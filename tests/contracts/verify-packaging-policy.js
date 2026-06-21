@@ -12,6 +12,7 @@ const read = function(relativePath) {
 const packageAction = read(".github/actions/package-product/action.yml");
 const packageProduct = read("build/scripts/package-product.ts");
 const copyStatic = read("build/scripts/copy-static.ts");
+const macosNotarization = read("build/scripts/macos-notarization.ts");
 const packagedDependencies = read(
     "build/scripts/packagedRuntimeDependencies.ts"
 );
@@ -63,6 +64,25 @@ assert.ok(
     copyStatic.includes("packagedRuntimeDependencies.forEach")
     && packageProduct.includes("assertPackagedRuntimeDependencies();"),
     "production dependencies must be staged and checked before packaging"
+);
+[
+    "submit:DialogR",
+    "submit:DialogQCA",
+    "history",
+    "staple:DialogR",
+    "staple:DialogQCA"
+].forEach((scriptName) => {
+    assert.ok(
+        packageJson.scripts[scriptName],
+        "missing macOS notarization script: " + scriptName
+    );
+});
+assert.ok(
+    macosNotarization.includes('path.join(productRoot, "product.json")')
+    && macosNotarization.includes('`_${version}_silicon.dmg`')
+    && macosNotarization.includes('"--output-format",\n            "json"')
+    && macosNotarization.includes("normalizedRight - normalizedLeft"),
+    "macOS notarization must derive product DMGs and report only the latest history entry"
 );
 dialogRWorkflowPaths.forEach((relativePath) => {
     const workflow = read(relativePath);

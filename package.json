@@ -8,6 +8,11 @@
     "scripts": {
         "build": "tsc -p tsconfig.json && node dist/build/scripts/copy-static.js && node dist/build/scripts/package-product-if-requested.js",
         "start": "npm run build && node dist/build/scripts/start-app.js",
+        "submit:DialogR": "tsc -p tsconfig.json && node dist/build/scripts/macos-notarization.js submit DialogR",
+        "submit:DialogQCA": "tsc -p tsconfig.json && node dist/build/scripts/macos-notarization.js submit DialogQCA",
+        "history": "tsc -p tsconfig.json && node dist/build/scripts/macos-notarization.js history",
+        "staple:DialogR": "tsc -p tsconfig.json && node dist/build/scripts/macos-notarization.js staple DialogR",
+        "staple:DialogQCA": "tsc -p tsconfig.json && node dist/build/scripts/macos-notarization.js staple DialogQCA",
         "measure:electron:data-editor": "npm run build && node -r ./tests/register-dist-require.js tests/electron/measure-data-editor-first-paint.js",
         "verify": "npm run verify:engine",
         "verify:engine": "npm run build && node -r ./tests/register-dist-require.js tests/run-verifier-group.js engine-contract",

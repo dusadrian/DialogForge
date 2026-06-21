@@ -645,55 +645,62 @@ Product repositories may expose `npm run check` for local contributor and CI
 validation, but they are not expected to build an application or publish their
 own application artifacts.
 
-### Building An External Product In GitHub Actions
+### Building A Product In GitHub Actions
 
-The manual build workflows know the two maintained product repositories:
+GitHub Actions exposes a separate manual workflow for every maintained product
+and platform combination:
 
-- `product: dialogr` checks out `RODA/DialogR`;
-- `product: dialogqca` checks out `RODA/DialogQCA`.
+- `Build DialogR Linux`;
+- `Build DialogR Windows`;
+- `Build DialogR macOS`;
+- `Build DialogQCA Linux`;
+- `Build DialogQCA Windows`;
+- `Build DialogQCA macOS`.
 
-For either maintained product, select the product and platform. The workflow
-checks out the product automatically under `external-product/`; no repository
-or product-path input is required. `external_product_ref` may select a branch,
-tag, or commit SHA instead of the repository's default branch.
+Two additional workflows build all three platforms in parallel:
 
-The workflows can also package a product from any other GitHub repository. Use
-the manual workflow inputs:
+- `Build DialogR`;
+- `Build DialogQCA`.
 
-- `product`: `external`;
-- `external_product_repository`: the product repository in `owner/repo` form;
-- `external_product_ref`: optional branch, tag, or commit SHA;
-- `external_product_path`: the product directory inside that repository,
-  usually `.`;
-- `external_product_check_command`: optional command to run inside that product
-  directory before DialogForge packages it.
-
-The default external product check command is:
-
-```sh
-npm run check
-```
-
-Set `external_product_check_command` to an empty string when no product-local
-validation is needed. DialogForge still compiles and stages the selected product
-as part of `npm run build -- <product-path>`.
+Each workflow checks out its named product repository automatically. The
+optional `product_ref` input selects a branch, tag, or commit SHA instead of the
+repository's default branch. The workflow validates the product with
+`npm run check`, reads its `product.json`, and asks DialogForge to package it.
 
 For private product repositories, add a repository secret named
-`PRODUCT_REPOSITORY_TOKEN`. It must have read access to the external product
-repository. Public repositories can use the default GitHub token.
+`PRODUCT_REPOSITORY_TOKEN`. It must have read access to the product repository.
+Public repositories can use the default GitHub token. Binary workflows upload
+platform files directly to the selected GitHub Release rather than retaining an
+intermediate GitHub Actions artifact.
 
-The workflow checks out DialogForge first, then checks out the product under
-`external-product/`, then packages it with:
+### Local macOS Notarization
+
+After building a local Apple Silicon DMG, submit it with the product-specific
+command:
 
 ```sh
-npm run build -- ./external-product/<external_product_path> --platform <platform>
+npm run submit:DialogR
+npm run submit:DialogQCA
 ```
 
-The workflow reads the selected product's `product.json` before packaging. The
-packaged binary names come from the product metadata used by
-`package-product.ts`. Binary workflows upload platform files directly to the
-selected GitHub Release rather than retaining an intermediate GitHub Actions
-artifact.
+These commands read the product name and version from the sibling product
+repository's `product.json`, then select the matching
+`build/output/<product>_<version>_silicon.dmg`. They use the
+`developer-id-notary` Keychain profile by default. Set
+`DIALOGFORGE_NOTARY_PROFILE` to use another stored profile.
+
+Show only the newest notarization submission from the account history:
+
+```sh
+npm run history
+```
+
+After that submission is accepted, staple its ticket:
+
+```sh
+npm run staple:DialogR
+npm run staple:DialogQCA
+```
 
 ### Product Tests
 
