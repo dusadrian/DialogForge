@@ -1,0 +1,83 @@
+name: Build DialogR
+
+on:
+  workflow_dispatch:
+    inputs:
+      product_ref:
+        description: Optional DialogR branch, tag, or commit SHA.
+        required: false
+        default: ""
+        type: string
+      release_tag:
+        description: Release tag to upload to. Leave empty to skip upload.
+        required: false
+        default: ""
+        type: string
+      release_repository:
+        description: Target repository in owner/repo form. Leave empty for this repository.
+        required: false
+        default: ""
+        type: string
+      overwrite_release_assets:
+        description: Replace release assets with matching filenames.
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  contents: write
+
+jobs:
+  prepare-release:
+    if: ${{ inputs.release_tag != '' }}
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ inputs.release_tag }}
+      TARGET_REPO: ${{ inputs.release_repository != '' && inputs.release_repository || github.repository }}
+      GH_TOKEN: ${{ secrets.RELEASE_UPLOAD_TOKEN != '' && secrets.RELEASE_UPLOAD_TOKEN || github.token }}
+    steps:
+      - name: Confirm target release exists
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "$RELEASE_TAG" --repo "$TARGET_REPO" >/dev/null 2>&1; then
+            gh release edit "$RELEASE_TAG" --repo "$TARGET_REPO" --prerelease --latest=false
+          else
+            gh release create "$RELEASE_TAG" --repo "$TARGET_REPO" --prerelease --latest=false --title "$RELEASE_TAG" --notes ""
+          fi
+
+  linux:
+    needs: prepare-release
+    if: ${{ always() && (needs.prepare-release.result == 'success' || needs.prepare-release.result == 'skipped') }}
+    uses: ./.github/workflows/build-dialogr-linux.yml
+    with:
+      product_ref: ${{ inputs.product_ref }}
+      release_tag: ${{ inputs.release_tag }}
+      release_repository: ${{ inputs.release_repository }}
+      overwrite_release_assets: ${{ inputs.overwrite_release_assets }}
+      release_prepared: true
+    secrets: inherit
+
+  windows:
+    needs: prepare-release
+    if: ${{ always() && (needs.prepare-release.result == 'success' || needs.prepare-release.result == 'skipped') }}
+    uses: ./.github/workflows/build-dialogr-windows.yml
+    with:
+      product_ref: ${{ inputs.product_ref }}
+      release_tag: ${{ inputs.release_tag }}
+      release_repository: ${{ inputs.release_repository }}
+      overwrite_release_assets: ${{ inputs.overwrite_release_assets }}
+      release_prepared: true
+    secrets: inherit
+
+  macos:
+    needs: prepare-release
+    if: ${{ always() && (needs.prepare-release.result == 'success' || needs.prepare-release.result == 'skipped') }}
+    uses: ./.github/workflows/build-dialogr-macos.yml
+    with:
+      product_ref: ${{ inputs.product_ref }}
+      release_tag: ${{ inputs.release_tag }}
+      release_repository: ${{ inputs.release_repository }}
+      overwrite_release_assets: ${{ inputs.overwrite_release_assets }}
+      release_prepared: true
+    secrets: inherit

@@ -1,0 +1,48 @@
+[
+    {
+        "id": "console",
+        "label": "Console",
+        "owner": "shared/base-app",
+        "domTarget": "visibleCommandPanel",
+        "targetHome": "shared/base-app/pages/console",
+        "status": "implemented",
+        "replacement": "Rebuild as a base feature backed by visible runtime commands and transcript events."
+    },
+    {
+        "id": "workspace-pane",
+        "label": "Workspace pane",
+        "owner": "shared/workspace",
+        "domTarget": "workspacePanel",
+        "targetHome": "shared/workspace/pane",
+        "status": "implemented",
+        "replacement": "Rebuild from runtime workspace events and object inspection capabilities."
+    },
+    {
+        "id": "dataset-editor.grid",
+        "label": "Dataset grid",
+        "owner": "shared/dataset-editor",
+        "domTarget": "datasetPreviewPanel",
+        "targetHome": "shared/dataset-editor/view",
+        "sourceReference": "/Users/dusadrian/Documents/GitHub/DialogQCA/src/pages/dataEditor.html",
+        "status": "implemented",
+        "replacement": "Rebuild as a shared dataset editor entrypoint backed by tabular runtime capabilities."
+    },
+    {
+        "id": "dataset-editor.cell-editing",
+        "label": "Cell editing",
+        "owner": "shared/dataset-editor",
+        "domTarget": "datasetPreviewPanel",
+        "targetHome": "shared/dataset-editor/commands",
+        "status": "implemented",
+        "replacement": "Rebuild as dataset-editor commands routed through tabular write capabilities."
+    },
+    {
+        "id": "dataset-editor.variable-view",
+        "label": "Variable metadata",
+        "owner": "shared/dataset-editor",
+        "domTarget": "variableMetadataPanel",
+        "targetHome": "shared/dataset-editor/variable-grid",
+        "status": "implemented",
+        "replacement": "Rebuild as a variable metadata view enabled by provider metadata capabilities."
+    }
+]

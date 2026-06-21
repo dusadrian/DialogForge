@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self' 'unsafe-inline' http: https:; style-src 'self' 'unsafe-inline' http: https:; img-src 'self' data: blob: http: https:; font-src 'self' data: blob: http: https:; frame-src 'self' about: http://127.0.0.1:* http://localhost:*;"
+    >
+    <link rel="stylesheet" href="./shared/appCodicon.css">
+    <title>R Help</title>
+    <style>
+      @font-face {
+        font-family: 'Inter';
+        src: url('../../assets/fonts/Inter/Inter-Regular.ttf') format('truetype');
+        font-weight: 400;
+        font-style: normal;
+      }
+      @font-face {
+        font-family: 'Inter';
+        src: url('../../assets/fonts/Inter/Inter-Bold.ttf') format('truetype');
+        font-weight: 700;
+        font-style: normal;
+      }
+      html, body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: #ffffff;
+        color: #1f1f1f;
+        font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, 'Noto Sans', 'Liberation Sans', sans-serif;
+      }
+      body {
+        display: flex;
+        flex-direction: column;
+      }
+      .help-toolbar {
+        height: 28px;
+        flex: 0 0 28px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        box-sizing: border-box;
+        padding: 0 8px;
+        border-bottom: 1px solid #d2d2d2;
+        background: #f3f3f3;
+      }
+      .help-toolbar-left,
+      .help-toolbar-right {
+        display: flex;
+        align-items: center;
+      }
+      .help-toolbar-right {
+        min-width: 0;
+        flex: 1 1 auto;
+        justify-content: flex-end;
+      }
+      .help-toolbar-btn {
+        width: 24px;
+        height: 24px;
+        padding: 0;
+        margin: 0 1px;
+        border: 0;
+        border-radius: 4px;
+        background: transparent;
+        color: #2f2f2f;
+        cursor: pointer;
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .help-toolbar-btn:hover {
+        background: #e4e4e4;
+      }
+      .help-toolbar-btn:active {
+        background: #d6d6d6;
+      }
+      .help-toolbar-btn:disabled {
+        color: #b7b7b7;
+        cursor: default;
+        background: transparent;
+      }
+      .help-toolbar-btn::after {
+        content: attr(data-tooltip);
+        position: absolute;
+        left: 0;
+        top: calc(100% + 6px);
+        background: #f5f5f5;
+        color: #3a3a3a;
+        border: 1px solid #c7c7c7;
+        border-radius: 10px;
+        padding: 5px 11px;
+        font-size: 12px;
+        font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, 'Noto Sans', 'Liberation Sans', sans-serif;
+        font-weight: 400;
+        line-height: 1.2;
+        white-space: nowrap;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+        opacity: 0;
+        visibility: hidden;
+        transition: opacity 70ms ease-out;
+        transition-delay: 80ms;
+        pointer-events: none;
+        z-index: 30;
+      }
+      .help-toolbar-btn:hover::after,
+      .help-toolbar-btn:focus-visible::after {
+        opacity: 1;
+        visibility: visible;
+      }
+      .help-toolbar-btn .codicon {
+        font-size: 16px;
+        line-height: 16px;
+      }
+      .help-toolbar-icon {
+        width: 16px;
+        height: 16px;
+        display: block;
+        pointer-events: none;
+      }
+      .help-toolbar-btn:disabled .help-toolbar-icon {
+        opacity: 0.38;
+      }
+      .help-toolbar-title {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        color: #5f5f5f;
+        font-size: 12px;
+        padding-left: 8px;
+      }
+      .help-frame-wrap {
+        min-height: 0;
+        flex: 1 1 auto;
+        display: flex;
+      }
+      #helpFrame {
+        border: 0;
+        width: 100%;
+        height: 100%;
+        display: block;
+        background: #ffffff;
+        flex: 1 1 auto;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="help-toolbar">
+      <div class="help-toolbar-left">
+        <button id="helpBack" class="help-toolbar-btn" type="button" data-tooltip="Back" aria-label="Back">
+          <img class="help-toolbar-icon" src="../../assets/icons/arrow-left.svg" alt="" aria-hidden="true" />
+        </button>
+        <button id="helpForward" class="help-toolbar-btn" type="button" data-tooltip="Forward" aria-label="Forward">
+          <img class="help-toolbar-icon" src="../../assets/icons/arrow-right.svg" alt="" aria-hidden="true" />
+        </button>
+        <button id="helpHome" class="help-toolbar-btn" type="button" data-tooltip="First Page" aria-label="First Page">
+          <img class="help-toolbar-icon" src="../../assets/icons/home.svg" alt="" aria-hidden="true" />
+        </button>
+      </div>
+      <div class="help-toolbar-right">
+        <div id="helpLocation" class="help-toolbar-title"></div>
+      </div>
+    </div>
+    <div class="help-frame-wrap">
+      <iframe id="helpFrame" title="R Help"></iframe>
+    </div>
+    <script>
+      (() => {
+        const params = new URLSearchParams(window.location.search);
+        const frame = document.getElementById('helpFrame');
+        const backButton = document.getElementById('helpBack');
+        const forwardButton = document.getElementById('helpForward');
+        const homeButton = document.getElementById('helpHome');
+        const locationEl = document.getElementById('helpLocation');
+        const initialUrl = String(params.get('src') || '').trim();
+        const initialDoc = String(params.get('doc') || '').trim();
+        const baseTitle = String(params.get('title') || 'R Help').trim() || 'R Help';
+        let currentUrl = initialUrl;
+        const historyEntries = [];
+        let historyIndex = -1;
+        const escapeHtml = (value) =>
+          String(value || '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+
+        const escapeAttr = (value) =>
+          escapeHtml(value).replace(/"/g, '&quot;');
+
+        const isLocalHelpUrl = (value) => {
+          try {
+            const parsed = new URL(String(value || ''));
+            return (
+              (parsed.protocol === 'http:' || parsed.protocol === 'https:') &&
+              (parsed.hostname === '127.0.0.1' || parsed.hostname === 'localhost')
+            );
+          } catch {
+            return false;
+          }
+        };
+
+        const getCurrentEntry = () =>
+          historyIndex >= 0 && historyIndex < historyEntries.length ? historyEntries[historyIndex] : null;
+
+        const getLocationLabel = () => {
+          const entry = getCurrentEntry();
+          if (!entry) return '';
+          if (entry.kind === 'doc') return '';
+          return String(entry.url || '').trim().replace(/^https?:\/\/127\.0\.0\.1:\d+/, '');
+        };
+
+        const updateToolbarState = () => {
+          if (backButton) backButton.disabled = historyIndex <= 0;
+          if (forwardButton) forwardButton.disabled = historyIndex < 0 || historyIndex >= historyEntries.length - 1;
+          if (homeButton) homeButton.disabled = historyEntries.length <= 1 || historyIndex === 0;
+          if (locationEl) {
+            locationEl.textContent = getLocationLabel();
+          }
+        };
+
+        const sameEntry = (left, right) => {
+          if (!left || !right || left.kind !== right.kind) return false;
+          if (left.kind === 'url') return String(left.url || '') === String(right.url || '');
+          return String(left.baseUrl || '') === String(right.baseUrl || '') && String(left.html || '') === String(right.html || '');
+        };
+
+        const recordHistory = (entry) => {
+          const current = historyEntries[historyIndex];
+          if (!sameEntry(current, entry)) {
+            historyEntries.splice(historyIndex + 1);
+            historyEntries.push(entry);
+            historyIndex = historyEntries.length - 1;
+          }
+          updateToolbarState();
+        };
+
+        const buildSrcDoc = (html, baseUrl) => {
+          const safeBaseUrl = String(baseUrl || '').trim();
+          const safeHtml = String(html || '');
+          const injectedScript = `
+            (() => {
+              const post = (payload) => {
+                try { window.parent.postMessage(payload, '*'); } catch {}
+              };
+              const hijackLinks = () => {
+                const links = Array.from(document.links || []);
+                for (const link of links) {
+                  link.onclick = (event) => {
+                    try { event.preventDefault(); } catch {}
+                    post({ id: 'app-help-navigate', url: String(link.href || '') });
+                    return false;
+                  };
+                }
+              };
+              const report = () => {
+                post({
+                  id: 'app-help-complete',
+                  url: document.baseURI || '',
+                  title: document.title || ''
+                });
+              };
+              document.addEventListener('readystatechange', () => {
+                if (document.readyState === 'complete') {
+                  hijackLinks();
+                  report();
+                }
+              });
+              window.addEventListener('load', () => {
+                hijackLinks();
+                report();
+              });
+            })();
+          `;
+          return [
+            '<!DOCTYPE html>',
+            '<html>',
+            '<head>',
+            '<meta charset="UTF-8">',
+            `<base href="${escapeAttr(safeBaseUrl)}">`,
+            '<style>html,body{min-height:100%;} body{background:#ffffff !important;color:#1f1f1f !important;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif !important;font-size:13px !important;line-height:1.5 !important;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;} .container{max-width:980px !important;padding-left:14px !important;padding-right:14px !important;} a{color:#0550AE !important;} h1,h2,h3,h4,h5,h6{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif !important;text-align:left !important;letter-spacing:0 !important;} h1{color:#2f2f2f !important;font-size:25px !important;font-weight:600 !important;line-height:1.22 !important;margin:18px 0 22px !important;} h2{color:#3f3f3f !important;font-size:18px !important;font-weight:600 !important;line-height:1.3 !important;margin:28px 0 12px !important;} h3,h4,h5,h6{color:#4a4a4a !important;font-size:15px !important;font-weight:600 !important;line-height:1.3 !important;margin:22px 0 10px !important;font-style:normal !important;} p,li,dd,dt,td,th{font-size:13px !important;line-height:1.5 !important;} table{font-size:13px !important;line-height:1.5 !important;} code,pre,tt,samp,kbd{font-family:"Dialog Mono",monospace !important;font-size:13px !important;line-height:1.45 !important;color:#1f1f1f !important;} pre{background:transparent !important;border:0 !important;padding:0 !important;margin:10px 0 16px !important;} dl{margin:0 0 14px 0 !important;} dt{font-weight:600 !important;} dd{margin-left:22px !important;} img.toplogo{display:none !important;}</style>',
+            '</head>',
+            '<body>',
+            safeHtml,
+            `<script>${injectedScript}<\/script>`,
+            '</body>',
+            '</html>'
+          ].join('');
+        };
+
+        const resolveHref = (href) => {
+          try {
+            const base = String(currentUrl || initialUrl || '');
+            return new URL(String(href || ''), base).toString();
+          } catch {
+            return String(href || '');
+          }
+        };
+
+        const openCommandUrl = (url) => {
+          try {
+            window.dialogForge?.openHelpCommandUrl(String(url || ''));
+          } catch {}
+        };
+
+        const renderHelpPage = (html, baseUrl) => {
+          try {
+            if (!frame) return;
+            currentUrl = String(baseUrl || '');
+            updateToolbarState();
+            frame.srcdoc = buildSrcDoc(html, currentUrl);
+          } catch {}
+        };
+
+        const loadHelpUrl = async (targetUrl, options = {}) => {
+          const nextUrl = String(targetUrl || '').trim();
+          if (!nextUrl || !frame) return;
+          currentUrl = nextUrl;
+          updateToolbarState();
+          frame.srcdoc = [
+            '<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body style="margin:0;padding:16px;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;color:#444;background:#fff;">',
+            escapeHtml('Loading help...'),
+            '</body></html>'
+          ].join('');
+          try {
+            const response = await fetch(nextUrl);
+
+            if (!response.ok) {
+              throw new Error(`HTTP ${response.status}`);
+            }
+
+            const text = await response.text();
+            const resolvedUrl = String(response.url || nextUrl);
+
+            if (options.record !== false) {
+              recordHistory({ kind: 'url', url: resolvedUrl });
+            } else {
+              updateToolbarState();
+            }
+
+            renderHelpPage(text, resolvedUrl);
+            return;
+          } catch (error) {
+            frame.srcdoc = [
+              '<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body style="margin:0;padding:16px;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;color:#444;background:#fff;">',
+              `<div>${escapeHtml('Unable to load help page.')}</div>`,
+              `<div style="margin-top:8px;color:#888;">${escapeHtml(String(error && error.message ? error.message : 'unknown-help-fetch-error'))}</div>`,
+              '</body></html>'
+            ].join('');
+            document.title = baseTitle;
+            return;
+          }
+        };
+
+        const loadHelpDoc = (html, baseUrl, options = {}) => {
+          if (options.record !== false) {
+            recordHistory({ kind: 'doc', html: String(html || ''), baseUrl: String(baseUrl || '') });
+          } else {
+            updateToolbarState();
+          }
+          renderHelpPage(String(html || ''), String(baseUrl || ''));
+        };
+
+        const openHistoryIndex = async (nextIndex) => {
+          const idx = Number(nextIndex);
+          if (!Number.isInteger(idx) || idx < 0 || idx >= historyEntries.length) return;
+          historyIndex = idx;
+          const entry = historyEntries[idx];
+          updateToolbarState();
+          if (!entry) return;
+          if (entry.kind === 'doc') {
+            loadHelpDoc(String(entry.html || ''), String(entry.baseUrl || ''), { record: false });
+            return;
+          }
+          await loadHelpUrl(String(entry.url || ''), { record: false });
+        };
+
+        if (backButton) {
+          backButton.addEventListener('click', () => {
+            void openHistoryIndex(historyIndex - 1);
+          });
+        }
+        if (forwardButton) {
+          forwardButton.addEventListener('click', () => {
+            void openHistoryIndex(historyIndex + 1);
+          });
+        }
+        if (homeButton) {
+          homeButton.addEventListener('click', () => {
+            void openHistoryIndex(0);
+          });
+        }
+
+        window.addEventListener('message', (event) => {
+          const data = event.data || {};
+          if (String(data.id || '') === 'app-help-complete') {
+            if (getCurrentEntry()?.kind !== 'doc') {
+              currentUrl = String(data.url || currentUrl || initialUrl || '');
+            }
+            updateToolbarState();
+            document.title = String(data.title || '').trim()
+              ? `${baseTitle} - ${String(data.title || '').trim()}`
+              : baseTitle;
+            return;
+          }
+          if (String(data.id || '') !== 'app-help-navigate') return;
+          const resolved = resolveHref(String(data.url || ''));
+          if (!resolved) return;
+          if (/^app:\/\//i.test(resolved)) {
+            openCommandUrl(resolved);
+            return;
+          }
+          if (isLocalHelpUrl(resolved) && !/\.pdf(?:$|[?#])/i.test(resolved)) {
+            void loadHelpUrl(resolved, { record: true });
+            return;
+          }
+          try {
+            window.open(resolved, '_blank', 'noopener');
+          } catch {}
+        });
+        if (initialDoc) {
+          try {
+            const decoded = typeof atob === 'function'
+              ? decodeURIComponent(escape(atob(initialDoc)))
+              : initialDoc;
+            loadHelpDoc(decoded, '', { record: true });
+            document.title = baseTitle;
+          } catch {
+            document.title = baseTitle;
+          }
+        } else if (initialUrl) {
+          void loadHelpUrl(initialUrl, { record: true });
+        } else {
+          document.title = baseTitle;
+          updateToolbarState();
+        }
+      })();
+    </script>
+  </body>
+</html>

@@ -1,0 +1,18 @@
+{
+    "title": "Fake product dialog",
+    "name": "fake",
+    "rPackages": "fakepkg",
+    "externalCalls": [
+        "fake.preview",
+        "getDatasetVariablesForDialog"
+    ],
+    "customJS": "callExternal('fake.preview'); callExternal('getDatasetVariablesForDialog');",
+    "elements": [
+        {
+            "id": "c_dataset",
+            "nameid": "c_dataset",
+            "type": "combobox",
+            "value": ""
+        }
+    ]
+}

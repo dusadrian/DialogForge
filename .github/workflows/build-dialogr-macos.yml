@@ -1,0 +1,87 @@
+name: Build DialogR macOS
+
+on:
+  workflow_dispatch:
+    inputs:
+      product_ref:
+        description: Optional DialogR branch, tag, or commit SHA.
+        required: false
+        default: ""
+        type: string
+      release_tag:
+        description: Release tag to upload to. Leave empty to skip upload.
+        required: false
+        default: ""
+        type: string
+      release_repository:
+        description: Target repository in owner/repo form. Leave empty for this repository.
+        required: false
+        default: ""
+        type: string
+      overwrite_release_assets:
+        description: Replace release assets with matching filenames.
+        required: false
+        default: true
+        type: boolean
+  workflow_call:
+    inputs:
+      product_ref:
+        required: false
+        type: string
+      release_tag:
+        required: false
+        type: string
+      release_repository:
+        required: false
+        type: string
+      overwrite_release_assets:
+        required: false
+        default: true
+        type: boolean
+      release_prepared:
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+jobs:
+  prepare-release:
+    if: ${{ !inputs.release_prepared && inputs.release_tag != '' }}
+    runs-on: macos-15-intel
+    env:
+      RELEASE_TAG: ${{ inputs.release_tag }}
+      TARGET_REPO: ${{ inputs.release_repository != '' && inputs.release_repository || github.repository }}
+      GH_TOKEN: ${{ secrets.RELEASE_UPLOAD_TOKEN != '' && secrets.RELEASE_UPLOAD_TOKEN || github.token }}
+    steps:
+      - name: Confirm target release exists
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "$RELEASE_TAG" --repo "$TARGET_REPO" >/dev/null 2>&1; then
+            gh release edit "$RELEASE_TAG" --repo "$TARGET_REPO" --prerelease --latest=false
+          else
+            gh release create "$RELEASE_TAG" --repo "$TARGET_REPO" --prerelease --latest=false --title "$RELEASE_TAG" --notes ""
+          fi
+
+  build:
+    needs: prepare-release
+    if: ${{ always() && (needs.prepare-release.result == 'success' || needs.prepare-release.result == 'skipped') }}
+    runs-on: macos-15-intel
+    steps:
+      - name: Check out DialogForge
+        uses: actions/checkout@v5
+
+      - name: Build DialogR for macOS
+        uses: ./.github/actions/package-product
+        with:
+          product_repository: RODA/DialogR
+          product_ref: ${{ inputs.product_ref }}
+          product_token: ${{ secrets.PRODUCT_REPOSITORY_TOKEN || github.token }}
+          platform: macos
+          arch_args: --arch x64
+          release_tag: ${{ inputs.release_tag }}
+          release_repository: ${{ inputs.release_repository }}
+          release_token: ${{ secrets.RELEASE_UPLOAD_TOKEN != '' && secrets.RELEASE_UPLOAD_TOKEN || github.token }}
+          overwrite_release_assets: ${{ inputs.overwrite_release_assets }}

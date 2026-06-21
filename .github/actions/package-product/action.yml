@@ -1,0 +1,125 @@
+name: Package product
+description: Check, package, and optionally publish one DialogForge product build.
+
+inputs:
+  product_repository:
+    required: true
+  product_ref:
+    required: false
+    default: ""
+  product_token:
+    required: true
+  platform:
+    required: true
+  arch_args:
+    required: false
+    default: ""
+  release_tag:
+    required: false
+    default: ""
+  release_repository:
+    required: false
+    default: ""
+  release_token:
+    required: true
+  overwrite_release_assets:
+    required: false
+    default: "true"
+
+runs:
+  using: composite
+  steps:
+    - name: Check out product repository
+      if: ${{ inputs.product_ref == '' }}
+      uses: actions/checkout@v5
+      with:
+        repository: ${{ inputs.product_repository }}
+        path: external-product
+        token: ${{ inputs.product_token }}
+
+    - name: Check out product repository at ref
+      if: ${{ inputs.product_ref != '' }}
+      uses: actions/checkout@v5
+      with:
+        repository: ${{ inputs.product_repository }}
+        ref: ${{ inputs.product_ref }}
+        path: external-product
+        token: ${{ inputs.product_token }}
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v5
+      with:
+        node-version: 20
+        cache: npm
+
+    - name: Install DialogForge dependencies
+      shell: bash
+      run: npm ci
+
+    - name: Read product metadata
+      shell: bash
+      run: |
+        node -e "
+        const fs = require('fs');
+        const path = require('path');
+        const manifestPath = path.join('external-product', 'product.json');
+        const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+        const id = String(manifest.id || '').trim();
+        const name = String(manifest.name || id).trim();
+        if (!id) {
+            throw new Error('Missing product id in ' + manifestPath);
+        }
+        console.log('Building product ' + id + ' (' + name + ').');
+        "
+
+    - name: Check product
+      shell: bash
+      working-directory: external-product
+      run: npm run check
+
+    - name: Build product package
+      shell: bash
+      run: npm run build -- ./external-product --platform ${{ inputs.platform }} ${{ inputs.arch_args }}
+
+    - name: Upload files to GitHub release
+      if: ${{ inputs.release_tag != '' }}
+      shell: bash
+      env:
+        RELEASE_TAG: ${{ inputs.release_tag }}
+        TARGET_REPO: ${{ inputs.release_repository != '' && inputs.release_repository || github.repository }}
+        OVERWRITE_RELEASE_ASSETS: ${{ inputs.overwrite_release_assets }}
+        GH_TOKEN: ${{ inputs.release_token }}
+        BUILD_PLATFORM: ${{ inputs.platform }}
+      run: |
+        set -euo pipefail
+        shopt -s nullglob
+        files=()
+
+        case "$BUILD_PLATFORM" in
+          linux)
+            files=(build/output/*.AppImage)
+            ;;
+          windows)
+            files=(build/output/*.exe)
+            ;;
+          macos)
+            files=(build/output/*.dmg)
+            ;;
+          *)
+            echo "Unsupported build platform: $BUILD_PLATFORM"
+            exit 1
+            ;;
+        esac
+
+        if [ "${#files[@]}" -eq 0 ]; then
+          echo "No release files found for $BUILD_PLATFORM."
+          exit 1
+        fi
+
+        cmd=(gh release upload "$RELEASE_TAG" --repo "$TARGET_REPO")
+        if [ "$OVERWRITE_RELEASE_ASSETS" = "true" ]; then
+          cmd+=(--clobber)
+        fi
+        cmd+=("${files[@]}")
+
+        "${cmd[@]}"

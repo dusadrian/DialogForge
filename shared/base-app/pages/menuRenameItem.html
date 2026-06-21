@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <link rel="stylesheet" href="./shared/dmTheme.css">
+    <script src="../../dist/src/modules/menuRenameItemInterface.js"></script>
+    <style>
+        html, body{
+            margin: 0;
+            width: 100%;
+            height: 100%;
+        }
+        .container{
+            padding: 12px;
+        }
+        label{
+            display: block;
+            margin: 0px 0px 5px 0px;
+        }
+        #newName{
+            display: block;
+            box-sizing: border-box;
+            width: 100%;
+            padding: 3px 7px;
+        }
+        .buttons{
+            display: block;
+            text-align: right;
+            margin-top: 15px;
+        }
+        button{
+            width: 80px;
+            height: 30px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <label id="labelNewName" for="newName">New name</label>
+        <input type="text" name="newName" id="newName">
+        <div class="buttons">
+            <button id="save">Save</button>
+            <button id="cancel">Cancel</button>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <link rel="stylesheet" type="text/css" href="./dialogBuilder.css">
+    <link rel="stylesheet" href="./shared/appCodicon.css">
+</head>
+<body>
+    <div id="paper"></div>
+    <div id="dialogQuickActionsHotspot" aria-hidden="true"></div>
+    <div id="dialogQuickActions" aria-label="Dialog actions">
+      <button
+        type="button"
+        id="dialogSendToConsole"
+        class="dm-dialog-action"
+        data-tooltip="Copy"
+        aria-label="Copy"
+      >
+        <span class="copy-icon" aria-hidden="true"></span>
+      </button>
+      <button
+        type="button"
+        id="dialogSendToScriptEditor"
+        class="dm-dialog-action"
+        data-tooltip="Send to Script Editor"
+        aria-label="Send to Script Editor"
+      >
+        <span class="codicon codicon-insert" aria-hidden="true"></span>
+      </button>
+    </div>
+    <script>
+      (function () {
+        if (typeof require !== 'function') {
+          console.error('Dialog runtime requires Node integration.');
+          return;
+        }
+
+        const candidates = [
+          '../../dialog-runtime/renderer/modules/dialogBuilderInterface.js',
+          String(process.resourcesPath || '')
+            ? require('path').join(
+                String(process.resourcesPath || ''),
+                'app.asar',
+                'dist',
+                'shared',
+                'dialog-runtime',
+                'renderer',
+                'modules',
+                'dialogBuilderInterface.js'
+              )
+            : ''
+        ].filter(Boolean);
+
+        let loaded = false;
+        let lastError = '';
+        for (const one of candidates) {
+          try {
+            require(one);
+            loaded = true;
+            break;
+          } catch (e) {
+            lastError = String(e && e.message ? e.message : e);
+          }
+        }
+
+        if (!loaded) {
+          console.error('Dialog runtime loader failed:', lastError);
+        }
+      })();
+    </script>
+</body>
+</html>

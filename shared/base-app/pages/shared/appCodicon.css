@@ -1,0 +1,203 @@
+@import url("./vscodeCodicon.css");
+
+.dm-console-toolbar {
+  height: 28px;
+  flex: 0 0 28px;
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  padding: 0 8px;
+  border-bottom: 1px solid #d2d2d2;
+  background: #f3f3f3;
+}
+
+.dm-console-toolbar-left {
+  min-width: 0;
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dm-console-toolbar-right {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 0;
+}
+
+.dm-console-toolbar .dm-toolbar-btn {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  margin: 0 1px;
+  color: #2f2f2f;
+  cursor: pointer;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  vertical-align: middle;
+}
+
+.dm-console-toolbar .dm-toolbar-btn:hover {
+  background: #e4e4e4;
+}
+
+.dm-console-toolbar .dm-toolbar-btn:active {
+  background: #d6d6d6;
+}
+
+.dm-console-toolbar .dm-toolbar-btn::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  transform: none;
+  background: #f5f5f5;
+  color: #3a3a3a;
+  border: 1px solid #c7c7c7;
+  border-radius: 10px;
+  padding: 5px 11px;
+  font-size: 12px;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+  font-weight: 400;
+  letter-spacing: 0;
+  line-height: 1.2;
+  white-space: nowrap;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 70ms ease-out;
+  transition-delay: 80ms;
+  pointer-events: none;
+  z-index: 30;
+}
+
+.dm-console-toolbar .dm-toolbar-btn:hover::after {
+  opacity: 1;
+  visibility: visible;
+}
+
+.dm-console-toolbar .dm-toolbar-btn .codicon {
+  font-size: 16px;
+  line-height: 16px;
+}
+
+.dm-console-toolbar .dm-toolbar-btn .dm-toolbar-svg-icon {
+  width: 16px;
+  height: 16px;
+  display: inline-block;
+  background-color: currentColor;
+  pointer-events: none;
+  -webkit-mask-position: center;
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-size: contain;
+  mask-position: center;
+  mask-repeat: no-repeat;
+  mask-size: contain;
+}
+
+.dm-console-toolbar .dm-toolbar-btn .dm-toolbar-svg-icon-restart {
+  -webkit-mask-image: url("../../../assets/icons/restart.svg");
+  mask-image: url("../../../assets/icons/restart.svg");
+}
+
+.dm-console-toolbar .dm-toolbar-btn .dm-toolbar-svg-icon-restartworkspace {
+  -webkit-mask-image: url("../../../assets/icons/restartworkspace.svg");
+  mask-image: url("../../../assets/icons/restartworkspace.svg");
+}
+
+.dm-console-toolbar .dm-toolbar-btn .dm-stop-square {
+  width: 11px;
+  height: 11px;
+  display: inline-block;
+  background: currentColor;
+  border-radius: 0;
+}
+
+.dm-console-toolbar .dm-toolbar-btn.dm-toolbar-btn-stop {
+  color: #ef4b41;
+}
+
+.dm-console-toolbar .dm-toolbar-btn.dm-toolbar-btn-stop:hover {
+  color: #dd3e35;
+}
+
+.dm-console-toolbar .dm-toolbar-btn.dm-toolbar-btn-stop:active {
+  color: #cb352c;
+}
+
+.dm-console-cwd {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #2f2f2f;
+  padding-left: 2px;
+}
+
+.dm-console-cwd .codicon {
+  font-size: 16px;
+  line-height: 1;
+  padding-top: 1px;
+}
+
+.dm-console-cwd-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  padding-left: 0;
+}
+
+.dm-console-active-dataset,
+.dm-console-state-chip {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 26%;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 20px;
+  box-sizing: border-box;
+  padding: 0 7px;
+  border: 1px solid rgba(47, 125, 79, 0.28);
+  border-radius: 4px;
+  background: rgba(47, 125, 79, 0.08);
+  color: #245f3d;
+  font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, 'Noto Sans', 'Liberation Sans', sans-serif;
+  font-size: 11px;
+  line-height: 1;
+}
+
+.dm-console-state-chip {
+  border-color: rgba(64, 92, 134, 0.26);
+  background: rgba(64, 92, 134, 0.07);
+  color: #30496c;
+}
+
+.dm-console-active-dataset[hidden],
+.dm-console-state-chip[hidden] {
+  display: none;
+}
+
+.dm-console-active-dataset-label,
+.dm-console-state-chip-label {
+  flex: 0 0 auto;
+  font-weight: 600;
+}
+
+.dm-console-active-dataset-name,
+.dm-console-state-chip-value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 700;
+}

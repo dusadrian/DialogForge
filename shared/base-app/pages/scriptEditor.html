@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="ie=edge">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' blob:; worker-src 'self' blob: data:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' ws: http: https:;">
+  <link rel="stylesheet" href="./shared/dmTheme.css">
+  <link rel="stylesheet" href="./shared/appCodicon.css">
+  <script>
+    (function loadScriptEditorInterface() {
+      const path = require('path');
+      const resourcesPath = String(process.resourcesPath || '');
+      const candidates = [
+        path.join(process.cwd(), 'dist', 'shared', 'base-app', 'modules', 'scriptEditorInterface.js'),
+        resourcesPath ? path.join(resourcesPath, 'app.asar', 'shared', 'base-app', 'modules', 'scriptEditorInterface.js') : '',
+        '../modules/scriptEditorInterface.js'
+      ].filter(Boolean);
+      let lastError = '';
+      for (const one of candidates) {
+        try {
+          require(one);
+          return;
+        } catch (error) {
+          lastError = String(error && error.message ? error.message : error);
+        }
+      }
+      try {
+      } catch (e) {
+        console.error('SCRIPT-EDITOR-ERR loader failed:', lastError || e);
+      }
+    })();
+  </script>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      background: #ececec;
+      overflow: hidden;
+    }
+    #root {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+
+    .dm-script-toolbar {
+      height: 34px;
+      flex: 0 0 34px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 8px;
+      border-bottom: 1px solid #d2d2d2;
+      background: #f3f3f3;
+      box-sizing: border-box;
+    }
+
+    .dm-script-toolbar .dm-divider {
+      width: 1px;
+      height: 16px;
+      background: #dadada;
+      margin: 0 2px;
+    }
+
+    .dm-script-toolbar .dm-script-btn {
+      height: 24px;
+      border: 0;
+      border-radius: 4px;
+      background: transparent;
+      color: #2f2f2f;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 0 6px;
+      font-size: 12px;
+      font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, 'Noto Sans', 'Liberation Sans', sans-serif;
+      position: relative;
+    }
+
+    .dm-script-toolbar .dm-script-btn:hover {
+      background: #e4e4e4;
+    }
+
+    .dm-script-toolbar .dm-script-btn:active {
+      background: #d6d6d6;
+    }
+
+    .dm-script-toolbar .dm-script-btn[disabled] {
+      opacity: 0.45;
+      cursor: default;
+      pointer-events: none;
+    }
+
+    .dm-script-toolbar .dm-script-btn .codicon {
+      font-size: 16px;
+      line-height: 1;
+    }
+
+    .dm-script-toolbar .dm-script-btn::after {
+      content: attr(data-tooltip);
+      position: absolute;
+      right: 0;
+      top: calc(100% + 6px);
+      background: #f5f5f5;
+      color: #3a3a3a;
+      border: 1px solid #c7c7c7;
+      border-radius: 10px;
+      padding: 5px 11px;
+      font-size: 12px;
+      font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, 'Noto Sans', 'Liberation Sans', sans-serif;
+      font-weight: 400;
+      line-height: 1.2;
+      white-space: nowrap;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity 70ms ease-out;
+      transition-delay: 20ms;
+      pointer-events: none;
+      z-index: 30;
+    }
+
+    .dm-script-toolbar .dm-script-btn:hover::after,
+    .dm-script-toolbar .dm-script-btn:focus-visible::after {
+      opacity: 1;
+      visibility: visible;
+    }
+
+    .dm-script-toolbar .dm-script-btn.dm-script-btn-new .codicon.codicon-add {
+      width: 14px;
+      height: 14px;
+      border: 1px solid currentColor;
+      border-radius: 50%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+      line-height: 1;
+      box-sizing: border-box;
+      font-weight: 400;
+    }
+
+    .dm-script-toolbar .dm-script-btn.icon-only {
+      width: 24px;
+      justify-content: center;
+      padding: 0;
+    }
+
+    .dm-script-toolbar .dm-script-btn.dm-script-outline-btn {
+      min-width: 112px;
+      max-width: 190px;
+    }
+
+    .dm-script-toolbar .dm-script-btn.dm-script-outline-btn span:last-child {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .dm-script-outline-popup {
+      position: fixed;
+      z-index: 1100;
+      min-width: 260px;
+      max-width: 420px;
+      max-height: 360px;
+      overflow: auto;
+      background: #ffffff;
+      border: 1px solid #cfcfcf;
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
+      border-radius: 8px;
+      padding: 4px;
+      box-sizing: border-box;
+    }
+
+    .dm-script-outline-popup-item {
+      width: 100%;
+      border: 0;
+      background: transparent;
+      text-align: left;
+      display: grid;
+      grid-template-columns: 18px minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 8px;
+      border-radius: 6px;
+      font-size: 13px;
+      color: #2d2d2d;
+      cursor: pointer;
+      font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, 'Noto Sans', 'Liberation Sans', sans-serif;
+    }
+
+    .dm-script-outline-popup-item:hover {
+      background: #eef3ff;
+    }
+
+    .dm-script-outline-popup-item .codicon {
+      font-size: 15px;
+      line-height: 1;
+      color: #555;
+    }
+
+    .dm-script-outline-popup-name {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .dm-script-outline-popup-line {
+      color: #6a6a6a;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    .dm-script-pathbar {
+      height: 26px;
+      flex: 0 0 26px;
+      display: flex;
+      align-items: center;
+      box-sizing: border-box;
+      padding: 0 10px;
+      border-bottom: 1px solid #dcdcdc;
+      background: #f8f8f8;
+      color: #4a4a4a;
+      font-size: 12px;
+      font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, 'Noto Sans', 'Liberation Sans', sans-serif;
+      min-width: 0;
+    }
+
+    .dm-script-pathbar-text {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .dm-script-breadcrumbs {
+      min-width: 0;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      overflow: hidden;
+      white-space: nowrap;
+    }
+
+    .dm-script-crumb {
+      border: 0;
+      background: transparent;
+      padding: 0;
+      margin: 0;
+      color: #4a4a4a;
+      font-size: 12px;
+      line-height: 1;
+      cursor: pointer;
+      text-decoration: none;
+    }
+
+    .dm-script-crumb:hover {
+      text-decoration: underline;
+    }
+
+    .dm-script-sep {
+      color: #7a7a7a;
+      font-size: 12px;
+      line-height: 1;
+      user-select: none;
+    }
+
+    .dm-script-crumb-popup {
+      position: fixed;
+      z-index: 1000;
+      min-width: 220px;
+      max-width: 420px;
+      max-height: 320px;
+      overflow: auto;
+      background: #ffffff;
+      border: 1px solid #cfcfcf;
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
+      border-radius: 8px;
+      padding: 4px;
+    }
+
+    .dm-script-crumb-popup-item {
+      width: 100%;
+      border: 0;
+      background: transparent;
+      text-align: left;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 8px;
+      border-radius: 6px;
+      font-size: 13px;
+      color: #2d2d2d;
+      cursor: pointer;
+    }
+
+    .dm-script-crumb-popup-item:hover {
+      background: #eef3ff;
+    }
+
+    .dm-script-crumb-popup-item .codicon {
+      font-size: 15px;
+      line-height: 1;
+      color: #555;
+    }
+
+    .dm-script-tabs {
+      height: 30px;
+      flex: 0 0 30px;
+      display: flex;
+      align-items: stretch;
+      gap: 0;
+      overflow-x: auto;
+      overflow-y: hidden;
+      border-bottom: 1px solid #dcdcdc;
+      background: #efefef;
+    }
+
+    .dm-script-tab {
+      min-width: 120px;
+      max-width: 260px;
+      height: 29px;
+      border: 0;
+      border-right: 1px solid #d6d6d6;
+      background: #efefef;
+      color: #2f2f2f;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 10px;
+      cursor: pointer;
+      font-size: 13px;
+      font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, 'Noto Sans', 'Liberation Sans', sans-serif;
+      box-sizing: border-box;
+    }
+
+    .dm-script-tab.active {
+      background: #f8f8f8;
+    }
+
+    .dm-script-tab-label {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      flex: 1 1 auto;
+      text-align: left;
+    }
+
+    .dm-script-tab-close {
+      border: 0;
+      background: transparent;
+      color: #616161;
+      width: 18px;
+      height: 18px;
+      border-radius: 4px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+      flex: 0 0 auto;
+      font-size: 13px;
+      line-height: 1;
+    }
+
+    .dm-script-tab-close:hover {
+      background: #e5e5e5;
+      color: #2f2f2f;
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+</body>
+</html>

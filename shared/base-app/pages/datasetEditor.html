@@ -1,0 +1,990 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:;">
+    <title>Dataset Editor</title>
+    <style>
+      @font-face {
+        font-family: 'Inter';
+        src: url('../../assets/fonts/Inter/Inter-Regular.ttf') format('truetype');
+        font-weight: 400;
+        font-style: normal;
+      }
+      @font-face {
+        font-family: 'Inter';
+        src: url('../../assets/fonts/Inter/Inter-Bold.ttf') format('truetype');
+        font-weight: 700;
+        font-style: normal;
+      }
+      :root {
+        --de-bg: #f2f2f2;
+        --de-panel: #ffffff;
+        --de-toolbar: #ececec;
+        --de-toolbar-2: #e4e4e4;
+        --de-line: #7b7f85;
+        --de-line-soft: #a1a6ae;
+        --de-header: #f7f7f7;
+        --de-index: #fafafa;
+        --de-text: #1f1f1f;
+        --de-soft: #666;
+        --de-blue: #275ea7;
+        --de-tab: #ececec;
+        --de-tab-active: #ffffff;
+      }
+      html, body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: var(--de-bg);
+        color: var(--de-text);
+        font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, 'Noto Sans', 'Liberation Sans', sans-serif;
+        font-size: 13px;
+      }
+      .dataset-editor {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+      }
+      .dataset-editor__cover {
+        top: 0;
+        left: 0;
+        display: none;
+        position: fixed;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(110, 110, 110, 0.35);
+        z-index: 40;
+        align-items: center;
+        justify-content: center;
+      }
+      .dataset-editor__cover--active {
+        display: flex;
+      }
+      .dataset-editor__cover-label {
+        display: none;
+        min-width: 180px;
+        max-width: 320px;
+        padding: 14px 18px;
+        border: 1px solid rgba(64, 74, 88, 0.22);
+        border-radius: 10px;
+        background: rgba(255, 255, 255, 0.97);
+        box-shadow: 0 10px 28px rgba(32, 42, 56, 0.18);
+        color: var(--de-text);
+        font-size: 14px;
+        font-weight: 600;
+        text-align: center;
+      }
+      .dataset-editor__cover--loading .dataset-editor__cover-label {
+        display: block;
+      }
+      .dataset-editor__menu {
+        position: fixed;
+        z-index: 60;
+        display: none;
+        min-width: 172px;
+        padding: 4px;
+        border: 1px solid rgba(67, 77, 90, 0.22);
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.98);
+        box-shadow: 0 10px 26px rgba(26, 34, 44, 0.16);
+      }
+      .dataset-editor__menu.is-open {
+        display: block;
+      }
+      .dataset-editor__menu-button {
+        display: block;
+        width: 100%;
+        border: 0;
+        border-radius: 6px;
+        background: transparent;
+        color: var(--de-text);
+        font: inherit;
+        text-align: left;
+        padding: 7px 10px;
+        cursor: default;
+      }
+      .dataset-editor__menu-button:hover,
+      .dataset-editor__menu-button:focus-visible {
+        background: #e8f0ff;
+        outline: none;
+      }
+      .dataset-editor__menu-button:disabled {
+        color: #9aa3ad;
+        background: transparent;
+        cursor: default;
+        opacity: 0.62;
+      }
+      .dataset-editor__menu-button:disabled:hover,
+      .dataset-editor__menu-button:disabled:focus-visible {
+        background: transparent;
+        outline: none;
+      }
+      .dataset-editor__menu-separator {
+        height: 1px;
+        margin: 4px 3px;
+        background: rgba(107, 118, 133, 0.22);
+      }
+      .dataset-editor__chrome {
+        display: flex;
+        align-items: center;
+        justify-content: flex-start;
+        gap: 12px;
+        padding: 7px 10px 6px;
+        border-bottom: 1px solid var(--de-line);
+        background: linear-gradient(to bottom, var(--de-toolbar), var(--de-toolbar-2));
+      }
+      .dataset-editor__title-wrap {
+        display: flex;
+        align-items: center;
+        min-width: 0;
+      }
+      .dataset-editor__dataset-switch {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 220px;
+      }
+      .dataset-editor__dataset-switch-label {
+        font-size: 11px;
+        color: var(--de-soft);
+        white-space: nowrap;
+      }
+      .dataset-editor__dataset-select {
+        min-width: 160px;
+        max-width: 260px;
+        height: 24px;
+        padding: 1px 22px 1px 6px;
+        border: 1px solid var(--de-line-soft);
+        border-radius: 4px;
+        background: #ffffff;
+        color: var(--de-text);
+        font: inherit;
+      }
+      .dataset-editor__dataset-switch .dataset-grid__select-wrap {
+        flex: 0 0 160px;
+        width: 160px;
+        height: 24px;
+      }
+      .dataset-editor__dataset-switch .dataset-grid__select-arrow {
+        right: 7px;
+      }
+      .dataset-editor__dataset-select.dataset-grid__select {
+        width: 100%;
+        min-width: 0;
+        box-sizing: border-box;
+        -webkit-appearance: none;
+        -moz-appearance: none;
+        appearance: none;
+      }
+      .dataset-editor__title {
+        display: none;
+      }
+      .dataset-editor__meta {
+        font-size: 11px;
+        line-height: 1;
+        color: var(--de-soft);
+        white-space: nowrap;
+      }
+      .dataset-editor__body {
+        flex: 1 1 auto;
+        min-height: 0;
+        background: var(--de-panel);
+      }
+      .dataset-editor__panel {
+        display: none;
+        height: 100%;
+      }
+      .dataset-editor__panel.is-active {
+        display: block;
+      }
+      .dataset-sheet {
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+      }
+      .dataset-sheet__viewport {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow: auto;
+        background: #fff;
+      }
+      .dataset-sheet__status {
+        padding: 18px;
+        color: var(--de-soft);
+      }
+      .dataset-sheet__canvas {
+        position: relative;
+        min-width: 100%;
+        min-height: 100%;
+      }
+      .dataset-sheet__overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+      }
+      table.dataset-grid {
+        border-collapse: separate;
+        border-spacing: 0;
+        table-layout: fixed;
+        font-size: 12px;
+        min-width: max-content;
+      }
+      .dataset-grid th,
+      .dataset-grid td {
+        border-right: 1px solid var(--de-line);
+        border-bottom: 1px solid var(--de-line);
+        padding: 4px 7px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        background: #fff;
+        box-sizing: border-box;
+      }
+      .dataset-grid thead th {
+        position: sticky;
+        top: 0px;
+        z-index: 3;
+        background: var(--de-header);
+        font-weight: 600;
+        border-top: 0;
+        user-select: none;
+        -webkit-user-select: none;
+      }
+      .dataset-grid th.row-index,
+      .dataset-grid td.row-index {
+        position: sticky;
+        left: 0;
+        z-index: 2;
+        text-align: right;
+        background: var(--de-index);
+        color: var(--de-soft);
+        border-right-color: #9ea7b2;
+      }
+      .dataset-grid td.row-index.is-filtered-out {
+        position: sticky;
+      }
+      .dataset-grid td.row-index.is-filtered-out::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        background: linear-gradient(
+          to bottom right,
+          transparent calc(50% - 0.5px),
+          var(--de-line-soft) calc(50% - 0.5px),
+          var(--de-line-soft) calc(50% + 0.5px),
+          transparent calc(50% + 0.5px)
+        );
+      }
+      .dataset-grid thead th.row-index {
+        z-index: 4;
+      }
+      .dataset-grid tbody tr:nth-child(even) td:not(.row-index) {
+        background: #fcfcfc;
+      }
+      .dataset-grid--data th.is-selected,
+      .dataset-grid--data td.is-selected {
+        background: #c7ddff;
+      }
+      .dataset-grid--data tbody tr:nth-child(even) td.is-selected {
+        background: #c7ddff;
+      }
+      .dataset-grid--data td.is-active-cell {
+        background: #c7ddff;
+      }
+      .dataset-grid--data tbody tr:nth-child(even) td.is-active-cell {
+        background: #c7ddff;
+      }
+      .dataset-grid--data td.is-editing-cell,
+      .dataset-grid--data tbody tr:nth-child(even) td.is-editing-cell,
+      .dataset-grid--data td.is-editing-cell:focus-within {
+        background: #dce8ff !important;
+        outline: 1px solid #275ea7;
+        outline-offset: -1px;
+      }
+      .dataset-grid--variables tbody tr.is-selected > td,
+      .dataset-grid--variables tbody tr.is-selected > td.row-index {
+        background: #dbe9ff !important;
+      }
+      .dataset-grid--variables td.row-index.is-active-row-index {
+        background: #dbe9ff !important;
+      }
+      .dataset-grid--variables tbody tr.is-selected .dataset-grid__input,
+      .dataset-grid--variables tbody tr.is-selected .dataset-grid__select,
+      .dataset-grid--variables tbody tr.is-selected .dataset-grid__select-wrap,
+      .dataset-grid--variables tbody tr.is-selected .dataset-grid__values-cell,
+      .dataset-grid--variables tbody tr.is-selected .dataset-grid__values-text {
+        background: transparent;
+      }
+      .dataset-grid--data td {
+        height: 26px;
+      }
+      .dataset-grid__data-cell {
+        position: relative;
+      }
+      .dataset-grid__data-cell.is-declared-missing {
+        color: #6b5a00;
+        font-style: italic;
+      }
+      .dataset-grid__data-input {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        min-width: 0;
+        box-sizing: border-box;
+        margin: 0;
+        padding: 4px 7px;
+        border: 0;
+        background: transparent;
+        color: var(--de-text);
+        font: inherit;
+        line-height: inherit;
+        text-align: inherit;
+        outline: none;
+        box-shadow: none;
+        border-radius: 0;
+      }
+      .dataset-grid__data-cell:focus-within {
+        background: #fffdf2;
+      }
+      .dataset-grid--variables td.wrap {
+        white-space: normal;
+        line-height: 1.35;
+      }
+      .dataset-grid__header-label {
+        display: block;
+        padding-right: 8px;
+      }
+      .dataset-grid--variables thead th {
+        position: sticky;
+        position: -webkit-sticky;
+      }
+      .dataset-grid--variables thead th[data-variable-header] {
+        position: sticky;
+        top: 0;
+        user-select: none;
+      }
+      .dataset-grid__col-resizer {
+        position: absolute;
+        top: 0;
+        right: 0;
+        width: 8px;
+        height: 100%;
+        cursor: col-resize;
+      }
+      .dataset-grid--variables thead th {
+        position: sticky;
+        top: 0;
+      }
+      .dataset-grid--variables thead th[data-variable-header] {
+        position: sticky;
+        top: 0;
+      }
+      .dataset-grid--variables .dataset-grid__input,
+      .dataset-grid--variables .dataset-grid__select {
+        width: 100%;
+        min-width: 0;
+        box-sizing: border-box;
+        border: 0;
+        background: transparent;
+        color: var(--de-text);
+        font: inherit;
+        padding: 2px 4px;
+        margin: -2px -4px;
+        outline: none;
+        box-shadow: none;
+        border-radius: 0;
+      }
+      .dataset-grid__select-wrap {
+        position: relative;
+        display: flex;
+        align-items: center;
+      }
+      .dataset-grid--variables .dataset-grid__select {
+        -webkit-appearance: none;
+        -moz-appearance: none;
+        appearance: none;
+        padding-right: 16px;
+      }
+      .dataset-grid__select-arrow {
+        position: absolute;
+        right: 2px;
+        top: 50%;
+        transform: translateY(-50%);
+        pointer-events: none;
+        font-size: 0.55rem;
+        line-height: 1;
+        color: #555;
+      }
+      .dataset-grid--variables .dataset-grid__input:focus,
+      .dataset-grid--variables .dataset-grid__select:focus {
+        outline: none;
+        background: transparent;
+        box-shadow: none;
+      }
+      .dataset-grid--variables td:focus-within {
+        background: #fffdf2;
+      }
+      .dataset-grid--variables tbody tr.is-selected td:focus-within {
+        background: #dbe9ff;
+      }
+      .dataset-grid--variables td.is-cell-selected,
+      .dataset-grid--variables tbody tr.is-selected > td.is-cell-selected,
+      .dataset-grid--variables tbody tr:nth-child(even) td.is-cell-selected {
+        background: #c7ddff !important;
+      }
+      .dataset-grid--variables td.is-cell-selected .dataset-grid__input,
+      .dataset-grid--variables td.is-cell-selected .dataset-grid__select,
+      .dataset-grid--variables td.is-cell-selected .dataset-grid__select-wrap,
+      .dataset-grid--variables td.is-cell-selected .dataset-grid__values-cell,
+      .dataset-grid--variables td.is-cell-selected .dataset-grid__values-text {
+        background: transparent;
+      }
+      .dataset-grid--variables td {
+        padding: 4px 6px;
+        vertical-align: top;
+      }
+      .dataset-grid--variables td[data-column="values"] {
+        position: relative;
+        max-width: 108px;
+        width: 108px;
+        padding-right: 2px;
+      }
+      .dataset-grid__values-cell {
+        display: block;
+        width: 100%;
+        min-width: 0;
+        overflow: visible;
+        padding-right: 22px;
+        box-sizing: border-box;
+      }
+      .dataset-grid__values-text {
+        display: block;
+        min-width: 0;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .dataset-grid__values-button {
+        position: absolute;
+        right: 1px;
+        top: 50%;
+        width: 20px;
+        height: 20px;
+        transform: translateY(-50%);
+        border: 1px solid #aebfd3;
+        border-radius: 3px;
+        background: linear-gradient(180deg, #f7fbff 0%, #d7e3f0 100%);
+        color: #6882a3;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0;
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.25px;
+        line-height: 1;
+        box-shadow:
+          0 1px 0 rgba(255, 255, 255, 0.95) inset,
+          0 1px 2px rgba(80, 104, 132, 0.18),
+          0 0 0 1px rgba(255, 255, 255, 0.4);
+        z-index: 2;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.12s ease, background 0.12s ease, border-color 0.12s ease, color 0.12s ease, box-shadow 0.12s ease;
+      }
+      .dataset-grid__values-button:hover {
+        background: linear-gradient(180deg, #fbfdff 0%, #d5e2f0 100%);
+        border-color: #97abc1;
+        color: #4f6b8c;
+        box-shadow:
+          0 1px 0 rgba(255, 255, 255, 0.95) inset,
+          0 1px 3px rgba(80, 104, 132, 0.22),
+          0 0 0 1px rgba(255, 255, 255, 0.4);
+      }
+      .dataset-grid__values-button:focus-visible {
+        outline: none;
+        border-color: #7f9bbb;
+        box-shadow:
+          0 0 0 2px rgba(143, 176, 212, 0.28),
+          0 1px 0 rgba(255, 255, 255, 0.95) inset;
+      }
+      .dataset-grid--variables td[data-column="values"]:hover .dataset-grid__values-button,
+      .dataset-grid--variables td[data-column="values"]:focus-within .dataset-grid__values-button {
+        opacity: 1;
+        pointer-events: auto;
+      }
+      .dataset-modal[hidden] {
+        display: none;
+      }
+      .dataset-modal {
+        position: fixed;
+        inset: 0;
+        z-index: 50;
+        background: transparent;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+        box-sizing: border-box;
+        pointer-events: none;
+      }
+      .dataset-modal__dialog {
+        width: fit-content;
+        min-width: 0;
+        max-width: min(760px, calc(100vw - 48px));
+        max-height: min(680px, calc(100vh - 48px));
+        background: #fff;
+        border: 1px solid var(--de-line);
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.22);
+        display: flex;
+        flex-direction: column;
+        pointer-events: auto;
+      }
+      .dataset-modal__header {
+        display: flex;
+        align-items: center;
+        justify-content: flex-start;
+        padding: 10px 12px;
+        border-bottom: 1px solid var(--de-line);
+        background: var(--de-header);
+      }
+      .dataset-modal__title {
+        font-size: 13px;
+        font-weight: 600;
+      }
+      .dataset-modal__body {
+        overflow: auto;
+        padding: 12px 12px 16px;
+        background: #f6f6f6;
+        width: fit-content;
+        max-width: min(760px, calc(100vw - 48px));
+      }
+      .dataset-modal__footer {
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+        padding: 10px 12px 12px;
+        border-top: 1px solid var(--de-line);
+        background: #f6f6f6;
+      }
+      .dataset-modal__action {
+        min-width: 88px;
+        height: 30px;
+        padding: 0 14px;
+        border-radius: 6px;
+        border: 1px solid #b8c6d5;
+        background: linear-gradient(180deg, #ffffff 0%, #eef3f8 100%);
+        color: #29415f;
+        font: inherit;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .dataset-modal__action:hover {
+        border-color: #8ba3bb;
+      }
+      .dataset-modal__action:focus-visible {
+        outline: none;
+        box-shadow: 0 0 0 2px rgba(143, 176, 212, 0.28);
+      }
+      .dataset-modal__action--primary {
+        border-color: #5f88b1;
+        background: linear-gradient(180deg, #7ea8d3 0%, #5c87b3 100%);
+        color: #fff;
+      }
+      .dataset-modal__action--primary:hover {
+        border-color: #4f769c;
+      }
+      dm-checkbox.ds-labels-table__checkbox {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+      dm-checkbox.ds-labels-table__checkbox.custom-checkbox--disabled {
+        opacity: 0.5;
+        pointer-events: none;
+      }
+      .labels-area__message {
+        margin-left: 6px;
+        color: #3f4d63;
+        font-size: 0.9rem;
+      }
+      .ds-labels-table {
+        width: auto;
+        min-width: 560px;
+        margin-left: 4px;
+        border-collapse: collapse;
+        font-size: 0.9rem;
+        margin-top: 6px;
+      }
+      .ds-labels-table th,
+      .ds-labels-table td {
+        padding: 2px 2px;
+        text-align: left;
+        vertical-align: middle;
+      }
+      .ds-labels-table__missing {
+        width: 78px;
+        min-width: 78px;
+        max-width: 78px;
+        text-align: center !important;
+        vertical-align: middle !important;
+        padding-left: 0 !important;
+      }
+      .ds-labels-table__drag {
+        width: 18px;
+        min-width: 18px;
+        max-width: 18px;
+        text-align: center;
+        vertical-align: middle;
+      }
+      .ds-labels-table thead .ds-labels-table__missing {
+        position: relative;
+        left: 0;
+        text-align: center !important;
+        white-space: nowrap;
+      }
+      .ds-labels-table thead .ds-labels-table__value {
+        padding-left: 5px;
+      }
+      .ds-labels-table thead .ds-labels-table__label {
+        padding-left: 7px;
+      }
+      .ds-labels-table__value {
+        width: 118px;
+        min-width: 118px;
+        max-width: 118px;
+      }
+      .ds-labels-table__label {
+        width: 260px;
+        min-width: 260px;
+      }
+      .ds-labels-table__actions {
+        width: 24px;
+        min-width: 24px;
+        max-width: 24px;
+        text-align: center;
+      }
+      .ds-labels-delete {
+        width: 26px;
+        height: 26px;
+        border: 1px solid rgba(0, 0, 0, 0.12);
+        border-radius: 6px;
+        background: rgba(255, 255, 255, 0.9);
+        cursor: pointer;
+        line-height: 1;
+        padding: 4px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .ds-labels-delete:hover {
+        border-color: rgba(0, 0, 0, 0.35);
+        background: rgba(236, 88, 88, 0.14);
+      }
+      .ds-labels-delete img {
+        width: 17px;
+        height: 17px;
+        pointer-events: none;
+      }
+      .ds-labels-add-row__cell {
+        text-align: right;
+        color: #29384d;
+        font-size: 0.9rem;
+        padding-left: 4px;
+        padding-right: 6px;
+      }
+      .ds-labels-add-row__content {
+        display: inline-flex;
+        justify-content: flex-end;
+        align-items: center;
+        gap: 8px;
+        width: 100%;
+      }
+      .ds-labels-add-row__label {
+        display: inline-block;
+        white-space: nowrap;
+      }
+      .ds-labels-add {
+        width: 26px;
+        height: 26px;
+        border: 1px solid rgba(0, 0, 0, 0.12);
+        border-radius: 6px;
+        background: rgba(255, 255, 255, 0.9);
+        cursor: pointer;
+        line-height: 1;
+        padding: 4px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        color: #26714d;
+        font-size: 22px;
+        font-weight: 500;
+      }
+      .ds-labels-drag {
+        width: 8px;
+        height: 22px;
+        border: none;
+        background: transparent;
+        padding: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        cursor: grab;
+      }
+      .ds-labels-drag::before {
+        content: '';
+        width: 6px;
+        height: 15px;
+        background-image:
+          radial-gradient(circle, #26714d 58%, transparent 60%),
+          radial-gradient(circle, #26714d 58%, transparent 60%),
+          radial-gradient(circle, #26714d 58%, transparent 60%);
+        background-size: 4px 4px;
+        background-repeat: no-repeat;
+        background-position: center 0.5px, center 5.5px, center 10.5px;
+      }
+      .ds-labels-drag:active {
+        cursor: grabbing;
+      }
+      .ds-labels-row--dragging {
+        opacity: 0.6;
+      }
+      .ds-labels-row--dragover td {
+        outline: 1px dashed var(--active-color, #7ab094);
+        outline-offset: -4px;
+      }
+      .ds-labels-add:hover {
+        border-color: rgba(0, 0, 0, 0.35);
+        background: rgba(236, 88, 88, 0.14);
+      }
+      .ds-labels-add img {
+        width: 17px;
+        height: 17px;
+        pointer-events: none;
+      }
+      .ds-labels-range-controls {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 0.9rem;
+        width: 100%;
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      .ds-labels-range-controls--disabled {
+        opacity: 0.45;
+        pointer-events: none;
+      }
+      .ds-labels-range-checkbox {
+        display: flex;
+        align-items: center;
+        gap: 11px;
+      }
+      .ds-labels-range-label {
+        display: inline-flex;
+        align-items: center;
+      }
+      .ds-labels-range-checkbox .ds-labels-table__checkbox {
+        margin-left: 4px;
+      }
+      .ds-labels-range-inputs {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+      }
+      .ds-labels-range-row td {
+        padding-top: 15px;
+      }
+      .ds-labels-table__missing--range {
+        text-align: center;
+      }
+      .ds-labels-table__range-content {
+        padding-left: 0;
+      }
+      .ds-labels-range-inputs__item {
+        display: flex;
+        flex-direction: column;
+      }
+      .ds-labels-range-input {
+        margin-top: 2px;
+        width: 75px;
+        padding-left: 8px;
+        color: #1f2b3c;
+        font-size: 0.9rem;
+      }
+      .ds-labels-range-inputs--disabled {
+        opacity: 0.4;
+      }
+      .ds-labels-table__input {
+        width: 100%;
+        height: 26px;
+        box-sizing: border-box;
+        padding: 3px 8px;
+        border: 1px solid #d6dde7;
+        border-radius: 6px;
+        background: #fff;
+        color: #1f2b3c;
+        font: inherit;
+      }
+      .ds-labels-table__input:focus {
+        outline: none;
+        border-color: #7bb798;
+        box-shadow: 0 0 0 2px rgba(123, 183, 152, 0.18);
+      }
+      .dataset-editor__footer {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 0 8px;
+        height: 34px;
+        border-top: 1px solid var(--de-line);
+        background: linear-gradient(to bottom, #efefef, #dfdfdf);
+      }
+      .dataset-editor__tabs {
+        display: inline-flex;
+        align-items: flex-end;
+        gap: 2px;
+        height: 100%;
+      }
+      .dataset-editor__tab {
+        align-self: flex-end;
+        margin: 0;
+        height: 28px;
+        padding: 0 14px;
+        border: 1px solid var(--de-line);
+        border-bottom: 0;
+        border-top-left-radius: 4px;
+        border-top-right-radius: 4px;
+        background: var(--de-tab);
+        color: #444;
+        cursor: pointer;
+        font-size: 12px;
+        font-weight: 600;
+      }
+      .dataset-editor__tab.is-active {
+        background: var(--de-tab-active);
+        color: var(--de-blue);
+      }
+      .dataset-editor__footer-note {
+        font-size: 11px;
+        color: var(--de-soft);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="dataset-editor" id="datasetEditorRoot">
+      <div class="dataset-editor__cover" id="datasetEditorCover">
+        <div class="dataset-editor__cover-label" id="datasetEditorCoverLabel" hidden>Loading...</div>
+      </div>
+      <div class="dataset-editor__menu" id="datasetEditorHeaderMenu" hidden>
+        <button type="button" class="dataset-editor__menu-button" data-header-menu-action="copy-values">Copy values</button>
+        <button type="button" class="dataset-editor__menu-button" data-header-menu-action="copy-labels">Copy values and labels</button>
+        <button type="button" class="dataset-editor__menu-button" data-header-menu-action="paste" disabled>Paste</button>
+        <div class="dataset-editor__menu-separator" aria-hidden="true"></div>
+        <button type="button" class="dataset-editor__menu-button" data-header-menu-action="sort-asc">Sort ascending</button>
+        <button type="button" class="dataset-editor__menu-button" data-header-menu-action="sort-desc">Sort descending</button>
+        <div class="dataset-editor__menu-separator" aria-hidden="true"></div>
+        <button type="button" class="dataset-editor__menu-button" data-header-menu-action="add-before">Add column before</button>
+        <button type="button" class="dataset-editor__menu-button" data-header-menu-action="add-after">Add column after</button>
+        <div class="dataset-editor__menu-separator" aria-hidden="true"></div>
+        <button type="button" class="dataset-editor__menu-button" data-header-menu-action="rename">Rename column</button>
+        <button type="button" class="dataset-editor__menu-button" data-header-menu-action="remove">Remove</button>
+      </div>
+      <div class="dataset-editor__menu" id="datasetEditorRowMenu" hidden>
+        <button type="button" class="dataset-editor__menu-button" data-row-menu-action="rename">Rename row</button>
+        <button type="button" class="dataset-editor__menu-button" data-row-menu-action="add-before">Add row before</button>
+        <button type="button" class="dataset-editor__menu-button" data-row-menu-action="add-after">Add row after</button>
+        <div class="dataset-editor__menu-separator" aria-hidden="true"></div>
+        <button type="button" class="dataset-editor__menu-button" data-row-menu-action="remove">Delete row</button>
+      </div>
+      <div class="dataset-editor__menu" id="datasetEditorVariableRowMenu" hidden>
+        <button type="button" class="dataset-editor__menu-button" data-variable-row-menu-action="add-before">Add row before</button>
+        <button type="button" class="dataset-editor__menu-button" data-variable-row-menu-action="add-after">Add row after</button>
+        <div class="dataset-editor__menu-separator" aria-hidden="true"></div>
+        <button type="button" class="dataset-editor__menu-button" data-variable-row-menu-action="remove">Remove row</button>
+      </div>
+      <div class="dataset-editor__menu" id="datasetEditorCellMenu" hidden>
+        <button type="button" class="dataset-editor__menu-button" data-cell-menu-action="copy">Copy</button>
+        <button type="button" class="dataset-editor__menu-button" data-cell-menu-action="paste">Paste</button>
+      </div>
+      <div class="dataset-editor__chrome">
+        <div class="dataset-editor__dataset-switch">
+          <label class="dataset-editor__dataset-switch-label" for="datasetEditorDatasetSelect">Dataset:</label>
+          <div class="dataset-grid__select-wrap">
+            <select class="dataset-editor__dataset-select dataset-grid__select custom-select" id="datasetEditorDatasetSelect"></select>
+            <span class="dataset-grid__select-arrow" aria-hidden="true">▼</span>
+          </div>
+        </div>
+        <div class="dataset-editor__title-wrap">
+          <div class="dataset-editor__title" id="datasetEditorTitle">Dataset Editor</div>
+          <div class="dataset-editor__meta" id="datasetEditorSubtitle">&nbsp;</div>
+        </div>
+      </div>
+      <div class="dataset-editor__body">
+        <section class="dataset-editor__panel is-active" id="datasetEditorPanelData" role="tabpanel">
+          <div class="dataset-sheet">
+            <div class="dataset-sheet__viewport" id="datasetEditorDataScroll"></div>
+          </div>
+        </section>
+        <section class="dataset-editor__panel" id="datasetEditorPanelVariables" role="tabpanel">
+          <div class="dataset-sheet">
+            <div class="dataset-sheet__viewport" id="datasetEditorVariablesScroll"></div>
+          </div>
+        </section>
+      </div>
+      <div class="dataset-editor__footer">
+        <div class="dataset-editor__tabs" role="tablist" aria-label="Dataset editor tabs">
+          <button type="button" class="dataset-editor__tab is-active" id="datasetEditorTabData" role="tab" aria-selected="true">Data</button>
+          <button type="button" class="dataset-editor__tab" id="datasetEditorTabVariables" role="tab" aria-selected="false">Variables</button>
+        </div>
+        <div class="dataset-editor__footer-note" id="datasetEditorFooterNote">Spreadsheet view</div>
+      </div>
+    </div>
+    <div class="dataset-modal" id="datasetValueLabelsModal" hidden>
+      <div class="dataset-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="datasetValueLabelsTitle">
+        <div class="dataset-modal__header">
+          <div class="dataset-modal__title" id="datasetValueLabelsTitle">Values</div>
+        </div>
+        <div class="dataset-modal__body" id="datasetValueLabelsBody"></div>
+        <div class="dataset-modal__footer">
+          <button type="button" class="dataset-modal__action" id="datasetValueLabelsCancel">Cancel</button>
+          <button type="button" class="dataset-modal__action dataset-modal__action--primary" id="datasetValueLabelsSave">Save</button>
+        </div>
+      </div>
+    </div>
+    <script src="./shared/dmControls.js"></script>
+    <script>
+      (function () {
+        if (typeof require !== 'function') return;
+        const path = require('path');
+        const resourcesPath = String(process.resourcesPath || '');
+        const candidates = [
+          path.join(process.cwd(), 'dist', 'shared', 'base-app', 'modules', 'datasetEditorInterface.js'),
+          resourcesPath ? path.join(resourcesPath, 'app.asar', 'shared', 'base-app', 'modules', 'datasetEditorInterface.js') : ''
+        ].filter(Boolean);
+        let lastError = '';
+        for (const one of candidates) {
+          try {
+            require(one);
+            return;
+          } catch (error) {
+            lastError = String(error && error.message ? error.message : error);
+          }
+        }
+        console.error('DATASET-EDITOR-ERR loader failed:', lastError);
+      })();
+    </script>
+  </body>
+</html>

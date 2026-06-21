@@ -1,0 +1,2025 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta
+        http-equiv="Content-Security-Policy"
+        content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' blob:; worker-src 'self' blob: data:; font-src 'self' data:;"
+    >
+    <title>Loading...</title>
+    <link rel="stylesheet" href="./shared/appCodicon.css">
+    <style>
+        @font-face {
+            font-family: "Dialog Mono";
+            src: url("../../assets/fonts/liberation-mono/LiberationMono-Regular.ttf") format("truetype");
+            font-weight: 400;
+            font-style: normal;
+        }
+
+        @font-face {
+            font-family: "Inter";
+            src: url("../../assets/fonts/Inter/Inter-Regular.ttf") format("truetype");
+            font-weight: 400;
+            font-style: normal;
+        }
+
+        @font-face {
+            font-family: "Inter";
+            src: url("../../assets/fonts/Inter/Inter-Bold.ttf") format("truetype");
+            font-weight: 700;
+            font-style: normal;
+        }
+
+        :root {
+            color-scheme: light;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            font-size: 13px;
+            color: #222;
+            background: #ffffff;
+            --main-workspace-width: 296px;
+            --main-workspace-border: #d3d3d3;
+            --workspace-pane-bg: #fbfbfb;
+            --active-dataset-accent: #2f7d4f;
+            --active-dataset-bg: rgba(47, 125, 79, 0.10);
+            --main-command-height: 35%;
+            --main-command-min-height: 56px;
+            --main-terminal-min-height: 180px;
+            --splitter-width: 2px;
+            --splitter-color: #b5b5b5;
+        }
+
+        html,
+        body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+        }
+
+        body {
+            margin: 0;
+        }
+
+        .app {
+            width: 100%;
+            height: 100%;
+            min-height: 0;
+            display: grid;
+            grid-template-rows: 1fr;
+            overflow: hidden;
+        }
+
+        .topbar {
+            display: none;
+        }
+
+        .title {
+            font-size: 17px;
+            font-weight: 600;
+        }
+
+        .meta {
+            display: flex;
+            gap: 10px;
+            color: #5f6672;
+            white-space: nowrap;
+        }
+
+        .pill {
+            border: 1px solid #cbd1da;
+            background: #f8f9fb;
+            padding: 3px 8px;
+            border-radius: 4px;
+        }
+
+        .main {
+            display: flex;
+            flex-direction: row;
+            width: 100%;
+            height: 100%;
+            max-height: 100%;
+            min-height: 0;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .sidebar {
+            display: none;
+        }
+
+        .sidebarSection {
+            min-width: 0;
+        }
+
+        .content {
+            display: flex;
+            flex-direction: column;
+            flex: 1 1 auto;
+            min-width: 0;
+            padding: 0;
+            height: 100%;
+            max-height: 100%;
+            min-height: 0;
+            overflow: hidden;
+        }
+
+        #workspacePane {
+            flex: 0 0 var(--main-workspace-width);
+            width: var(--main-workspace-width);
+            min-width: 220px;
+            height: 100%;
+            min-height: 0;
+            border-left: 1px solid var(--main-workspace-border);
+            background: var(--workspace-pane-bg);
+            box-sizing: border-box;
+            overflow: hidden;
+        }
+
+        body.workspace-pane-hidden #workspacePane {
+            display: none;
+        }
+
+        .primary {
+            order: 1;
+            flex: 1 1 auto;
+            min-width: 0;
+            min-height: 0;
+            height: 100%;
+        }
+
+        .secondary {
+            order: 2;
+            min-width: 0;
+            display: none;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 14px;
+        }
+
+        h2 {
+            margin: 0 0 12px;
+            font-size: 15px;
+        }
+
+        pre {
+            margin: 0;
+            padding: 14px;
+            background: #ffffff;
+            border: 1px solid #d7dbe2;
+            border-radius: 4px;
+            overflow: auto;
+        }
+
+        ul {
+            margin: 0;
+            padding-left: 18px;
+        }
+
+        li {
+            margin: 5px 0;
+        }
+
+        .panel {
+            background: #ffffff;
+            border: 1px solid #d7dbe2;
+            border-radius: 4px;
+            padding: 14px;
+        }
+
+        .stack {
+            display: grid;
+            gap: 14px;
+        }
+
+        .stack.secondary {
+            display: none;
+        }
+
+        .status {
+            display: inline-block;
+            margin-left: 8px;
+            padding: 1px 6px;
+            border-radius: 4px;
+            font-size: 12px;
+            border: 1px solid;
+        }
+
+        .status.enabled {
+            color: #23613d;
+            border-color: #8bc29f;
+            background: #eff8f2;
+        }
+
+        .status.disabled {
+            color: #8a4a00;
+            border-color: #e1b878;
+            background: #fff7ea;
+        }
+
+        .missing {
+            color: #6a717c;
+            font-size: 12px;
+            margin-top: 2px;
+            overflow-wrap: anywhere;
+        }
+
+        .commandField {
+            display: grid;
+            grid-template-columns: 86px 1fr;
+            gap: 10px;
+            margin: 4px 0;
+        }
+
+        .commandName {
+            color: #6a717c;
+        }
+
+        .commandValue {
+            overflow-wrap: anywhere;
+        }
+
+        .buttonRow {
+            display: flex;
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        .commandButton {
+            border: 1px solid #cbd1da;
+            background: #ffffff;
+            border-radius: 4px;
+            padding: 5px 10px;
+            cursor: pointer;
+        }
+
+        .commandButton:disabled {
+            color: #8a9099;
+            cursor: default;
+            background: #f2f4f7;
+        }
+
+        .contextMenu {
+            position: fixed;
+            z-index: 20;
+            min-width: 180px;
+            padding: 4px;
+            border: 1px solid #cbd1da;
+            border-radius: 4px;
+            background: #ffffff;
+            box-shadow: 0 8px 18px rgba(35, 42, 52, 0.14);
+        }
+
+        .contextMenu[hidden] {
+            display: none;
+        }
+
+        .contextMenu button {
+            display: block;
+            width: 100%;
+            border: 0;
+            background: transparent;
+            padding: 6px 8px;
+            text-align: left;
+            cursor: pointer;
+        }
+
+        .contextMenu button:hover {
+            background: #eef2f7;
+        }
+
+        .isDatasetSelection {
+            background: #e8f1ff;
+            outline: 2px solid #7aa7e8;
+            outline-offset: -2px;
+        }
+
+        .commandInput {
+            box-sizing: border-box;
+            width: 100%;
+            min-height: 76px;
+            resize: vertical;
+            border: 1px solid #cbd1da;
+            border-radius: 4px;
+            padding: 8px;
+            font: inherit;
+        }
+
+        .cellWriteGrid {
+            display: grid;
+            grid-template-columns: 80px 1fr;
+            gap: 8px;
+            align-items: center;
+            margin-top: 10px;
+        }
+
+        .cellWriteGrid input {
+            box-sizing: border-box;
+            width: 100%;
+            border: 1px solid #cbd1da;
+            border-radius: 4px;
+            padding: 5px 7px;
+            font: inherit;
+        }
+
+        .datasetLayoutGrid {
+            display: grid;
+            grid-template-columns: repeat(4, auto minmax(64px, 1fr));
+            gap: 8px;
+            align-items: center;
+            margin-top: 10px;
+        }
+
+        .datasetLayoutGrid input {
+            box-sizing: border-box;
+            width: 100%;
+            border: 1px solid #cbd1da;
+            border-radius: 4px;
+            padding: 5px 7px;
+            font: inherit;
+        }
+
+        .consolePanel {
+            min-height: 0;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 0;
+            padding: 0;
+            border: 0;
+            border-radius: 0;
+            overflow: hidden;
+        }
+
+        #commandPane {
+            flex: 0 0 var(--main-command-height);
+            min-height: var(--main-command-min-height);
+            position: relative;
+            box-sizing: border-box;
+        }
+
+        #command {
+            width: 100%;
+            height: 100%;
+            box-sizing: border-box;
+            padding: 6px 74px 6px 8px;
+            background: #f8f8f8;
+            border-bottom: 1px solid #d0d0d0;
+            overflow: auto;
+            white-space: pre-wrap;
+            font-family: "Dialog Mono", monospace;
+            font-size: 13px;
+            line-height: 20px;
+            font-variant-ligatures: none;
+            font-feature-settings: "liga" 0, "calt" 0, "clig" 0, "dlig" 0;
+        }
+
+        #command * {
+            font-family: inherit;
+            font-size: inherit;
+            line-height: inherit;
+            font-variant-ligatures: inherit;
+            font-feature-settings: inherit;
+        }
+
+        #commandActions {
+            position: absolute;
+            top: 6px;
+            right: 22px;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 90ms ease-out;
+            z-index: 4;
+        }
+
+        #commandPane:hover #commandActions,
+        #commandPane:focus-within #commandActions {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .dm-command-action {
+            width: 24px;
+            height: 24px;
+            padding: 0;
+            border: 1px solid #d0d0d0;
+            border-radius: 4px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(255, 255, 255, 0.96);
+            color: #2f2f2f;
+            cursor: pointer;
+            box-shadow: none;
+        }
+
+        .dm-command-action:hover {
+            background: #ececec;
+            color: #1f1f1f;
+        }
+
+        .dm-command-action:active {
+            background: #dfdfdf;
+        }
+
+        .dm-command-action:disabled {
+            opacity: 0.45;
+            cursor: default;
+        }
+
+        .dm-command-action .codicon {
+            font-size: 15px;
+            line-height: 1;
+        }
+
+        .dm-command-action::after {
+            content: attr(data-tooltip);
+            position: absolute;
+            right: 0;
+            top: calc(100% + 6px);
+            background: #f5f5f5;
+            color: #3a3a3a;
+            border: 1px solid #c7c7c7;
+            border-radius: 10px;
+            padding: 5px 11px;
+            font-size: 12px;
+            font-family: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, "Noto Sans", "Liberation Sans", sans-serif;
+            font-weight: 400;
+            line-height: 1.2;
+            white-space: nowrap;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 70ms ease-out;
+            transition-delay: 20ms;
+            pointer-events: none;
+            z-index: 30;
+        }
+
+        .dm-command-action:hover::after,
+        .dm-command-action:focus-visible::after {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .copy-icon {
+            position: relative;
+            display: inline-block;
+            width: 18px;
+            height: 18px;
+            color: currentColor;
+        }
+
+        .copy-icon::before,
+        .copy-icon::after {
+            content: "";
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            border: 1.3px solid currentColor;
+            border-radius: 2.5px;
+            background: transparent;
+            box-sizing: border-box;
+        }
+
+        .copy-icon::before {
+            top: 1.5px;
+            left: 5px;
+        }
+
+        .copy-icon::after {
+            top: 4.5px;
+            left: 1.5px;
+        }
+
+        .splitter {
+            flex: 0 0 var(--splitter-width);
+            height: var(--splitter-width);
+            background: var(--splitter-color);
+            cursor: row-resize;
+        }
+
+        #consoleArea {
+            flex: 1 1 auto;
+            min-height: var(--main-terminal-min-height);
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+            position: relative;
+        }
+
+        body.command-pane-hidden #commandPane,
+        body.command-pane-hidden #mainSplitter {
+            display: none;
+        }
+
+        .consoleHeader {
+            display: none;
+        }
+
+        .consoleStatus {
+            color: #5f6672;
+            font-size: 12px;
+            text-align: right;
+        }
+
+        .consoleToolbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            height: 28px;
+            min-height: 28px;
+            border-bottom: 1px solid #d7dbe2;
+            background: #f4f4f4;
+            padding: 0 8px;
+            box-sizing: border-box;
+        }
+
+        .consoleToolbarLeft,
+        .consoleToolbarRight {
+            display: flex;
+            align-items: center;
+            gap: 0;
+            min-width: 0;
+        }
+
+        .consoleToolbarLeft {
+            gap: 8px;
+        }
+
+        .consoleChip {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            max-width: 420px;
+            min-height: 24px;
+            border: 0;
+            border-radius: 0;
+            background: transparent;
+            padding: 0 4px;
+            color: #2f2f2f;
+            overflow: hidden;
+        }
+
+        .consoleChipLabel {
+            display: none;
+            white-space: nowrap;
+        }
+
+        .consoleChipValue {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            font-size: 12px;
+        }
+
+        .dm-console-cwd {
+            height: 24px;
+            border: 0;
+            border-radius: 0;
+            background: transparent;
+            padding-left: 2px;
+            padding-right: 0;
+            cursor: pointer;
+            position: relative;
+        }
+
+        .dm-console-cwd:hover,
+        .dm-console-cwd:active {
+            background: #e4e4e4;
+        }
+
+        .dm-console-cwd::after {
+            content: attr(data-tooltip);
+            position: absolute;
+            left: 0;
+            top: calc(100% + 6px);
+            background: #f5f5f5;
+            color: #3a3a3a;
+            border: 1px solid #c7c7c7;
+            border-radius: 10px;
+            padding: 5px 11px;
+            font-size: 12px;
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+            font-weight: 400;
+            line-height: 1.2;
+            white-space: nowrap;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 70ms ease-out;
+            transition-delay: 80ms;
+            pointer-events: none;
+            z-index: 30;
+        }
+
+        .dm-console-cwd:hover::after,
+        .dm-console-cwd:focus-visible::after {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .dm-console-active-dataset {
+            flex: 0 1 auto;
+            min-width: 0;
+            max-width: 26%;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            height: 20px;
+            box-sizing: border-box;
+            padding: 0 7px;
+            border: 1px solid rgba(47, 125, 79, 0.28);
+            border-radius: 4px;
+            background: rgba(47, 125, 79, 0.08);
+            color: #245f3d;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            font-size: 11px;
+            line-height: 1;
+        }
+
+        .dm-console-active-dataset[hidden] {
+            display: none;
+        }
+
+        .dm-console-active-dataset-label {
+            flex: 0 0 auto;
+            font-weight: 600;
+        }
+
+        .dm-console-active-dataset-name {
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            font-weight: 700;
+        }
+
+        .toolbarButton {
+            min-width: 24px;
+            width: 24px;
+            height: 24px;
+            border: 0;
+            border-radius: 4px;
+            background: transparent;
+            color: #1f2328;
+            font: inherit;
+            cursor: pointer;
+            padding: 0;
+            overflow: hidden;
+            text-indent: -999px;
+            position: relative;
+        }
+
+        .toolbarButton:hover {
+            background: #e4e4e4;
+        }
+
+        .toolbarButton:disabled {
+            color: #9aa4b2;
+            cursor: default;
+        }
+
+        .toolbarButton::before {
+            content: "";
+            position: absolute;
+            inset: 4px;
+            background: currentColor;
+            -webkit-mask-position: center;
+            -webkit-mask-repeat: no-repeat;
+            -webkit-mask-size: contain;
+            mask-position: center;
+            mask-repeat: no-repeat;
+            mask-size: contain;
+        }
+
+        .toolbarButton#consoleToolbarRestart::before {
+            -webkit-mask-image: url("../../assets/icons/restart.svg");
+            mask-image: url("../../assets/icons/restart.svg");
+        }
+
+        .toolbarButton#consoleToolbarRestartWorkspace::before {
+            -webkit-mask-image: url("../../assets/icons/restartworkspace.svg");
+            mask-image: url("../../assets/icons/restartworkspace.svg");
+        }
+
+        .toolbarButton#consoleToolbarClear::before {
+            -webkit-mask-image: url("../../assets/icons/clear-all.svg");
+            mask-image: url("../../assets/icons/clear-all.svg");
+        }
+
+        .toolbarButton#consoleToolbarInfo::before {
+            -webkit-mask-image: url("../../assets/icons/info.svg");
+            mask-image: url("../../assets/icons/info.svg");
+        }
+
+        #consoleToolbarStart,
+        #consoleHistoryPrevious,
+        #consoleHistoryNext,
+        #consoleUiCommandVisibility,
+        label[for="consoleUiCommandVisibility"] {
+            display: none;
+        }
+
+        .dm-console-toolbar .dm-toolbar-btn.dm-toolbar-btn-stop {
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+        }
+
+        .dm-console-toolbar-left .dm-toolbar-btn::after {
+            left: 0;
+            right: auto;
+        }
+
+        body.console-runtime-busy .dm-console-toolbar .dm-toolbar-btn.dm-toolbar-btn-stop {
+            opacity: 1;
+            visibility: visible;
+            pointer-events: auto;
+        }
+
+        .consoleTerminal {
+            flex: 1 1 auto;
+            min-height: 0;
+            overflow: hidden;
+            background: #ffffff;
+            padding: 0;
+            box-sizing: border-box;
+            position: relative;
+        }
+
+        .consoleInputRow {
+            display: none;
+            grid-template-columns: 18px minmax(260px, 1fr);
+            gap: 4px;
+            align-items: baseline;
+            border-top: 0;
+            background: #ffffff;
+            padding: 0;
+            max-width: 100%;
+        }
+
+        body.consoleMonacoReady .consoleInputRow {
+            display: none;
+        }
+
+        body.consoleMonacoReady .consolePrompt {
+            display: none;
+        }
+
+        .consolePrompt {
+            color: #566171;
+            font-family: "Dialog Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+            font-size: 13px;
+            line-height: 20px;
+            font-variant-ligatures: none;
+            font-feature-settings: "liga" 0, "calt" 0, "clig" 0, "dlig" 0;
+            padding-top: 0;
+        }
+
+        .transcript {
+            min-height: 0;
+            max-height: none;
+            overflow: visible;
+            margin-top: 0;
+            margin-bottom: 0;
+            padding-left: 0;
+            list-style: none;
+            border: 0;
+            border-radius: 0;
+            background: #ffffff;
+        }
+
+        .transcript li {
+            padding: 0;
+            margin: 0;
+            white-space: pre-wrap;
+            overflow-wrap: anywhere;
+            font-family: "Dialog Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+            font-size: 13px;
+            line-height: 20px;
+            font-variant-ligatures: none;
+            font-feature-settings: "liga" 0, "calt" 0, "clig" 0, "dlig" 0;
+        }
+
+        .transcript li + li {
+            border-top: 0;
+        }
+
+        .transcript .submitted {
+            color: #23527c;
+            background: #ffffff;
+        }
+
+        .transcript .output {
+            color: #1f2933;
+        }
+
+        .transcript .failed,
+        .transcript .rejected {
+            color: #8a1f11;
+            background: #ffffff;
+        }
+
+        .consolePanel .commandInput {
+            min-height: 20px;
+            height: 20px;
+            max-height: 120px;
+            border: 0;
+            outline: none;
+            background: #ffffff;
+            color: #1f1f1f;
+            font-family: "Dialog Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+            font-size: 13px;
+            line-height: 20px;
+            font-variant-ligatures: none;
+            font-feature-settings: "liga" 0, "calt" 0, "clig" 0, "dlig" 0;
+            padding: 0;
+            white-space: pre-wrap;
+            overflow-wrap: anywhere;
+            caret-color: #111827;
+        }
+
+        .consolePanel .commandInput .monaco-editor,
+        .consolePanel .commandInput .monaco-editor-background,
+        .consolePanel .commandInput .monaco-editor .margin {
+            background: #ffffff;
+        }
+
+        .consolePanel .commandInput .monaco-editor .view-line,
+        .consolePanel .commandInput .monaco-editor .margin-view-overlays {
+            font-variant-ligatures: none;
+            font-feature-settings: "liga" 0, "calt" 0, "clig" 0, "dlig" 0;
+        }
+
+        .consolePanel .commandInput:focus {
+            outline: none;
+        }
+
+        .consolePanel .commandInput:empty::before {
+            content: "";
+        }
+
+        .consolePanel .commandButton {
+            display: none;
+        }
+
+        .consoleToken-comment {
+            color: #6c737a;
+        }
+
+        .consoleToken-string {
+            color: #0a7c3c;
+        }
+
+        .consoleToken-keyword,
+        .consoleToken-function {
+            color: #d31d1d;
+        }
+
+        .consoleToken-argument {
+            color: #22529f;
+        }
+
+        .consoleToken-constant {
+            color: #aa0d91;
+        }
+
+        .workspaceList {
+            padding-left: 0;
+            list-style: none;
+        }
+
+        .workspaceList li,
+        .workspaceList .workspaceObject {
+            margin: 0;
+        }
+
+        .workspacePane {
+            border-top: 1px solid #edf0f4;
+            padding-top: 14px;
+            min-height: 0;
+        }
+
+        .workspacePane h2 {
+            margin-bottom: 8px;
+        }
+
+        .workspaceStatus {
+            color: #5f6672;
+            font-size: 12px;
+            line-height: 1.35;
+            margin-bottom: 8px;
+            overflow-wrap: anywhere;
+        }
+
+        .workspaceActions {
+            margin: 8px 0 10px;
+        }
+
+        .workspaceInspectStatus {
+            color: #5f6672;
+            font-size: 12px;
+            margin-bottom: 8px;
+            overflow-wrap: anywhere;
+        }
+
+        .workspaceGroup {
+            border-top: 1px solid #edf0f4;
+            padding-top: 9px;
+            margin-top: 9px;
+        }
+
+        .workspaceGroupHeading {
+            display: block;
+            width: 100%;
+            border: 0;
+            background: transparent;
+            color: #5f6672;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            margin-bottom: 6px;
+            padding: 2px 0;
+            text-align: left;
+            cursor: pointer;
+        }
+
+        .workspaceGroupHeading:hover {
+            color: #1f2933;
+        }
+
+        .workspaceGroupItems.collapsed {
+            display: none;
+        }
+
+        .workspaceObject {
+            border: 1px solid #d7dbe2;
+            border-radius: 4px;
+            padding: 8px;
+            background: #ffffff;
+        }
+
+        .workspaceObject + .workspaceObject {
+            margin-top: 7px;
+        }
+
+        .workspaceObject.active {
+            border-color: #8bb1e2;
+            background: #f4f8ff;
+        }
+
+        .workspaceObjectNameRow {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            min-width: 0;
+        }
+
+        .workspaceObjectName {
+            font-weight: 600;
+            overflow-wrap: anywhere;
+        }
+
+        .workspaceObjectKind,
+        .workspaceActiveBadge {
+            color: #5f6672;
+            font-size: 12px;
+            border: 1px solid #cbd1da;
+            border-radius: 4px;
+            padding: 1px 5px;
+            white-space: nowrap;
+        }
+
+        .workspaceActiveBadge {
+            color: #23613d;
+            border-color: #8bc29f;
+            background: #eff8f2;
+        }
+
+        .workspaceObjectDetails {
+            display: grid;
+            gap: 2px;
+            margin-top: 4px;
+            color: #5f6672;
+            font-size: 12px;
+            overflow-wrap: anywhere;
+        }
+
+        .workspaceObjectActions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-top: 8px;
+        }
+
+        .workspaceObjectActions .commandButton {
+            padding: 3px 7px;
+            font-size: 12px;
+        }
+
+        .workspaceEmpty {
+            color: #5f6672;
+            font-size: 12px;
+            padding-top: 6px;
+        }
+
+        .workspace-pane-shell {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            min-height: 0;
+            position: relative;
+        }
+
+        .workspace-pane-header {
+            height: 28px;
+            flex: 0 0 28px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            box-sizing: border-box;
+            padding: 0 8px;
+            border-bottom: 1px solid #d2d2d2;
+            background: #f3f3f3;
+        }
+
+        .workspace-pane-title {
+            color: #2d2d2d;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            font-size: 13px;
+            font-weight: 600;
+            line-height: 1;
+        }
+
+        .workspace-pane-actions {
+            flex: 0 0 auto;
+            display: inline-flex;
+            align-items: center;
+            gap: 0;
+        }
+
+        .workspace-pane-action {
+            position: relative;
+            width: 24px;
+            height: 24px;
+            padding: 0;
+            border: 0;
+            border-radius: 4px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: transparent;
+            color: #2f2f2f;
+            cursor: pointer;
+            box-shadow: none;
+            margin: 0 1px;
+            line-height: 1;
+            vertical-align: middle;
+        }
+
+        .workspace-pane-action:hover {
+            background: #e4e4e4;
+        }
+
+        .workspace-pane-action:active {
+            background: #d6d6d6;
+        }
+
+        .workspace-pane-action:disabled {
+            opacity: 0.4;
+            cursor: default;
+        }
+
+        .workspace-pane-action .workspace-pane-action-icon {
+            width: 15px;
+            height: 15px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            pointer-events: none;
+            user-select: none;
+        }
+
+        .workspace-pane-action .workspace-broom-icon {
+            width: 100%;
+            height: 100%;
+            display: block;
+            overflow: visible;
+        }
+
+        .workspace-pane-action .workspace-broom-icon path {
+            fill: none;
+            stroke: currentColor;
+            stroke-width: 0.7;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+            stroke-miterlimit: 5;
+            vector-effect: non-scaling-stroke;
+        }
+
+        .workspace-pane-action::after {
+            content: attr(data-tooltip);
+            position: absolute;
+            right: calc(100% + 8px);
+            top: 50%;
+            transform: translateY(-50%);
+            background: #f5f5f5;
+            color: #3a3a3a;
+            border: 1px solid #c7c7c7;
+            border-radius: 10px;
+            padding: 5px 11px;
+            font-size: 12px;
+            font-family: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, "Noto Sans", "Liberation Sans", sans-serif;
+            font-weight: 400;
+            line-height: 1.2;
+            white-space: nowrap;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 70ms ease-out;
+            transition-delay: 20ms;
+            pointer-events: none;
+            z-index: 30;
+        }
+
+        .workspace-pane-action:hover::after,
+        .workspace-pane-action:focus-visible::after {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .workspace-pane-body {
+            flex: 1 1 auto;
+            min-height: 0;
+            overflow: auto;
+            padding: 10px 10px 14px 10px;
+        }
+
+        .workspace-pane-empty {
+            padding: 18px 10px;
+            color: #7a7a7a;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            font-size: 12px;
+            line-height: 1.4;
+        }
+
+        .workspace-group {
+            margin-bottom: 10px;
+        }
+
+        .workspace-group-header {
+            width: 100%;
+            padding: 6px 8px;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            background: #f7f7f7;
+            color: #454545;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            font-size: 12px;
+            font-weight: 600;
+            text-align: left;
+        }
+
+        .workspace-group-chevron {
+            width: 18px;
+            color: #707070;
+            text-align: center;
+            font-size: 17px;
+            line-height: 1;
+        }
+
+        .workspace-group-title {
+            flex: 1 1 auto;
+            min-width: 0;
+        }
+
+        .workspace-group-count {
+            color: #7a7a7a;
+            font-weight: 500;
+        }
+
+        .workspace-group-items {
+            margin-top: 6px;
+        }
+
+        .workspace-variable-row {
+            position: relative;
+        }
+
+        .workspace-variable-row + .workspace-variable-row {
+            margin-top: 6px;
+        }
+
+        .workspace-variable-row.recent .workspace-variable {
+            background: #eff8f2;
+            border-color: rgba(52, 141, 88, 0.22);
+        }
+
+        .workspace-variable-row.active-dataset .workspace-variable {
+            background: #edf7f0;
+            border-color: rgba(47, 125, 79, 0.46);
+        }
+
+        .workspace-variable-row.active-dataset .workspace-variable:hover {
+            background: rgba(47, 125, 79, 0.14);
+            border-color: rgba(47, 125, 79, 0.58);
+        }
+
+        .workspace-variable {
+            width: 100%;
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            gap: 10px;
+            box-sizing: border-box;
+            margin: 0;
+            padding: 7px 9px;
+            border: 1px solid #ececec;
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.88);
+            text-align: left;
+            cursor: pointer;
+        }
+
+        .workspace-variable:hover {
+            background: #ffffff;
+            border-color: #d9d9d9;
+        }
+
+        .workspace-variable-main,
+        .workspace-variable-name-wrap,
+        .workspace-variable-summary {
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .workspace-variable-name-wrap {
+            flex: 1 1 auto;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .workspace-variable-main {
+            flex: 0 1 auto;
+            color: #1f1f1f;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            font-size: 12px;
+            font-weight: 600;
+            line-height: 1.25;
+        }
+
+        .workspace-active-dataset-badge {
+            flex: 0 0 auto;
+            padding: 1px 5px 2px;
+            border: 1px solid rgba(47, 125, 79, 0.34);
+            border-radius: 4px;
+            background: rgba(255, 255, 255, 0.72);
+            color: #2f7d4f;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            font-size: 10px;
+            font-weight: 700;
+            line-height: 1.1;
+        }
+
+        .workspace-variable-summary {
+            flex: 0 0 auto;
+            color: #6a6a6a;
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+            font-size: 11px;
+            font-weight: 600;
+            line-height: 1.25;
+        }
+
+        .workspace-variable-delete {
+            position: absolute;
+            top: 50%;
+            right: 6px;
+            transform: translateY(-50%);
+            min-width: 24px;
+            width: 24px;
+            height: 24px;
+            padding: 0;
+            border: 0;
+            border-radius: 4px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: transparent;
+            color: #111;
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+            transition: opacity 90ms ease-out;
+        }
+
+        .workspace-variable-row:hover .workspace-variable-delete,
+        .workspace-variable-row:focus-within .workspace-variable-delete {
+            opacity: 1;
+            visibility: visible;
+            pointer-events: auto;
+        }
+
+        .workspace-variable-delete:hover {
+            background: #ececec;
+        }
+
+        .workspace-variable-delete:active {
+            background: #dfdfdf;
+        }
+
+        .workspace-variable-delete .codicon {
+            font-size: 17px;
+            line-height: 1;
+            color: #111;
+            pointer-events: none;
+            user-select: none;
+        }
+
+        .workspace-context-menu {
+            position: absolute;
+            z-index: 20;
+            min-width: 150px;
+            padding: 4px;
+            border: 1px solid #c8c8c8;
+            border-radius: 6px;
+            background: #ffffff;
+            box-shadow: 0 6px 18px rgba(0, 0, 0, 0.14);
+        }
+
+        .workspace-context-menu[hidden] {
+            display: none;
+        }
+
+        .workspace-context-menu-item {
+            width: 100%;
+            min-height: 26px;
+            padding: 4px 8px;
+            border: 0;
+            border-radius: 4px;
+            background: transparent;
+            color: #242424;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            font-size: 12px;
+            font-weight: 500;
+            line-height: 1.25;
+            text-align: left;
+            cursor: pointer;
+        }
+
+        .workspace-context-menu-item:hover,
+        .workspace-context-menu-item:focus-visible {
+            background: #ececec;
+            outline: none;
+        }
+
+        .dataPreview {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+            font-size: 13px;
+        }
+
+        .dataPreview th,
+        .dataPreview td {
+            border: 1px solid #d7dbe2;
+            padding: 5px 7px;
+            text-align: left;
+        }
+
+        .dataPreview th {
+            background: #f8f9fb;
+            font-weight: 600;
+        }
+
+        .dataPreviewHeaderLabel {
+            display: inline-block;
+            margin-right: 6px;
+        }
+
+        .dataPreviewHeaderTools {
+            display: inline-flex;
+            gap: 2px;
+            vertical-align: middle;
+        }
+
+        .dataPreviewHeaderTool {
+            width: 20px;
+            height: 20px;
+            border: 1px solid #cbd1da;
+            border-radius: 3px;
+            background: #ffffff;
+            color: #1f2328;
+            font: inherit;
+            line-height: 1;
+            padding: 0;
+            cursor: pointer;
+        }
+
+        .dialogHost {
+            margin-bottom: 18px;
+            background: #ffffff;
+            border: 1px solid #b8c7dd;
+            border-radius: 4px;
+        }
+
+        .dialogHeader {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 10px 12px;
+            border-bottom: 1px solid #d7dbe2;
+            background: #f8f9fb;
+        }
+
+        .dialogTitle {
+            font-weight: 600;
+        }
+
+        .dialogBody {
+            padding: 12px;
+        }
+
+        .sourceDialogPreview {
+            margin-top: 12px;
+            overflow: auto;
+            border: 1px solid #d7dbe2;
+            background: #f8f9fb;
+            max-height: 520px;
+        }
+
+        .sourceDialogSurface {
+            position: relative;
+            margin: 12px;
+            background: #ffffff;
+            border: 1px solid #cbd1da;
+        }
+
+        .sourceDialogControl {
+            position: absolute;
+            box-sizing: border-box;
+            font: inherit;
+        }
+
+        .sourceDialogControl-label {
+            overflow: hidden;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+        }
+
+        .sourceDialogControl-error {
+            outline: 1px solid #b3261e;
+            outline-offset: 1px;
+        }
+
+        .sourceDialogControl-plot {
+            display: grid;
+            place-items: center;
+            border: 1px dashed #aeb8c6;
+            color: #6a717c;
+            background: #fbfcfe;
+        }
+
+        .sourceDialogControl-separator {
+            background: #c8ced8;
+        }
+
+        .iconButton {
+            width: 28px;
+            height: 28px;
+            border: 1px solid #cbd1da;
+            background: #ffffff;
+            border-radius: 4px;
+            cursor: pointer;
+            line-height: 1;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        @media (max-width: 860px) {
+            .content {
+                grid-template-columns: 1fr;
+            }
+
+            .sidebar {
+                border-right: 0;
+                border-bottom: 1px solid #d7dbe2;
+            }
+        }
+    </style>
+</head>
+<body class="workspace-pane-hidden command-pane-hidden">
+    <div class="app">
+        <div class="contextMenu" id="datasetEditorContextMenu" hidden></div>
+        <header class="topbar">
+            <div class="title" id="appTitle">Loading...</div>
+            <div class="meta">
+                <span class="pill" id="productPill">product</span>
+                <span class="pill" id="runtimePill">runtime</span>
+            </div>
+        </header>
+        <main class="main">
+            <aside class="sidebar">
+                <section class="sidebarSection">
+                    <h2>Base Menu</h2>
+                    <ul id="menuList"></ul>
+                </section>
+                <section class="workspacePane sidebarSection" id="workspacePanelDiagnostics">
+                    <h2>Workspace</h2>
+                    <div id="activeDatasetStatus"></div>
+                    <div id="workspaceStatus"></div>
+                    <div class="buttonRow workspaceActions">
+                        <button class="commandButton" id="workspaceRefresh" type="button">Refresh</button>
+                        <button class="commandButton" id="workspaceClear" type="button">Clear</button>
+                    </div>
+                    <div class="workspaceInspectStatus" id="workspaceInspectStatus"></div>
+                    <ul class="workspaceList" id="workspaceList"></ul>
+                </section>
+            </aside>
+            <section class="content">
+                <div class="stack secondary">
+                    <div class="panel" id="capabilitiesPanel">
+                        <h2>Runtime Capabilities</h2>
+                        <ul id="capabilityList"></ul>
+                    </div>
+                    <div class="panel" id="productInfoPanel">
+                        <h2>Product Info</h2>
+                        <div id="productInfo"></div>
+                    </div>
+                    <div class="panel" id="productSettingsPanel">
+                        <h2>Settings</h2>
+                        <div id="productSettings"></div>
+                        <div id="applicationSettings"></div>
+                    </div>
+                    <div class="panel">
+                        <h2>Runtime Session</h2>
+                        <div id="runtimeSession"></div>
+                        <div class="buttonRow">
+                            <button class="commandButton" id="runtimeStart" type="button">Start</button>
+                            <button class="commandButton" id="runtimeStop" type="button">Stop</button>
+                        </div>
+                    </div>
+                    <div class="panel">
+                        <h2>Runtime Events</h2>
+                        <div id="runtimeEventStatus"></div>
+                        <div class="buttonRow">
+                            <button class="commandButton" id="runtimeEventsRefresh" type="button">Refresh events</button>
+                        </div>
+                        <ul class="workspaceList" id="runtimeEventList"></ul>
+                    </div>
+                    <div class="panel">
+                        <h2>Runtime Prompts</h2>
+                        <div id="promptStatus"></div>
+                        <div class="cellWriteGrid">
+                            <label for="promptText">prompt</label>
+                            <input id="promptText" type="text" value="Enter value">
+                            <label for="promptAnswer">answer</label>
+                            <input id="promptAnswer" type="text" value="42">
+                        </div>
+                        <div class="buttonRow">
+                            <button class="commandButton" id="promptQueue" type="button">Queue</button>
+                            <button class="commandButton" id="promptAnswerButton" type="button">Answer first</button>
+                            <button class="commandButton" id="promptRefresh" type="button">Refresh</button>
+                        </div>
+                        <ul class="workspaceList" id="promptList"></ul>
+                    </div>
+                    <div class="panel">
+                        <h2>Feature Status</h2>
+                        <ul id="featureList"></ul>
+                    </div>
+                    <div class="panel">
+                        <h2>Product Capabilities</h2>
+                        <ul id="productCapabilityList"></ul>
+                    </div>
+                    <div class="panel">
+                        <h2>Startup Tasks</h2>
+                        <div id="startupTaskStatus"></div>
+                        <ul id="startupTaskList"></ul>
+                    </div>
+                    <div class="panel">
+                        <h2>Selected Command</h2>
+                        <div id="selectedCommand"></div>
+                    </div>
+                    <div class="panel">
+                        <h2>Command Log</h2>
+                        <ul id="commandLog"></ul>
+                    </div>
+                </div>
+                <div class="primary">
+                    <section class="dialogHost hidden" id="dialogHost">
+                        <div class="dialogHeader">
+                            <div class="dialogTitle" id="dialogTitle"></div>
+                            <button class="iconButton" id="dialogClose" type="button" title="Close">X</button>
+                        </div>
+                        <div class="dialogBody" id="dialogBody"></div>
+                    </section>
+                    <section class="panel consolePanel" id="visibleCommandPanel">
+                        <div id="commandPane">
+                            <div id="commandActions" aria-label="Command preview actions">
+                                <button type="button" id="commandPreviewToConsole" class="dm-command-action" data-tooltip="Copy to Console" aria-label="Copy to Console">
+                                    <span class="copy-icon" aria-hidden="true"></span>
+                                </button>
+                                <button type="button" id="commandPreviewToScriptEditor" class="dm-command-action" data-tooltip="Send to Script Editor" aria-label="Send to Script Editor">
+                                    <span class="codicon codicon-insert" aria-hidden="true"></span>
+                                </button>
+                            </div>
+                            <div id="command"></div>
+                        </div>
+                        <div class="splitter" id="mainSplitter" role="separator" aria-orientation="horizontal" tabindex="0"></div>
+                        <div id="consoleArea">
+                            <div class="consoleHeader">
+                                <h2>Console</h2>
+                                <div class="consoleStatus" id="consoleStatus">Runtime status pending.</div>
+                            </div>
+                            <div class="consoleToolbar dm-console-toolbar" id="consoleToolbar" aria-label="Console toolbar">
+                                <div class="consoleToolbarLeft dm-console-toolbar-left">
+                                <button class="dm-console-cwd" id="consoleCwd" type="button" data-tooltip="Set working directory" aria-label="Set working directory">
+                                    <span class="codicon codicon-folder" aria-hidden="true"></span>
+                                    <span class="dm-console-cwd-text" id="consoleCwdText"></span>
+                                </button>
+                                <span class="dm-console-active-dataset" id="consoleActiveDataset" hidden>
+                                    <span class="dm-console-active-dataset-label" id="consoleActiveDatasetLabel">Active:</span>
+                                    <span class="dm-console-active-dataset-name" id="consoleActiveDatasetName"></span>
+                                </span>
+                                <label class="consoleChip" for="consoleUiCommandVisibility">
+                                    <span class="consoleChipLabel">UI commands</span>
+                                    <select id="consoleUiCommandVisibility">
+                                        <option value="hidden">hidden</option>
+                                        <option value="visible">visible</option>
+                                    </select>
+                                </label>
+                                </div>
+                                <div class="consoleToolbarRight dm-console-toolbar-right">
+                                <button class="toolbarButton" id="consoleToolbarStart" type="button" title="Start runtime">Start</button>
+                                <button class="dm-toolbar-btn dm-toolbar-btn-stop" id="consoleToolbarStop" type="button" data-tooltip="Interrupt" aria-label="Interrupt">
+                                    <span class="dm-stop-square" aria-hidden="true"></span>
+                                </button>
+                                <button class="dm-toolbar-btn" id="consoleToolbarRestart" type="button" data-tooltip="Restart Clean" aria-label="Restart Clean">
+                                    <span class="dm-toolbar-svg-icon dm-toolbar-svg-icon-restart" aria-hidden="true"></span>
+                                </button>
+                                <button class="dm-toolbar-btn" id="consoleToolbarRestartWorkspace" type="button" data-tooltip="Restart and Restore Workspace" aria-label="Restart and Restore Workspace">
+                                    <span class="dm-toolbar-svg-icon dm-toolbar-svg-icon-restartworkspace" aria-hidden="true"></span>
+                                </button>
+                                <button class="toolbarButton" id="consoleHistoryPrevious" type="button" title="Previous command">Prev</button>
+                                <button class="toolbarButton" id="consoleHistoryNext" type="button" title="Next command">Next</button>
+                                <button class="dm-toolbar-btn" id="consoleToolbarInfo" type="button" data-tooltip="Info" aria-label="Info">
+                                    <span class="codicon codicon-info" aria-hidden="true"></span>
+                                </button>
+                                <button class="dm-toolbar-btn" id="consoleToolbarClear" type="button" data-tooltip="Clear Console" aria-label="Clear Console">
+                                    <span class="codicon codicon-clear-all" aria-hidden="true"></span>
+                                </button>
+                                <button class="dm-toolbar-btn" id="workspacePaneToggle" type="button" data-tooltip="Show Workspace" aria-label="Show Workspace">
+                                    <span class="codicon codicon-chevron-right" aria-hidden="true"></span>
+                                </button>
+                                </div>
+                            </div>
+                            <div class="consoleTerminal" id="consoleTerminal">
+                                <ul class="transcript" id="runtimeTranscript"></ul>
+                                <div class="consoleInputRow">
+                                    <span class="consolePrompt">&gt;</span>
+                                    <div
+                                        class="commandInput"
+                                        id="visibleCommandInput"
+                                        role="textbox"
+                                        aria-multiline="true"
+                                        contenteditable="true"
+                                        spellcheck="false"
+                                    ></div>
+                                    <button class="commandButton" id="visibleCommandRun" type="button">Run</button>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+                    <div class="mainDiagnosticsScaffold hidden" aria-hidden="true">
+                    <section class="panel">
+                        <h2>Invisible Query</h2>
+                        <textarea class="commandInput" id="invisibleQueryInput" spellcheck="false">workspace.objects()</textarea>
+                        <div class="buttonRow">
+                            <button class="commandButton" id="invisibleQueryRun" type="button">Query</button>
+                        </div>
+                        <div id="invisibleQueryStatus"></div>
+                    </section>
+                    <br>
+                    <section class="panel">
+                        <h2>Invisible Mutation</h2>
+                        <div class="cellWriteGrid">
+                            <label for="invisibleMutationName">name</label>
+                            <input id="invisibleMutationName" type="text" value="lastSelection">
+                            <label for="invisibleMutationValue">value</label>
+                            <input id="invisibleMutationValue" type="text" value="sample_data">
+                        </div>
+                        <div class="buttonRow">
+                            <button class="commandButton" id="invisibleMutationRun" type="button">Mutate</button>
+                        </div>
+                        <div id="invisibleMutationStatus"></div>
+                    </section>
+                    <br>
+                    <section class="panel">
+                        <h2>Help Topic</h2>
+                        <div class="cellWriteGrid">
+                            <label for="helpTopic">topic</label>
+                            <input id="helpTopic" type="text" value="data.frame">
+                        </div>
+                        <div class="buttonRow">
+                            <button class="commandButton" id="helpTopicLookup" type="button">Lookup</button>
+                        </div>
+                        <div id="helpTopicStatus"></div>
+                    </section>
+                    <br>
+                    <section class="panel">
+                        <h2>Completions</h2>
+                        <div class="cellWriteGrid">
+                            <label for="completionPrefix">prefix</label>
+                            <input id="completionPrefix" type="text" value="s">
+                        </div>
+                        <div class="buttonRow">
+                            <button class="commandButton" id="completionLookup" type="button">Lookup</button>
+                        </div>
+                        <div id="completionStatus"></div>
+                    </section>
+                    <br>
+                    <section class="panel">
+                        <h2>Dependency Checks</h2>
+                        <div class="cellWriteGrid">
+                            <label for="dependencyNames">packages</label>
+                            <input id="dependencyNames" type="text" value="QCA, admisc">
+                        </div>
+                        <div class="buttonRow">
+                            <button class="commandButton" id="dependencyCheck" type="button">Check</button>
+                        </div>
+                        <div id="dependencyStatus"></div>
+                    </section>
+                    <br>
+                    <section class="panel">
+                        <h2>Import Data</h2>
+                        <div class="cellWriteGrid">
+                            <label for="importSource">source</label>
+                            <input id="importSource" type="text" value="/tmp/data.csv">
+                            <label for="importFormat">format</label>
+                            <input id="importFormat" type="text" value="csv">
+                            <label for="importTarget">target</label>
+                            <input id="importTarget" type="text" value="imported_data">
+                            <label for="importOverwrite">overwrite</label>
+                            <input id="importOverwrite" type="checkbox">
+                        </div>
+                        <div class="buttonRow">
+                            <button class="commandButton" id="selectImportFile" type="button">Browse</button>
+                            <button class="commandButton" id="planImportFile" type="button">Plan</button>
+                            <button class="commandButton" id="previewImportFile" type="button">Preview</button>
+                            <button class="commandButton" id="importData" type="button">Import</button>
+                        </div>
+                        <div id="importFileStatus"></div>
+                        <div id="importPlanStatus"></div>
+                        <div id="importPreviewStatus"></div>
+                        <div id="importStatus"></div>
+                    </section>
+                    <br>
+                    <section class="panel" id="datasetPreviewPanel">
+                        <h2>Dataset Preview</h2>
+                        <div id="datasetEditorSelection"></div>
+                        <div id="datasetEditorContextActions"></div>
+                        <div id="tabularPreviewStatus"></div>
+                        <div class="datasetLayoutGrid">
+                            <label for="dataStartRow">row start</label>
+                            <input id="dataStartRow" type="number" min="0" value="0">
+                            <label for="dataVisibleRows">rows</label>
+                            <input id="dataVisibleRows" type="number" min="1" value="50">
+                            <label for="dataStartColumn">column start</label>
+                            <input id="dataStartColumn" type="number" min="0" value="0">
+                            <label for="dataVisibleColumns">columns</label>
+                            <input id="dataVisibleColumns" type="number" min="1" value="20">
+                        </div>
+                        <div class="buttonRow">
+                            <button class="commandButton" id="datasetViewportBack" type="button">Previous rows</button>
+                            <button class="commandButton" id="datasetViewportForward" type="button">Next rows</button>
+                            <button class="commandButton" id="datasetViewportLeft" type="button">Previous columns</button>
+                            <button class="commandButton" id="datasetViewportRight" type="button">Next columns</button>
+                            <button class="commandButton" id="datasetViewportApply" type="button">Apply viewport</button>
+                        </div>
+                        <div class="cellWriteGrid">
+                            <label for="selectedColumnWidth">column width</label>
+                            <input id="selectedColumnWidth" type="number" min="24" value="96">
+                        </div>
+                        <div class="buttonRow">
+                            <button class="commandButton" id="columnNarrower" type="button">Narrower</button>
+                            <button class="commandButton" id="columnWider" type="button">Wider</button>
+                            <button class="commandButton" id="columnWidthApply" type="button">Apply width</button>
+                            <button class="commandButton" id="columnMoveLeft" type="button">Move left</button>
+                            <button class="commandButton" id="columnMoveRight" type="button">Move right</button>
+                        </div>
+                        <div id="datasetLayoutStatus"></div>
+                        <div id="tabularPreviewTable"></div>
+                        <div class="cellWriteGrid">
+                            <label for="cellRow">row</label>
+                            <input id="cellRow" type="number" min="0" value="0">
+                            <label for="cellColumn">column</label>
+                            <input id="cellColumn" type="text" value="condition">
+                            <label for="cellValue">value</label>
+                            <input id="cellValue" type="text" value="1">
+                        </div>
+                        <div class="buttonRow">
+                            <button class="commandButton" id="datasetBeginEdit" type="button">Edit selection</button>
+                            <button class="commandButton" id="datasetCommitEdit" type="button">Commit edit</button>
+                            <button class="commandButton" id="datasetCancelEdit" type="button">Cancel edit</button>
+                        </div>
+                        <div class="buttonRow">
+                            <button class="commandButton" id="cellWrite" type="button">Write cell</button>
+                        </div>
+                        <div id="cellWriteStatus"></div>
+                        <div class="cellWriteGrid">
+                            <label for="columnRenameFrom">from</label>
+                            <input id="columnRenameFrom" type="text" value="condition">
+                            <label for="columnRenameTo">to</label>
+                            <input id="columnRenameTo" type="text" value="condition2">
+                        </div>
+                        <div class="buttonRow">
+                            <button class="commandButton" id="columnRename" type="button">Rename column</button>
+                        </div>
+                        <div id="columnRenameStatus"></div>
+                        <div class="cellWriteGrid">
+                            <label for="columnInsertName">new</label>
+                            <input id="columnInsertName" type="text" value="inserted">
+                            <label for="columnInsertPosition">position</label>
+                            <select id="columnInsertPosition">
+                                <option value="after" selected>after</option>
+                                <option value="before">before</option>
+                            </select>
+                        </div>
+                        <div class="buttonRow">
+                            <button class="commandButton" id="columnInsert" type="button">Insert column</button>
+                            <button class="commandButton" id="columnRemove" type="button">Remove column</button>
+                        </div>
+                        <div id="columnStructureStatus"></div>
+                        <div class="cellWriteGrid">
+                            <label for="rowNameIndex">row</label>
+                            <input id="rowNameIndex" type="number" min="0" value="0">
+                            <label for="rowNameValue">name</label>
+                            <input id="rowNameValue" type="text" value="row1">
+                        </div>
+                        <div class="buttonRow">
+                            <button class="commandButton" id="rowNameUpdate" type="button">Update row name</button>
+                        </div>
+                        <div id="rowNameStatus"></div>
+                        <div class="cellWriteGrid">
+                            <label for="rowStructurePosition">position</label>
+                            <select id="rowStructurePosition">
+                                <option value="after" selected>after</option>
+                                <option value="before">before</option>
+                            </select>
+                        </div>
+                        <div class="buttonRow">
+                            <button class="commandButton" id="rowInsert" type="button">Insert row</button>
+                            <button class="commandButton" id="rowRemove" type="button">Remove row</button>
+                        </div>
+                        <div id="rowStructureStatus"></div>
+                        <div class="buttonRow">
+                            <button class="commandButton" id="copySelection" type="button">Build copy payload</button>
+                            <button class="commandButton" id="copyToClipboard" type="button">Copy</button>
+                        </div>
+                        <div id="copyPayloadStatus"></div>
+                        <div id="clipboardStatus"></div>
+                        <br>
+                        <h2>Paste Payload</h2>
+                        <textarea class="commandInput" id="pasteInput" spellcheck="false">A	1
+B	0</textarea>
+                        <div class="buttonRow">
+                            <button class="commandButton" id="readClipboard" type="button">Read clipboard</button>
+                            <button class="commandButton" id="parsePaste" type="button">Parse paste</button>
+                            <button class="commandButton" id="applyPaste" type="button">Apply paste</button>
+                        </div>
+                        <div id="clipboardReadStatus"></div>
+                        <div id="pastePayloadStatus"></div>
+                        <div id="pasteApplyStatus"></div>
+                        <div id="pasteApplyDetails"></div>
+                    </section>
+                    <br>
+                    <section class="panel" id="variableMetadataPanel">
+                        <h2>Variables</h2>
+                        <div id="variableMetadataStatus"></div>
+                        <div class="buttonRow">
+                            <button class="commandButton" id="variableMetadataRefresh" type="button">Refresh variables</button>
+                        </div>
+                        <div class="datasetLayoutGrid">
+                            <label for="variableStartRow">row start</label>
+                            <input id="variableStartRow" type="number" min="0" value="0">
+                            <label for="variableVisibleRows">rows</label>
+                            <input id="variableVisibleRows" type="number" min="1" value="50">
+                        </div>
+                        <div class="buttonRow">
+                            <button class="commandButton" id="variableViewportBack" type="button">Previous variables</button>
+                            <button class="commandButton" id="variableViewportForward" type="button">Next variables</button>
+                            <button class="commandButton" id="variableViewportApply" type="button">Apply variable viewport</button>
+                        </div>
+                        <div id="variableMetadataTable"></div>
+                        <div class="cellWriteGrid">
+                            <label for="variableName">variable</label>
+                            <input id="variableName" type="text" value="condition">
+                            <label for="variableMetadataKey">metadata</label>
+                            <select id="variableMetadataKey">
+                                <option value="label" selected>label</option>
+                                <option value="type">type</option>
+                                <option value="role">role</option>
+                                <option value="width">width</option>
+                                <option value="decimals">decimals</option>
+                                <option value="values">values</option>
+                                <option value="align">align</option>
+                                <option value="measure">measure</option>
+                            </select>
+                            <label for="variableMetadataValue">value</label>
+                            <input id="variableMetadataValue" type="text" value="Edited condition">
+                        </div>
+                        <div class="buttonRow">
+                            <button class="commandButton" id="variableMetadataWrite" type="button">Update metadata</button>
+                        </div>
+                        <div id="variableMetadataWriteStatus"></div>
+                        <br>
+                        <h2>Value Labels</h2>
+                        <div id="valueLabelsStatus"></div>
+                        <div class="buttonRow">
+                            <button class="commandButton" id="valueLabelsRefresh" type="button">Refresh labels</button>
+                        </div>
+                        <div id="valueLabelsTable"></div>
+                        <div class="cellWriteGrid">
+                            <label for="valueLabelVariable">variable</label>
+                            <input id="valueLabelVariable" type="text" value="condition">
+                            <label for="valueLabelValue">value</label>
+                            <input id="valueLabelValue" type="text" value="0">
+                            <label for="valueLabelLabel">label</label>
+                            <input id="valueLabelLabel" type="text" value="No">
+                        </div>
+                        <div class="buttonRow">
+                            <button class="commandButton" id="valueLabelsWrite" type="button">Update label value</button>
+                        </div>
+                        <div id="valueLabelsWriteStatus"></div>
+                        <br>
+                        <h2>Declared Missing</h2>
+                        <div id="declaredMissingStatus"></div>
+                        <div class="buttonRow">
+                            <button class="commandButton" id="declaredMissingRefresh" type="button">Refresh missing</button>
+                        </div>
+                        <div id="declaredMissingTable"></div>
+                        <div class="cellWriteGrid">
+                            <label for="declaredMissingVariable">variable</label>
+                            <input id="declaredMissingVariable" type="text" value="condition">
+                            <label for="declaredMissingValue">value</label>
+                            <input id="declaredMissingValue" type="text" value="-7">
+                            <label for="declaredMissingLabel">label</label>
+                            <input id="declaredMissingLabel" type="text" value="Refused">
+                        </div>
+                        <div class="buttonRow">
+                            <button class="commandButton" id="declaredMissingWrite" type="button">Update missing value</button>
+                        </div>
+                        <div id="declaredMissingWriteStatus"></div>
+                    </section>
+                    <br>
+                    <h2>Composition</h2>
+                    <pre id="compositionOutput">Loading...</pre>
+                    </div>
+                </div>
+            </section>
+            <aside id="workspacePane" aria-label="Workspace"></aside>
+        </main>
+    </div>
+    <script>
+        (function() {
+            if (typeof require !== "function") {
+                return;
+            }
+
+            const path = require("path");
+            const resourcesPath = String(process.resourcesPath || "");
+            const candidates = [
+                path.join(process.cwd(), "dist", "shared", "base-app", "pages", "main.js"),
+                resourcesPath
+                    ? path.join(resourcesPath, "app.asar", "shared", "base-app", "pages", "main.js")
+                    : ""
+            ].filter(Boolean);
+            let lastError = "";
+
+            for (const candidate of candidates) {
+                try {
+                    require(candidate);
+                    return;
+                }
+                catch (error) {
+                    lastError = String(error && error.message ? error.message : error);
+                }
+            }
+
+            console.error("MAIN-RENDERER-ERR loader failed:", lastError);
+        })();
+    </script>
+</body>
+</html>

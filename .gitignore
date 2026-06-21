@@ -1,0 +1,9 @@
+node_modules/
+dist/
+build/output/
+.DS_Store
+.vscode/
+*.log
+tmp/
+artifacts/
+AGENTS.md

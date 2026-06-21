@@ -1,0 +1,1497 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: http: https:; connect-src 'self' http: https:; frame-src 'self' http: https:; child-src 'self' http: https:;">
+    <title>Plots</title>
+    <link rel="stylesheet" href="./shared/appCodicon.css">
+    <style>
+      @font-face {
+        font-family: 'Inter';
+        src: url('../../assets/fonts/Inter/Inter-Regular.ttf') format('truetype');
+        font-weight: 400;
+        font-style: normal;
+      }
+      @font-face {
+        font-family: 'Inter';
+        src: url('../../assets/fonts/Inter/Inter-Bold.ttf') format('truetype');
+        font-weight: 700;
+        font-style: normal;
+      }
+      html, body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        background: #f3f3f3;
+        color: #242424;
+        font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+      }
+      :root {
+        --plot-history-toolbar-width: 0px;
+      }
+      .shell {
+        width: 100%;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+      }
+      .toolbar {
+        flex: 0 0 28px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 12px;
+        border-bottom: 1px solid #d7d7d7;
+        background: #f8f8f8;
+        box-sizing: border-box;
+        position: relative;
+      }
+      .title {
+        font-size: 13px;
+        font-weight: 700;
+      }
+      .toolbar-right {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        flex: 1 1 auto;
+        justify-content: flex-end;
+        padding-right: var(--plot-history-toolbar-width);
+        box-sizing: border-box;
+      }
+      .toolbar-history-actions {
+        position: absolute;
+        top: 50%;
+        right: 0;
+        transform: translateY(-50%);
+        width: var(--plot-history-toolbar-width);
+        height: 24px;
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        padding-right: 8px;
+        box-sizing: border-box;
+        pointer-events: none;
+        display: none;
+      }
+      .toolbar-controls {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .plot-toolbar-select {
+        height: 24px;
+        min-width: 0;
+        width: 70px;
+        padding: 0 24px 0 8px;
+        border: 1px solid #d0d0d0;
+        border-radius: 6px;
+        background: #ffffff;
+        color: #383838;
+        font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+        font-size: 11px;
+        font-weight: 700;
+        line-height: 1;
+        box-sizing: border-box;
+        appearance: none;
+        -webkit-appearance: none;
+        background-image:
+          linear-gradient(45deg, transparent 50%, #5a5a5a 50%),
+          linear-gradient(135deg, #5a5a5a 50%, transparent 50%);
+        background-position:
+          calc(100% - 14px) 9px,
+          calc(100% - 10px) 9px;
+        background-size: 4px 4px, 4px 4px;
+        background-repeat: no-repeat;
+        cursor: pointer;
+      }
+      .plot-toolbar-select:hover {
+        background-color: #f0f0f0;
+      }
+      .plot-toolbar-select:disabled {
+        opacity: 0.5;
+        cursor: default;
+      }
+      .plot-save-menu {
+        position: relative;
+        display: inline-flex;
+      }
+      .plot-save-popup {
+        position: absolute;
+        top: calc(100% + 6px);
+        right: 0;
+        width: 208px;
+        padding: 10px;
+        border: 1px solid rgba(0, 0, 0, 0.14);
+        border-radius: 14px;
+        background: rgba(255, 255, 255, 0.98);
+        box-shadow: 0 12px 28px rgba(0, 0, 0, 0.18);
+        backdrop-filter: blur(8px);
+        display: none;
+        z-index: 40;
+        box-sizing: border-box;
+      }
+      .plot-save-popup.is-open {
+        display: block;
+      }
+      .plot-save-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px 10px;
+        align-items: end;
+      }
+      .plot-save-field {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        min-width: 0;
+      }
+      .plot-save-field--full {
+        grid-column: 1 / -1;
+      }
+      .plot-save-label {
+        font-size: 11px;
+        font-weight: 700;
+        color: #555555;
+      }
+      .plot-save-input,
+      .plot-save-popup .plot-toolbar-select {
+        width: 100%;
+        min-width: 0;
+      }
+      .plot-save-input {
+        height: 24px;
+        padding: 0 8px;
+        border: 1px solid #d0d0d0;
+        border-radius: 6px;
+        background: #ffffff;
+        color: #383838;
+        font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+        font-size: 11px;
+        font-weight: 700;
+        box-sizing: border-box;
+      }
+      .plot-save-actions {
+        grid-column: 1 / -1;
+        display: flex;
+        justify-content: flex-end;
+        gap: 6px;
+        padding-top: 4px;
+      }
+      .plot-save-actions .plot-toolbar-btn {
+        min-width: 56px;
+      }
+      .plot-zoom-menu {
+        position: relative;
+        display: inline-flex;
+      }
+      .plot-zoom-button {
+        min-width: 0;
+        height: 24px;
+        padding: 0 4px 0 0;
+        border: 1px solid #d0d0d0;
+        border-radius: 6px;
+        background: #ffffff;
+        color: #383838;
+        display: inline-flex;
+        align-items: center;
+        gap: 0;
+        cursor: pointer;
+        box-sizing: border-box;
+      }
+      .plot-zoom-button:hover {
+        background: #f0f0f0;
+      }
+      .plot-toolbar-icon {
+        display: block;
+        width: 16px;
+        height: 16px;
+        pointer-events: none;
+      }
+      .plot-zoom-button-face {
+        display: inline-flex;
+        align-items: center;
+      }
+      .plot-zoom-button-icon {
+        padding: 0 4px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        height: 24px;
+      }
+      .plot-zoom-button-icon .plot-toolbar-icon {
+        width: 18px;
+        height: 18px;
+      }
+      .plot-zoom-button-label {
+        display: inline-flex;
+        align-items: center;
+        font-size: 12px;
+        font-weight: 400;
+        margin-right: 2px;
+        white-space: nowrap;
+      }
+      .plot-zoom-button-arrow {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 12px;
+        height: 24px;
+        position: relative;
+      }
+      .plot-zoom-button-arrow::before,
+      .plot-zoom-button-arrow::after {
+        content: "";
+        position: absolute;
+        top: 10px;
+        width: 4px;
+        height: 4px;
+      }
+      .plot-zoom-button-arrow::before {
+        left: 2px;
+        background: linear-gradient(45deg, transparent 50%, #5a5a5a 50%);
+      }
+      .plot-zoom-button-arrow::after {
+        left: 6px;
+        background: linear-gradient(135deg, #5a5a5a 50%, transparent 50%);
+      }
+      .plot-zoom-menu-popup {
+        position: absolute;
+        top: calc(100% + 6px);
+        left: 0;
+        min-width: 112px;
+        padding: 8px 0;
+        border: 1px solid rgba(0, 0, 0, 0.14);
+        border-radius: 22px;
+        background: rgba(255, 255, 255, 0.98);
+        box-shadow: 0 12px 28px rgba(0, 0, 0, 0.18);
+        backdrop-filter: blur(8px);
+        display: none;
+        z-index: 40;
+      }
+      .plot-zoom-menu-popup.is-open {
+        display: block;
+      }
+      .plot-zoom-menu-item {
+        width: 100%;
+        height: 40px;
+        padding: 0 18px;
+        border: 0;
+        background: transparent;
+        color: #2f2f2f;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+        font-size: 11px;
+        cursor: pointer;
+        box-sizing: border-box;
+      }
+      .plot-zoom-menu-item:hover {
+        background: rgba(0, 0, 0, 0.04);
+      }
+      .plot-zoom-menu-item-check {
+        width: 16px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 14px;
+        color: #2f2f2f;
+        visibility: hidden;
+      }
+      .plot-zoom-menu-item.is-selected .plot-zoom-menu-item-check {
+        visibility: visible;
+      }
+      .plot-zoom-menu-item-label {
+        flex: 1 1 auto;
+        text-align: left;
+        padding-left: 6px;
+      }
+      .status {
+        font-size: 11px;
+        font-weight: 500;
+        color: #6f6f6f;
+        margin-right: 6px;
+      }
+      .plot-toolbar-btn {
+        min-width: 30px;
+        height: 24px;
+        padding: 0 8px;
+        border: 1px solid #d0d0d0;
+        border-radius: 6px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: #ffffff;
+        color: #383838;
+        font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+        font-size: 11px;
+        font-weight: 700;
+        line-height: 1;
+        cursor: pointer;
+        box-sizing: border-box;
+      }
+      .plot-toolbar-btn--icon {
+        min-width: 24px;
+        width: 24px;
+        padding: 0;
+      }
+      .plot-toolbar-edge-toggle {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 24px;
+        height: 24px;
+        color: #2f2f2f;
+        cursor: pointer;
+        user-select: none;
+        flex: 0 0 auto;
+      }
+      .plot-toolbar-edge-toggle:hover {
+        color: #111111;
+      }
+      .plot-toolbar-edge-toggle .codicon {
+        font-size: 16px;
+        line-height: 16px;
+      }
+      .plot-pane-action {
+        position: relative;
+        width: 24px;
+        height: 24px;
+        padding: 0;
+        border: 0;
+        border-radius: 4px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: transparent;
+        color: #2f2f2f;
+        cursor: pointer;
+        box-shadow: none;
+        margin: 0 1px;
+        line-height: 1;
+        vertical-align: middle;
+        pointer-events: auto;
+      }
+      .plot-pane-action:hover {
+        background: #e4e4e4;
+      }
+      .plot-pane-action:active {
+        background: #d6d6d6;
+      }
+      .plot-pane-action .plot-pane-action-icon {
+        width: 15px;
+        height: 15px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        pointer-events: none;
+        user-select: none;
+      }
+      .plot-pane-action .plot-broom-icon {
+        width: 100%;
+        height: 100%;
+        display: block;
+        overflow: visible;
+      }
+      .plot-pane-action .plot-broom-icon path {
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 0.7;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        stroke-miterlimit: 5;
+        vector-effect: non-scaling-stroke;
+      }
+      .plot-pane-action::after {
+        content: attr(data-tooltip);
+        position: absolute;
+        right: calc(100% + 8px);
+        top: 50%;
+        transform: translateY(-50%);
+        background: #f5f5f5;
+        color: #3a3a3a;
+        border: 1px solid #c7c7c7;
+        border-radius: 10px;
+        padding: 5px 11px;
+        font-size: 12px;
+        font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        font-weight: 400;
+        line-height: 1.2;
+        white-space: nowrap;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+        opacity: 0;
+        visibility: hidden;
+        transition: opacity 70ms ease-out;
+        transition-delay: 20ms;
+        pointer-events: none;
+        z-index: 30;
+      }
+      .plot-pane-action:hover::after,
+      .plot-pane-action:focus-visible::after {
+        opacity: 1;
+        visibility: visible;
+      }
+      .copy-icon {
+        position: relative;
+        display: inline-block;
+        width: 18px;
+        height: 18px;
+        color: currentColor;
+      }
+      .copy-icon::before,
+      .copy-icon::after {
+        content: "";
+        position: absolute;
+        width: 10px;
+        height: 10px;
+        border: 1.3px solid currentColor;
+        border-radius: 2.5px;
+        background: transparent;
+        box-sizing: border-box;
+      }
+      .copy-icon::before {
+        top: 1.5px;
+        left: 5px;
+      }
+      .copy-icon::after {
+        top: 4.5px;
+        left: 1.5px;
+      }
+      .plot-toolbar-btn:hover {
+        background: #f0f0f0;
+      }
+      .plot-toolbar-btn:active {
+        background: #e4e4e4;
+      }
+      .plot-toolbar-btn.is-active {
+        background: #e8f0ff;
+        border-color: #8aa7e8;
+        color: #1f4fb8;
+      }
+      .body {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow: hidden;
+        padding: 0;
+        display: flex;
+        align-items: center;
+        justify-content: flex-start;
+        box-sizing: border-box;
+        position: relative;
+        background:
+          radial-gradient(circle at top, rgba(255, 255, 255, 0.92), rgba(241, 241, 241, 0.98)),
+          linear-gradient(180deg, #fafafa 0%, #efefef 100%);
+      }
+      .plot-viewer {
+        flex: 1 1 auto;
+        height: 100%;
+        min-width: 0;
+        min-height: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+      }
+      .plot-viewer.is-scrollable {
+        align-items: flex-start;
+        justify-content: flex-start;
+        overflow: auto;
+      }
+      .plot-main {
+        flex: 0 0 auto;
+        min-width: 160px;
+        min-height: 160px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .plot-sidebar {
+        width: 184px;
+        min-width: 132px;
+        max-width: 360px;
+        height: auto;
+        min-height: 0;
+        max-height: none;
+        display: none;
+        flex-direction: column;
+        gap: 10px;
+        padding-left: 0;
+        box-sizing: border-box;
+        position: relative;
+        background: linear-gradient(180deg, #ececec 0%, #e5e5e5 100%);
+        z-index: 0;
+        overflow: hidden;
+        align-self: center;
+        flex: 0 0 auto;
+      }
+      .plot-sidebar.is-visible {
+        display: flex;
+      }
+      .plot-sidebar-header {
+        height: 28px;
+        flex: 0 0 28px;
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 0;
+        padding: 0 6px 0 0;
+        box-sizing: border-box;
+      }
+      .plot-sidebar::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        left: 0;
+        width: 2px;
+        background: rgba(0, 0, 0, 0.18);
+        z-index: 0;
+        pointer-events: none;
+      }
+      .plot-sidebar-resize {
+        position: absolute;
+        top: 0;
+        left: -2px;
+        width: 4px;
+        height: 100%;
+        cursor: col-resize;
+        background: transparent;
+        z-index: 2;
+      }
+      .plot-sidebar-resize::before {
+        content: '';
+        position: absolute;
+        top: 50%;
+        left: 1px;
+        width: 2px;
+        height: 56px;
+        border-radius: 999px;
+        transform: translateY(-50%);
+        background: rgba(0, 0, 0, 0.12);
+      }
+      .plot-history {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow: auto;
+        overflow-x: hidden;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        padding: 0 4px 0 0;
+      }
+      .plot-thumb {
+        width: 100%;
+        min-height: 0;
+        align-self: stretch;
+        border: 2px solid transparent;
+        border-radius: 12px;
+        background: #ffffff;
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
+        cursor: pointer;
+        overflow: hidden;
+        box-sizing: border-box;
+        padding: 6px;
+        position: relative;
+      }
+      .plot-thumb.is-active {
+        border-color: #1f4fb8;
+      }
+      .plot-thumb:hover .plot-thumb-delete,
+      .plot-thumb:focus-within .plot-thumb-delete {
+        opacity: 1;
+        pointer-events: auto;
+      }
+      .plot-thumb-viewport {
+        width: 100%;
+        aspect-ratio: 4 / 3;
+        border-radius: 8px;
+        overflow: hidden;
+        background: #ffffff;
+        position: relative;
+      }
+      .plot-thumb-delete {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        width: 24px;
+        height: 24px;
+        border: 1px solid rgba(0, 0, 0, 0.12);
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.96);
+        color: #555555;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 120ms ease, background 120ms ease, color 120ms ease;
+        z-index: 2;
+      }
+      .plot-thumb-delete:hover {
+        background: #f3f3f3;
+        color: #1f1f1f;
+      }
+      .plot-thumb-delete .codicon {
+        font-size: 14px;
+      }
+      .plot-thumb img {
+        display: block;
+        width: 106%;
+        height: 106%;
+        background: #ffffff;
+        object-fit: cover;
+        object-position: 50% 50%;
+        transform: translate(-2.9%, -2.9%);
+        pointer-events: none;
+      }
+      .empty {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        max-width: 280px;
+        text-align: center;
+        font-size: 12px;
+        line-height: 1.45;
+        color: #6f6f6f;
+      }
+      .plot-frame {
+        display: none;
+        max-width: 100%;
+        max-height: 100%;
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        box-sizing: border-box;
+        background: #ffffff;
+        border: 1px solid rgba(0, 0, 0, 0.08);
+        border-radius: 10px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <div class="toolbar">
+        <div class="title">Plots</div>
+        <div id="toolbarHistoryActions" class="toolbar-history-actions">
+          <button id="clearHistoryButton" class="plot-pane-action plot-toolbar-history-action" type="button" data-tooltip="Clear Plot History" aria-label="Clear Plot History">
+            <span class="plot-pane-action-icon" aria-hidden="true">
+              <svg class="plot-broom-icon" viewBox="0 0 9.3000004 9.3000002" xmlns="http://www.w3.org/2000/svg" focusable="false" aria-hidden="true">
+                <g transform="translate(-110.41606,-147.96284)">
+                  <path d="m 115.78808,149.31078 2.81097,2.51235 c -0.26593,2.29224 -1.56893,3.73539 -2.83636,4.78824 -3.81958,-0.2388 -4.86774,-2.17239 -5.05852,-4.8929 1.6748,-0.32835 3.21824,-0.8525 5.08391,-2.40769" />
+                  <path d="m 111.35884,154.02375 c 0.80061,-0.17938 1.56161,-0.52596 2.13669,-1.07683" />
+                  <path d="m 112.93228,155.82813 c 0.86208,-0.27179 1.76923,-0.71851 2.44111,-1.54509" />
+                  <path d="m 114.36124,150.41474 3.67783,3.28014" />
+                  <path d="m 117.28494,150.59061 2.15465,-2.02803" />
+                </g>
+              </svg>
+            </span>
+          </button>
+        </div>
+        <div class="toolbar-right">
+          <div class="toolbar-controls">
+            <button id="resetParButton" class="plot-toolbar-btn" type="button" aria-label="Reset plot parameters" title="Reset plot parameters">Reset</button>
+            <button id="copyPlotButton" class="plot-toolbar-btn plot-toolbar-btn--icon" type="button" aria-label="Copy plot to clipboard" title="Copy plot to clipboard">
+              <span class="copy-icon" aria-hidden="true"></span>
+            </button>
+            <div id="saveMenu" class="plot-save-menu">
+              <button id="saveButton" class="plot-toolbar-btn plot-toolbar-btn--icon" type="button" aria-label="Save plot" title="Save plot" aria-haspopup="dialog" aria-expanded="false">
+                <img class="plot-toolbar-icon" src="../../assets/icons/save.svg" alt="" aria-hidden="true" />
+              </button>
+              <div id="savePopup" class="plot-save-popup" role="dialog" aria-label="Save plot options">
+                <div class="plot-save-grid">
+                  <label class="plot-save-field plot-save-field--full">
+                    <span class="plot-save-label">Format</span>
+                    <select id="saveFormatSelect" class="plot-toolbar-select" aria-label="Save format">
+                      <option value="png">PNG</option>
+                      <option value="jpeg">JPEG</option>
+                      <option value="svg">SVG</option>
+                      <option value="pdf">PDF</option>
+                      <option value="tiff">TIFF</option>
+                    </select>
+                  </label>
+                  <label class="plot-save-field">
+                    <span class="plot-save-label">Width</span>
+                    <input id="saveWidthInput" class="plot-save-input" type="number" min="160" step="1" inputmode="numeric" />
+                  </label>
+                  <label class="plot-save-field">
+                    <span class="plot-save-label">Height</span>
+                    <input id="saveHeightInput" class="plot-save-input" type="number" min="160" step="1" inputmode="numeric" />
+                  </label>
+                  <div class="plot-save-actions">
+                    <button id="saveCancelButton" class="plot-toolbar-btn" type="button">Cancel</button>
+                    <button id="saveConfirmButton" class="plot-toolbar-btn" type="button">Save...</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div id="zoomMenu" class="plot-zoom-menu">
+              <button id="zoomButton" class="plot-zoom-button" type="button" aria-label="Set the plot zoom" title="Set the plot zoom" aria-haspopup="menu" aria-expanded="false">
+                <span class="plot-zoom-button-face">
+                  <span class="plot-zoom-button-icon" aria-hidden="true"><img class="plot-toolbar-icon" src="../../assets/icons/fit.svg" alt="" /></span>
+                  <span id="zoomButtonLabel" class="plot-zoom-button-label">100%</span>
+                  <span class="plot-zoom-button-arrow" aria-hidden="true"></span>
+                </span>
+              </button>
+              <div id="zoomMenuPopup" class="plot-zoom-menu-popup" role="menu" aria-label="Set the plot zoom">
+                <button class="plot-zoom-menu-item" type="button" role="menuitemradio" data-zoom-value="1">
+                  <span class="plot-zoom-menu-item-check" aria-hidden="true">✓</span>
+                  <span class="plot-zoom-menu-item-label">100%</span>
+                </button>
+                <button class="plot-zoom-menu-item" type="button" role="menuitemradio" data-zoom-value="1.5">
+                  <span class="plot-zoom-menu-item-check" aria-hidden="true">✓</span>
+                  <span class="plot-zoom-menu-item-label">150%</span>
+                </button>
+                <button class="plot-zoom-menu-item" type="button" role="menuitemradio" data-zoom-value="2">
+                  <span class="plot-zoom-menu-item-check" aria-hidden="true">✓</span>
+                  <span class="plot-zoom-menu-item-label">200%</span>
+                </button>
+                <button class="plot-zoom-menu-item" type="button" role="menuitemradio" data-zoom-value="2.5">
+                  <span class="plot-zoom-menu-item-check" aria-hidden="true">✓</span>
+                  <span class="plot-zoom-menu-item-label">250%</span>
+                </button>
+                <button class="plot-zoom-menu-item" type="button" role="menuitemradio" data-zoom-value="3">
+                  <span class="plot-zoom-menu-item-check" aria-hidden="true">✓</span>
+                  <span class="plot-zoom-menu-item-label">300%</span>
+                </button>
+              </div>
+            </div>
+            <button id="squareToggle" class="plot-toolbar-btn" type="button" aria-label="Toggle square plot viewport" title="Toggle square plot viewport">1:1</button>
+          </div>
+          <div id="status" class="status"></div>
+          <span id="historyToggle" class="plot-toolbar-edge-toggle" role="button" tabindex="0" aria-label="Hide plot history pane">
+            <span id="historyToggleIcon" class="codicon codicon-chevron-right" aria-hidden="true"></span>
+          </span>
+        </div>
+      </div>
+      <div class="body">
+        <div id="empty" class="empty">Plots created in R will appear here when the `httpgd` graphics device is active.</div>
+        <div id="viewer" class="plot-viewer" style="display:none;">
+          <div id="plotMain" class="plot-main">
+            <img id="frame" class="plot-frame" alt="Latest R plot" />
+          </div>
+        </div>
+        <div id="sidebar" class="plot-sidebar">
+          <div id="sidebarResize" class="plot-sidebar-resize" aria-hidden="true"></div>
+          <div id="historyList" class="plot-history"></div>
+        </div>
+      </div>
+    </div>
+    <script>
+      (function () {
+        const SQUARE_MODE_KEY = 'app.plotWindow.squareMode';
+        const ZOOM_MODE_KEY = 'app.plotWindow.zoomMode';
+        const HISTORY_VISIBLE_KEY = 'app.plotWindow.historyVisible';
+        const HISTORY_WIDTH_KEY = 'app.plotWindow.historyWidth';
+        const statusEl = document.getElementById('status');
+        const emptyEl = document.getElementById('empty');
+        const frameEl = document.getElementById('frame');
+        const bodyEl = document.querySelector('.body');
+        const viewerEl = document.getElementById('viewer');
+        const plotMainEl = document.getElementById('plotMain');
+        const sidebarEl = document.getElementById('sidebar');
+        const historyListEl = document.getElementById('historyList');
+        const sidebarResizeEl = document.getElementById('sidebarResize');
+        const clearHistoryButtonEl = document.getElementById('clearHistoryButton');
+        const saveMenuEl = document.getElementById('saveMenu');
+        const saveButtonEl = document.getElementById('saveButton');
+        const savePopupEl = document.getElementById('savePopup');
+        const saveFormatSelectEl = document.getElementById('saveFormatSelect');
+        const saveWidthInputEl = document.getElementById('saveWidthInput');
+        const saveHeightInputEl = document.getElementById('saveHeightInput');
+        const saveCancelButtonEl = document.getElementById('saveCancelButton');
+        const saveConfirmButtonEl = document.getElementById('saveConfirmButton');
+        const copyPlotButtonEl = document.getElementById('copyPlotButton');
+        const zoomMenuEl = document.getElementById('zoomMenu');
+        const zoomButtonEl = document.getElementById('zoomButton');
+        const zoomButtonLabelEl = document.getElementById('zoomButtonLabel');
+        const zoomMenuPopupEl = document.getElementById('zoomMenuPopup');
+        const zoomMenuItemEls = Array.from(document.querySelectorAll('[data-zoom-value]'));
+        const toolbarHistoryActionsEl = document.getElementById('toolbarHistoryActions');
+        const resetParButtonEl = document.getElementById('resetParButton');
+        const squareToggleEl = document.getElementById('squareToggle');
+        const historyToggleEl = document.getElementById('historyToggle');
+        const historyToggleIconEl = document.getElementById('historyToggleIcon');
+        const SAVE_FORMAT_LABELS = {
+          png: 'PNG',
+          jpeg: 'JPEG',
+          svg: 'SVG',
+          pdf: 'PDF',
+          tiff: 'TIFF'
+        };
+        const SAVE_FORMAT_ORDER = ['png', 'jpeg', 'svg', 'pdf', 'tiff'];
+        let layoutRaf = 0;
+        let resizeObserver = null;
+        let latestPayload = {};
+        let currentPlotIndex = -1;
+        let hiddenPlotIndexes = new Set();
+        let isResizingSidebar = false;
+        let sidebarWidth = 184;
+        let availableRendererIds = new Set(['png', 'svg']);
+        let saveFormatsRefreshToken = 0;
+        const resolveAvailablePlotArea = function () {
+          if (!bodyEl || !sidebarEl) return { width: 720, height: 576 };
+          const bodyWidth = Math.max(0, bodyEl.clientWidth);
+          const bodyHeight = Math.max(0, bodyEl.clientHeight);
+          const activeSidebarWidth = historyVisible
+            ? sidebarEl.getBoundingClientRect().width || sidebarWidth || 184
+            : 0;
+          return {
+            width: Math.max(160, Math.round(Math.max(0, bodyWidth - activeSidebarWidth))),
+            height: Math.max(160, Math.round(bodyHeight || 576))
+          };
+        };
+        const resolvePlotDimensions = function () {
+          const available = resolveAvailablePlotArea();
+          const baseWidth = squareMode
+            ? Math.max(160, Math.min(available.width, available.height))
+            : available.width;
+          const baseHeight = squareMode
+            ? Math.max(160, Math.min(available.width, available.height))
+            : available.height;
+          const scale = Math.max(1, Number(zoomMode) || 1);
+          return {
+            width: Math.max(160, Math.round(baseWidth * scale)),
+            height: Math.max(160, Math.round(baseHeight * scale))
+          };
+        };
+        const scheduleLayout = function () {
+          if (layoutRaf) return;
+          layoutRaf = window.requestAnimationFrame(function () {
+            layoutRaf = 0;
+            layoutFrame();
+            renderHistory(latestPayload);
+            renderCurrentPlot();
+          });
+        };
+        const syncSidebarHeightToPlot = function () {
+          if (!sidebarEl || !frameEl || !plotMainEl) return;
+          const imageHeight = Math.round(frameEl.getBoundingClientRect().height || 0);
+          const fallbackHeight = Math.round(plotMainEl.getBoundingClientRect().height || 0);
+          const nextHeight = Math.max(0, imageHeight || fallbackHeight);
+          sidebarEl.style.height = nextHeight > 0 ? `${nextHeight}px` : '';
+        };
+        const layoutFrame = function () {
+          if (!frameEl || !bodyEl || !plotMainEl || !sidebarEl) return;
+          const isVisible = viewerEl && viewerEl.style.display !== 'none';
+          if (!isVisible) {
+            plotMainEl.style.width = '';
+            plotMainEl.style.height = '';
+            syncSidebarHeightToPlot();
+            return;
+          }
+          const dims = resolvePlotDimensions();
+          plotMainEl.style.width = `${Math.max(160, Math.round(dims.width || 720))}px`;
+          plotMainEl.style.height = `${Math.max(160, Math.round(dims.height || 576))}px`;
+          syncSidebarHeightToPlot();
+        };
+
+        const readSquareMode = function () {
+          try {
+            const raw = String(window.localStorage.getItem(SQUARE_MODE_KEY) || '').trim().toLowerCase();
+            if (raw === '1' || raw === 'true' || raw === 'on') return true;
+            if (raw === '0' || raw === 'false' || raw === 'off') return false;
+          } catch {
+            return false;
+          }
+          return false;
+        };
+
+        const writeSquareMode = function (mode) {
+          try {
+            window.localStorage.setItem(SQUARE_MODE_KEY, mode ? 'true' : 'false');
+          } catch {}
+        };
+
+        const readZoomMode = function () {
+          try {
+            const raw = String(window.localStorage.getItem(ZOOM_MODE_KEY) || '').trim().toLowerCase();
+            const value = Number(raw);
+            if (Number.isFinite(value) && value >= 1) return String(value);
+          } catch {
+            return '1';
+          }
+          return '1';
+        };
+
+        const writeZoomMode = function (mode) {
+          try {
+            window.localStorage.setItem(ZOOM_MODE_KEY, String(mode || '1'));
+          } catch {}
+        };
+
+        const readHistoryVisible = function () {
+          try {
+            const raw = String(window.localStorage.getItem(HISTORY_VISIBLE_KEY) || '').trim().toLowerCase();
+            if (raw === '0' || raw === 'false' || raw === 'off') return false;
+            if (raw === '1' || raw === 'true' || raw === 'on') return true;
+          } catch {
+            return true;
+          }
+          return true;
+        };
+
+        const writeHistoryVisible = function (visible) {
+          try {
+            window.localStorage.setItem(HISTORY_VISIBLE_KEY, visible ? 'true' : 'false');
+          } catch {}
+        };
+
+        const readHistoryWidth = function () {
+          try {
+            const value = Number(window.localStorage.getItem(HISTORY_WIDTH_KEY) || '');
+            if (Number.isFinite(value)) return Math.max(132, Math.min(360, Math.round(value)));
+          } catch {
+            return 184;
+          }
+          return 184;
+        };
+
+        const writeHistoryWidth = function (value) {
+          try {
+            window.localStorage.setItem(HISTORY_WIDTH_KEY, String(Math.max(132, Math.min(360, Math.round(value)))));
+          } catch {}
+        };
+
+        const derivePlotUrl = function (rawUrl, index, width, height) {
+          const url = String(rawUrl || '').trim();
+          if (!url) return '';
+          try {
+            const parsed = new URL(url);
+            parsed.pathname = parsed.pathname.replace(/\/live$/, '/plot');
+            parsed.searchParams.delete('websockets');
+            parsed.searchParams.delete('history');
+            parsed.searchParams.delete('sidebar');
+            parsed.searchParams.delete('dm_upid');
+            parsed.searchParams.set('renderer', 'svg');
+            parsed.searchParams.set('index', String(Math.max(0, Number(index) || 0)));
+            parsed.searchParams.set('width', String(Math.max(160, Math.round(width || 720))));
+            parsed.searchParams.set('height', String(Math.max(160, Math.round(height || 576))));
+            return parsed.toString();
+          } catch {
+            return '';
+          }
+        };
+
+        const deriveRenderersUrl = function (rawUrl) {
+          const url = String(rawUrl || '').trim();
+          if (!url) return '';
+          try {
+            const parsed = new URL(url);
+            parsed.pathname = parsed.pathname.replace(/\/live$/, '/renderers');
+            parsed.search = '';
+            const token = String(new URL(url).searchParams.get('token') || '').trim();
+            if (token) parsed.searchParams.set('token', token);
+            return parsed.toString();
+          } catch {
+            return '';
+          }
+        };
+
+        const deriveThumbnailUrl = function (rawUrl, index, width, height) {
+          const url = derivePlotUrl(rawUrl, index, width, height);
+          if (!url) return '';
+          try {
+            const parsed = new URL(url);
+            parsed.searchParams.set('zoom', '0.62');
+            return parsed.toString();
+          } catch {
+            return url;
+          }
+        };
+
+        const deriveExportUrl = function (rawUrl, index, width, height, format) {
+          const url = derivePlotUrl(rawUrl, index, width, height);
+          if (!url) return '';
+          try {
+            const parsed = new URL(url);
+            let renderer = String(format || 'png').trim().toLowerCase();
+            if (renderer === 'jpeg') {
+              if (availableRendererIds.has('jpeg')) renderer = 'jpeg';
+              else if (availableRendererIds.has('jpg')) renderer = 'jpg';
+              else renderer = 'png';
+            }
+            parsed.searchParams.set('renderer', renderer);
+            return parsed.toString();
+          } catch {
+            return url;
+          }
+        };
+
+        const parseRendererIds = function (payload) {
+          if (Array.isArray(payload)) {
+            return payload
+              .map(function (item) { return String(item && item.id || '').trim().toLowerCase(); })
+              .filter(Boolean);
+          }
+          if (payload && Array.isArray(payload.id)) {
+            return payload.id
+              .map(function (item) { return String(item || '').trim().toLowerCase(); })
+              .filter(Boolean);
+          }
+          if (payload && Array.isArray(payload.renderers)) {
+            return payload.renderers
+              .map(function (item) { return String(item && item.id || '').trim().toLowerCase(); })
+              .filter(Boolean);
+          }
+          return [];
+        };
+
+        const syncSaveFormatOptions = function () {
+          if (!saveFormatSelectEl) return;
+          const selected = String(saveFormatSelectEl.value || 'png').trim().toLowerCase();
+          const nextFormats = SAVE_FORMAT_ORDER.filter(function (format) {
+            if (format === 'jpeg') {
+              return availableRendererIds.has('jpeg') || availableRendererIds.has('jpg') || availableRendererIds.has('png');
+            }
+            return availableRendererIds.has(format);
+          });
+          const formats = nextFormats.length ? nextFormats : ['png', 'svg'];
+          saveFormatSelectEl.textContent = '';
+          formats.forEach(function (format) {
+            const option = document.createElement('option');
+            option.value = format;
+            option.textContent = SAVE_FORMAT_LABELS[format] || format.toUpperCase();
+            saveFormatSelectEl.appendChild(option);
+          });
+          saveFormatSelectEl.value = formats.includes(selected) ? selected : formats[0];
+        };
+
+        const refreshSaveFormats = async function (payload) {
+          const rawUrl = String((payload && payload.url) || '').trim();
+          const token = ++saveFormatsRefreshToken;
+          if (!rawUrl) {
+            availableRendererIds = new Set(['png', 'svg']);
+            syncSaveFormatOptions();
+            return;
+          }
+          const renderersUrl = deriveRenderersUrl(rawUrl);
+          if (!renderersUrl) {
+            availableRendererIds = new Set(['png', 'svg']);
+            syncSaveFormatOptions();
+            return;
+          }
+          try {
+            const response = await fetch(renderersUrl);
+            if (!response.ok) throw new Error('renderers-unavailable');
+            const payloadJson = await response.json();
+            if (token !== saveFormatsRefreshToken) return;
+            const rendererIds = parseRendererIds(payloadJson);
+            availableRendererIds = new Set(rendererIds.length ? rendererIds : ['png', 'svg']);
+          } catch {
+            if (token !== saveFormatsRefreshToken) return;
+            availableRendererIds = new Set(['png', 'svg']);
+          }
+          syncSaveFormatOptions();
+        };
+
+        const getSaveDimensions = function () {
+          const dims = resolvePlotDimensions();
+          const width = Math.max(160, Math.round(Number(saveWidthInputEl && saveWidthInputEl.value) || dims.width || 720));
+          const height = Math.max(160, Math.round(Number(saveHeightInputEl && saveHeightInputEl.value) || dims.height || 576));
+          return { width, height };
+        };
+
+        const applySquareMode = function (enabled) {
+          if (squareToggleEl) {
+            const title = enabled ? 'Disable square plot viewport' : 'Enable square plot viewport';
+            squareToggleEl.classList.toggle('is-active', enabled);
+            squareToggleEl.textContent = '1:1';
+            squareToggleEl.setAttribute('title', title);
+            squareToggleEl.setAttribute('aria-label', title);
+          }
+          scheduleLayout();
+        };
+
+        const applyZoomMode = function (mode) {
+          const current = String(mode || '1');
+          if (zoomButtonLabelEl) {
+            zoomButtonLabelEl.textContent = `${Math.round((Number(current) || 1) * 100)}%`;
+          }
+          zoomMenuItemEls.forEach(function (node) {
+            const value = String(node.getAttribute('data-zoom-value') || '');
+            const selected = value === current;
+            node.classList.toggle('is-selected', selected);
+            node.setAttribute('aria-checked', selected ? 'true' : 'false');
+          });
+          if (viewerEl) {
+            const scrollable = (Number(current) || 1) > 1;
+            viewerEl.classList.toggle('is-scrollable', scrollable);
+            if (!scrollable) {
+              viewerEl.scrollLeft = 0;
+              viewerEl.scrollTop = 0;
+            }
+          }
+          scheduleLayout();
+        };
+
+        const applyHistoryVisible = function (visible) {
+          if (historyToggleEl) {
+            const title = visible ? 'Hide plot history pane' : 'Show plot history pane';
+            historyToggleEl.setAttribute('aria-label', title);
+            historyToggleEl.setAttribute('data-tooltip', visible ? 'Hide History' : 'Show History');
+          }
+          if (historyToggleIconEl) {
+            historyToggleIconEl.className = visible
+              ? 'codicon codicon-chevron-right'
+              : 'codicon codicon-chevron-left';
+          }
+          if (sidebarEl) {
+            sidebarEl.classList.toggle('is-visible', visible);
+            sidebarEl.style.width = sidebarWidth + 'px';
+          }
+          if (toolbarHistoryActionsEl) {
+            toolbarHistoryActionsEl.style.display = visible ? 'flex' : 'none';
+          }
+          try {
+            document.documentElement.style.setProperty(
+              '--plot-history-toolbar-width',
+              visible ? `${Math.max(0, Math.round(sidebarWidth + 4))}px` : '0px'
+            );
+          } catch {}
+          scheduleLayout();
+        };
+
+        const renderCurrentPlot = function () {
+          const rawUrl = String((latestPayload && latestPayload.url) || '').trim();
+          if (!frameEl) return;
+          if (!rawUrl || currentPlotIndex < 0) {
+            frameEl.removeAttribute('src');
+            frameEl.style.display = 'none';
+            updateSaveAvailability();
+            return;
+          }
+          const dims = resolvePlotDimensions();
+          const nextUrl = derivePlotUrl(rawUrl, currentPlotIndex, dims.width, dims.height);
+          if (!nextUrl) return;
+          if (frameEl.getAttribute('src') !== nextUrl) {
+            frameEl.setAttribute('src', nextUrl);
+          }
+          frameEl.style.display = 'block';
+          syncSidebarHeightToPlot();
+        };
+
+        const updateSaveAvailability = function () {
+          if (!saveButtonEl) return;
+          const rawUrl = String((latestPayload && latestPayload.url) || '').trim();
+          const enabled = !!rawUrl && currentPlotIndex >= 0;
+          saveButtonEl.disabled = !enabled;
+          if (copyPlotButtonEl) copyPlotButtonEl.disabled = !enabled;
+          if (saveFormatSelectEl) saveFormatSelectEl.disabled = !enabled;
+        };
+
+        const renderHistory = function (payload) {
+          if (!historyListEl) return;
+          const rawUrl = String((payload && payload.url) || '').trim();
+          const count = Math.max(rawUrl ? 1 : 0, Number((payload && payload.count) || 0));
+          historyListEl.textContent = '';
+          if (!rawUrl || count <= 0) return;
+          const thumbWidth = Math.max(120, Math.round((historyListEl.clientWidth || 160) - 16));
+          const thumbHeight = Math.max(90, Math.round(thumbWidth * 0.75));
+          for (let index = count - 1; index >= 0; index -= 1) {
+            if (hiddenPlotIndexes.has(index)) continue;
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'plot-thumb' + (index === currentPlotIndex ? ' is-active' : '');
+            button.title = 'Plot ' + (index + 1);
+            const deleteButton = document.createElement('button');
+            deleteButton.type = 'button';
+            deleteButton.className = 'plot-thumb-delete';
+            deleteButton.title = 'Delete plot ' + (index + 1);
+            deleteButton.setAttribute('aria-label', 'Delete plot ' + (index + 1));
+            deleteButton.innerHTML = '<span class="codicon codicon-trash" aria-hidden="true"></span>';
+            deleteButton.addEventListener('click', function (event) {
+              event.preventDefault();
+              event.stopPropagation();
+              hiddenPlotIndexes.add(index);
+              if (currentPlotIndex === index) {
+                let nextIndex = -1;
+                for (let probe = count - 1; probe >= 0; probe -= 1) {
+                  if (!hiddenPlotIndexes.has(probe)) {
+                    nextIndex = probe;
+                    break;
+                  }
+                }
+                currentPlotIndex = nextIndex;
+              }
+              renderHistory(latestPayload);
+              renderCurrentPlot();
+            });
+            button.appendChild(deleteButton);
+            const viewport = document.createElement('div');
+            viewport.className = 'plot-thumb-viewport';
+            const img = document.createElement('img');
+            img.alt = 'Plot ' + (index + 1);
+            img.src = deriveThumbnailUrl(rawUrl, index, thumbWidth, thumbHeight);
+            viewport.appendChild(img);
+            button.appendChild(viewport);
+            button.addEventListener('click', function () {
+              currentPlotIndex = index;
+              renderHistory(latestPayload);
+              renderCurrentPlot();
+            });
+            historyListEl.appendChild(button);
+          }
+          updateSaveAvailability();
+        };
+
+        const updateFrameSource = function (payload) {
+          const rawUrl = String((payload && payload.url) || '').trim();
+          if (!rawUrl) {
+            currentPlotIndex = -1;
+            hiddenPlotIndexes = new Set();
+            renderCurrentPlot();
+            renderHistory(payload);
+            return;
+          }
+          const count = Math.max(rawUrl ? 1 : 0, Number((payload && payload.count) || 0));
+          hiddenPlotIndexes = new Set(Array.from(hiddenPlotIndexes).filter((index) => index >= 0 && index < count));
+          if (count > 0 && (currentPlotIndex < 0 || currentPlotIndex > count - 1 || count - 1 > currentPlotIndex)) {
+            let nextIndex = count - 1;
+            while (nextIndex >= 0 && hiddenPlotIndexes.has(nextIndex)) nextIndex -= 1;
+            currentPlotIndex = nextIndex;
+          }
+          renderHistory(payload);
+          renderCurrentPlot();
+          updateSaveAvailability();
+        };
+
+        let squareMode = readSquareMode();
+        let zoomMode = readZoomMode();
+        let historyVisible = readHistoryVisible();
+        sidebarWidth = readHistoryWidth();
+        applySquareMode(squareMode);
+        applyZoomMode(zoomMode);
+        applyHistoryVisible(historyVisible);
+
+        if (squareToggleEl) {
+          squareToggleEl.addEventListener('click', function () {
+            squareMode = !squareMode;
+            writeSquareMode(squareMode);
+            applySquareMode(squareMode);
+          });
+        }
+
+        if (historyToggleEl) {
+          historyToggleEl.addEventListener('click', function () {
+            historyVisible = !historyVisible;
+            writeHistoryVisible(historyVisible);
+            applyHistoryVisible(historyVisible);
+          });
+          historyToggleEl.addEventListener('keydown', function (event) {
+            if (event.key !== 'Enter' && event.key !== ' ') return;
+            event.preventDefault();
+            historyVisible = !historyVisible;
+            writeHistoryVisible(historyVisible);
+            applyHistoryVisible(historyVisible);
+          });
+        }
+        const closeSavePopup = function () {
+          if (savePopupEl) savePopupEl.classList.remove('is-open');
+          if (saveButtonEl) saveButtonEl.setAttribute('aria-expanded', 'false');
+        };
+        const openSavePopup = function () {
+          const rawUrl = String((latestPayload && latestPayload.url) || '').trim();
+          if (!rawUrl || currentPlotIndex < 0) return;
+          const dims = resolvePlotDimensions();
+          if (saveWidthInputEl) saveWidthInputEl.value = String(Math.max(160, Math.round(dims.width || 720)));
+          if (saveHeightInputEl) saveHeightInputEl.value = String(Math.max(160, Math.round(dims.height || 576)));
+          if (savePopupEl) savePopupEl.classList.add('is-open');
+          if (saveButtonEl) saveButtonEl.setAttribute('aria-expanded', 'true');
+        };
+        const closeZoomMenu = function () {
+          if (zoomMenuPopupEl) zoomMenuPopupEl.classList.remove('is-open');
+          if (zoomButtonEl) zoomButtonEl.setAttribute('aria-expanded', 'false');
+        };
+        const openZoomMenu = function () {
+          if (zoomMenuPopupEl) zoomMenuPopupEl.classList.add('is-open');
+          if (zoomButtonEl) zoomButtonEl.setAttribute('aria-expanded', 'true');
+        };
+        if (zoomButtonEl) {
+          zoomButtonEl.addEventListener('click', function (event) {
+            event.preventDefault();
+            const open = zoomMenuPopupEl && zoomMenuPopupEl.classList.contains('is-open');
+            if (open) closeZoomMenu();
+            else openZoomMenu();
+          });
+        }
+        zoomMenuItemEls.forEach(function (node) {
+          node.addEventListener('click', function () {
+            zoomMode = String(node.getAttribute('data-zoom-value') || '1');
+            writeZoomMode(zoomMode);
+            applyZoomMode(zoomMode);
+            closeZoomMenu();
+          });
+        });
+        window.addEventListener('pointerdown', function (event) {
+          if (saveMenuEl && savePopupEl && savePopupEl.classList.contains('is-open')) {
+            const target = event.target;
+            if (!(target instanceof Node && saveMenuEl.contains(target))) {
+              closeSavePopup();
+            }
+          }
+          if (!zoomMenuEl || !zoomMenuPopupEl || !zoomMenuPopupEl.classList.contains('is-open')) return;
+          const target = event.target;
+          if (target instanceof Node && zoomMenuEl.contains(target)) return;
+          closeZoomMenu();
+        });
+        window.addEventListener('keydown', function (event) {
+          if (event.key === 'Escape') closeSavePopup();
+          if (event.key === 'Escape') closeZoomMenu();
+        });
+
+        if (resetParButtonEl) {
+          resetParButtonEl.addEventListener('click', function () {
+            try {
+              if (window.dialogForge && window.dialogForge.executeInvisibleMutation) {
+                void window.dialogForge.executeInvisibleMutation({
+                  text: 'try(par(mar=c(5.1,4.1,4.1,2.1), mai=c(1.02,0.82,0.82,0.42), mgp=c(3,1,0), las=0, tcl=-0.5, xaxs="r", yaxs="r", pty="m"), silent=TRUE)',
+                  source: 'plot-viewer.reset-par'
+                });
+              }
+            } catch {}
+          });
+        }
+
+        if (clearHistoryButtonEl) {
+          clearHistoryButtonEl.addEventListener('click', function () {
+            const rawUrl = String((latestPayload && latestPayload.url) || '').trim();
+            const count = Math.max(rawUrl ? 1 : 0, Number((latestPayload && latestPayload.count) || 0));
+            hiddenPlotIndexes = new Set(Array.from({ length: count }, (_value, index) => index));
+            currentPlotIndex = -1;
+            renderHistory(latestPayload);
+            renderCurrentPlot();
+            updateSaveAvailability();
+          });
+        }
+        if (saveButtonEl) {
+          saveButtonEl.addEventListener('click', function (event) {
+            event.preventDefault();
+            const open = savePopupEl && savePopupEl.classList.contains('is-open');
+            if (open) closeSavePopup();
+            else openSavePopup();
+          });
+        }
+        if (saveCancelButtonEl) {
+          saveCancelButtonEl.addEventListener('click', function () {
+            closeSavePopup();
+          });
+        }
+        if (saveConfirmButtonEl) {
+          saveConfirmButtonEl.addEventListener('click', async function () {
+            const rawUrl = String((latestPayload && latestPayload.url) || '').trim();
+            if (!rawUrl || currentPlotIndex < 0) return;
+            const format = String((saveFormatSelectEl && saveFormatSelectEl.value) || 'png').trim().toLowerCase();
+            const dims = getSaveDimensions();
+            const exportUrl = deriveExportUrl(rawUrl, currentPlotIndex, dims.width, dims.height, format);
+            if (!exportUrl) return;
+            try {
+              await window.dialogForge.savePlot({
+                url: exportUrl,
+                format,
+                index: currentPlotIndex
+              });
+            } catch {}
+            closeSavePopup();
+          });
+        }
+        if (copyPlotButtonEl) {
+          copyPlotButtonEl.addEventListener('click', async function () {
+            const rawUrl = String((latestPayload && latestPayload.url) || '').trim();
+            if (!rawUrl || currentPlotIndex < 0) return;
+            const dims = resolvePlotDimensions();
+            const exportUrl = deriveExportUrl(rawUrl, currentPlotIndex, dims.width, dims.height, 'png');
+            if (!exportUrl) return;
+            try {
+              await window.dialogForge.copyPlot(exportUrl);
+            } catch {}
+          });
+        }
+
+        if (sidebarResizeEl) {
+          sidebarResizeEl.addEventListener('pointerdown', function (event) {
+            if (!historyVisible) return;
+            isResizingSidebar = true;
+            try { sidebarResizeEl.setPointerCapture(event.pointerId); } catch {}
+            event.preventDefault();
+          });
+        }
+
+        window.addEventListener('pointermove', function (event) {
+          if (!isResizingSidebar || !bodyEl || !sidebarEl) return;
+          const bodyRect = bodyEl.getBoundingClientRect();
+          const nextWidth = bodyRect.right - event.clientX;
+          sidebarWidth = Math.max(132, Math.min(360, Math.round(nextWidth)));
+          sidebarEl.style.width = sidebarWidth + 'px';
+          try {
+            document.documentElement.style.setProperty('--plot-history-toolbar-width', `${Math.max(0, Math.round(sidebarWidth + 4))}px`);
+          } catch {}
+          scheduleLayout();
+        });
+
+        window.addEventListener('pointerup', function () {
+          if (!isResizingSidebar) return;
+          isResizingSidebar = false;
+          writeHistoryWidth(sidebarWidth);
+        });
+
+        const render = function (payload) {
+          latestPayload = payload || {};
+          void refreshSaveFormats(latestPayload);
+          const status = String((payload && payload.status) || 'waiting');
+          const url = String((payload && payload.url) || '').trim();
+          const message = String((payload && payload.message) || '').trim();
+          const count = Math.max(url ? 1 : 0, Number((payload && payload.count) || 0));
+
+          if (url) {
+            if (statusEl) statusEl.textContent = '';
+            if (emptyEl) emptyEl.style.display = 'none';
+            if (viewerEl) viewerEl.style.display = 'flex';
+            updateFrameSource(payload);
+            scheduleLayout();
+            return;
+          }
+
+          if (statusEl) statusEl.textContent = status === 'disabled' ? 'Native' : '';
+          if (frameEl) {
+            frameEl.removeAttribute('src');
+            frameEl.style.display = 'none';
+          }
+          updateSaveAvailability();
+          if (viewerEl) viewerEl.style.display = 'none';
+          scheduleLayout();
+          if (emptyEl) {
+            emptyEl.textContent = message || 'Plots created in R will appear here when the httpgd graphics device is active.';
+            emptyEl.style.display = 'block';
+          }
+        };
+
+        window.addEventListener('resize', function () {
+          scheduleLayout();
+        });
+
+        if (window.dialogForge && window.dialogForge.onMainZoomFactor) {
+          window.dialogForge.onMainZoomFactor(function () {
+            scheduleLayout();
+          });
+        }
+
+        if (typeof ResizeObserver !== 'undefined' && bodyEl) {
+          resizeObserver = new ResizeObserver(function () {
+            scheduleLayout();
+          });
+          resizeObserver.observe(bodyEl);
+        }
+
+        window.dialogForge.onPlotViewerUpdate(function (payload) {
+          render(payload || {});
+        });
+      })();
+    </script>
+  </body>
+</html>

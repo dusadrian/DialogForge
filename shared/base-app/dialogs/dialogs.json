@@ -1,0 +1,13 @@
+[
+    {
+        "id": "import",
+        "label": "Import data",
+        "owner": "shared/base-app",
+        "targetHome": "shared/base-app/dialogs/import",
+        "sourceReference": "/Users/dusadrian/Documents/GitHub/DialogQCA/src/dialogs/import.json",
+        "sourceFile": "source/import/dialog.json",
+        "status": "source-imported",
+        "replacement": "Rebuilt as a shared import dialog backed by runtime import capabilities.",
+        "requiredRuntime": ["data.import"]
+    }
+]

@@ -1,0 +1,125 @@
+{
+    "name": "dialogforge",
+    "productName": "DialogForge",
+    "version": "0.0.0",
+    "main": "dist/build/scripts/electron-main.js",
+    "private": true,
+    "description": "A language-neutral workbench for dialog-driven desktop applications.",
+    "scripts": {
+        "build": "tsc -p tsconfig.json && node dist/build/scripts/copy-static.js && node dist/build/scripts/package-product-if-requested.js",
+        "start": "npm run build && node dist/build/scripts/start-app.js",
+        "measure:electron:data-editor": "npm run build && node -r ./tests/register-dist-require.js tests/electron/measure-data-editor-first-paint.js",
+        "verify": "npm run verify:engine",
+        "verify:engine": "npm run build && node -r ./tests/register-dist-require.js tests/run-verifier-group.js engine-contract",
+        "verify:dialogforge-contract": "npm run verify:engine",
+        "verify:all": "npm run verify:engine",
+        "verify:architecture-boundaries": "node -r ./tests/register-dist-require.js tests/contracts/verify-architecture-boundaries.js",
+        "verify:settings-storage": "node -r ./tests/register-dist-require.js tests/contracts/verify-settings-storage.js",
+        "verify:runtime-session-ipc": "node -r ./tests/register-dist-require.js tests/contracts/verify-runtime-session-ipc.js",
+        "verify:runtime-command-ipc": "node -r ./tests/register-dist-require.js tests/contracts/verify-runtime-command-ipc.js",
+        "verify:tabular-ipc": "node -r ./tests/register-dist-require.js tests/contracts/verify-tabular-ipc.js",
+        "verify:workspace-ipc": "node -r ./tests/register-dist-require.js tests/contracts/verify-workspace-ipc.js",
+        "verify:runtime-lifecycle-controller": "node -r ./tests/register-dist-require.js tests/contracts/verify-runtime-lifecycle-controller.js",
+        "verify:runtime-restart-controller": "node -r ./tests/register-dist-require.js tests/contracts/verify-runtime-restart-controller.js",
+        "verify:runtime-command-controller": "node -r ./tests/register-dist-require.js tests/contracts/verify-runtime-command-controller.js",
+        "verify:runtime-extension-controller": "node -r ./tests/register-dist-require.js tests/contracts/verify-runtime-extension-controller.js",
+        "verify:process-tree": "node -r ./tests/register-dist-require.js tests/contracts/verify-process-tree.js",
+        "verify:process-lifecycle-controller": "node -r ./tests/register-dist-require.js tests/contracts/verify-process-lifecycle-controller.js",
+        "verify:runtime-quit-controller": "node -r ./tests/register-dist-require.js tests/contracts/verify-runtime-quit-controller.js",
+        "verify:workspace-mutations": "node -r ./tests/register-dist-require.js tests/contracts/verify-workspace-mutations.js",
+        "verify:r-readonly-adapter": "node -r ./tests/register-dist-require.js tests/contracts/verify-r-readonly-adapter.js",
+        "verify:r-runtime-launch-plan": "node -r ./tests/register-dist-require.js tests/contracts/verify-r-runtime-launch-plan.js",
+        "verify:r-runtime-source-bundle": "node -r ./tests/register-dist-require.js tests/contracts/verify-r-runtime-source-bundle.js",
+        "verify:r-process-lifecycle": "node -r ./tests/register-dist-require.js tests/contracts/verify-r-process-lifecycle.js",
+        "verify:r-visible-command": "node -r ./tests/register-dist-require.js tests/contracts/verify-r-visible-command.js",
+        "verify:r-workspace-runtime-control": "node -r ./tests/register-dist-require.js tests/contracts/verify-r-workspace-runtime-control.js",
+        "verify:package-install-workflow": "node -r ./tests/register-dist-require.js tests/contracts/verify-package-install-workflow.js",
+        "verify:packaging-policy": "node -r ./tests/register-dist-require.js tests/contracts/verify-packaging-policy.js",
+        "verify:product-contribution-registry": "node -r ./tests/register-dist-require.js tests/contracts/verify-product-contribution-registry.js",
+        "verify:python-readonly-adapter": "node -r ./tests/register-dist-require.js tests/contracts/verify-python-readonly-adapter.js",
+        "verify:verifier-groups": "node -r ./tests/register-dist-require.js tests/contracts/verify-verifier-groups.js",
+        "verify:renderer-scripts": "node -r ./tests/register-dist-require.js tests/contracts/verify-renderer-scripts.js",
+        "verify:shared-assets": "node -r ./tests/register-dist-require.js tests/contracts/verify-shared-assets.js",
+        "verify:shared-dialog-sources": "node -r ./tests/register-dist-require.js tests/contracts/verify-shared-dialog-sources.js",
+        "verify:console-history-persistence": "node -r ./tests/register-dist-require.js tests/contracts/verify-console-history-persistence.js",
+        "verify:workspace-pane": "node -r ./tests/register-dist-require.js tests/contracts/verify-workspace-pane.js",
+        "verify:runtime-panels": "node -r ./tests/register-dist-require.js tests/contracts/verify-runtime-panels.js",
+        "verify:external-url": "node -r ./tests/register-dist-require.js tests/contracts/verify-external-url.js",
+        "verify:plot-viewer-state": "node -r ./tests/register-dist-require.js tests/contracts/verify-plot-viewer-state.js",
+        "verify:plot-viewer-page": "node -r ./tests/register-dist-require.js tests/contracts/verify-plot-viewer-page.js",
+        "verify:help-window-page": "node -r ./tests/register-dist-require.js tests/contracts/verify-help-window-page.js",
+        "verify:script-editor-window": "node -r ./tests/register-dist-require.js tests/contracts/verify-script-editor-window.js",
+        "verify:dataset-editor-window": "node -r ./tests/register-dist-require.js tests/contracts/verify-dataset-editor-window.js",
+        "verify:dev-diagnostics-page": "node -r ./tests/register-dist-require.js tests/contracts/verify-dev-diagnostics-page.js",
+        "verify:electron-main-runtime-refresh": "node -r ./tests/register-dist-require.js tests/contracts/verify-electron-main-runtime-refresh.js",
+        "verify:composition-panels": "node -r ./tests/register-dist-require.js tests/contracts/verify-composition-panels.js",
+        "verify:feature-entrypoint-commands": "node -r ./tests/register-dist-require.js tests/contracts/verify-feature-entrypoint-commands.js",
+        "verify:startup-prompt-panel": "node -r ./tests/register-dist-require.js tests/contracts/verify-startup-prompt-panel.js",
+        "verify:dialog-source-renderer": "node -r ./tests/register-dist-require.js tests/contracts/verify-dialog-source-renderer.js",
+        "verify:dataset-editor-state": "node -r ./tests/register-dist-require.js tests/dataset-editor/verify-dataset-editor-state.js",
+        "verify:copy-payload": "node -r ./tests/register-dist-require.js tests/dataset-editor/verify-copy-payload.js",
+        "verify:clipboard-result": "node -r ./tests/register-dist-require.js tests/dataset-editor/verify-clipboard-result.js",
+        "verify:paste-payload": "node -r ./tests/register-dist-require.js tests/dataset-editor/verify-paste-payload.js",
+        "verify:paste-mapping": "node -r ./tests/register-dist-require.js tests/dataset-editor/verify-paste-mapping.js",
+        "verify:clipboard-commands": "node -r ./tests/register-dist-require.js tests/dataset-editor/verify-clipboard-commands.js",
+        "verify:keyboard-commands": "node -r ./tests/register-dist-require.js tests/dataset-editor/verify-keyboard-commands.js",
+        "verify:command-router": "node -r ./tests/register-dist-require.js tests/dataset-editor/verify-command-router.js",
+        "verify:structural-commands": "node -r ./tests/register-dist-require.js tests/dataset-editor/verify-structural-commands.js",
+        "verify:metadata-commands": "node -r ./tests/register-dist-require.js tests/dataset-editor/verify-metadata-commands.js",
+        "verify:edit-commands": "node -r ./tests/register-dist-require.js tests/dataset-editor/verify-edit-commands.js",
+        "verify:selection-controls": "node -r ./tests/register-dist-require.js tests/dataset-editor/verify-selection-controls.js",
+        "verify:selection-highlights": "node -r ./tests/register-dist-require.js tests/dataset-editor/verify-selection-highlights.js",
+        "verify:selection-diagnostics": "node -r ./tests/register-dist-require.js tests/dataset-editor/verify-selection-diagnostics.js",
+        "verify:table-descriptors": "node -r ./tests/register-dist-require.js tests/dataset-editor/verify-table-descriptors.js",
+        "verify:context-menu-actions": "node -r ./tests/register-dist-require.js tests/dataset-editor/verify-context-menu-actions.js",
+        "verify:open-file-result": "node -r ./tests/register-dist-require.js tests/contracts/verify-open-file-result.js",
+        "verify:script-file-result": "node -r ./tests/register-dist-require.js tests/contracts/verify-script-file-result.js",
+        "verify:import-format": "node -r ./tests/register-dist-require.js tests/contracts/verify-import-format.js",
+        "verify:import-plan": "node -r ./tests/register-dist-require.js tests/contracts/verify-import-plan.js",
+        "verify:import-preview": "node -r ./tests/register-dist-require.js tests/contracts/verify-import-preview.js",
+        "verify:import-panel": "node -r ./tests/register-dist-require.js tests/contracts/verify-import-panel.js"
+    },
+    "devDependencies": {
+        "@types/sortablejs": "^1.15.9",
+        "electron": "^22.0.0",
+        "electron-builder": "^26.9.0",
+        "playwright": "^1.60.0",
+        "typescript": "^6.0.3"
+    },
+    "dependencies": {
+        "monaco-editor": "^0.55.1",
+        "preact": "^10.29.2",
+        "sortablejs": "^1.15.7"
+    },
+    "build": {
+        "directories": {
+            "output": "build/output"
+        },
+        "files": [
+            "dist/**/*",
+            "package.json"
+        ],
+        "asar": true,
+        "asarUnpack": [
+            "dist/shared/runtime/providers/r/r-sources/**/*"
+        ],
+        "mac": {
+            "category": "public.app-category.developer-tools",
+            "target": [
+                {
+                    "target": "dmg",
+                    "arch": [
+                        "arm64"
+                    ]
+                }
+            ]
+        },
+        "win": {
+            "target": "nsis"
+        },
+        "linux": {
+            "target": "AppImage",
+            "category": "Development;Science"
+        }
+    }
+}

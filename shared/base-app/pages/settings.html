@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="ie=edge">
+  <link rel="stylesheet" href="./shared/dmTheme.css">
+  <script src="./shared/dmControls.js"></script>
+  <script>
+    require('./settings.js');
+  </script>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      background: #ececec;
+    }
+
+    .settings-shell {
+      box-sizing: border-box;
+      width: 100%;
+      height: 100%;
+      padding: 14px;
+      overflow: auto;
+    }
+
+    .settings-root {
+      box-sizing: border-box;
+      width: min(760px, 100%);
+      min-height: 100%;
+      padding: 14px 16px;
+      background: #fff;
+      border: 1px solid #cecece;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+    }
+
+    h1 {
+      margin: 0 0 14px 0;
+      font-size: 17px;
+      font-weight: 600;
+    }
+
+    .settings-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(260px, 1fr));
+      gap: 12px 14px;
+    }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .field.wide {
+      grid-column: 1 / -1;
+    }
+
+    .field-inline {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    label {
+      color: #222;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    select, dm-select { display: block; }
+
+    .reload-info {
+      margin-top: 12px;
+      color: #777;
+      grid-column: 1 / -1;
+      font-size: 12px;
+    }
+
+    .actions {
+      margin-top: 16px;
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      border-top: 1px solid #e2e2e2;
+      padding-top: 12px;
+    }
+
+    button {
+      height: 30px;
+      min-width: 78px;
+    }
+
+    @media (max-width: 740px) {
+      .settings-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="settings-shell">
+    <div class="settings-root">
+      <h1 id="settingsTitle">Settings</h1>
+
+      <div class="settings-grid">
+        <div class="field">
+          <label id="labelLanguage" for="defaultLanguage">Language</label>
+          <dm-select id="defaultLanguage"></dm-select>
+        </div>
+
+        <div class="field">
+          <label id="labelTerminalFont" for="terminalFont">Terminal Font</label>
+          <dm-select id="terminalFont"></dm-select>
+        </div>
+
+        <div class="field">
+          <label id="labelTerminalCursor" for="terminalCursorStyle">Terminal Cursor</label>
+          <dm-select id="terminalCursorStyle"></dm-select>
+        </div>
+
+        <div class="field">
+          <label id="labelTerminalCursorBlink" for="terminalCursorBlink">Terminal Cursor Blink</label>
+          <dm-select id="terminalCursorBlink"></dm-select>
+        </div>
+
+        <div class="field">
+          <label id="labelTerminalSelectionColor" for="terminalSelectionColor">Terminal Selection Color</label>
+          <dm-select id="terminalSelectionColor"></dm-select>
+        </div>
+
+        <div class="field wide">
+          <label id="labelTerminalQuiet" for="terminalQuiet">Start R quietly</label>
+          <div class="field-inline">
+            <dm-checkbox id="terminalQuiet" label="On"></dm-checkbox>
+          </div>
+        </div>
+
+        <div class="field">
+          <label id="labelTerminalErrorContext" for="terminalErrorContext">Terminal Error Context</label>
+          <dm-select id="terminalErrorContext"></dm-select>
+        </div>
+
+        <div class="field">
+          <label id="labelTerminalInputMode" for="terminalInputMode">Input Mode</label>
+          <dm-select id="terminalInputMode"></dm-select>
+        </div>
+
+        <div class="field wide">
+          <label id="labelAuthoringFeatures" for="enableAuthoringFeatures">Enable Authoring Features</label>
+          <div class="field-inline">
+            <dm-checkbox id="enableAuthoringFeatures" label="On"></dm-checkbox>
+          </div>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button id="saveBtn" type="button">Save</button>
+        <button id="cancelBtn" type="button">Cancel</button>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,232 @@
+[
+    {
+        "id": "File",
+        "labelKey": "menu.root.file",
+        "type": "submenu",
+        "items": [
+            {
+                "id": "SetWorkingDirectory",
+                "labelKey": "menu.root.file.setwd",
+                "label": "Set working directory",
+                "type": "shell-command",
+                "command": "runtime.setWorkingDirectory"
+            },
+            {
+                "id": "ScriptEditor",
+                "labelKey": "menu.root.file.scripteditor",
+                "label": "Script editor",
+                "type": "shell-command",
+                "command": "script.focusEditor",
+                "accelerator": "CmdOrCtrl+Shift+E"
+            },
+            {
+                "id": "OpenScriptFile",
+                "labelKey": "menu.root.file.openScript",
+                "label": "Open script file",
+                "type": "shell-command",
+                "command": "script.openFile"
+            },
+            {
+                "id": "RunScriptFile",
+                "labelKey": "menu.root.file.runScript",
+                "label": "Run script file",
+                "type": "shell-command",
+                "command": "runtime.runScriptFile"
+            },
+            {
+                "id": "ImportData",
+                "labelKey": "menu.root.file.importdata",
+                "type": "shared-dialog",
+                "dialog": "import"
+            },
+            {
+                "id": "WorkspaceOpenFile",
+                "labelKey": "menu.workspace.openFile",
+                "label": "Open workspace file",
+                "type": "shell-command",
+                "command": "workspace.openFile"
+            },
+            {
+                "id": "WorkspaceSaveFile",
+                "labelKey": "menu.workspace.saveFile",
+                "label": "Save workspace file",
+                "type": "shell-command",
+                "command": "workspace.saveFile"
+            },
+            {
+                "id": "AppSettings",
+                "labelKey": "menu.root.file.appsettings",
+                "label": "Settings",
+                "type": "shell-command",
+                "command": "app.showSettings"
+            },
+            {
+                "id": "AppExit",
+                "labelKey": "menu.root.file.exit",
+                "label": "Exit",
+                "type": "native-role",
+                "role": "quit"
+            }
+        ]
+    },
+    {
+        "id": "Runtime",
+        "labelKey": "menu.runtime",
+        "type": "submenu",
+        "items": [
+            {
+                "id": "RuntimeStart",
+                "labelKey": "menu.runtime.start",
+                "type": "shell-command",
+                "command": "runtime.start"
+            },
+            {
+                "id": "RuntimeStop",
+                "labelKey": "menu.runtime.stop",
+                "type": "shell-command",
+                "command": "runtime.stop"
+            },
+            {
+                "id": "WorkspaceRefresh",
+                "labelKey": "menu.workspace.refresh",
+                "type": "shell-command",
+                "command": "workspace.refresh"
+            }
+        ]
+    },
+    {
+        "id": "Edit",
+        "labelKey": "menu.root.edit",
+        "type": "submenu",
+        "items": [
+            {
+                "id": "AppUndo",
+                "labelKey": "menu.root.edit.undo",
+                "label": "Undo",
+                "type": "native-role",
+                "role": "undo"
+            },
+            {
+                "id": "AppRedo",
+                "labelKey": "menu.root.edit.redo",
+                "label": "Redo",
+                "type": "native-role",
+                "role": "redo"
+            },
+            {
+                "id": "AppCut",
+                "labelKey": "menu.root.edit.cut",
+                "label": "Cut",
+                "type": "native-role",
+                "role": "cut"
+            },
+            {
+                "id": "AppCopy",
+                "labelKey": "menu.root.edit.copy",
+                "label": "Copy",
+                "type": "native-role",
+                "role": "copy"
+            },
+            {
+                "id": "AppPaste",
+                "labelKey": "menu.root.edit.paste",
+                "label": "Paste",
+                "type": "native-role",
+                "role": "paste"
+            },
+            {
+                "id": "AppSelectAll",
+                "labelKey": "menu.root.edit.selectall",
+                "label": "Select All",
+                "type": "native-role",
+                "role": "selectAll"
+            },
+            {
+                "id": "EditNavigationSeparator",
+                "type": "separator"
+            },
+            {
+                "id": "AppGoToCase",
+                "labelKey": "menu.root.edit.gotocase",
+                "label": "Go to case...",
+                "type": "shell-command",
+                "command": "dataset.goToCase"
+            },
+            {
+                "id": "AppGoToVariable",
+                "labelKey": "menu.root.edit.gotovariable",
+                "label": "Go to variable...",
+                "type": "shell-command",
+                "command": "dataset.goToVariable"
+            }
+        ]
+    },
+    {
+        "id": "View",
+        "labelKey": "menu.root.view",
+        "type": "submenu",
+        "items": [
+            {
+                "id": "AppZoomIn",
+                "labelKey": "menu.root.view.mainappzoomin",
+                "label": "Zoom In",
+                "type": "native-role",
+                "role": "zoomIn"
+            },
+            {
+                "id": "AppZoomOut",
+                "labelKey": "menu.root.view.mainappzoomout",
+                "label": "Zoom Out",
+                "type": "native-role",
+                "role": "zoomOut"
+            },
+            {
+                "id": "AppZoomReset",
+                "labelKey": "menu.root.view.mainappzoomreset",
+                "label": "Reset Zoom",
+                "type": "native-role",
+                "role": "resetZoom"
+            },
+            {
+                "id": "ViewDiagnosticsSeparator",
+                "type": "separator"
+            },
+            {
+                "id": "DeveloperDiagnostics",
+                "labelKey": "menu.root.view.developerDiagnostics",
+                "label": "Developer Diagnostics",
+                "type": "shell-command",
+                "command": "app.openDevDiagnostics",
+                "accelerator": "CmdOrCtrl+Alt+D"
+            }
+        ]
+    },
+    {
+        "id": "About",
+        "labelKey": "menu.root.about",
+        "label": "About",
+        "type": "submenu",
+        "items": [
+            {
+                "id": "AppAbout",
+                "labelKey": "menu.root.about.appabout",
+                "label": "Application",
+                "type": "shell-command",
+                "command": "app.showProductInfo"
+            }
+        ]
+    },
+    {
+        "id": "Data",
+        "labelKey": "menu.root.data",
+        "type": "submenu",
+        "items": [
+            {
+                "id": "DatasetEditor",
+                "labelKey": "menu.root.data.edit",
+                "type": "feature",
+                "feature": "dataset-editor.grid"
+            }
+        ]
+    }
+]
