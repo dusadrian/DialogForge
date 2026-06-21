@@ -276,7 +276,7 @@ const generatedMainFile = function(productId: string): string {
         [
             `"use strict";`,
             `const path = require("path");`,
-            `process.argv.push("--product-path", path.join(__dirname, ${JSON.stringify(stagedProductPath)}));`,
+            `process.env.DIALOGFORGE_PRODUCT_PATH = path.join(__dirname, ${JSON.stringify(stagedProductPath)});`,
             `require("./electron-main");`,
             ``
         ].join("\n")
@@ -471,6 +471,7 @@ const main = function(): void {
         const builderArgs = [
             "--config.electronVersion=40.6.1",
             `--config.extraMetadata.main=${mainFile}`,
+            `--config.extraMetadata.productName=${productName}`,
             `--config.extraMetadata.version=${productVersion}`,
             `--config.directories.output=${outputDir}`,
             `--config.appId=${appId}`,

@@ -11,6 +11,7 @@ const read = function(relativePath) {
 };
 const packageAction = read(".github/actions/package-product/action.yml");
 const packageProduct = read("build/scripts/package-product.ts");
+const electronMain = read("build/scripts/electron-main.ts");
 const copyStatic = read("build/scripts/copy-static.ts");
 const macosNotarization = read("build/scripts/macos-notarization.ts");
 const packagedDependencies = read(
@@ -240,6 +241,21 @@ assert.ok(
 assert.ok(
     packageProduct.includes("`--config.directories.output=${outputDir}`"),
     "electron-builder output paths must use the Windows-safe equals form"
+);
+assert.ok(
+    packageProduct.includes(
+        "process.env.DIALOGFORGE_PRODUCT_PATH = path.join(__dirname"
+    )
+    && electronMain.includes(
+        'String(process.env.DIALOGFORGE_PRODUCT_PATH || "").trim()'
+    ),
+    "packaged products must select their staged product without relying on argv layout"
+);
+assert.ok(
+    packageProduct.includes(
+        "`--config.extraMetadata.productName=${productName}`"
+    ),
+    "packaged products must expose the product name to Electron at runtime"
 );
 [
     "`--config.linux.artifactName=${fileName}_${version}_intel.AppImage`",

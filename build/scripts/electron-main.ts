@@ -140,7 +140,8 @@ const readOption = function(name: string, fallback: string): string {
 
 
 const rootDir = path.resolve(__dirname, "../..");
-const productPathArg = readOption("product-path", "");
+const productPathArg = readOption("product-path", "")
+    || String(process.env.DIALOGFORGE_PRODUCT_PATH || "").trim();
 const requestedProduct = readOption("product", "") || "base";
 const runtime = readOption("runtime", "r");
 const locale = readOption("locale", "en_US");
