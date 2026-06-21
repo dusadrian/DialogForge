@@ -11,12 +11,12 @@ on:
       release_tag:
         description: Release tag to upload to. Leave empty to skip upload.
         required: false
-        default: ""
+        default: QCA
         type: string
       release_repository:
         description: Target repository in owner/repo form. Leave empty for this repository.
         required: false
-        default: ""
+        default: dusadrian/binaries
         type: string
       overwrite_release_assets:
         description: Replace release assets with matching filenames.

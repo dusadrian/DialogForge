@@ -198,6 +198,29 @@ const platformFlags = function(
 };
 
 
+const artifactNameConfig = function(
+    platform: BuildSelection["platform"],
+    productName: string,
+    version: string
+): string[] {
+    const fileName = productName.replace(/\s+/g, "_");
+
+    if (platform === "linux") {
+        return [
+            `--config.linux.artifactName=${fileName}_${version}_intel.AppImage`
+        ];
+    }
+
+    if (platform === "windows") {
+        return [
+            `--config.nsis.artifactName=${fileName}_setup_${version}_intel.exe`
+        ];
+    }
+
+    return [];
+};
+
+
 const renameMacArtifacts = function(
     productName: string,
     version: string,
@@ -434,6 +457,11 @@ const main = function(): void {
             ...(macConfigPath ? ["--config", macConfigPath] : []),
             "--publish=never",
             ...platformFlags(selection.platform, selection.arch),
+            ...artifactNameConfig(
+                selection.platform,
+                productName,
+                productVersion
+            ),
             ...iconConfig(iconBasePath)
         ];
 
