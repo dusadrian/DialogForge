@@ -1856,31 +1856,31 @@ workspace_dataset_finite_values <- function(column) {
 
 workspace_dataset_calibration_flags <- function(column) {
     values <- workspace_dataset_finite_values(column)
-    unique_values <- sort(unique(values))
     unit_interval <- length(values) > 0L &&
         all(values >= 0 & values <= 1)
-    integer_values <- length(unique_values) > 0L &&
-        all(unique_values >= 0) &&
+    integer_values <- length(values) > 0L &&
+        all(values >= 0) &&
         all(
-            abs(unique_values - round(unique_values)) <
+            abs(values - round(values)) <
                 .Machine$double.eps^0.5
         )
     binary <- FALSE
     multi_value <- FALSE
 
     if (isTRUE(integer_values)) {
-        binary <- all(vapply(
-            unique_values,
-            function(value) is.element(value, c(0, 1)),
-            logical(1)
-        ))
-        maximum <- suppressWarnings(as.integer(max(unique_values)))
+        binary <- all(values == 0 | values == 1)
+        minimum <- suppressWarnings(min(values))
+        maximum <- suppressWarnings(max(values))
 
-        if (is.finite(maximum) && !is.na(maximum) && maximum >= 2L) {
-            multi_value <- identical(
-                unique_values,
-                as.numeric(seq.int(0L, maximum))
-            )
+        if (
+            is.finite(minimum) &&
+            is.finite(maximum) &&
+            !is.na(minimum) &&
+            !is.na(maximum) &&
+            identical(minimum, 0) &&
+            maximum >= 2
+        ) {
+            multi_value <- length(unique(values)) == maximum + 1
         }
     }
 
@@ -2092,6 +2092,7 @@ workspace_dataset_variable_json <- function(name, column) {
         attributes$measurement,
         attributes$labels
     )
+    flags <- workspace_dataset_item_flags(column)
     result_json <- paste0(
         "{",
         "\"name\":", json_str(as.character(name %||% "")), ",",
@@ -2109,6 +2110,12 @@ workspace_dataset_variable_json <- function(name, column) {
         ), ",",
         "\"measure\":", json_str(measure), ",",
         "\"calibrated\":", json_bool(calibration$calibrated), ",",
+        "\"numeric\":", json_bool(flags$numeric), ",",
+        "\"factor\":", json_bool(flags$factor), ",",
+        "\"binary\":", json_bool(flags$binary), ",",
+        "\"character\":", json_bool(flags$character), ",",
+        "\"categorical\":", json_bool(flags$categorical), ",",
+        "\"date\":", json_bool(flags$date), ",",
         "\"declared\":", json_bool(
             workspace_dataset_is_declared(column, declared_namespace)
         ), ",",

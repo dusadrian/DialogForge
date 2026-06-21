@@ -41,7 +41,15 @@ export const createColumn = function(input: Partial<TabularColumnSnapshot>): Tab
     return {
         name: input.name || "",
         type: input.type || "",
-        role: input.role || "data"
+        role: input.role || "data",
+        numeric: input.numeric,
+        character: input.character,
+        logical: input.logical,
+        factor: input.factor,
+        calibrated: input.calibrated,
+        binary: input.binary,
+        categorical: input.categorical,
+        date: input.date
     };
 };
 
@@ -197,6 +205,34 @@ export const createVariableMetadata = function(input: Partial<VariableMetadata>)
 
     if (input.measure !== undefined) {
         metadata.measure = input.measure;
+    }
+
+    if (input.numeric !== undefined) {
+        metadata.numeric = input.numeric === true;
+    }
+
+    if (input.factor !== undefined) {
+        metadata.factor = input.factor === true;
+    }
+
+    if (input.calibrated !== undefined) {
+        metadata.calibrated = input.calibrated === true;
+    }
+
+    if (input.binary !== undefined) {
+        metadata.binary = input.binary === true;
+    }
+
+    if (input.character !== undefined) {
+        metadata.character = input.character === true;
+    }
+
+    if (input.categorical !== undefined) {
+        metadata.categorical = input.categorical === true;
+    }
+
+    if (input.date !== undefined) {
+        metadata.date = input.date === true;
     }
 
     return metadata;

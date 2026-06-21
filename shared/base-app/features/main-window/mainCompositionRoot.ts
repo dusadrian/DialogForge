@@ -625,7 +625,11 @@ const consoleTranscriptController = createConsoleTranscriptController({
     },
     setPromptState: setConsolePromptState,
     setRuntimeBusy: setConsoleRuntimeBusy,
-    renderEvents: renderTranscript
+    renderEvents: renderTranscript,
+    recordSubmittedCommand: function(text): void {
+        consoleCommandHistory.record(text);
+        consoleCompletionModel.registerCommandInput(text);
+    }
 });
 
 
@@ -860,6 +864,10 @@ const datasetCommandServices = createMainDatasetCommandServices({
     refreshRuntimeEvents: function(): void {
         void refreshRuntimeEvents();
     },
+    getActiveDatasetName: function(): string {
+        return activeDatasetSnapshot?.objectName || "";
+    },
+    openDatasetEditor: window.dialogForge.openDatasetEditor,
     getGoToDialogId: findDatasetNavigationDialogId,
     executeProductGoToDialog: function(dialogId, mode): void {
         void executeProductGoToDialog(dialogId, mode);

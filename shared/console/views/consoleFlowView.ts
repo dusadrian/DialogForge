@@ -27,6 +27,7 @@ export const createConsoleFlowView = (deps: {
   focusCommandInput?: () => void;
   focusRequestInput?: () => void;
   onResize?: () => void;
+  writeClipboardText?: (text: string) => Promise<void> | void;
 }) => {
   let root: HTMLDivElement | null = null;
   let viewport: HTMLDivElement | null = null;
@@ -40,6 +41,49 @@ export const createConsoleFlowView = (deps: {
   let currentTypography = normalizeConsoleTypography();
   let renderVersion = 0;
   let attachInputFrame = 0;
+  let contextMenu: HTMLDivElement | null = null;
+  let contextCopyText = '';
+
+  const selectedTranscriptText = (): string => {
+    if (!itemsHost) return '';
+
+    try {
+      const selection = window.getSelection?.();
+      if (!selection || selection.rangeCount === 0) return '';
+      const range = selection.getRangeAt(0);
+      const ancestor = range.commonAncestorContainer;
+      const node = ancestor.nodeType === Node.TEXT_NODE
+        ? ancestor.parentNode
+        : ancestor;
+
+      if (!node || !itemsHost.contains(node)) return '';
+      return String(selection.toString() || '');
+    } catch {
+      return '';
+    }
+  };
+
+  const hideContextMenu = () => {
+    if (contextMenu) contextMenu.hidden = true;
+    contextCopyText = '';
+  };
+
+  const handleDocumentKeyDown = (event: KeyboardEvent) => {
+    if (!(event.metaKey || event.ctrlKey) || event.shiftKey || event.altKey) return;
+    if (String(event.key || '').toLowerCase() !== 'c') return;
+    const selectedText = selectedTranscriptText();
+    if (!selectedText) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    void Promise.resolve(deps.writeClipboardText?.(selectedText));
+  };
+
+  const handleDocumentPointerDown = (event: MouseEvent) => {
+    const target = event.target instanceof Node ? event.target : null;
+    if (target && contextMenu?.contains(target)) return;
+    hideContextMenu();
+  };
 
   const applyTypography = () => {
     if (!root) return;
@@ -184,6 +228,32 @@ export const createConsoleFlowView = (deps: {
         focusActiveInput();
       });
     });
+    viewport.addEventListener('contextmenu', (event: MouseEvent) => {
+      const target = event.target instanceof Node ? event.target : null;
+      const selectedText = selectedTranscriptText();
+
+      if (!target || !itemsHost?.contains(target) || !selectedText || !contextMenu || !root) {
+        hideContextMenu();
+        return;
+      }
+
+      event.preventDefault();
+      contextCopyText = selectedText;
+      const rootRect = root.getBoundingClientRect();
+      contextMenu.hidden = false;
+      const menuRect = contextMenu.getBoundingClientRect();
+      const left = Math.max(4, Math.min(
+        event.clientX - rootRect.left,
+        rootRect.width - menuRect.width - 4
+      ));
+      const top = Math.max(4, Math.min(
+        event.clientY - rootRect.top,
+        rootRect.height - menuRect.height - 4
+      ));
+
+      contextMenu.style.left = `${left}px`;
+      contextMenu.style.top = `${top}px`;
+    });
 
     content = document.createElement('div');
     content.style.display = 'flex';
@@ -209,12 +279,31 @@ export const createConsoleFlowView = (deps: {
     requestInputHost.style.display = 'none';
     requestInputHost.style.scrollMarginBottom = `${INPUT_BOTTOM_CLEARANCE_PX}px`;
 
+    contextMenu = document.createElement('div');
+    contextMenu.className = 'console-context-menu';
+    contextMenu.hidden = true;
+
+    const copyButton = document.createElement('button');
+    copyButton.type = 'button';
+    copyButton.className = 'console-context-menu-item';
+    copyButton.dataset.consoleContextAction = 'copy';
+    copyButton.textContent = 'Copy';
+    copyButton.addEventListener('click', () => {
+      const text = contextCopyText;
+      hideContextMenu();
+      if (text) void Promise.resolve(deps.writeClipboardText?.(text));
+    });
+    contextMenu.appendChild(copyButton);
+
     content.appendChild(itemsHost);
     content.appendChild(inputHost);
     content.appendChild(requestInputHost);
     viewport.appendChild(content);
     root.appendChild(viewport);
+    root.appendChild(contextMenu);
     container.appendChild(root);
+    document.addEventListener('keydown', handleDocumentKeyDown, true);
+    document.addEventListener('mousedown', handleDocumentPointerDown, true);
 
     if (typeof ResizeObserver !== 'undefined') {
       resizeObserver = new ResizeObserver(() => {
@@ -235,6 +324,8 @@ export const createConsoleFlowView = (deps: {
   };
 
   const dispose = () => {
+    document.removeEventListener('keydown', handleDocumentKeyDown, true);
+    document.removeEventListener('mousedown', handleDocumentPointerDown, true);
     try { unsubscribeModel?.(); } catch {}
     unsubscribeModel = null;
     try { resizeObserver?.disconnect(); } catch {}
@@ -253,6 +344,8 @@ export const createConsoleFlowView = (deps: {
     itemsHost = null;
     inputHost = null;
     requestInputHost = null;
+    contextMenu = null;
+    contextCopyText = '';
     renderVersion = 0;
   };
 

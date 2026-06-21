@@ -281,8 +281,8 @@ export const createRuntimeSessionManager = function(
         return commandOperationController.executeProductCommand(request);
     };
 
-    const listWorkspaceObjects: RuntimeSessionManager["listWorkspaceObjects"] = async function() {
-        return workspaceOperationController.listWorkspaceObjects();
+    const listWorkspaceObjects: RuntimeSessionManager["listWorkspaceObjects"] = async function(options) {
+        return workspaceOperationController.listWorkspaceObjects(options);
     };
 
     const getWorkspaceSnapshot: RuntimeSessionManager["getWorkspaceSnapshot"] = function() {

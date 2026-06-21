@@ -439,6 +439,7 @@ registerProductDialogRuntimeComposition({
     productId: product,
     getUiCommandVisibility: uiActionCommandVisibility,
     executeVisibleCommandAndBroadcast,
+    sendTranscriptEvents,
     invalidateDatasetPreview: invalidateInitialDatasetPreview,
     refreshWorkspaceAndBroadcast,
     broadcastRuntimeEvents,

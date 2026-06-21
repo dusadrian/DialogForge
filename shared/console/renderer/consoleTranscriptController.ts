@@ -18,6 +18,7 @@ export interface ConsoleTranscriptControllerBindings {
     setPromptState(inputPrompt: string, continuationPrompt: string): void;
     setRuntimeBusy(busy: boolean): void;
     renderEvents(events: TranscriptEvent[]): void;
+    recordSubmittedCommand?(text: string, source: string): void;
 }
 
 
@@ -58,6 +59,14 @@ export const createConsoleTranscriptController = function(
 
             bindings.session.rememberTranscriptEvent(eventKey);
             events.push(event);
+
+            if (event.type === "submitted" && event.text) {
+                bindings.recordSubmittedCommand?.(
+                    event.text,
+                    String(event.source || "")
+                );
+            }
+
             routeEvent(event);
         });
 

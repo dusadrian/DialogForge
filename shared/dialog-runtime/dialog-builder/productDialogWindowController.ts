@@ -31,6 +31,8 @@ export interface ProductDialogWindowControllerOptions<WorkspaceSource> {
     sessions: ProductDialogSessionStore;
     readDialog(dialogId: string): ProductDialogDefinition;
     readWorkspaceData(source?: WorkspaceSource): Promise<unknown>;
+    readInitialWorkspaceData(source?: WorkspaceSource): Promise<unknown>;
+    getActiveDatasetName(): string;
     getParentWindow(): BrowserWindow | null;
     windowClosed(dialogId: string): void;
 }
@@ -49,6 +51,8 @@ export const createProductDialogWindowController = function<WorkspaceSource>(
     options: ProductDialogWindowControllerOptions<WorkspaceSource>
 ): ProductDialogWindowController<WorkspaceSource> {
     let lastWorkspaceData: unknown = null;
+    let lastWorkspaceSource: WorkspaceSource | undefined;
+    let pendingWorkspaceData: Promise<unknown> | null = null;
     let workspaceRequestSequence = 0;
 
     const sendWorkspaceData = function(
@@ -75,12 +79,49 @@ export const createProductDialogWindowController = function<WorkspaceSource>(
             );
         });
     };
+    const withCurrentActiveDataset = function(
+        workspaceData: unknown
+    ): unknown {
+        if (
+            !workspaceData
+            || typeof workspaceData !== "object"
+            || Array.isArray(workspaceData)
+        ) {
+            return workspaceData;
+        }
+
+        return {
+            ...workspaceData,
+            activeDataset: options.getActiveDatasetName()
+        };
+    };
     const refreshWorkspaceData = async function(
         dialogId = "",
         source?: WorkspaceSource
     ): Promise<void> {
+        if (source !== undefined) {
+            if (source !== lastWorkspaceSource) {
+                lastWorkspaceData = null;
+            }
+
+            lastWorkspaceSource = source;
+        }
+
         const sequence = ++workspaceRequestSequence;
-        const workspaceData = await options.readWorkspaceData(source);
+        const request = options.readWorkspaceData(
+            source ?? lastWorkspaceSource
+        );
+        pendingWorkspaceData = request;
+        let workspaceData: unknown;
+
+        try {
+            workspaceData = await request;
+        }
+        finally {
+            if (pendingWorkspaceData === request) {
+                pendingWorkspaceData = null;
+            }
+        }
 
         if (sequence < workspaceRequestSequence) {
             if (dialogId && lastWorkspaceData) {
@@ -90,8 +131,23 @@ export const createProductDialogWindowController = function<WorkspaceSource>(
             return;
         }
 
-        lastWorkspaceData = workspaceData;
-        sendWorkspaceData(workspaceData, dialogId);
+        lastWorkspaceData = withCurrentActiveDataset(workspaceData);
+        sendWorkspaceData(lastWorkspaceData, dialogId);
+    };
+    const readPreparedWorkspaceData = async function(): Promise<unknown> {
+        if (lastWorkspaceData) {
+            return lastWorkspaceData;
+        }
+
+        if (pendingWorkspaceData) {
+            await pendingWorkspaceData;
+
+            if (lastWorkspaceData) {
+                return lastWorkspaceData;
+            }
+        }
+
+        return options.readInitialWorkspaceData(lastWorkspaceSource);
     };
     const open = function(dialogId: string): BrowserWindow {
         const existing = options.windows.focusExisting(dialogId);
@@ -169,21 +225,33 @@ export const createProductDialogWindowController = function<WorkspaceSource>(
             "shared/base-app/pages/dialogBuilder.html"
         ));
         window.webContents.once("did-finish-load", function(): void {
-            window.webContents.send(dialogRuntimeEventChannels.created, {
-                dialogID: dialogId,
-                data: runtimeDialog,
-                lastState: options.sessions.getState(dialogId),
-                workspaceData: lastWorkspaceData
-            });
+            const sendCreated = function(workspaceData: unknown): void {
+                if (window.isDestroyed()) {
+                    return;
+                }
 
-            if (lastWorkspaceData) {
+                const currentWorkspaceData = withCurrentActiveDataset(
+                    workspaceData
+                );
+
+                lastWorkspaceData = currentWorkspaceData;
+                window.webContents.send(dialogRuntimeEventChannels.created, {
+                    dialogID: dialogId,
+                    data: runtimeDialog,
+                    lastState: options.sessions.getState(dialogId),
+                    workspaceData: currentWorkspaceData
+                });
                 window.webContents.send(
                     dialogRuntimeEventChannels.incomingData,
-                    lastWorkspaceData
+                    currentWorkspaceData
                 );
-            }
+            };
 
-            void refreshWorkspaceData(dialogId);
+            void readPreparedWorkspaceData().then(function(
+                initialWorkspaceData
+            ): void {
+                sendCreated(initialWorkspaceData);
+            });
         });
         window.once("ready-to-show", function(): void {
             if (!window.isDestroyed()) {

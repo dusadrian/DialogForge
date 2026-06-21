@@ -260,6 +260,14 @@ const customJSRuntime = {
       return obj;
     };
 
+    const findOrNull = (el: DialogScriptValue) => {
+      try {
+        return find(el);
+      } catch {
+        return null;
+      }
+    };
+
     const coerceName = (el: DialogScriptValue) => {
       if (!el && el !== 0) throw new SyntaxError('Element is required');
       return String(el).trim();
@@ -568,7 +576,8 @@ const customJSRuntime = {
     };
 
     const getValue = (el: DialogScriptValue) => {
-      const obj = find(el);
+      const obj = findOrNull(el);
+      if (!obj) return null;
       const t = inferType(obj);
 
       if (t === 'checkbox') return !!obj.checked;
@@ -588,7 +597,8 @@ const customJSRuntime = {
     };
 
     const setValue = (el: DialogScriptValue, value: DialogScriptValue) => {
-      const obj = find(el);
+      const obj = findOrNull(el);
+      if (!obj) return;
       const t = inferType(obj);
 
       if (t === 'checkbox') {
@@ -658,7 +668,8 @@ const customJSRuntime = {
     };
 
     const getSelected = (el: DialogScriptValue) => {
-      const obj = find(el);
+      const obj = findOrNull(el);
+      if (!obj) return [];
       const t = inferType(obj);
       if (t === 'container') return Array.isArray(obj.value) ? obj.value.slice() : [];
       if (t === 'choice') return Array.isArray(obj.selected) ? obj.selected.slice() : [];
@@ -667,7 +678,8 @@ const customJSRuntime = {
     };
 
     const setSelected = (el: DialogScriptValue, value: DialogScriptValue) => {
-      const obj = find(el);
+      const obj = findOrNull(el);
+      if (!obj) return;
       const t = inferType(obj);
       if (t === 'container') {
         obj.setValue(asArray(value).map(String));
@@ -699,7 +711,8 @@ const customJSRuntime = {
 
     const check = (...els: DialogScriptValue[]) => {
       els.forEach((el) => {
-        const obj = find(el);
+        const obj = findOrNull(el);
+        if (!obj) return;
         if (typeof obj.check === 'function') obj.check();
         else if (typeof obj.select === 'function') obj.select();
       });
@@ -707,14 +720,16 @@ const customJSRuntime = {
 
     const uncheck = (...els: DialogScriptValue[]) => {
       els.forEach((el) => {
-        const obj = find(el);
+        const obj = findOrNull(el);
+        if (!obj) return;
         if (typeof obj.uncheck === 'function') obj.uncheck();
         else if (typeof obj.deselect === 'function') obj.deselect();
       });
     };
 
     const show = (el: DialogScriptValue, on = true) => {
-      const obj = find(el);
+      const obj = findOrNull(el);
+      if (!obj) return;
       if (on) { if (typeof obj.show === 'function') obj.show(); }
       else { if (typeof obj.hide === 'function') obj.hide(); }
     };
@@ -722,7 +737,8 @@ const customJSRuntime = {
     const hide = (el: DialogScriptValue, on = true) => show(el, !on);
 
     const enable = (el: DialogScriptValue, on = true) => {
-      const obj = find(el);
+      const obj = findOrNull(el);
+      if (!obj) return;
       if (on) { if (typeof obj.enable === 'function') obj.enable(); }
       else { if (typeof obj.disable === 'function') obj.disable(); }
     };
@@ -730,7 +746,8 @@ const customJSRuntime = {
     const disable = (el: DialogScriptValue, on = true) => enable(el, !on);
 
     const addValue = (el: DialogScriptValue, value: DialogScriptValue) => {
-      const obj = find(el);
+      const obj = findOrNull(el);
+      if (!obj) return;
       if (inferType(obj) !== 'container') return;
       const existing = Array.isArray(obj.__scriptItems) ? obj.__scriptItems.slice() : [];
       const additions = toItems(asArray(value));
@@ -739,7 +756,8 @@ const customJSRuntime = {
     };
 
     const clearValue = (el: DialogScriptValue, value: DialogScriptValue) => {
-      const obj = find(el);
+      const obj = findOrNull(el);
+      if (!obj) return;
       if (inferType(obj) === 'container') {
         const existing = Array.isArray(obj.__scriptItems) ? obj.__scriptItems.slice() : [];
         const remove = new Set(toItems(asArray(value)));
@@ -754,7 +772,8 @@ const customJSRuntime = {
 
     const clearContent = (...els: DialogScriptValue[]) => {
       els.forEach((el) => {
-        const obj = find(el);
+        const obj = findOrNull(el);
+        if (!obj) return;
         const t = inferType(obj);
         if (t === 'container') {
           setContainerItems(obj, []);
@@ -1100,16 +1119,29 @@ const customJSRuntime = {
       const isCategorical = isFactor || measure === 'nominal' || measure === 'ordinal';
       const isBinary = typeToken === 'logical' || categories.length === 2;
       const isCalibrated = record.calibrated === true;
+      const hasRuntimeNumeric = typeof record.numeric === 'boolean';
       return {
         ...record,
         name,
-        numeric: isNumeric || isCalibrated,
-        factor: isFactor || isCategorical,
+        numeric: hasRuntimeNumeric
+          ? record.numeric === true || isCalibrated
+          : isNumeric || isCalibrated,
+        factor: typeof record.factor === 'boolean'
+          ? record.factor === true
+          : isFactor || isCategorical,
         calibrated: isCalibrated,
-        binary: isBinary,
-        character: isCharacter,
-        categorical: isCategorical,
-        date: isDate
+        binary: typeof record.binary === 'boolean'
+          ? record.binary === true
+          : isBinary,
+        character: typeof record.character === 'boolean'
+          ? record.character === true
+          : isCharacter,
+        categorical: typeof record.categorical === 'boolean'
+          ? record.categorical === true
+          : isCategorical,
+        date: typeof record.date === 'boolean'
+          ? record.date === true
+          : isDate
       };
     };
 
@@ -1379,7 +1411,8 @@ const customJSRuntime = {
     attachRawClickListeners();
 
     const isChecked = (el: DialogScriptValue) => {
-      const obj = find(el);
+      const obj = findOrNull(el);
+      if (!obj) return false;
       return !!(obj.checked || obj.selected);
     };
 
@@ -1409,10 +1442,10 @@ const customJSRuntime = {
       hide,
       enable,
       disable,
-      isVisible: (el: DialogScriptValue) => !!find(el).visible,
-      isHidden: (el: DialogScriptValue) => !find(el).visible,
-      isEnabled: (el: DialogScriptValue) => !!find(el).enabled,
-      isDisabled: (el: DialogScriptValue) => !find(el).enabled,
+      isVisible: (el: DialogScriptValue) => !!findOrNull(el)?.visible,
+      isHidden: (el: DialogScriptValue) => !findOrNull(el)?.visible,
+      isEnabled: (el: DialogScriptValue) => !!findOrNull(el)?.enabled,
+      isDisabled: (el: DialogScriptValue) => !findOrNull(el)?.enabled,
       on,
       onChange,
       onClick,
@@ -1491,6 +1524,20 @@ const customJSRuntime = {
         'package', 'private', 'protected', 'public', 'return', 'static', 'super', 'switch',
         'this', 'throw', 'true', 'try', 'typeof', 'var', 'void', 'while', 'with', 'yield'
       ]);
+      const apiNames = new Set(Object.keys(api));
+      const controlNamePattern =
+        /\b(?:(?:b|cb|c|choice|group|input|plot|radio|txt)_[A-Za-z0-9_]*|label[A-Za-z0-9_]*|select(?:\d|_)[A-Za-z0-9_]*)\b/g;
+      let match: RegExpExecArray | null;
+
+      while ((match = controlNamePattern.exec(code)) !== null) {
+        const name = String(match[0] || '');
+
+        if (!name || reservedWords.has(name) || apiNames.has(name)) {
+          continue;
+        }
+
+        identifiers.add(name);
+      }
 
       const bindingDecl = Array.from(identifiers)
         .map((n) => String(n))

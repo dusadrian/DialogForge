@@ -106,9 +106,13 @@ export const routeConsoleRuntimeEvent = function(
     }
 
     if (event.type === "output") {
-        const message = String(event.message || "").trim();
+        const message = String(event.message || "");
+        const trimmedMessage = message.trim();
 
-        if (!message || message === "R command completed without output.") {
+        if (
+            !trimmedMessage
+            || trimmedMessage === "R command completed without output."
+        ) {
             return;
         }
 
@@ -123,7 +127,7 @@ export const routeConsoleRuntimeEvent = function(
     }
 
     if (event.type === "failed" || event.type === "rejected") {
-        const message = String(event.message || event.type || "").trim();
+        const message = String(event.message || "").trim();
 
         if (message) {
             options.transcript.recordRuntimeMessageStream({

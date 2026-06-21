@@ -40,6 +40,49 @@ const readClipboardText = async function(): Promise<string> {
 };
 
 
+const writeClipboardText = async function(text: string): Promise<boolean> {
+    const normalized = String(text || "");
+
+    if (!normalized) {
+        return false;
+    }
+
+    try {
+        const host = (window as unknown as {
+            dialogForge?: {
+                writeClipboardText?(value: string): Promise<boolean> | boolean | void;
+            };
+        }).dialogForge;
+
+        if (host?.writeClipboardText) {
+            await host.writeClipboardText(normalized);
+            return true;
+        }
+    }
+    catch {}
+
+    try {
+        if (navigator?.clipboard?.writeText) {
+            await navigator.clipboard.writeText(normalized);
+            return true;
+        }
+    }
+    catch {}
+
+    return false;
+};
+
+
+const getDocumentSelectionText = function(): string {
+    try {
+        return String(window.getSelection?.()?.toString?.() || "");
+    }
+    catch {
+        return "";
+    }
+};
+
+
 export const wireConsoleEditorCommands = function(
     bindings: ConsoleEditorCommandBindings
 ): Monaco.IDisposable[] {
@@ -332,6 +375,15 @@ export const wireConsoleEditorCommands = function(
                 && !isAlt
                 && keyCode === Number(KeyCode.KeyC)
             ) {
+                const documentSelection = getDocumentSelectionText();
+
+                if (documentSelection) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    void writeClipboardText(documentSelection);
+                    return;
+                }
+
                 const selection = editor.getSelection?.();
                 const hasSelection = Boolean(selection && (
                     Number(selection.startLineNumber)
@@ -339,6 +391,21 @@ export const wireConsoleEditorCommands = function(
                     || Number(selection.startColumn)
                         !== Number(selection.endColumn)
                 ));
+
+                if (hasSelection && selection) {
+                    const model = bindings.getModel();
+                    const selectedText = String(
+                        model?.getValueInRange?.(selection) || ""
+                    );
+
+                    if (selectedText) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        void writeClipboardText(selectedText);
+                    }
+
+                    return;
+                }
 
                 if (!hasSelection) {
                     event.preventDefault();

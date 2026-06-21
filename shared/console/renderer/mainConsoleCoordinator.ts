@@ -41,6 +41,7 @@ export interface MainConsoleCoordinatorBindings {
         allowSearch?: boolean;
         source: string;
     }): void;
+    writeClipboardText(text: string): Promise<void> | void;
 }
 
 
@@ -136,7 +137,8 @@ export const createMainConsoleCoordinator = function(
                     allowSearch: request.allowSearch,
                     source: "base-app.console-help"
                 });
-            }
+            },
+            writeClipboardText: bindings.writeClipboardText
         });
 
         return surface;

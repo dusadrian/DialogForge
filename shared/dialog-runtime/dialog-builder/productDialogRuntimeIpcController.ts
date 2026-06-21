@@ -6,6 +6,7 @@ import type {
 
 import { createVisibleCommandRequest } from "../../runtime/commands/commandProtocol";
 import { createDialogExecutionRequest } from "../../runtime/dialogs/dialogExecutionProtocol";
+import { createRuntimeExtensionMethodRequest } from "../../runtime/extensions/runtimeExtensionProtocol";
 import { createInvisibleQueryRequest } from "../../runtime/queries/invisibleQueryProtocol";
 import type {
     DialogExecutionRequest,
@@ -30,7 +31,7 @@ export interface ProductDialogRuntimeIpcControllerOptions {
     ipcMain: IpcMain;
     runtimeSessionManager: Pick<
         RuntimeSessionManager,
-        "executeDialog" | "executeInvisibleQuery"
+        "executeDialog" | "executeInvisibleQuery" | "executeRuntimeMethod"
     >;
     getProductId(): string;
     ensureDependencies(
@@ -49,6 +50,33 @@ interface ProductDialogVariableValuesPayload {
 }
 
 
+interface ProductDialogCreatedPayload {
+    name?: string;
+    dialogID?: string;
+    dependencies?: unknown;
+}
+
+
+const parseRuntimePayload = function(value: unknown): unknown {
+    if (typeof value !== "string") {
+        return value;
+    }
+
+    try {
+        return JSON.parse(value);
+    } catch {
+        return value;
+    }
+};
+
+
+const asRecord = function(value: unknown): Record<string, unknown> {
+    return value && typeof value === "object" && !Array.isArray(value)
+        ? value as Record<string, unknown>
+        : {};
+};
+
+
 const createDialogSource = function(
     productId: string,
     dialogId: unknown
@@ -60,6 +88,28 @@ const createDialogSource = function(
 export const createProductDialogRuntimeIpcController = function(
     options: ProductDialogRuntimeIpcControllerOptions
 ): void {
+    options.ipcMain.on(dialogRuntimeEventChannels.created, (
+        _event: IpcMainEvent,
+        payload: ProductDialogCreatedPayload
+    ) => {
+        const dialogId = String(
+            payload?.dialogID || payload?.name || "unknown"
+        );
+        const source = createDialogSource(
+            options.getProductId(),
+            dialogId
+        );
+
+        void options.ensureDependencies(
+            payload?.dependencies,
+            source
+        ).then((result) => {
+            if (!result.ok) {
+                options.reportError(result.error);
+            }
+        }).catch(options.reportError);
+    });
+
     options.ipcMain.handle(dialogRuntimeIpcChannels.executeDialog, async (
         _event: IpcMainInvokeEvent,
         input: Partial<DialogExecutionRequest>
@@ -196,20 +246,34 @@ export const createProductDialogRuntimeIpcController = function(
         const variable = String(payload?.variableName || "").trim();
 
         if (!dataset || !variable) {
-            return [];
+            return {
+                isNumeric: false,
+                values: [],
+                rowNames: []
+            };
         }
 
-        const query =
-            `as.character(get(${JSON.stringify(dataset)}, envir = .GlobalEnv)` +
-            `[[${JSON.stringify(variable)}]])`;
         const productId = options.getProductId();
-        const result = await options.runtimeSessionManager.executeInvisibleQuery(
-            createInvisibleQueryRequest({
-                query,
+        const result = await options.runtimeSessionManager.executeRuntimeMethod(
+            createRuntimeExtensionMethodRequest({
+                method: "workspace.dataset_values",
+                params: {
+                    name: dataset,
+                    variableName: variable
+                },
                 source: `${productId}.dialog.variableValues`
             })
         );
 
-        return Array.isArray(result.value) ? result.value : [];
+        if (result.status !== "ready") {
+            return {
+                isNumeric: false,
+                values: [],
+                rowNames: [],
+                error: result.message || "Unable to read variable values."
+            };
+        }
+
+        return asRecord(parseRuntimePayload(result.value));
     });
 };

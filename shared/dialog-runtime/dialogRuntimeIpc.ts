@@ -57,7 +57,7 @@ interface DialogRuntimeIpcRoutes {
     "base-app:openProductDialog": { input: [{ dialogId?: string }]; result: { status: string; dialogId: string } };
     "dialog:getWorkingDirectory": { input: []; result: string };
     "dialog:runVisibleCommand": { input: [ProductDialogCommandPayload]; result: ProductDialogCommandResult };
-    "dialog:getVariableValues": { input: [{ name?: string; variableName?: string }]; result: unknown[] };
+    "dialog:getVariableValues": { input: [{ name?: string; variableName?: string }]; result: unknown };
 }
 
 

@@ -193,7 +193,9 @@ export const createRToolController = function(
             addRuntimeCompletionItems(workspacePayload.items);
             addRuntimeCompletionItems(workspacePayload.symbols);
 
-            const packages = request.packageName
+            const hasContextualItems = Array.isArray(workspacePayload.items)
+                && workspacePayload.items.length > 0;
+            const packages = request.packageName || hasContextualItems
                 ? []
                 : defaultCompletionPackages;
 

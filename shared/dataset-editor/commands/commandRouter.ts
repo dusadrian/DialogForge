@@ -11,6 +11,7 @@ export type DatasetCommandAction =
     | "goToVariable"
     | "insertColumn"
     | "insertRow"
+    | "openActive"
     | "parsePaste"
     | "pasteFromClipboard"
     | "readClipboard"
@@ -95,6 +96,9 @@ export const routeDatasetCommand = function(command: string): DatasetCommandRout
     }
     if (command === "dataset.writeCell") {
         return route("writeCell");
+    }
+    if (command === "dataset.openActive") {
+        return route("openActive");
     }
     if (command === "dataset.goToCase") {
         return route("goToCase");

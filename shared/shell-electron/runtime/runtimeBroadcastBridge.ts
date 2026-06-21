@@ -33,7 +33,9 @@ export interface RuntimeBroadcastBridge {
     sendRuntimeSession(snapshot: RuntimeSessionSnapshot): void;
     sendTranscriptEvents(events: TranscriptEvent[]): void;
     sendWorkspaceSnapshot(snapshot: WorkspaceSnapshot): void;
-    refreshWorkspaceAndBroadcast(): Promise<WorkspaceSnapshot>;
+    refreshWorkspaceAndBroadcast(options?: {
+        forceRefresh?: boolean;
+    }): Promise<WorkspaceSnapshot>;
     sendRuntimeEvents(snapshot: RuntimeEventSnapshot): void;
     sendActiveDataset(snapshot: ActiveDatasetSnapshot): void;
     sendTabularPreview(preview: TabularPreviewSnapshot): void;
@@ -116,8 +118,12 @@ export const createRuntimeBroadcastBridge = function(
         sendToAllWindows(applicationEventChannels.activeDataset, snapshot);
     };
 
-    const refreshWorkspaceAndBroadcast = async function(): Promise<WorkspaceSnapshot> {
-        const snapshot = await options.runtimeSessionManager.listWorkspaceObjects();
+    const refreshWorkspaceAndBroadcast = async function(refreshOptions?: {
+        forceRefresh?: boolean;
+    }): Promise<WorkspaceSnapshot> {
+        const snapshot = await options.runtimeSessionManager.listWorkspaceObjects(
+            refreshOptions
+        );
 
         sendWorkspaceSnapshot(snapshot);
         sendActiveDataset(options.runtimeSessionManager.getActiveDataset());

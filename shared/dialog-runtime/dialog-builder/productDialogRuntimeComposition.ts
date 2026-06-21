@@ -8,11 +8,11 @@ import type {
     VisibleCommandRequest
 } from "../../runtime/provider-contract/runtimeProvider";
 import {
-    createDependencyCheckRequest
-} from "../../runtime/dependencies/dependencyProtocol";
-import {
     createVisibleCommandRequest
 } from "../../runtime/commands/commandProtocol";
+import {
+    createInvisibleQueryRequest
+} from "../../runtime/queries/invisibleQueryProtocol";
 import {
     createProductDialogRuntimeIpcController
 } from "./productDialogRuntimeIpcController";
@@ -26,6 +26,7 @@ export interface ProductDialogRuntimeCompositionOptions {
     executeVisibleCommandAndBroadcast(
         request: VisibleCommandRequest
     ): Promise<TranscriptEvent[]>;
+    sendTranscriptEvents(events: TranscriptEvent[]): void;
     invalidateDatasetPreview(): void;
     refreshWorkspaceAndBroadcast(): Promise<unknown>;
     broadcastRuntimeEvents(): Promise<void>;
@@ -36,6 +37,10 @@ export interface ProductDialogRuntimeCompositionOptions {
 export const registerProductDialogRuntimeComposition = function(
     options: ProductDialogRuntimeCompositionOptions
 ): void {
+    const dependencyReadiness = new Map<
+        string,
+        Promise<{ ok: boolean; error: string }>
+    >();
     const executeUiActionCommand = async function(
         request: VisibleCommandRequest,
         visibility: "hidden" | "visible" =
@@ -58,11 +63,25 @@ export const registerProductDialogRuntimeComposition = function(
     const normalizeDependencies = function(value: unknown): string[] {
         const source = Array.isArray(value)
             ? value
-            : String(value || "").split(",");
+            : String(value || "").split(/[;,\n]/);
 
         return Array.from(new Set(source.map((item) => {
             return String(item || "").trim();
         }).filter(Boolean)));
+    };
+
+    const isRuntimeTrue = function(value: unknown): boolean {
+        if (value === true) {
+            return true;
+        }
+
+        if (Array.isArray(value) && value.length === 1) {
+            return isRuntimeTrue(value[0]);
+        }
+
+        return /^(?:\[1\]\s*)?true$/i.test(
+            String(value || "").trim()
+        );
     };
 
     const ensureDependencies = async function(
@@ -78,50 +97,87 @@ export const registerProductDialogRuntimeComposition = function(
             };
         }
 
-        const result = await options.runtimeSessionManager.checkDependencies(
-            createDependencyCheckRequest({
-                kind: "package",
-                names: dependencies,
-                source
-            })
-        );
-        const missing = result.items.filter((item) => {
-            return item.status !== "available";
-        }).map((item) => {
-            return item.name;
-        });
+        const dependencyKey = dependencies.slice().sort().join("\n");
+        const existing = dependencyReadiness.get(dependencyKey);
 
-        if (missing.length > 0) {
-            return {
-                ok: false,
-                error: `Required package(s) not installed: ${missing.join(", ")}`
-            };
+        if (existing) {
+            return existing;
         }
 
-        for (const packageName of dependencies) {
-            const events = await executeUiActionCommand(
-                createVisibleCommandRequest({
-                    text: `library(${packageName})`,
-                    source: `${source}.dependency`
-                }),
-                "hidden"
-            );
-            const failed = events.some((event) => {
-                return event.type === "error" || event.type === "rejected";
-            });
+        const readiness = (async function(): Promise<{
+            ok: boolean;
+            error: string;
+        }> {
+            let loadedPackage = false;
 
-            if (failed) {
-                return {
-                    ok: false,
-                    error: `Failed to load required package: ${packageName}`
-                };
+            for (const packageName of dependencies) {
+                const attached = await options.runtimeSessionManager
+                    .executeInvisibleQuery(createInvisibleQueryRequest({
+                        query: `${JSON.stringify(`package:${packageName}`)} %in% search()`,
+                        source: `${source}.dependencies`
+                    }));
+
+                if (attached.status !== "ready") {
+                    return {
+                        ok: false,
+                        error: attached.message
+                            || `Failed to inspect required package ${packageName}.`
+                    };
+                }
+
+                if (isRuntimeTrue(attached.value)) {
+                    continue;
+                }
+
+                const events = await options.runtimeSessionManager
+                    .executeVisibleCommand(createVisibleCommandRequest({
+                        text: `library(${packageName})`,
+                        source: `${source}.dependencies`
+                    }));
+                const failure = events.find((event) => {
+                    return event.type === "failed"
+                        || event.type === "rejected";
+                });
+
+                options.sendTranscriptEvents(events);
+
+                if (failure) {
+                    return {
+                        ok: false,
+                        error: String(
+                            failure.message
+                            || `Failed to load required package ${packageName}.`
+                        )
+                    };
+                }
+
+                loadedPackage = true;
+            }
+
+            if (loadedPackage) {
+                options.invalidateDatasetPreview();
+                await options.refreshWorkspaceAndBroadcast();
+                void options.broadcastRuntimeEvents().catch(
+                    options.reportError
+                );
+            }
+
+            return {
+                ok: true,
+                error: ""
+            };
+        })();
+
+        dependencyReadiness.set(dependencyKey, readiness);
+
+        try {
+            return await readiness;
+        }
+        finally {
+            if (dependencyReadiness.get(dependencyKey) === readiness) {
+                dependencyReadiness.delete(dependencyKey);
             }
         }
-
-        return {
-            ok: true,
-            error: ""
-        };
     };
 
     createProductDialogRuntimeIpcController({

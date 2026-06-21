@@ -100,6 +100,8 @@ export interface MainDatasetCommandServicesOptions {
     renderPastePayload(payload: PastePayload): void;
     renderPasteApplyResult(result: PasteApplyResult): void;
     refreshRuntimeEvents(): void;
+    getActiveDatasetName(): string;
+    openDatasetEditor(objectName: string): Promise<unknown>;
     getGoToDialogId(): string;
     executeProductGoToDialog(
         dialogId: string,
@@ -324,9 +326,23 @@ export const createMainDatasetCommandServices = function(
         selectRow: options.selectRow,
         selectColumn: options.selectColumn
     });
+    const openActiveDataset = function(): void {
+        const objectName = String(options.getActiveDatasetName() || "").trim();
+
+        if (!objectName) {
+            options.renderStatus("datasetLayoutStatus", {
+                status: "unavailable",
+                message: "No active dataset is selected."
+            });
+            return;
+        }
+
+        void options.openDatasetEditor(objectName);
+    };
     const executeDatasetCommand = createDatasetCommandController({
         goToCase: navigationController.goToCase,
         goToVariable: navigationController.goToVariable,
+        openActive: openActiveDataset,
         buildCopyPayload: clipboardController.buildCopyPayload,
         copyToClipboard: clipboardController.copyToClipboard,
         readClipboard: function(): void {

@@ -7,3 +7,4 @@ build/output/
 tmp/
 artifacts/
 AGENTS.md
+docs/migration/

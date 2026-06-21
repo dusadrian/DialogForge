@@ -96,7 +96,8 @@ export const createMainConsoleServices = function(
         executeVisibleCommand: options.dialogForge.executeVisibleCommand,
         openHelpTopic: function(input): void {
             void options.dialogForge.openHelpTopic(input);
-        }
+        },
+        writeClipboardText: options.dialogForge.writeClipboardText
     });
 
     return {

@@ -383,6 +383,40 @@ runtime_refresh_workspace_index <- function() {
 }
 
 
+runtime_cached_workspace_snapshot <- function() {
+    state <- workspace_index_get("last_state")
+
+    if (is.null(state)) {
+        return(runtime_refresh_workspace_index())
+    }
+
+    dataset_states <- state$datasetStates %||% list()
+    data_frames <- lapply(dataset_states, function(dataset_state) {
+        workspace_dataset_summary(NULL, dataset_state)
+    })
+    variables <- unname(state$variables %||% list())
+    now <- runtime_time_ms()
+
+    list(
+        searchPath = state$searchPath %||% search(),
+        dataframe = data_frames,
+        select = state$select %||% list(
+            list = character(0),
+            matrix = character(0),
+            vector = character(0)
+        ),
+        variables = variables,
+        datasetStates = dataset_states,
+        objectCount = as.integer(state$objectCount %||% length(variables)),
+        diagnostics = list(
+            snapshotStartedMs = now,
+            snapshotCompletedMs = now,
+            snapshotDurationMs = 0
+        )
+    )
+}
+
+
 runtime_workspace_remove <- function(params) {
     names <- as.character(params$names %||% character(0))
     names <- names[nzchar(names)]
@@ -795,6 +829,7 @@ runtime_load_workspace_file <- function(params) {
 runtime_qca_truth_table_json <- function(name, value) {
     options <- value$options %||% list()
     conditions <- options$conditions %||% character(0)
+    outcome <- as.character(options$outcome %||% "")
     table <- value$tt %||% data.frame()
     id <- if (is.data.frame(table) && is.element("OUT", names(table))) {
         rownames(table)
@@ -811,7 +846,10 @@ runtime_qca_truth_table_json <- function(name, value) {
 
     paste0(
         "{\"name\":", json_str(name), ",",
-        "\"options\":{\"conditions\":", json_strv(as.character(conditions)), "},",
+        "\"options\":{",
+        "\"outcome\":", json_str(outcome), ",",
+        "\"conditions\":", json_strv(as.character(conditions)),
+        "},",
         "\"id\":", json_strv(as.character(id)), ",",
         "\"out\":", json_strv(as.character(out)), ",",
         "\"cases\":", json_strv(as.character(value$cases %||% character(0))),
@@ -870,7 +908,12 @@ runtime_dispatch_service <- function(method, params) {
         ),
         "workspace.snapshot" = list(
             ok = TRUE,
-            result = runtime_refresh_workspace_index()
+            result = if (isTRUE(params$forceRefresh)) {
+                runtime_refresh_workspace_index()
+            }
+            else {
+                runtime_cached_workspace_snapshot()
+            }
         ),
         "workspace.remove" = runtime_workspace_remove(params),
         "workspace.rename" = runtime_workspace_rename(params),

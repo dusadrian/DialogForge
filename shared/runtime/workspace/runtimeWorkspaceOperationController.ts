@@ -1,6 +1,7 @@
 import type {
     RuntimeSessionSnapshot,
     RuntimeWorkspaceController,
+    WorkspaceListOptions,
     WorkspaceRenameRequest,
     WorkspaceSnapshot
 } from "../provider-contract/runtimeProvider";
@@ -34,7 +35,7 @@ export interface RuntimeWorkspaceOperationControllerOptions {
 
 
 export interface RuntimeWorkspaceOperationController {
-    listWorkspaceObjects(): Promise<WorkspaceSnapshot>;
+    listWorkspaceObjects(options?: WorkspaceListOptions): Promise<WorkspaceSnapshot>;
     removeWorkspaceObjects(objectNames: string[]): Promise<WorkspaceSnapshot>;
     renameWorkspaceObject(request: WorkspaceRenameRequest): Promise<WorkspaceSnapshot>;
     clearWorkspace(): Promise<WorkspaceSnapshot>;
@@ -54,14 +55,18 @@ export const createRuntimeWorkspaceOperationController = function(
         });
     };
 
-    const listWorkspaceObjects = async function(): Promise<WorkspaceSnapshot> {
+    const listWorkspaceObjects = async function(
+        listOptions?: WorkspaceListOptions
+    ): Promise<WorkspaceSnapshot> {
         const snapshot = options.getSnapshot();
 
         if (snapshot.status !== "ready") {
             return unavailable();
         }
 
-        const workspace = await options.workspaceListController.list();
+        const workspace = await options.workspaceListController.list(
+            listOptions
+        );
         const objects = options.activeDatasetController.rememberWorkspaceObjects(
             workspace.objects
         );

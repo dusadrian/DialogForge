@@ -627,8 +627,66 @@ workspace_schema_column_widths <- function(value, column_names) {
 }
 
 
-workspace_schema_column_json <- function(names, types, decimals) {
+workspace_cached_dataset_state <- function(name, names) {
+    if (!exists("workspace_index_get", mode = "function")) {
+        return(NULL)
+    }
+
+    state <- workspace_index_get("last_state") %||% list()
+    dataset <- (state$datasetStates %||% list())[[as.character(name %||% "")]]
+
+    if (
+        is.null(dataset) ||
+        !identical(
+            as.character(dataset$columns %||% character(0)),
+            as.character(names %||% character(0))
+        )
+    ) {
+        return(NULL)
+    }
+
+    dataset
+}
+
+
+workspace_schema_column_flags <- function(dataset, names, dataset_name = "") {
+    cached_dataset <- workspace_cached_dataset_state(dataset_name, names)
+
+    if (!is.null(cached_dataset)) {
+        cached_flags <- cached_dataset$columnFlags %||% list()
+
+        if (all(vapply(names, function(name) {
+            is.element(name, base::names(cached_flags))
+        }, logical(1)))) {
+            return(unname(cached_flags[names]))
+        }
+    }
+
+    if (
+        !is.data.frame(dataset) ||
+        !exists("workspace_dataset_item_flags", mode = "function")
+    ) {
+        return(rep(list(list()), length(names)))
+    }
+
+    lapply(names, function(name) {
+        column <- tryCatch(
+            dataset[[name]],
+            error = function(error) NULL
+        )
+
+        tryCatch(
+            workspace_dataset_item_flags(column),
+            error = function(error) list()
+        )
+    })
+}
+
+
+workspace_schema_column_json <- function(names, types, decimals, flags) {
     vapply(seq_along(names), function(index) {
+        column_flags <- flags[[index]] %||% list()
+
         paste0(
             "{",
             "\"name\":", json_str(
@@ -638,6 +696,16 @@ workspace_schema_column_json <- function(names, types, decimals) {
                 as.character(types[[index]] %||% "unknown")
             ), ",",
             "\"decimals\":", json_num(decimals[[index]] %||% 0L),
+            ",\"numeric\":", json_bool(column_flags$numeric),
+            ",\"character\":", json_bool(column_flags$character),
+            ",\"logical\":", json_bool(
+                identical(types[[index]], "logical")
+            ),
+            ",\"factor\":", json_bool(column_flags$factor),
+            ",\"calibrated\":", json_bool(column_flags$calibrated),
+            ",\"binary\":", json_bool(column_flags$binary),
+            ",\"categorical\":", json_bool(column_flags$categorical),
+            ",\"date\":", json_bool(column_flags$date),
             "}"
         )
     }, character(1))
@@ -693,6 +761,11 @@ workspace_dataset_schema <- function(name) {
     else {
         rep.int(0L, length(column_names))
     }
+    column_flags <- workspace_schema_column_flags(
+        object$value,
+        column_names,
+        object$name
+    )
 
     list(
         ok = TRUE,
@@ -705,7 +778,8 @@ workspace_dataset_schema <- function(name) {
             columns = workspace_schema_column_json(
                 column_names,
                 column_types,
-                column_decimals
+                column_decimals,
+                column_flags
             )
         )
     )

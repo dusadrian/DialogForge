@@ -46,6 +46,7 @@ export interface ConsoleSurfaceOptions {
         package?: string;
         allowSearch?: boolean;
     }) => void;
+    writeClipboardText: (text: string) => Promise<void> | void;
 }
 
 export interface ConsoleSurface {
@@ -115,7 +116,8 @@ export const createConsoleSurface = function(
             focusCommandInput: focus,
             focusRequestInput: function() {
                 requestInput?.focus?.();
-            }
+            },
+            writeClipboardText: options.writeClipboardText
         });
         flow.mount(elementById(options.document, "consoleTerminal"));
 

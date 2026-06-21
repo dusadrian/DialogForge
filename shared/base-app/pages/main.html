@@ -1425,6 +1425,43 @@
             outline: none;
         }
 
+        .console-context-menu {
+            position: absolute;
+            z-index: 20;
+            min-width: 150px;
+            padding: 4px;
+            border: 1px solid #c8c8c8;
+            border-radius: 6px;
+            background: #ffffff;
+            box-shadow: 0 6px 18px rgba(0, 0, 0, 0.14);
+        }
+
+        .console-context-menu[hidden] {
+            display: none;
+        }
+
+        .console-context-menu-item {
+            width: 100%;
+            min-height: 26px;
+            padding: 4px 8px;
+            border: 0;
+            border-radius: 4px;
+            background: transparent;
+            color: #242424;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            font-size: 12px;
+            font-weight: 500;
+            line-height: 1.25;
+            text-align: left;
+            cursor: pointer;
+        }
+
+        .console-context-menu-item:hover,
+        .console-context-menu-item:focus-visible {
+            background: #ececec;
+            outline: none;
+        }
+
         .dataPreview {
             width: 100%;
             border-collapse: collapse;

@@ -12,6 +12,7 @@ import type {
 export interface ProductDialogSourceDefinition {
     sourceFile?: string;
     owner?: string;
+    rPackages?: string[];
 }
 
 
@@ -71,6 +72,30 @@ const readDialogCustomJS = function(
 };
 
 
+const mergeDialogDependencies = function(
+    parsed: Record<string, unknown>,
+    definition: ProductDialogSourceDefinition
+): void {
+    const properties = parsed.properties
+        && typeof parsed.properties === "object"
+        && !Array.isArray(parsed.properties)
+            ? parsed.properties as Record<string, unknown>
+            : {};
+    const declared = String(properties.dependencies || "")
+        .split(/[;,\n]/g)
+        .map((name) => name.trim())
+        .filter(Boolean);
+    const required = Array.isArray(definition.rPackages)
+        ? definition.rPackages.map((name) => String(name).trim()).filter(Boolean)
+        : [];
+
+    properties.dependencies = Array.from(new Set(
+        declared.concat(required)
+    )).join("; ");
+    parsed.properties = properties;
+};
+
+
 export const createProductDialogSourceReader = function(
     options: ProductDialogSourceReaderOptions
 ) {
@@ -103,6 +128,7 @@ export const createProductDialogSourceReader = function(
         const raw = fs.readFileSync(sourcePath, "utf8");
         const parsed = parseNewDialogJson(raw);
         const source = parsed as unknown as Record<string, unknown>;
+        mergeDialogDependencies(source, definition);
         source.customJS = readDialogCustomJS(sourcePath, source);
 
         return normalizeNewDialogForRuntime(

@@ -60,7 +60,16 @@ export const createProductDialogComposition = function(
         findDefinition: options.findDefinition
     });
     const readWorkspaceData = createProductDialogWorkspaceDataReader(
-        options.runtimeSessionManager
+        options.runtimeSessionManager,
+        {
+            schemaFirst: true
+        }
+    );
+    const readInitialWorkspaceData = createProductDialogWorkspaceDataReader(
+        options.runtimeSessionManager,
+        {
+            schemaFirst: true
+        }
     );
     const windowController = createProductDialogWindowController({
         rootDir: options.rootDir,
@@ -70,6 +79,10 @@ export const createProductDialogComposition = function(
         sessions,
         readDialog,
         readWorkspaceData,
+        readInitialWorkspaceData,
+        getActiveDatasetName: function(): string {
+            return options.runtimeSessionManager.getActiveDataset().objectName;
+        },
         getParentWindow: options.getParentWindow,
         windowClosed: events.windowClosed
     });

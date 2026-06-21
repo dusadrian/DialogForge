@@ -198,6 +198,18 @@ dataset_column_hash <- function(column) {
 }
 
 
+dataset_column_flags <- function(column) {
+    if (!exists("workspace_dataset_item_flags", mode = "function")) {
+        return(list())
+    }
+
+    tryCatch(
+        workspace_dataset_item_flags(column),
+        error = function(error) list()
+    )
+}
+
+
 dataset_column_names <- function(value) {
     tryCatch(
         as.character(colnames(value) %||% character(0)),
@@ -242,8 +254,10 @@ dataset_state_current <- function(name, value, previous_dataset = NULL) {
     columns <- dataset_column_names(value)
     previous_metadata <- previous_dataset$columnMetaSig %||% list()
     previous_hashes <- previous_dataset$columnHash %||% list()
+    previous_flags <- previous_dataset$columnFlags %||% list()
     column_metadata <- list()
     column_hashes <- list()
+    column_flags <- list()
 
     for (column_name in columns) {
         column <- value[[column_name]]
@@ -260,15 +274,18 @@ dataset_state_current <- function(name, value, previous_dataset = NULL) {
                 current_hash,
                 as.character(previous_hashes[[column_name]] %||% "")
             ) &&
-            !is.null(previous_metadata[[column_name]])
+            !is.null(previous_metadata[[column_name]]) &&
+            !is.null(previous_flags[[column_name]])
         ) {
             column_metadata[[column_name]] <- previous_metadata[[column_name]]
+            column_flags[[column_name]] <- previous_flags[[column_name]]
         }
         else {
             column_metadata[[column_name]] <- tryCatch(
                 dataset_column_metadata_signature(column),
                 error = function(error) ""
             )
+            column_flags[[column_name]] <- dataset_column_flags(column)
         }
     }
 
@@ -280,7 +297,8 @@ dataset_state_current <- function(name, value, previous_dataset = NULL) {
         columnsSig = paste(columns, collapse = "\r"),
         objectHash = as.character(object_hash %||% ""),
         columnHash = column_hashes,
-        columnMetaSig = column_metadata
+        columnMetaSig = column_metadata,
+        columnFlags = column_flags
     )
 }
 
@@ -477,6 +495,12 @@ workspace_state_from_snapshot <- function(snapshot) {
         signatures = signatures,
         variables = variables,
         datasetStates = snapshot$datasetStates %||% list(),
+        select = snapshot$select %||% list(
+            list = character(0),
+            matrix = character(0),
+            vector = character(0)
+        ),
+        searchPath = snapshot$searchPath %||% character(0),
         objectCount = as.integer(snapshot$objectCount %||% length(variables)),
         updatedAt = runtime_time_ms()
     )
@@ -530,6 +554,9 @@ collect_workspace_update <- function(previous_state = NULL) {
     added_datasets <- character(0)
     removed_datasets <- character(0)
     changed_datasets <- list()
+    vectors <- character(0)
+    matrices <- character(0)
+    lists <- character(0)
     updated_at <- runtime_time_ms()
 
     for (name in object_names) {
@@ -555,6 +582,15 @@ collect_workspace_update <- function(previous_state = NULL) {
                     changed_datasets[[length(changed_datasets) + 1L]] <- change
                 }
             }
+        }
+        else if (is.matrix(value)) {
+            matrices <- c(matrices, name)
+        }
+        else if (is.list(value)) {
+            lists <- c(lists, name)
+        }
+        else if (is.atomic(value)) {
+            vectors <- c(vectors, name)
         }
 
         signature <- workspace_variable_change_signature(
@@ -617,6 +653,12 @@ collect_workspace_update <- function(previous_state = NULL) {
             signatures = signatures,
             variables = variables,
             datasetStates = dataset_states,
+            select = list(
+                list = as.character(lists),
+                matrix = as.character(matrices),
+                vector = as.character(vectors)
+            ),
+            searchPath = search(),
             objectCount = as.integer(length(object_names)),
             updatedAt = updated_at
         )
@@ -624,8 +666,13 @@ collect_workspace_update <- function(previous_state = NULL) {
 }
 
 
-workspace_dataset_summary <- function(value) {
-    columns <- dataset_column_names(value)
+workspace_dataset_summary <- function(value, dataset_state = NULL) {
+    columns <- if (is.null(dataset_state)) {
+        dataset_column_names(value)
+    }
+    else {
+        as.character(dataset_state$columns %||% character(0))
+    }
     summary <- list(colnames = columns)
 
     if (!length(columns)) {
@@ -646,11 +693,15 @@ workspace_dataset_summary <- function(value) {
     })
     names(flag_values) <- flag_names
 
+    cached_flags <- dataset_state$columnFlags %||% list()
+
     for (index in seq_along(columns)) {
-        flags <- tryCatch(
-            workspace_dataset_item_flags(value[[columns[[index]]]]),
-            error = function(error) list()
-        )
+        column_name <- columns[[index]]
+        flags <- cached_flags[[column_name]]
+
+        if (is.null(flags)) {
+            flags <- dataset_column_flags(value[[column_name]])
+        }
 
         for (flag_name in flag_names) {
             flag_values[[flag_name]][[index]] <- isTRUE(flags[[flag_name]])
@@ -677,6 +728,13 @@ workspace_snapshot <- function() {
     lists <- character(0)
     variables <- list()
     updated_at <- runtime_time_ms()
+    previous_state <- if (exists("workspace_index_get", mode = "function")) {
+        workspace_index_get("last_state") %||% list()
+    }
+    else {
+        list()
+    }
+    previous_dataset_states <- previous_state$datasetStates %||% list()
 
     for (name in object_names) {
         value <- runtime_global_object(name)
@@ -686,8 +744,15 @@ workspace_snapshot <- function() {
         }
 
         if (is.data.frame(value)) {
-            data_frames[[name]] <- workspace_dataset_summary(value)
-            dataset_states[[name]] <- dataset_state_current(name, value)
+            dataset_states[[name]] <- dataset_state_current(
+                name,
+                value,
+                previous_dataset_states[[name]]
+            )
+            data_frames[[name]] <- workspace_dataset_summary(
+                value,
+                dataset_states[[name]]
+            )
         }
         else if (is.matrix(value)) {
             matrices <- c(matrices, name)
@@ -699,11 +764,23 @@ workspace_snapshot <- function() {
             vectors <- c(vectors, name)
         }
 
-        variables[[length(variables) + 1L]] <- workspace_variable(
+        signature <- workspace_variable_change_signature(
             name,
             value,
-            updated_at
+            dataset_states[[name]]
         )
+        previous_signature <- (previous_state$signatures %||% list())[[name]]
+        previous_variable <- (previous_state$variables %||% list())[[name]]
+
+        variables[[length(variables) + 1L]] <- if (
+            !is.null(previous_variable) &&
+            identical(previous_signature, signature)
+        ) {
+            previous_variable
+        }
+        else {
+            workspace_variable(name, value, updated_at, signature)
+        }
     }
 
     completed_at <- runtime_time_ms()

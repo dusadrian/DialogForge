@@ -6,6 +6,7 @@ import {
 export interface DatasetCommandControllerBindings {
     goToCase(): void;
     goToVariable(): void;
+    openActive(): void;
     buildCopyPayload(options?: { includeValueLabels?: boolean }): void;
     copyToClipboard(options?: { includeValueLabels?: boolean }): void;
     readClipboard(): void;
@@ -43,6 +44,11 @@ export const createDatasetCommandController = function(
 
         if (route.action === "goToVariable") {
             bindings.goToVariable();
+            return;
+        }
+
+        if (route.action === "openActive") {
+            bindings.openActive();
             return;
         }
 

@@ -1,6 +1,7 @@
 import type {
     RuntimeSessionSnapshot,
     RuntimeWorkspaceController,
+    WorkspaceListOptions,
     WorkspaceObjectSnapshot,
     WorkspaceSnapshot
 } from "../provider-contract/runtimeProvider";
@@ -18,7 +19,7 @@ export interface RuntimeWorkspaceListControllerOptions {
 
 
 export interface RuntimeWorkspaceListController {
-    list(): Promise<WorkspaceSnapshot>;
+    list(options?: WorkspaceListOptions): Promise<WorkspaceSnapshot>;
 }
 
 
@@ -26,13 +27,16 @@ export const createRuntimeWorkspaceListController = function(
     options: RuntimeWorkspaceListControllerOptions
 ): RuntimeWorkspaceListController {
     return {
-        list: async function(): Promise<WorkspaceSnapshot> {
+        list: async function(
+            listOptions?: WorkspaceListOptions
+        ): Promise<WorkspaceSnapshot> {
             const snapshot = options.getSnapshot();
 
             if (options.providerWorkspaceController) {
                 const objects = (
                     await options.providerWorkspaceController.listWorkspaceObjects(
-                        snapshot
+                        snapshot,
+                        listOptions
                     )
                 ).concat(options.listImportedTables());
 
@@ -46,7 +50,8 @@ export const createRuntimeWorkspaceListController = function(
 
             const objects =
                 await options.fallbackWorkspaceController.listWorkspaceObjects(
-                    snapshot
+                    snapshot,
+                    listOptions
                 );
 
             return createWorkspaceSnapshot({

@@ -93,6 +93,11 @@ export interface WorkspaceSnapshot {
 }
 
 
+export interface WorkspaceListOptions {
+    forceRefresh?: boolean;
+}
+
+
 export interface WorkspaceRenameRequest {
     oldName: string;
     newName: string;
@@ -129,6 +134,14 @@ export interface TabularColumnSnapshot {
     name: string;
     type: string;
     role: string;
+    numeric?: boolean;
+    character?: boolean;
+    logical?: boolean;
+    factor?: boolean;
+    calibrated?: boolean;
+    binary?: boolean;
+    categorical?: boolean;
+    date?: boolean;
 }
 
 
@@ -385,6 +398,13 @@ export interface VariableMetadataSnapshot {
         } | null;
         align?: string;
         measure?: string;
+        numeric?: boolean;
+        factor?: boolean;
+        calibrated?: boolean;
+        binary?: boolean;
+        character?: boolean;
+        categorical?: boolean;
+        date?: boolean;
     }>;
     message: string;
     refreshedAt: string;
@@ -851,7 +871,10 @@ export interface RuntimeEventController {
 
 
 export interface RuntimeWorkspaceController {
-    listWorkspaceObjects: (snapshot: RuntimeSessionSnapshot) => Promise<WorkspaceObjectSnapshot[]>;
+    listWorkspaceObjects: (
+        snapshot: RuntimeSessionSnapshot,
+        options?: WorkspaceListOptions
+    ) => Promise<WorkspaceObjectSnapshot[]>;
     readTabularSchema?: (
         objectName: string,
         snapshot: RuntimeSessionSnapshot
@@ -941,7 +964,9 @@ export interface RuntimeSessionManager {
     stop: () => Promise<RuntimeSessionSnapshot>;
     executeVisibleCommand: (request: VisibleCommandRequest) => Promise<TranscriptEvent[]>;
     getWorkspaceSnapshot: () => WorkspaceSnapshot;
-    listWorkspaceObjects: () => Promise<WorkspaceSnapshot>;
+    listWorkspaceObjects: (
+        options?: WorkspaceListOptions
+    ) => Promise<WorkspaceSnapshot>;
     removeWorkspaceObjects: (objectNames: string[]) => Promise<WorkspaceSnapshot>;
     renameWorkspaceObject: (request: WorkspaceRenameRequest) => Promise<WorkspaceSnapshot>;
     clearWorkspace: () => Promise<WorkspaceSnapshot>;

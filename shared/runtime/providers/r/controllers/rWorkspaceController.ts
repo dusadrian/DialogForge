@@ -11,6 +11,7 @@ import type {
     RuntimeCapability,
     RuntimeSessionSnapshot,
     RuntimeWorkspaceController,
+    WorkspaceListOptions,
     TabularPreviewRequest,
     TabularPreviewSnapshot,
     WorkspaceObjectSnapshot
@@ -68,7 +69,9 @@ const workspaceCapabilities = function(
 export const createRWorkspaceController = function(
     options: RWorkspaceControllerOptions
 ): RuntimeWorkspaceController {
-    const readWorkspaceObjects = async function(): Promise<WorkspaceObjectSnapshot[]> {
+    const readWorkspaceObjects = async function(
+        listOptions?: WorkspaceListOptions
+    ): Promise<WorkspaceObjectSnapshot[]> {
         const client = options.getClient();
 
         if (!client) {
@@ -79,6 +82,7 @@ export const createRWorkspaceController = function(
             id: options.createRequestId("workspace"),
             method: "workspace.snapshot",
             params: {
+                forceRefresh: listOptions?.forceRefresh === true,
                 timeoutMs: 5000
             }
         });
@@ -147,7 +151,15 @@ export const createRWorkspaceController = function(
 
             return createColumn({
                 name: String(column.name || ""),
-                type: String(column.type || "unknown")
+                type: String(column.type || "unknown"),
+                numeric: column.numeric === true,
+                character: column.character === true,
+                logical: column.logical === true,
+                factor: column.factor === true,
+                calibrated: column.calibrated === true,
+                binary: column.binary === true,
+                categorical: column.categorical === true,
+                date: column.date === true
             });
         }).filter((column) => {
             return column.name.length > 0;
@@ -275,8 +287,8 @@ export const createRWorkspaceController = function(
     };
 
     return {
-        listWorkspaceObjects: async function() {
-            return readWorkspaceObjects();
+        listWorkspaceObjects: async function(_snapshot, listOptions) {
+            return readWorkspaceObjects(listOptions);
         },
         readTabularSchema,
         readTabularPreview,

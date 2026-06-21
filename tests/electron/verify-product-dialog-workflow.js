@@ -39,9 +39,48 @@ const expectedText = String(
 const expectedWorkspaceObject = String(
     process.env.DIALOGFORGE_ELECTRON_WORKSPACE_OBJECT || ""
 ).trim();
+const selectedDataset = String(
+    process.env.DIALOGFORGE_ELECTRON_DIALOG_SELECT_DATASET || ""
+).trim();
+const selectedVariable = String(
+    process.env.DIALOGFORGE_ELECTRON_DIALOG_SELECT_VARIABLE || ""
+).trim();
+const expectedPlotPoints = Math.max(
+    0,
+    Number(process.env.DIALOGFORGE_ELECTRON_DIALOG_EXPECTED_PLOT_POINTS) || 0
+);
 const minimumControls = Math.max(
     1,
     Number(process.env.DIALOGFORGE_ELECTRON_DIALOG_MIN_CONTROLS) || 1
+);
+const runDialogCommand = process.env.DIALOGFORGE_ELECTRON_DIALOG_RUN === "1";
+const requiredAttachedPackages = String(
+    process.env.DIALOGFORGE_ELECTRON_DIALOG_ATTACHED_PACKAGES || ""
+).split(",").map((name) => name.trim()).filter(Boolean);
+const expectedHistoryText = String(
+    process.env.DIALOGFORGE_ELECTRON_DIALOG_HISTORY_TEXT || ""
+).trim();
+const maximumRunLatencyMs = Math.max(
+    0,
+    Number(process.env.DIALOGFORGE_ELECTRON_DIALOG_MAX_RUN_LATENCY_MS) || 0
+);
+const expectedActiveDataset = String(
+    process.env.DIALOGFORGE_ELECTRON_EXPECT_ACTIVE_DATASET || ""
+).trim();
+const secondDialogId = String(
+    process.env.DIALOGFORGE_ELECTRON_DIALOG_SECOND_ID || ""
+).trim();
+const maximumPopulateLatencyMs = Math.max(
+    0,
+    Number(
+        process.env.DIALOGFORGE_ELECTRON_DIALOG_MAX_POPULATE_LATENCY_MS
+    ) || 0
+);
+const maximumReopenLatencyMs = Math.max(
+    0,
+    Number(
+        process.env.DIALOGFORGE_ELECTRON_DIALOG_MAX_REOPEN_LATENCY_MS
+    ) || 0
 );
 
 
@@ -251,13 +290,13 @@ const waitForWorkspaceObject = async function(page, objectName) {
 };
 
 
-const openDialog = async function(app, mainPage) {
+const openDialog = async function(app, mainPage, targetDialogId = dialogId) {
     const windowPromise = app.waitForEvent("window", {
         timeout: 10000
     });
     const result = await mainPage.evaluate(async (targetDialogId) => {
         return window.dialogForge.openProductDialog(targetDialogId);
-    }, dialogId);
+    }, targetDialogId);
 
     assert.equal(result.status, "opened");
 
@@ -265,25 +304,178 @@ const openDialog = async function(app, mainPage) {
 };
 
 
-const verifyDialog = async function(dialogPage) {
-    await dialogPage.waitForLoadState("domcontentloaded");
-    await dialogPage.waitForFunction(({ count, text, workspaceObject }) => {
-        const paper = document.getElementById("paper");
-        const bodyText = String(paper?.innerText || "");
+const waitForDependencyCommands = async function(mainPage) {
+    if (requiredAttachedPackages.length === 0) {
+        return;
+    }
 
-        return Boolean(
-            paper
-            && paper.querySelectorAll(".dm-el").length >= count
-            && (!text || bodyText.includes(text))
-            && (!workspaceObject || bodyText.includes(workspaceObject))
+    await mainPage.waitForFunction((packages) => {
+        const transcript = String(
+            document.getElementById("consoleTerminal")?.innerText || ""
         );
-    }, {
-        count: minimumControls,
-        text: expectedText,
-        workspaceObject: expectedWorkspaceObject
-    }, {
+
+        return packages.every((packageName) => {
+            return transcript.includes(`> library(${packageName})`);
+        });
+    }, requiredAttachedPackages, {
         timeout: 30000
     });
+
+    const transcript = await transcriptText(mainPage);
+
+    assert.ok(
+        !transcript.includes("library(admisc; declared)"),
+        "Dialog dependencies were combined into a nonexistent package name."
+    );
+
+    await mainPage.waitForFunction(async (packages) => {
+        const history = await window.dialogForge.readConsoleHistory({});
+
+        return packages.every((packageName) => {
+            return history.includes(`library(${packageName})`);
+        });
+    }, requiredAttachedPackages, {
+        timeout: 10000,
+        polling: 100
+    });
+};
+
+
+const verifyActiveDataset = async function(mainPage, dialogPage) {
+    if (!expectedActiveDataset) {
+        return;
+    }
+
+    await dialogPage.waitForFunction((datasetName) => {
+        const row = document.querySelector(
+            `.container-item[data-value=${JSON.stringify(datasetName)}]`
+        );
+
+        return row?.classList.contains("active") === true;
+    }, expectedActiveDataset, {
+        timeout: 30000
+    });
+
+    const active = await mainPage.evaluate(() => {
+        return window.dialogForge.getActiveDataset();
+    });
+
+    assert.equal(
+        active.objectName,
+        expectedActiveDataset,
+        "Opening a product dialog changed the active workspace dataset."
+    );
+};
+
+
+const verifyDependenciesStayLoaded = async function(app, mainPage) {
+    if (!secondDialogId || requiredAttachedPackages.length === 0) {
+        return;
+    }
+
+    const before = await transcriptText(mainPage);
+    const countsBefore = requiredAttachedPackages.map((packageName) => {
+        return (before.match(new RegExp(
+            `> library\\(${packageName}\\)`,
+            "g"
+        )) || []).length;
+    });
+    const secondDialogPage = await openDialog(
+        app,
+        mainPage,
+        secondDialogId
+    );
+
+    await secondDialogPage.waitForLoadState("domcontentloaded");
+    await secondDialogPage.waitForSelector(".dm-el", {
+        timeout: 30000
+    });
+    await mainPage.waitForTimeout(500);
+
+    const after = await transcriptText(mainPage);
+
+    requiredAttachedPackages.forEach((packageName, index) => {
+        const countAfter = (after.match(new RegExp(
+            `> library\\(${packageName}\\)`,
+            "g"
+        )) || []).length;
+
+        assert.equal(
+            countAfter,
+            countsBefore[index],
+            `${packageName} was reloaded when a second dialog opened.`
+        );
+    });
+};
+
+
+const verifyDialogReopen = async function(app, mainPage, dialogPage) {
+    if (!maximumReopenLatencyMs) {
+        return;
+    }
+
+    await dialogPage.close();
+    const startedAt = Date.now();
+    const reopenedPage = await openDialog(app, mainPage);
+
+    await verifyDialog(reopenedPage);
+    const latencyMs = Date.now() - startedAt;
+
+    if (latencyMs > maximumReopenLatencyMs) {
+        throw new Error(
+            `Dialog repopulated after ${latencyMs}ms; expected at most ${maximumReopenLatencyMs}ms.`
+        );
+    }
+
+    console.log(`Product dialog ${dialogId} repopulated in ${latencyMs}ms.`);
+};
+
+
+const verifyDialog = async function(dialogPage) {
+    await dialogPage.waitForLoadState("domcontentloaded");
+    try {
+        await dialogPage.waitForFunction(({ count, text, workspaceObject }) => {
+            const paper = document.getElementById("paper");
+            const bodyText = String(paper?.innerText || "");
+
+            return Boolean(
+                paper
+                && paper.querySelectorAll(".dm-el").length >= count
+                && (!text || bodyText.includes(text))
+                && (!workspaceObject || bodyText.includes(workspaceObject))
+            );
+        }, {
+            count: minimumControls,
+            text: expectedText,
+            workspaceObject: expectedWorkspaceObject
+        }, {
+            timeout: 30000
+        });
+    }
+    catch (error) {
+        const state = await dialogPage.evaluate(() => {
+            const paper = document.getElementById("paper");
+
+            return {
+                controls: paper?.querySelectorAll(".dm-el").length || 0,
+                text: String(paper?.innerText || ""),
+                containers: Array.from(
+                    document.querySelectorAll(".container-item")
+                ).map((item) => {
+                    return {
+                        value: item.getAttribute("data-value"),
+                        text: String(item.textContent || "").trim()
+                    };
+                })
+            };
+        });
+
+        throw new Error(
+            "Timed out waiting for product dialog content. "
+            + `State: ${JSON.stringify(state)}. `
+            + `Cause: ${String(error && error.message || error)}`
+        );
+    }
 
     const state = await dialogPage.evaluate(() => {
         const paper = document.getElementById("paper");
@@ -299,6 +491,133 @@ const verifyDialog = async function(dialogPage) {
         `Expected at least ${minimumControls} dialog controls.`
     );
     assert.ok(state.text.trim(), "Product dialog rendered no visible content.");
+};
+
+
+const clickContainerItem = async function(dialogPage, value) {
+    if (!value) {
+        return;
+    }
+
+    const selector = `.container-item[data-value=${JSON.stringify(value)}]`;
+
+    await dialogPage.waitForSelector(selector, {
+        timeout: 30000
+    });
+    await dialogPage.click(selector);
+};
+
+
+const waitForAttachedPackages = async function(mainPage) {
+    if (requiredAttachedPackages.length === 0) {
+        return;
+    }
+
+    await mainPage.waitForFunction(async (packages) => {
+        const quoted = packages.map((name) => JSON.stringify(`package:${name}`));
+        const result = await window.dialogForge.executeInvisibleQuery({
+            query: `all(c(${quoted.join(", ")}) %in% search())`,
+            source: "electron.product-dialog.attached-packages"
+        });
+
+        return result.status === "ready" && result.value === true;
+    }, requiredAttachedPackages, {
+        timeout: 30000,
+        polling: 200
+    });
+};
+
+
+const transcriptText = function(mainPage) {
+    return mainPage.evaluate(() => {
+        return String(document.getElementById("consoleTerminal")?.innerText || "");
+    });
+};
+
+
+const verifyRunCommand = async function(mainPage, dialogPage) {
+    if (!runDialogCommand) {
+        return;
+    }
+
+    await waitForAttachedPackages(mainPage);
+    const before = await transcriptText(mainPage);
+    const libraryCountBefore = (before.match(/> library\(/g) || []).length;
+    const startedAt = Date.now();
+
+    await dialogPage.locator(".dm-button .smart-button").filter({
+        hasText: /^Run$/
+    }).click();
+    await mainPage.waitForFunction((historyText) => {
+        return String(document.getElementById("consoleTerminal")?.innerText || "")
+            .includes(historyText);
+    }, expectedHistoryText, {
+        timeout: 30000
+    });
+
+    const latencyMs = Date.now() - startedAt;
+
+    if (maximumRunLatencyMs && latencyMs > maximumRunLatencyMs) {
+        throw new Error(
+            `Dialog command appeared after ${latencyMs}ms; expected at most ${maximumRunLatencyMs}ms.`
+        );
+    }
+
+    const after = await transcriptText(mainPage);
+    const libraryCountAfter = (after.match(/> library\(/g) || []).length;
+
+    assert.equal(
+        libraryCountAfter,
+        libraryCountBefore,
+        "Run reloaded dialog dependencies instead of using the packages attached at dialog creation. "
+        + `Before: ${JSON.stringify(before)}. After: ${JSON.stringify(after)}.`
+    );
+    await mainPage.waitForFunction(() => {
+        const rows = Array.from(document.querySelectorAll(
+            "[data-console-transcript-row] div"
+        ));
+
+        return rows.some((row) => /^\s+fre\s+rel\s+per\s+cpd/.test(
+            String(row.textContent || "")
+        ));
+    }, undefined, {
+        timeout: 30000
+    });
+
+    const historyValue = await mainPage.evaluate(() => {
+        const input = document.getElementById("visibleCommandInput");
+        const view = input?.dialogForgeConsoleInputView;
+
+        view.setText("");
+        view.focus();
+        view.historyPrevious();
+        return view.getText();
+    });
+
+    assert.ok(
+        historyValue.includes(expectedHistoryText),
+        `Dialog command was not added to console history: ${JSON.stringify(historyValue)}.`
+    );
+};
+
+
+const verifyDialogInteraction = async function(dialogPage) {
+    await clickContainerItem(dialogPage, selectedDataset);
+    await clickContainerItem(dialogPage, selectedVariable);
+
+    if (!expectedPlotPoints) {
+        return;
+    }
+
+    await dialogPage.waitForFunction((minimumPoints) => {
+        const points = document.querySelectorAll(
+            ".dm-plot .dm-plot-surface svg circle"
+        );
+
+        return points.length >= minimumPoints;
+    }, expectedPlotPoints, {
+        timeout: 30000
+    });
 };
 
 
@@ -385,9 +704,32 @@ const run = async function() {
             expectedWorkspaceObject
         );
 
+        if (expectedActiveDataset) {
+            await mainPage.evaluate(async (datasetName) => {
+                await window.dialogForge.setActiveDataset(datasetName);
+            }, expectedActiveDataset);
+        }
+
+        const populateStartedAt = Date.now();
         const dialogPage = await openDialog(app, mainPage);
 
         await verifyDialog(dialogPage);
+        const populateLatencyMs = Date.now() - populateStartedAt;
+
+        if (
+            maximumPopulateLatencyMs
+            && populateLatencyMs > maximumPopulateLatencyMs
+        ) {
+            throw new Error(
+                `Dialog populated after ${populateLatencyMs}ms; expected at most ${maximumPopulateLatencyMs}ms.`
+            );
+        }
+        await waitForDependencyCommands(mainPage);
+        await verifyActiveDataset(mainPage, dialogPage);
+        await verifyDialogInteraction(dialogPage);
+        await verifyRunCommand(mainPage, dialogPage);
+        await verifyDialogReopen(app, mainPage, dialogPage);
+        await verifyDependenciesStayLoaded(app, mainPage);
         assert.deepEqual(
             rendererErrors,
             [],
@@ -395,7 +737,7 @@ const run = async function() {
         );
 
         console.log(
-            `Product dialog ${dialogId} rendered successfully in Playwright.`
+            `Product dialog ${dialogId} populated in ${populateLatencyMs}ms and completed successfully in Playwright.`
         );
     }
     finally {

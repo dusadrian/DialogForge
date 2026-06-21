@@ -234,8 +234,7 @@ export const createTranscriptEventsFromRuntimeControl = function(
                     id: runtimeControlEventText(event, "id"),
                     parentId: parent,
                     createdAt,
-                    state,
-                    message: state
+                    state
                 }
             ));
         }

@@ -160,7 +160,14 @@ export const createRTabularMetadataController = function(
                     }
                     : null,
                 align: String(variable.align || ""),
-                measure: String(variable.measure || "")
+                measure: String(variable.measure || ""),
+                numeric: variable.numeric === true,
+                factor: variable.factor === true,
+                calibrated: variable.calibrated === true,
+                binary: variable.binary === true,
+                character: variable.character === true,
+                categorical: variable.categorical === true,
+                date: variable.date === true
             });
         }).filter((variable) => variable.name.length > 0);
 
