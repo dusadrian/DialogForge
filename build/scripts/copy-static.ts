@@ -1,6 +1,10 @@
 import * as fs from "fs";
 import * as path from "path";
 
+import {
+    packagedRuntimeDependencies
+} from "./packagedRuntimeDependencies";
+
 
 const rootDir = path.resolve(__dirname, "../..");
 const sourceRoot = path.resolve(rootDir, "..");
@@ -62,8 +66,9 @@ const copyPackageJson = function(): void {
                 "build/scripts/**/*",
                 "shared/**/*",
                 "products/**/*",
-                "node_modules/monaco-editor/**/*",
-                "node_modules/sortablejs/**/*",
+                ...packagedRuntimeDependencies.map((packageName) => {
+                    return `node_modules/${packageName}/**/*`;
+                }),
                 "package.json"
             ],
             asarUnpack: [
@@ -106,17 +111,9 @@ cleanGeneratedAssetDirectories();
 
 copyPackageJson();
 
-copyDirectory(
-    path.join(sourceRoot, "node_modules/monaco-editor/min/vs"),
-    path.join(rootDir, "node_modules/monaco-editor/min/vs")
-);
-
-copyDirectory(
-    path.join(sourceRoot, "node_modules/monaco-editor"),
-    path.join(rootDir, "node_modules/monaco-editor")
-);
-
-copyDirectory(
-    path.join(sourceRoot, "node_modules/sortablejs"),
-    path.join(rootDir, "node_modules/sortablejs")
-);
+packagedRuntimeDependencies.forEach((packageName) => {
+    copyDirectory(
+        path.join(sourceRoot, "node_modules", packageName),
+        path.join(rootDir, "node_modules", packageName)
+    );
+});

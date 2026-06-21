@@ -11,6 +11,9 @@ import {
 import type {
     ResolvedProductLocation
 } from "../../shared/core/contracts/productLocation";
+import {
+    packagedRuntimeDependencies
+} from "./packagedRuntimeDependencies";
 
 
 interface BuildSelection {
@@ -297,6 +300,21 @@ const iconConfig = function(iconBasePath: string): string[] {
 };
 
 
+const assertPackagedRuntimeDependencies = function(): void {
+    const missing = packagedRuntimeDependencies.filter((packageName) => {
+        return !fs.existsSync(
+            path.join(distDir, "node_modules", packageName, "package.json")
+        );
+    });
+
+    if (missing.length > 0) {
+        throw new Error(
+            "Missing staged runtime dependencies: " + missing.join(", ")
+        );
+    }
+};
+
+
 const copyProductSourceFiles = function(sourcePath: string, targetPath: string): void {
     fs.cpSync(sourcePath, targetPath, {
         recursive: true,
@@ -446,6 +464,8 @@ const main = function(): void {
     if (selection.stageOnly) {
         return;
     }
+
+    assertPackagedRuntimeDependencies();
 
     try {
         const builderArgs = [

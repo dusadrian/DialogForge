@@ -11,6 +11,10 @@ const read = function(relativePath) {
 };
 const packageAction = read(".github/actions/package-product/action.yml");
 const packageProduct = read("build/scripts/package-product.ts");
+const copyStatic = read("build/scripts/copy-static.ts");
+const packagedDependencies = read(
+    "build/scripts/packagedRuntimeDependencies.ts"
+);
 const renameMacArtifacts = read("build/scripts/rename-binaries-mac.ts");
 const packageJson = JSON.parse(read("package.json"));
 const productWorkflowPaths = [
@@ -42,6 +46,23 @@ assert.ok(
 assert.ok(
     packageAction.includes("gh release upload"),
     "platform builds must upload files directly to the target Release"
+);
+[
+    "dompurify",
+    "marked",
+    "monaco-editor",
+    "preact",
+    "sortablejs"
+].forEach((packageName) => {
+    assert.ok(
+        packagedDependencies.includes(`"${packageName}"`),
+        packageName + " must be declared as a packaged runtime dependency"
+    );
+});
+assert.ok(
+    copyStatic.includes("packagedRuntimeDependencies.forEach")
+    && packageProduct.includes("assertPackagedRuntimeDependencies();"),
+    "production dependencies must be staged and checked before packaging"
 );
 dialogRWorkflowPaths.forEach((relativePath) => {
     const workflow = read(relativePath);
