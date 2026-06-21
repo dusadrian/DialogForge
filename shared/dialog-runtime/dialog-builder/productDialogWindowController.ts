@@ -137,7 +137,11 @@ export const createProductDialogWindowController = function<WorkspaceSource>(
             icon: options.nativeWindowIconPath || undefined,
             webPreferences: {
                 contextIsolation: false,
-                nodeIntegration: true
+                nodeIntegration: true,
+                preload: path.join(
+                    options.rootDir,
+                    "shared/dialog-runtime/dialog-builder/productDialogPreload.js"
+                )
             }
         };
         const windowOptions = applySavedWindowState(

@@ -4,6 +4,7 @@ const assert = require("assert");
 const fs = require("fs");
 const path = require("path");
 const { readDialogSourceElements } = require("../../shared/dialog-runtime/dialogSource");
+const { createProductDialogSourceReader } = require("../../shared/dialog-runtime/dialog-builder/productDialogSourceReader");
 const rootDir = path.resolve(__dirname, "../..");
 const readJson = function (filePath) {
     return JSON.parse(fs.readFileSync(filePath, "utf8"));
@@ -31,4 +32,16 @@ assert.ok(fs.readFileSync(sourceActionFile, "utf8").includes("const filePath"));
 assert.ok(sourceDialog.elements);
 assert.strictEqual(sourceElements.status, "ready");
 assert.strictEqual(sourceElements.controls.length, sourceDialog.elements.length);
+const readRuntimeDialog = createProductDialogSourceReader({
+    rootDir,
+    productId: "base",
+    findDefinition: function(dialogId) {
+        return dialogId === dialog.id ? dialog : null;
+    }
+});
+const runtimeDialog = readRuntimeDialog(dialog.id);
+assert.ok(
+    runtimeDialog.customJS.includes("const filePath"),
+    "runtime dialog loading must include the adjacent actions.js entry"
+);
 console.log("Shared dialog source registry verified.");

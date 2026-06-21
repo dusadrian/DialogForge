@@ -6,8 +6,6 @@ import type {
 export interface MainCommandHistoryControllerBindings {
     renderSelectedCommand(command: EvaluatedMenuItem): void;
     renderCommandHistory(commands: EvaluatedMenuItem[]): void;
-    renderDialogHost(command: EvaluatedMenuItem): void;
-    closeDialogHost(): void;
 }
 
 
@@ -31,15 +29,6 @@ export const createMainCommandHistoryController = function(
         bindings.renderSelectedCommand(command);
         bindings.renderCommandHistory(commands);
 
-        if (
-            command.type === "shared-dialog"
-            || command.type === "product-dialog"
-        ) {
-            bindings.renderDialogHost(command);
-            return;
-        }
-
-        bindings.closeDialogHost();
     };
 
     return {

@@ -4,11 +4,6 @@ import type {
     EvaluatedProductCapability,
     ProductPackageSourcePolicy
 } from "../../../core/contracts/applicationComposition";
-import type {
-    ProductDialogPreviewExtension
-} from "../../../dialog-runtime/productDialogPreviewExtension";
-
-
 export interface ConsoleHistoryScope {
     productId: string;
     runtimeId: string;
@@ -20,16 +15,10 @@ export interface MainCompositionBootstrapBindings {
     productPill: HTMLElement;
     runtimePill: HTMLElement;
     output: HTMLElement;
-    loadProductDialogPreviewExtension(
-        composition: ApplicationComposition
-    ): ProductDialogPreviewExtension;
     loadConsoleHistory(scope: ConsoleHistoryScope): Promise<void>;
     setProductId(productId: string): void;
     setPackageSourcePolicy(
         policy: ProductPackageSourcePolicy
-    ): void;
-    setProductDialogPreviewExtension(
-        extension: ProductDialogPreviewExtension
     ): void;
     setProductCapabilities(capabilities: EvaluatedProductCapability[]): void;
     setProductDialogs(dialogs: DialogDefinition[]): void;
@@ -58,9 +47,6 @@ export const createMainCompositionBootstrapController = function(
             bindings.setProductId(productId);
             bindings.setPackageSourcePolicy(
                 composition.productSettings.packageSources || {}
-            );
-            bindings.setProductDialogPreviewExtension(
-                bindings.loadProductDialogPreviewExtension(composition)
             );
             bindings.setProductCapabilities(composition.productCapabilities || []);
             bindings.setProductDialogs(composition.productDialogs || []);

@@ -1468,85 +1468,6 @@
             cursor: pointer;
         }
 
-        .dialogHost {
-            margin-bottom: 18px;
-            background: #ffffff;
-            border: 1px solid #b8c7dd;
-            border-radius: 4px;
-        }
-
-        .dialogHeader {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 12px;
-            padding: 10px 12px;
-            border-bottom: 1px solid #d7dbe2;
-            background: #f8f9fb;
-        }
-
-        .dialogTitle {
-            font-weight: 600;
-        }
-
-        .dialogBody {
-            padding: 12px;
-        }
-
-        .sourceDialogPreview {
-            margin-top: 12px;
-            overflow: auto;
-            border: 1px solid #d7dbe2;
-            background: #f8f9fb;
-            max-height: 520px;
-        }
-
-        .sourceDialogSurface {
-            position: relative;
-            margin: 12px;
-            background: #ffffff;
-            border: 1px solid #cbd1da;
-        }
-
-        .sourceDialogControl {
-            position: absolute;
-            box-sizing: border-box;
-            font: inherit;
-        }
-
-        .sourceDialogControl-label {
-            overflow: hidden;
-            white-space: nowrap;
-            text-overflow: ellipsis;
-        }
-
-        .sourceDialogControl-error {
-            outline: 1px solid #b3261e;
-            outline-offset: 1px;
-        }
-
-        .sourceDialogControl-plot {
-            display: grid;
-            place-items: center;
-            border: 1px dashed #aeb8c6;
-            color: #6a717c;
-            background: #fbfcfe;
-        }
-
-        .sourceDialogControl-separator {
-            background: #c8ced8;
-        }
-
-        .iconButton {
-            width: 28px;
-            height: 28px;
-            border: 1px solid #cbd1da;
-            background: #ffffff;
-            border-radius: 4px;
-            cursor: pointer;
-            line-height: 1;
-        }
-
         .hidden {
             display: none;
         }
@@ -1661,13 +1582,6 @@
                     </div>
                 </div>
                 <div class="primary">
-                    <section class="dialogHost hidden" id="dialogHost">
-                        <div class="dialogHeader">
-                            <div class="dialogTitle" id="dialogTitle"></div>
-                            <button class="iconButton" id="dialogClose" type="button" title="Close">X</button>
-                        </div>
-                        <div class="dialogBody" id="dialogBody"></div>
-                    </section>
                     <section class="panel consolePanel" id="visibleCommandPanel">
                         <div id="commandPane">
                             <div id="commandActions" aria-label="Command preview actions">

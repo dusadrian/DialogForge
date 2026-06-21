@@ -1,7 +1,30 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 const assert = require("assert");
+const fs = require("fs");
+const path = require("path");
 const { compositionPanelsApi } = require("../../shared/base-app/features/composition-panels/compositionPanels");
+const rootDir = process.cwd();
+const compositionPanelsSource = fs.readFileSync(path.join(
+    rootDir,
+    "shared/base-app/features/composition-panels/compositionPanels.ts"
+), "utf8");
+const commandHistorySource = fs.readFileSync(path.join(
+    rootDir,
+    "shared/base-app/features/menu-commands/mainCommandHistoryController.ts"
+), "utf8");
+const mainCompositionRoot = fs.readFileSync(path.join(
+    rootDir,
+    "shared/base-app/features/main-window/mainCompositionRoot.ts"
+), "utf8");
+const mainPage = fs.readFileSync(path.join(
+    rootDir,
+    "shared/base-app/pages/main.html"
+), "utf8");
+const dialogBuilderPage = fs.readFileSync(path.join(
+    rootDir,
+    "shared/base-app/pages/dialogBuilder.html"
+), "utf8");
 class FakeElement {
     constructor(tagName) {
         this.className = "";
@@ -75,4 +98,22 @@ assert.strictEqual(productCommandPanel.children[1].textContent, "product command
 assert.strictEqual(productCommandPanel.children[2].textContent, "message: Prepared update command for 2 package(s).");
 assert.strictEqual(productCommandPanel.children[3].textContent, "output: install.packages(c('admisc', 'declared'))");
 assert.strictEqual(productCommandPanel.children[4].textContent, "completed: Product command completed.");
+assert.ok(
+    !compositionPanelsSource.includes('runButton.textContent = "Run dialog"')
+    && !compositionPanelsSource.includes('appendField(body, "owner"'),
+    "product dialogs must not render migration metadata in the main window"
+);
+assert.ok(
+    !commandHistorySource.includes("DialogHost")
+    && !mainCompositionRoot.includes('byId("dialogHost")')
+    && !mainPage.includes('id="dialogHost"')
+    && !mainPage.includes('id="dialogClose"')
+    && !mainPage.includes(".sourceDialogPreview"),
+    "the migrated application must not contain the inline diagnostic dialog panel"
+);
+assert.ok(
+    dialogBuilderPage.includes("'app.asar',\n                'shared',")
+    && !dialogBuilderPage.includes("'app.asar',\n                'dist',"),
+    "packaged dialog windows must load their renderer from the app.asar root"
+);
 console.log("Composition panel helpers verified.");

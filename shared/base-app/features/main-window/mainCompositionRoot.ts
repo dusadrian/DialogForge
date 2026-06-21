@@ -24,9 +24,6 @@ import type {
 import type { CopyPayload } from "../../../dataset-editor/clipboard/copyPayload";
 import type { PastePayload } from "../../../dataset-editor/clipboard/pastePayload";
 import type { DatasetEditorState } from "../../../dataset-editor/state/datasetEditorState";
-import type {
-    ProductDialogPreviewExtension
-} from "../../../dialog-runtime/productDialogPreviewExtension";
 import { datasetEditorStateApi } from "../../../dataset-editor/state/datasetEditorState";
 import { keyboardCommandsApi } from "../../../dataset-editor/commands/keyboardCommands";
 import { importFormatApi } from "../../../runtime/tabular-data/importFormat";
@@ -77,12 +74,6 @@ import {
 import {
     createMainConsoleServices
 } from "./mainConsoleServices";
-import {
-    createMainDialogPreviewSupport
-} from "./mainDialogPreviewSupport";
-import {
-    loadProductDialogPreviewExtension
-} from "../dialog-host/productDialogPreviewExtensionLoader";
 import {
     createMainRuntimeWorkflows
 } from "./mainRuntimeWorkflows";
@@ -183,7 +174,6 @@ let productCapabilitiesSnapshot: EvaluatedProductCapability[] = [];
 let productDialogsSnapshot: DialogDefinition[] = [];
 let productId = "base";
 let packageSourcePolicy: ProductPackageSourcePolicy = {};
-let productDialogPreviewExtension: ProductDialogPreviewExtension = {};
 let applicationI18n: Record<string, string> = {};
 let runtimeProviderId = "none";
 let uiActionCommandVisibility: "hidden" | "visible" = "hidden";
@@ -216,23 +206,6 @@ const mainConsoleServices = createMainConsoleServices({
 const consoleCompletionModel = mainConsoleServices.completionModel;
 const consoleCommandHistory = mainConsoleServices.commandHistory;
 const mainConsoleCoordinator = mainConsoleServices.coordinator;
-const dialogPreviewSupport = createMainDialogPreviewSupport({
-    document,
-    dialogForge: window.dialogForge,
-    readWorkspace: function() {
-        return workspaceSnapshot;
-    },
-    readVariableMetadata: function() {
-        return variableMetadataSnapshot;
-    },
-    readTabularPreview: function() {
-        return tabularPreviewSnapshot;
-    },
-    productExtension: function() {
-        return productDialogPreviewExtension;
-    }
-});
-
 const notifyConsoleSessionPhase = mainConsoleCoordinator.notifySessionPhase;
 const setConsolePromptState = mainConsoleCoordinator.setPromptState;
 const setConsoleRuntimeBusy = mainConsoleCoordinator.setRuntimeBusy;
@@ -694,54 +667,9 @@ const renderFeatureEntrypointActivation =
     panelRendering.renderFeatureEntrypointActivation;
 
 const mainDialogController = createMainDialogController({
-    document,
-    host: byId("dialogHost"),
-    title: byId("dialogTitle"),
-    body: byId("dialogBody"),
-    previewSupport: dialogPreviewSupport,
-    helpers: {
-        appendField: appendCommandField,
-        empty,
-        setStatusClass
-    },
-    getProductExtension: function() {
-        return productDialogPreviewExtension;
-    },
-    getUiCommandVisibility: function() {
-        return uiActionCommandVisibility;
-    },
-    executeDialog: window.dialogForge.executeDialog,
-    importData: window.dialogForge.importData,
-    previewImportFile: window.dialogForge.previewImportFile,
-    selectImportFile: window.dialogForge.selectImportFile,
-    getWorkingDirectory: window.dialogForge.getWorkingDirectory,
-    executeVisibleCommand: window.dialogForge.executeVisibleCommand,
-    refreshWorkspace: function() {
-        return refreshWorkspace();
-    },
-    setActiveDataset: function(objectName) {
-        return setActiveDataset(objectName);
-    },
-    refreshRuntimeEvents: function() {
-        return refreshRuntimeEvents();
-    },
-    readTabularPreview: function(objectName) {
-        return readTabularPreview(objectName);
-    },
-    readVariableMetadata: function(objectName) {
-        return readVariableMetadata(objectName);
-    },
-    renderImportResult,
-    consumeGoToContext: consumeGoToDialogContext,
-    getDatasetEditorState: createDatasetEditorStateSnapshot,
-    gotoDatasetEditorCase,
-    gotoDatasetEditorVariable
+    executeDialog: window.dialogForge.executeDialog
 });
 
-
-const renderDialogExecution = mainDialogController.renderExecution;
-const renderDialogHost = mainDialogController.renderHost;
-const closeDialogHost = mainDialogController.close;
 
 const commandHistoryServices = createMainCommandHistoryServices({
     document,
@@ -750,8 +678,6 @@ const commandHistoryServices = createMainCommandHistoryServices({
     empty,
     setStatusClass,
     renderSelectedCommand,
-    renderDialogHost,
-    closeDialogHost,
     recordConsoleHistory: consoleCommandHistory.record,
     navigateConsoleHistory: consoleCommandHistory.navigate,
     navigateConsoleSurfaceHistory: function(direction): boolean {
@@ -1054,7 +980,6 @@ const mainCompositionBootstrapController =
         productPill: byId("productPill"),
         runtimePill: byId("runtimePill"),
         output: byId("compositionOutput"),
-        loadProductDialogPreviewExtension,
         loadConsoleHistory: function(scope): Promise<void> {
             return consoleCommandHistory.load(scope);
         },
@@ -1063,9 +988,6 @@ const mainCompositionBootstrapController =
         },
         setPackageSourcePolicy: function(value): void {
             packageSourcePolicy = value;
-        },
-        setProductDialogPreviewExtension: function(extension): void {
-            productDialogPreviewExtension = extension;
         },
         setProductCapabilities: function(capabilities): void {
             productCapabilitiesSnapshot = capabilities;
@@ -1086,7 +1008,6 @@ const mainCompositionBootstrapController =
 
 
 const mainUiBindingController = createMainUiBindingController({
-    closeDialogHost,
     mainWindowInput: {
         hideDatasetContextMenu: hideDatasetEditorContextMenu,
         openDeveloperDiagnostics: function(): void {

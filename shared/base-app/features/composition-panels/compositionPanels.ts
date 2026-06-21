@@ -442,59 +442,11 @@ const renderFeatureEntrypointActivation = function(
 };
 
 
-const renderDialogHost = function(
-    documentRef: Document,
-    host: HTMLElement,
-    title: HTMLElement,
-    body: HTMLElement,
-    command: EvaluatedMenuItem,
-    runDialog: (command: EvaluatedMenuItem) => void,
-    helpers: CompositionPanelHelpers
-): HTMLElement | null {
-    helpers.empty(body);
-
-    if (!command.target) {
-        host.classList.add("hidden");
-        return null;
-    }
-
-    const runButton = documentRef.createElement("button");
-    const buttonRow = documentRef.createElement("div");
-    const executionStatus = documentRef.createElement("div");
-
-    title.textContent = command.target.label || command.label || command.dialog || "";
-    helpers.appendField(body, "owner", command.target.owner);
-    helpers.appendField(body, "target", command.target.targetHome);
-    if (command.target.sourceReference) {
-        helpers.appendField(body, "source", command.target.sourceReference);
-    }
-    helpers.appendField(body, "status", command.target.status);
-    helpers.appendField(body, "replacement", command.target.replacement);
-
-    runButton.className = "commandButton";
-    runButton.type = "button";
-    runButton.textContent = "Run dialog";
-    runButton.disabled = command.enabled === false;
-    runButton.addEventListener("click", () => {
-        runDialog(command);
-    });
-    buttonRow.className = "buttonRow";
-    buttonRow.appendChild(runButton);
-    body.appendChild(buttonRow);
-    body.appendChild(executionStatus);
-
-    host.classList.remove("hidden");
-
-    return executionStatus;
-};
-
-
 export const compositionPanelsApi = {
     getCommandBoundary,
     renderCapabilities,
     renderCommandHistory,
     renderDialogExecution,
-    renderDialogHost,
     renderFeatureEntrypointActivation,
     renderFeatures,
     renderMenu,

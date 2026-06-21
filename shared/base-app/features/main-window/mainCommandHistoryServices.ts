@@ -20,8 +20,6 @@ export interface MainCommandHistoryServicesOptions {
     empty(element: HTMLElement): void;
     setStatusClass(element: HTMLElement, enabled: boolean): void;
     renderSelectedCommand(command: EvaluatedMenuItem): void;
-    renderDialogHost(command: EvaluatedMenuItem): void;
-    closeDialogHost(): void;
     recordConsoleHistory(text: string): void;
     navigateConsoleHistory(direction: number): {
         changed: boolean;
@@ -51,9 +49,7 @@ export const createMainCommandHistoryServices = function(
     };
     const commandHistoryController = createMainCommandHistoryController({
         renderSelectedCommand: options.renderSelectedCommand,
-        renderCommandHistory,
-        renderDialogHost: options.renderDialogHost,
-        closeDialogHost: options.closeDialogHost
+        renderCommandHistory
     });
 
     const recordVisibleCommandHistory = function(text: string): void {
