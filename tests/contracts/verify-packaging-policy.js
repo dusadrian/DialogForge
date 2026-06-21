@@ -27,6 +27,9 @@ const productWorkflows = productWorkflowPaths.map(read);
 const dialogRWorkflowPaths = productWorkflowPaths.filter((relativePath) => {
     return relativePath.includes("build-dialogr");
 });
+const dialogQCAWorkflowPaths = productWorkflowPaths.filter((relativePath) => {
+    return relativePath.includes("build-dialogqca");
+});
 
 
 assert.ok(
@@ -47,6 +50,15 @@ dialogRWorkflowPaths.forEach((relativePath) => {
         workflow.includes("default: DialogR")
         && workflow.includes("default: dusadrian/binaries"),
         relativePath + " must publish to the established DialogR release by default"
+    );
+});
+dialogQCAWorkflowPaths.forEach((relativePath) => {
+    const workflow = read(relativePath);
+
+    assert.ok(
+        workflow.includes("default: QCA")
+        && workflow.includes("default: dusadrian/binaries"),
+        relativePath + " must publish to the established QCA release by default"
     );
 });
 assert.ok(
@@ -71,10 +83,10 @@ assert.ok(
     !packageAction.includes("build/output/*.zip"),
     "Windows Release uploads must not include portable ZIP archives"
 );
-assert.equal(
+assert.deepEqual(
     packageJson.build.win.target,
-    "nsis",
-    "Windows packaging must remain installer-only"
+    ["nsis", "portable"],
+    "Windows packaging must produce installer and standalone executables"
 );
 assert.deepEqual(
     packageJson.build.mac.target[0].arch,
@@ -190,7 +202,8 @@ assert.ok(
 );
 [
     "`--config.linux.artifactName=${fileName}_${version}_intel.AppImage`",
-    "`--config.nsis.artifactName=${fileName}_setup_${version}_intel.exe`"
+    "`--config.nsis.artifactName=${fileName}_setup_${version}_intel.exe`",
+    "`--config.portable.artifactName=${fileName}_${version}_intel.exe`"
 ].forEach((expected) => {
     assert.ok(
         packageProduct.includes(expected),

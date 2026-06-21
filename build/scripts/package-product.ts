@@ -213,7 +213,8 @@ const artifactNameConfig = function(
 
     if (platform === "windows") {
         return [
-            `--config.nsis.artifactName=${fileName}_setup_${version}_intel.exe`
+            `--config.nsis.artifactName=${fileName}_setup_${version}_intel.exe`,
+            `--config.portable.artifactName=${fileName}_${version}_intel.exe`
         ];
     }
 
