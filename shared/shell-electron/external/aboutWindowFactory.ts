@@ -23,6 +23,7 @@ export const createAboutWindowFactory = function(
             parent: options.getParentWindow() || undefined,
             modal: false,
             center: true,
+            autoHideMenuBar: true,
             backgroundColor: "#ffffff",
             icon: options.nativeWindowIconPath || undefined,
             webPreferences: {

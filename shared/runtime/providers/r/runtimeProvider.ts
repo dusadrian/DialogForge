@@ -226,8 +226,14 @@ export const createRuntimeProvider = function(options: RuntimeProviderOptions = 
                 const command = await findLatestInstalledRBinary("R");
 
                 if (!command) {
+                    const locations = process.platform === "linux"
+                        ? "configured paths, R_HOME, PATH, /opt/R, or "
+                            + "standard installation directories"
+                        : "configured paths, R_HOME, PATH, or standard "
+                            + "installation directories";
+
                     throw new Error(
-                        "Unable to find R in the configured paths, R_HOME, PATH, or standard installation directories."
+                        `Unable to find R in ${locations}.`
                     );
                 }
 

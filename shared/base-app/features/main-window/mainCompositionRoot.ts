@@ -357,12 +357,25 @@ const renderTranscript = function(events: TranscriptEvent[]) {
 
 const renderConsoleStatus = function(session: RuntimeSessionSnapshot): void {
     const status = byId("consoleStatus");
+    const coverMessage = byId("consoleCoverMessage");
+    const runtimeStatus = String(session.status || "unknown");
+    const failure = String(session.message || "").trim();
+    const normalizedFailure = failure.toLowerCase();
+    const message = runtimeStatus === "starting"
+        ? "Starting R runtime..."
+        : runtimeStatus === "failed"
+            ? normalizedFailure.includes("unable to find r")
+                ? `R was not found on this system. ${failure}`
+                : `R runtime failed to start: ${failure || "Unknown startup error."}`
+            : "";
 
     status.textContent = [
         session.providerId || "runtime",
-        session.status || "unknown",
+        runtimeStatus,
         session.connection || ""
     ].filter(Boolean).join(" - ");
+    coverMessage.textContent = message;
+    document.body.classList.toggle("console-cover-visible", Boolean(message));
 };
 
 const consoleToolbar = createConsoleToolbarController({

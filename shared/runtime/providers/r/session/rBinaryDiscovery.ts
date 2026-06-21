@@ -323,6 +323,33 @@ const unixFallbackCandidates = function(
     ];
 };
 
+
+export const collectLinuxOptExecutableCandidates = function(
+    kind: RBinaryKind,
+    root = "/opt/R"
+): string[] {
+    if (!isDirectory(root)) {
+        return [];
+    }
+
+    const firstLevel = directoryNames(root).map((name) => {
+        return path.join(root, name);
+    });
+    const secondLevel = firstLevel.flatMap((candidate) => {
+        return directoryNames(candidate).map((name) => {
+            return path.join(candidate, name);
+        });
+    });
+
+    return unique([root, ...firstLevel, ...secondLevel].flatMap((candidate) => {
+        return [
+            ...directCandidates(candidate, kind, "linux"),
+            ...rHomeCandidates(candidate, kind, "linux")
+        ];
+    }));
+};
+
+
 const detectedVersion = function(candidate: string): Promise<string> {
     if (!versionRequests.has(candidate)) {
         versionRequests.set(candidate, new Promise((resolve) => {
@@ -444,7 +471,7 @@ export const findLatestInstalledRBinary = async function(
         ? windowsInstallCandidates(kind, env)
         : platform === "darwin"
             ? [...macFrameworkCandidates(kind), ...macCellarCandidates(kind)]
-            : [];
+            : collectLinuxOptExecutableCandidates(kind);
 
     return bestCandidate(
         [

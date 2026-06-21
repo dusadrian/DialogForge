@@ -342,7 +342,7 @@ export const createApplicationSupportWindowComposition = function(
             options.composition.rootDir,
             "shared/base-app/pages/about.html"
         ),
-        hideMenuBar: process.platform === "win32",
+        hideMenuBar: true,
         createWindow: createAboutWindowFactory({
             nativeWindowIconPath: options.nativeWindowIconPath,
             getParentWindow

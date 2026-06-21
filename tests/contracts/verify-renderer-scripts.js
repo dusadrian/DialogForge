@@ -28,6 +28,8 @@ const sourceCompletionContextPath = path.join(rootDir, "shared/console/terminal/
 const sourceConsoleSurfacePath = path.join(rootDir, "shared/console/renderer/consoleSurface.ts");
 const sourceConsoleCoordinatorPath = path.join(rootDir, "shared/console/renderer/mainConsoleCoordinator.ts");
 const sourceConsoleToolbarPath = path.join(rootDir, "shared/console/renderer/consoleToolbarView.ts");
+const sourceAboutWindowFactoryPath = path.join(rootDir, "shared/shell-electron/external/aboutWindowFactory.ts");
+const sourceApplicationSupportWindowsPath = path.join(rootDir, "shared/shell-electron/windows/applicationSupportWindowComposition.ts");
 const sourceConsoleEditorCommandPath = path.join(rootDir, "shared/console/terminal/consoleEditorCommandController.ts");
 const sourceConsoleInputStatePath = path.join(rootDir, "shared/console/terminal/consoleEditorInputStateController.ts");
 const sourceAppCodiconPath = path.join(rootDir, "shared/base-app/pages/shared/appCodicon.css");
@@ -54,6 +56,8 @@ const sourceCompletionContext = fs.readFileSync(sourceCompletionContextPath, "ut
 const sourceConsoleSurface = fs.readFileSync(sourceConsoleSurfacePath, "utf8");
 const sourceConsoleCoordinator = fs.readFileSync(sourceConsoleCoordinatorPath, "utf8");
 const sourceConsoleToolbar = fs.readFileSync(sourceConsoleToolbarPath, "utf8");
+const sourceAboutWindowFactory = fs.readFileSync(sourceAboutWindowFactoryPath, "utf8");
+const sourceApplicationSupportWindows = fs.readFileSync(sourceApplicationSupportWindowsPath, "utf8");
 const sourceConsoleEditorCommand = fs.readFileSync(sourceConsoleEditorCommandPath, "utf8");
 const sourceConsoleInputState = fs.readFileSync(sourceConsoleInputStatePath, "utf8");
 const sourceAppCodicon = fs.readFileSync(sourceAppCodiconPath, "utf8");
@@ -203,6 +207,12 @@ assert.ok(sourceHtml.includes(".consoleToolbarLeft {\n            gap: 8px;") &&
     sourceHtml.includes(".dm-console-toolbar-left .dm-toolbar-btn::after") &&
     sourceHtml.includes("left: 0;\n            right: auto;"), "working-directory icon and tooltip must stay visually close and inside the left edge");
 assert.ok(rendererSource.includes('buttonById(document, "consoleToolbarStop").disabled = !state.runtimeBusy;'), "console toolbar interrupt must only be enabled while the runtime is busy");
+assert.ok(sourceHtml.includes('id="consoleCover" aria-live="polite"') &&
+    sourceHtml.includes("body.console-cover-visible #consoleCover") &&
+    sourceMainComposition.includes('runtimeStatus === "failed"') &&
+    sourceMainComposition.includes('failure || "Unknown startup error."'), "console startup failures must remain visible when the runtime prompt is unavailable");
+assert.ok(sourceAboutWindowFactory.includes("autoHideMenuBar: true") &&
+    sourceApplicationSupportWindows.includes("hideMenuBar: true"), "the informative About window must not expose application menus on any platform");
 assert.ok(rendererSource.includes('requiredElement("consoleToolbarStop").addEventListener("click", bindings.interruptRuntime);'), "console toolbar stop button must interrupt the running command, not stop the runtime");
 assert.ok(!rendererSource.includes('requiredElement("consoleToolbarStop").addEventListener("click", bindings.stopRuntime);'), "console toolbar stop button must not stop the runtime session");
 assert.ok(rendererSource.includes('method: "reply_prompt"') &&

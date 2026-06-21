@@ -2,14 +2,35 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 const assert = require("assert");
 const { execFileSync } = require("child_process");
+const fs = require("fs");
+const os = require("os");
+const path = require("path");
 const { getRuntimeProvider } = require("../../shared/runtime/providers/runtimeProviderRegistry");
 const { createRuntimeSessionManager } = require("../../shared/runtime/session/runtimeSessionManager");
+const { collectLinuxOptExecutableCandidates } = require("../../shared/runtime/providers/r/session/rBinaryDiscovery");
 const verifyLocalRExists = function () {
     execFileSync("R", ["--version"], {
         stdio: "ignore"
     });
 };
+const verifyLinuxOptDiscovery = function () {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "dialogforge-opt-r-"));
+    const binaryPath = path.join(root, "4.6.0", "bin", "R");
+
+    try {
+        fs.mkdirSync(path.dirname(binaryPath), { recursive: true });
+        fs.writeFileSync(binaryPath, "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+        assert.ok(
+            collectLinuxOptExecutableCandidates("R", root).includes(binaryPath),
+            "Linux R discovery must inspect versioned installations under /opt/R"
+        );
+    }
+    finally {
+        fs.rmSync(root, { recursive: true, force: true });
+    }
+};
 const verifyRProcessLifecycle = async function () {
+    verifyLinuxOptDiscovery();
     verifyLocalRExists();
     process.env.DIALOGFORGE_R_PROCESS = "1";
     const disabledProvider = getRuntimeProvider("r", {
