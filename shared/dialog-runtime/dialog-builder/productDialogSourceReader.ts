@@ -149,6 +149,16 @@ const localizeDialogSource = function(
             const key = `elements.${id}.${property}`;
 
             if (Object.prototype.hasOwnProperty.call(translations, key)) {
+                if (
+                    property === "value"
+                    && !Object.prototype.hasOwnProperty.call(
+                        element,
+                        "__baseValue"
+                    )
+                ) {
+                    element.__baseValue = String(element.value ?? "");
+                }
+
                 element[property] = String(translations[key] ?? "");
             }
         });

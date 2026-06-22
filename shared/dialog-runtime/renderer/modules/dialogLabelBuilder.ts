@@ -110,6 +110,10 @@ export const createDialogLabelBuilder = function(
             : 0;
         const baseLeft = ensureNumber(spec.left, 0);
         const baseTop = ensureNumber(spec.top, 0);
+        const baseText = asText(
+            spec.baseText,
+            asText(spec.text, "")
+        );
 
         label.dataset.value = asText(spec.text, "");
         label.dataset.maxWidth = String(maximumWidth);
@@ -177,6 +181,93 @@ export const createDialogLabelBuilder = function(
             label.style.alignItems = verticalAlign;
             label.style.justifyContent = "flex-start";
             label.style.removeProperty("max-height");
+        };
+
+        const measureLabelBox = function(
+            text: string
+        ): { width: number; height: number } {
+            const naturalProbe = document.createElement("div");
+            naturalProbe.textContent = text;
+            naturalProbe.style.position = "absolute";
+            naturalProbe.style.visibility = "hidden";
+            naturalProbe.style.pointerEvents = "none";
+            naturalProbe.style.fontSize = fontSize + "px";
+            naturalProbe.style.fontWeight = fontWeight;
+            naturalProbe.style.lineHeight = "1.2";
+            naturalProbe.style.whiteSpace = "nowrap";
+            naturalProbe.style.display = "block";
+            naturalProbe.style.width = "auto";
+            root.appendChild(naturalProbe);
+
+            const naturalWidth = Math.max(
+                0,
+                Math.ceil(naturalProbe.scrollWidth || 0),
+                Math.ceil(
+                    naturalProbe.getBoundingClientRect().width || 0
+                )
+            );
+            naturalProbe.remove();
+
+            const width = Math.max(
+                0,
+                maximumWidth > 0
+                    ? Math.min(naturalWidth + 2, maximumWidth)
+                    : naturalWidth + 2
+            );
+            const heightProbe = document.createElement("div");
+            heightProbe.textContent = text;
+            heightProbe.style.position = "absolute";
+            heightProbe.style.visibility = "hidden";
+            heightProbe.style.pointerEvents = "none";
+            heightProbe.style.fontSize = fontSize + "px";
+            heightProbe.style.fontWeight = fontWeight;
+            heightProbe.style.lineHeight = "1.2";
+            heightProbe.style.width = width + "px";
+            heightProbe.style.maxWidth = maximumWidth > 0
+                ? maximumWidth + "px"
+                : "";
+            heightProbe.style.overflow = "hidden";
+            heightProbe.style.textOverflow = "ellipsis";
+
+            if (lineClamp > 1) {
+                heightProbe.style.display = "-webkit-box";
+                heightProbe.style.whiteSpace = "normal";
+                heightProbe.style.wordBreak = "break-word";
+                heightProbe.style.setProperty(
+                    "-webkit-line-clamp",
+                    String(lineClamp)
+                );
+                heightProbe.style.setProperty(
+                    "-webkit-box-orient",
+                    "vertical"
+                );
+            }
+            else {
+                heightProbe.style.display = "block";
+                heightProbe.style.whiteSpace = "nowrap";
+            }
+
+            root.appendChild(heightProbe);
+
+            const singleLineHeight = Math.ceil(fontSize * 1.2);
+            const wrappedTextHeight =
+                lineClamp > 1 && naturalWidth + 2 > width
+                    ? Math.ceil(
+                        fontSize * 1.2 * Math.max(1, lineClamp)
+                    )
+                    : 0;
+            const height = Math.max(
+                0,
+                Math.ceil(heightProbe.scrollHeight || 0),
+                Math.ceil(
+                    heightProbe.getBoundingClientRect().height || 0
+                ),
+                wrappedTextHeight,
+                singleLineHeight
+            );
+            heightProbe.remove();
+
+            return { width, height };
         };
 
         let control: ReturnType<
@@ -368,6 +459,28 @@ export const createDialogLabelBuilder = function(
             if (resetToBase) {
                 left = baseLeft;
                 top = baseTop;
+
+                if (rotation === 0) {
+                    const baseBox = measureLabelBox(baseText);
+
+                    if (alignment === "right") {
+                        left = baseLeft + baseBox.width - boxWidth;
+                    }
+                    else if (alignment === "center") {
+                        left = Math.round(
+                            baseLeft + baseBox.width / 2 - boxWidth / 2
+                        );
+                    }
+
+                    if (valign === "bottom") {
+                        top = baseTop + baseBox.height - boxHeight;
+                    }
+                    else if (valign === "middle") {
+                        top = Math.round(
+                            baseTop + baseBox.height / 2 - boxHeight / 2
+                        );
+                    }
+                }
             }
 
             label.style.left = left + "px";
