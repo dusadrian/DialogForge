@@ -1,9 +1,16 @@
+import type {
+    ProductConsoleStateChip
+} from "../../core/contracts/productContribution";
+
+
 export interface ConsoleToolbarRenderState {
     runtimeStatus: string;
     runtimeBusy: boolean;
     workingDirectoryPath: string;
     homeDirectoryPath: string;
     activeDatasetName: string;
+    productStateChips: ProductConsoleStateChip[];
+    translate(key: string): string;
 }
 
 const elementById = function(document: Document, id: string): HTMLElement {
@@ -71,6 +78,7 @@ export const renderConsoleToolbar = function(
     const activeDataset = elementById(document, "consoleActiveDataset");
     const activeDatasetLabel = elementById(document, "consoleActiveDatasetLabel");
     const activeDatasetName = elementById(document, "consoleActiveDatasetName");
+    const productStateChips = elementById(document, "consoleProductStateChips");
     const workingDirectoryDisplay = formatConsoleWorkingDirectory(
         state.workingDirectoryPath,
         state.homeDirectoryPath
@@ -85,14 +93,14 @@ export const renderConsoleToolbar = function(
         || "(working directory pending)";
     cwdText.title = state.workingDirectoryPath || "";
     cwdButton.title = state.workingDirectoryPath || "Set working directory";
-    activeDatasetLabel.textContent = "Active:";
+    activeDatasetLabel.textContent = state.translate("Active") + ":";
 
     if (datasetName) {
         activeDataset.hidden = false;
         activeDataset.title = datasetName;
         activeDataset.setAttribute(
             "aria-label",
-            "Active dataset: " + datasetName
+            state.translate("Active dataset") + ": " + datasetName
         );
         activeDatasetName.textContent = datasetName;
     }
@@ -101,6 +109,35 @@ export const renderConsoleToolbar = function(
         activeDataset.removeAttribute("title");
         activeDataset.removeAttribute("aria-label");
         activeDatasetName.textContent = "";
+    }
+
+    productStateChips.replaceChildren();
+    if (datasetName) {
+        state.productStateChips.forEach((stateChip) => {
+            const value = String(stateChip.value || "").trim();
+
+            if (!value) {
+                return;
+            }
+
+            const chip = document.createElement("span");
+            const label = document.createElement("span");
+            const valueElement = document.createElement("span");
+
+            chip.className = "dm-console-state-chip";
+            chip.dataset.productStateChip = stateChip.id;
+            chip.title = value;
+            chip.setAttribute(
+                "aria-label",
+                state.translate(stateChip.accessibilityLabelKey) + ": " + value
+            );
+            label.className = "dm-console-state-chip-label";
+            label.textContent = state.translate(stateChip.labelKey) + ":";
+            valueElement.className = "dm-console-state-chip-value";
+            valueElement.textContent = value;
+            chip.append(label, valueElement);
+            productStateChips.appendChild(chip);
+        });
     }
 
     buttonById(document, "consoleToolbarStart").disabled = isReady || isStarting;

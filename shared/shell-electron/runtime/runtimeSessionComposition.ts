@@ -5,6 +5,7 @@ import type {
     ResolvedProductLocation
 } from "../../core/contracts/productLocation";
 import type {
+    RuntimeSessionManager,
     TranscriptEvent
 } from "../../runtime/provider-contract/runtimeProvider";
 import {
@@ -54,15 +55,27 @@ export const createRuntimeSessionComposition = function(
         return createRuntimeDialogDatasetResolver(runtimeSessionManager)();
     };
     const productContribution = getProductContribution(options.location);
+    const sharedDialogExternalCallHost = createDialogExternalCallHost({
+        resolveDatasets: resolveDialogDatasets,
+        state: dialogBindingState
+    });
+    const productContext = {
+        executeRuntimeMethod: function(request: Parameters<RuntimeSessionManager["executeRuntimeMethod"]>[0]) {
+            return runtimeSessionManager.executeRuntimeMethod(request);
+        },
+        callSharedDialogExternal: async function(name: string, parameters: Record<string, unknown> = {}) {
+            const result = await sharedDialogExternalCallHost.call(name, parameters);
+
+            return result.status === "ready" ? result.value : null;
+        }
+    };
     const dialogExternalCallHost = createCompositeDialogExternalCallHost({
-        shared: createDialogExternalCallHost({
-            resolveDatasets: resolveDialogDatasets,
-            state: dialogBindingState
-        }),
+        shared: sharedDialogExternalCallHost,
         products: productContribution.createDialogExternalCallHosts({
             executeRuntimeMethod: function(request) {
                 return runtimeSessionManager.executeRuntimeMethod(request);
-            }
+            },
+            callSharedDialogExternal: productContext.callSharedDialogExternal
         })
     });
 
@@ -91,6 +104,14 @@ export const createRuntimeSessionComposition = function(
         dialogExternalCallHost,
         readFilterState: function(dataset: string) {
             return getFilterState(dialogBindingState, dataset);
+        },
+        readConsoleStateChips: function(dataset: string) {
+            return productContribution.readConsoleStateChips
+                ? productContribution.readConsoleStateChips(productContext, dataset)
+                : Promise.resolve([]);
+        },
+        shouldPublishConsoleStateChips: function(name: string) {
+            return (productContribution.consoleStateChipMutationCalls || []).includes(name);
         }
     };
 };

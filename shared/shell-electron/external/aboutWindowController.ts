@@ -23,6 +23,7 @@ export interface AboutWindowControllerOptions {
 export interface AboutWindowController {
     getWindow(): BrowserWindow | null;
     open(payload: AboutWindowPayload): BrowserWindow;
+    refresh(payload: AboutWindowPayload): void;
 }
 
 
@@ -135,6 +136,14 @@ export const createAboutWindowController = function(
         getWindow: function(): BrowserWindow | null {
             return win && !win.isDestroyed() ? win : null;
         },
-        open
+        open,
+        refresh: function(payload): void {
+            pendingPayload = payload;
+
+            if (ready) {
+                pendingPayload = null;
+                render(payload);
+            }
+        }
     };
 };

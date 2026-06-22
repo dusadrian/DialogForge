@@ -14,6 +14,7 @@ export interface DialogRuntimeRequirementsWindowControllerOptions {
 export interface DialogRuntimeRequirementsWindowController {
     getWindow(): BrowserWindow | null;
     notifySaved(payload: unknown): void;
+    refresh(): void;
     open(): BrowserWindow;
 }
 
@@ -65,6 +66,16 @@ export const createDialogRuntimeRequirementsWindowController = function(
             win.webContents.send(
                 dialogRuntimeEventChannels.requirementsSaved,
                 payload
+            );
+        },
+        refresh: function(): void {
+            if (!win || win.isDestroyed()) {
+                return;
+            }
+
+            win.webContents.send(
+                dialogRuntimeEventChannels.requirementsLoaded,
+                options.readPayload()
             );
         },
         open

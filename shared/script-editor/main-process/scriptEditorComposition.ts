@@ -51,7 +51,7 @@ export interface ScriptEditorCompositionOptions {
     showOnOpen: boolean;
     getZoomFactor(): number;
     readTerminalSettings(): Record<string, unknown>;
-    locale: string;
+    getLocale(): string;
     runtimeSessionManager: Pick<
         RuntimeSessionManager,
         "executeRuntimeMethod"
@@ -203,7 +203,7 @@ export const createScriptEditorComposition = function(
                     ...options.readTerminalSettings()
                 },
                 appPath: options.rootDir,
-                languageNS: options.locale
+                languageNS: options.getLocale()
             };
         },
         shouldPreventClose: function(): boolean {

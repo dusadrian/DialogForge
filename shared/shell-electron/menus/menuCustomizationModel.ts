@@ -25,6 +25,7 @@ export interface MenuCustomizationNode {
 
 export interface MenuCustomizationModelOptions {
     menu: EvaluatedMenuItem[];
+    readMenu?(): EvaluatedMenuItem[];
     productDialogs: DialogDefinition[];
     sharedDialogs: DialogDefinition[];
     userDialogsDirectory: string;
@@ -42,6 +43,10 @@ export interface MenuCustomizationModel {
 export const createMenuCustomizationModel = function(
     options: MenuCustomizationModelOptions
 ): MenuCustomizationModel {
+    const readMenu = function(): EvaluatedMenuItem[] {
+        return options.readMenu ? options.readMenu() : options.menu;
+    };
+
     const nodeFromItem = function(
         item: EvaluatedMenuItem,
         position: number
@@ -84,7 +89,7 @@ export const createMenuCustomizationModel = function(
             });
         };
 
-        visit(options.menu);
+        visit(readMenu());
 
         return items;
     };
@@ -138,8 +143,11 @@ export const createMenuCustomizationModel = function(
         const canonical = findCanonicalItem(node);
 
         if (canonical) {
+            const label = node.builtIn === true || Boolean(node.labelKey)
+                ? canonical.label
+                : String(node.name || canonical.label);
             const next = Object.assign({}, canonical, {
-                label: String(node.name || canonical.label),
+                label,
                 accelerator: String(
                     node.shortcut || canonical.accelerator || ""
                 ) || undefined
@@ -201,14 +209,14 @@ export const createMenuCustomizationModel = function(
         const customization = options.readSettings().menuCustomization;
 
         if (!Array.isArray(customization)) {
-            return options.menu;
+            return readMenu();
         }
 
         const items = customization.map((value) => {
             return itemFromNode(value as MenuCustomizationNode);
         }).filter((item): item is EvaluatedMenuItem => Boolean(item));
 
-        return items.length > 0 ? items : options.menu;
+        return items.length > 0 ? items : readMenu();
     };
 
     const currentTree = function(): MenuCustomizationNode[] {
@@ -218,7 +226,7 @@ export const createMenuCustomizationModel = function(
             return customization as MenuCustomizationNode[];
         }
 
-        return options.menu.map(nodeFromItem);
+        return readMenu().map(nodeFromItem);
     };
 
     return {

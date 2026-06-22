@@ -32,7 +32,7 @@
 
         :root {
             color-scheme: light;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            font-family: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, "Noto Sans", "Liberation Sans", sans-serif;
             font-size: 13px;
             color: #222;
             background: #ffffff;
@@ -620,7 +620,8 @@
             visibility: visible;
         }
 
-        .dm-console-active-dataset {
+        .dm-console-active-dataset,
+        .dm-console-state-chip {
             flex: 0 1 auto;
             min-width: 0;
             max-width: 26%;
@@ -639,16 +640,29 @@
             line-height: 1;
         }
 
-        .dm-console-active-dataset[hidden] {
+        .dm-console-state-chip {
+            border-color: rgba(64, 92, 134, 0.26);
+            background: rgba(64, 92, 134, 0.07);
+            color: #30496c;
+        }
+
+        #consoleProductStateChips {
+            display: contents;
+        }
+
+        .dm-console-active-dataset[hidden],
+        .dm-console-state-chip[hidden] {
             display: none;
         }
 
-        .dm-console-active-dataset-label {
+        .dm-console-active-dataset-label,
+        .dm-console-state-chip-label {
             flex: 0 0 auto;
             font-weight: 600;
         }
 
-        .dm-console-active-dataset-name {
+        .dm-console-active-dataset-name,
+        .dm-console-state-chip-value {
             min-width: 0;
             overflow: hidden;
             text-overflow: ellipsis;
@@ -1647,6 +1661,7 @@
                                     <span class="dm-console-active-dataset-label" id="consoleActiveDatasetLabel">Active:</span>
                                     <span class="dm-console-active-dataset-name" id="consoleActiveDatasetName"></span>
                                 </span>
+                                <span id="consoleProductStateChips"></span>
                                 <label class="consoleChip" for="consoleUiCommandVisibility">
                                     <span class="consoleChipLabel">UI commands</span>
                                     <select id="consoleUiCommandVisibility">

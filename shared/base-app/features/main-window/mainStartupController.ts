@@ -49,7 +49,9 @@ export interface MainStartupControllerBindings {
     renderFeatures(composition: ApplicationComposition): void;
     renderProductCapabilities(composition: ApplicationComposition): void;
     renderStartupTasks(composition: ApplicationComposition): void;
+    applyMainTranslations(): void;
     renderActiveDataset(snapshot: ActiveDatasetSnapshot): void;
+    refreshProductConsoleStateChips(dataset: string): Promise<void>;
     renderDatasetEditorSelection(): void;
 }
 
@@ -135,8 +137,14 @@ export const createMainStartupController = function(
             bindings.renderFeatures(composition);
             bindings.renderProductCapabilities(composition);
             bindings.renderStartupTasks(composition);
+            bindings.applyMainTranslations();
             bindings.setBootStage("active-dataset:request");
-            bindings.renderActiveDataset(await activeDatasetPromise);
+            const activeDataset = await activeDatasetPromise;
+
+            bindings.renderActiveDataset(activeDataset);
+            await bindings.refreshProductConsoleStateChips(
+                activeDataset.objectName
+            );
             bindings.setBootStage("active-dataset:rendered");
             bindings.renderDatasetEditorSelection();
             bindings.setBootStage("selection:rendered");

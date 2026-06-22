@@ -15,6 +15,7 @@ export interface MenuCustomizationWindowController {
     getWindow(): BrowserWindow | null;
     notifyDialogBrowsed(payload: unknown): void;
     notifySaved(payload: unknown): void;
+    refresh(): void;
     open(): BrowserWindow;
 }
 
@@ -74,6 +75,12 @@ export const createMenuCustomizationWindowController = function(
         },
         notifySaved: function(payload: unknown): void {
             send(applicationSettingsEventChannels.menuCustomizationSaved, payload);
+        },
+        refresh: function(): void {
+            send(
+                applicationSettingsEventChannels.menuCustomizationLoaded,
+                options.readPayload()
+            );
         },
         open
     };

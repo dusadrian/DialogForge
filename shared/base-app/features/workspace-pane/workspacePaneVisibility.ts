@@ -16,6 +16,7 @@ export interface WorkspacePaneVisibilityOptions {
     setWindowVisible: (request: WorkspacePaneWindowRequest) => Promise<unknown>;
     resizeConsole: () => void;
     focusConsole: () => void;
+    translate?(key: string): string;
 }
 
 export interface SetWorkspacePaneVisibilityOptions {
@@ -37,6 +38,7 @@ export interface WorkspacePaneVisibilityController {
     ) => Promise<void>;
     syncWindowWidth: () => Promise<void>;
     toggle: (sourceButton?: HTMLButtonElement) => Promise<void>;
+    refreshLabels: () => void;
 }
 
 const DEFAULT_SETTINGS_KEY = "app.main.workspacePaneVisible";
@@ -116,7 +118,10 @@ export const createWorkspacePaneVisibility = function(
             visible
         );
 
-        const label = visible ? "Hide Workspace" : "Show Workspace";
+        const labelKey = visible ? "Hide Workspace" : "Show Workspace";
+        const label = options.translate
+            ? options.translate(labelKey)
+            : labelKey;
 
         button.dataset.tooltip = label;
         button.setAttribute("aria-label", label);
@@ -251,6 +256,7 @@ export const createWorkspacePaneVisibility = function(
         apply,
         set,
         syncWindowWidth,
-        toggle
+        toggle,
+        refreshLabels: updateToggle
     };
 };

@@ -19,6 +19,9 @@ import type {
     EvaluatedMenuItem
 } from "../../../core/contracts/applicationComposition";
 import type {
+    ProductConsoleStateChipSnapshot
+} from "../../../core/contracts/productContribution";
+import type {
     MainRendererEventBindings
 } from "./mainRendererEventBindings";
 
@@ -34,6 +37,9 @@ export interface MainRendererEventControllerBindings {
     setZoomFactor(zoomFactor: number): void;
     applyZoomLayout(zoomFactor: number): void;
     renderActiveDataset(snapshot: ActiveDatasetSnapshot): void;
+    applyLanguageChanged(payload: Record<string, unknown>): void;
+    refreshProductConsoleStateChips(dataset: string): void;
+    renderProductConsoleStateChips(snapshot: ProductConsoleStateChipSnapshot): void;
     renderTabularPreview(snapshot: TabularPreviewSnapshot): void;
     renderCellUpdate(result: CellUpdateResult | CellUpdateBatchResult): void;
     renderVariableMetadata(snapshot: VariableMetadataSnapshot): void;
@@ -72,7 +78,12 @@ export const createMainRendererEventController = function(
             bindings.setZoomFactor(zoomFactor);
             bindings.applyZoomLayout(zoomFactor);
         },
-        handleActiveDataset: bindings.renderActiveDataset,
+        handleActiveDataset: function(snapshot): void {
+            bindings.renderActiveDataset(snapshot);
+            bindings.refreshProductConsoleStateChips(snapshot.objectName);
+        },
+        handleLanguageChanged: bindings.applyLanguageChanged,
+        handleProductConsoleStateChips: bindings.renderProductConsoleStateChips,
         handleTabularPreview: bindings.renderTabularPreview,
         handleCellUpdate: bindings.renderCellUpdate,
         handleVariableMetadata: bindings.renderVariableMetadata,

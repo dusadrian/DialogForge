@@ -21,6 +21,10 @@ import type {
 import type {
     OpenFileResult
 } from "../../../shell-electron/filesystem/openFileResult";
+import type {
+    ProductConsoleStateChip,
+    ProductConsoleStateChipSnapshot
+} from "../../../core/contracts/productContribution";
 import type { CopyPayload } from "../../../dataset-editor/clipboard/copyPayload";
 import type { PastePayload } from "../../../dataset-editor/clipboard/pastePayload";
 import type { DatasetEditorState } from "../../../dataset-editor/state/datasetEditorState";
@@ -164,6 +168,7 @@ let datasetEditorState: DatasetEditorState = createInitialDatasetEditorState();
 let runtimeSessionSnapshot: RuntimeSessionSnapshot | null = null;
 let workspaceSnapshot: WorkspaceSnapshot | null = null;
 let activeDatasetSnapshot: ActiveDatasetSnapshot | null = null;
+let productConsoleStateChips: ProductConsoleStateChip[] = [];
 let tabularPreviewSnapshot: TabularPreviewSnapshot | null = null;
 let variableMetadataSnapshot: VariableMetadataSnapshot | null = null;
 let copyPayloadSnapshot: CopyPayload | null = null;
@@ -231,6 +236,9 @@ const workspacePaneVisibility = createWorkspacePaneVisibility({
     },
     setWindowVisible: function(request) {
         return window.dialogForge.setWorkspacePaneVisible(request);
+    },
+    translate: function(key): string {
+        return applicationI18n[key] || key;
     },
     resizeConsole: function() {
         mainConsoleCoordinator.resize();
@@ -360,6 +368,10 @@ const consoleToolbar = createConsoleToolbarController({
     getActiveDatasetName: () => (
         activeDatasetSnapshot?.objectName || ""
     ),
+    getProductStateChips: () => productConsoleStateChips,
+    translate: function(key): string {
+        return applicationI18n[key] || key;
+    },
     setWorkingDirectoryPaths: (path, home) => {
         consoleWorkingDirectoryPath = path;
         consoleHomeDirectoryPath = home;
@@ -399,6 +411,41 @@ const consoleToolbar = createConsoleToolbarController({
     }
 });
 const renderConsoleToolbar = consoleToolbar.render;
+const renderProductConsoleStateChips = function(
+    snapshot: ProductConsoleStateChipSnapshot
+): void {
+    if (
+        String(snapshot.dataset || "").trim() !== String(
+            activeDatasetSnapshot?.objectName || ""
+        ).trim()
+    ) {
+        return;
+    }
+
+    productConsoleStateChips = Array.isArray(snapshot.chips)
+        ? snapshot.chips
+        : [];
+    renderConsoleToolbar();
+};
+const refreshProductConsoleStateChips = async function(
+    dataset: string
+): Promise<void> {
+    const activeDataset = String(dataset || "").trim();
+    const chips = activeDataset
+        ? await window.dialogForge.readConsoleStateChips(activeDataset)
+        : [];
+
+    if (
+        activeDataset === String(
+            activeDatasetSnapshot?.objectName || ""
+        ).trim()
+    ) {
+        renderProductConsoleStateChips({
+            dataset: activeDataset,
+            chips
+        });
+    }
+};
 
 const workspaceServices = createMainWorkspaceServices({
     document,
@@ -953,6 +1000,59 @@ const dialogCommandPreviewController =
         }
     });
 
+const setTranslatedControlLabel = function(
+    id: string,
+    key: string
+): void {
+    const element = document.getElementById(id);
+
+    if (!element) {
+        return;
+    }
+
+    const label = applicationI18n[key] || key;
+
+    element.dataset.tooltip = label;
+    element.setAttribute("aria-label", label);
+};
+const applyMainTranslations = function(): void {
+    setTranslatedControlLabel("commandPreviewToConsole", "Copy");
+    setTranslatedControlLabel(
+        "commandPreviewToScriptEditor",
+        "Send to Script Editor"
+    );
+    setTranslatedControlLabel("consoleToolbarStop", "Interrupt");
+    setTranslatedControlLabel("consoleToolbarRestart", "Restart Clean");
+    setTranslatedControlLabel(
+        "consoleToolbarRestartWorkspace",
+        "Restart and Restore Workspace"
+    );
+    setTranslatedControlLabel("consoleToolbarInfo", "Info");
+    setTranslatedControlLabel("consoleToolbarClear", "Clear Console");
+    workspacePaneVisibility.refreshLabels();
+    renderConsoleToolbar();
+
+    if (workspaceSnapshot) {
+        renderWorkspace(workspaceSnapshot);
+    }
+};
+const applyLiveLanguage = function(): void {
+    void window.dialogForge.getComposition().then((nextComposition) => {
+        applicationI18n = nextComposition.i18n || {};
+        productCapabilitiesSnapshot =
+            nextComposition.productCapabilities || [];
+        productDialogsSnapshot = nextComposition.productDialogs || [];
+        renderMenu(nextComposition.menu || []);
+        renderCapabilities(nextComposition.runtime || { capabilities: [] });
+        renderFeatures(nextComposition.features || []);
+        renderProductCapabilities(productCapabilitiesSnapshot);
+        renderProductInfo(nextComposition);
+        renderProductSettings(nextComposition);
+        renderStartupTasks(nextComposition.startupTasks || []);
+        applyMainTranslations();
+    });
+};
+
 const mainRendererEventController = createMainRendererEventController({
     handleMenuCommand,
     getRuntimeSession: function() {
@@ -972,6 +1072,11 @@ const mainRendererEventController = createMainRendererEventController({
         void workspacePaneVisibility.syncWindowWidth();
     },
     renderActiveDataset,
+    applyLanguageChanged: applyLiveLanguage,
+    refreshProductConsoleStateChips: function(dataset): void {
+        void refreshProductConsoleStateChips(dataset);
+    },
+    renderProductConsoleStateChips,
     renderTabularPreview,
     renderCellUpdate,
     renderVariableMetadata,
@@ -1162,7 +1267,9 @@ const mainStartupController = createMainStartupController({
     renderStartupTasks: function(composition): void {
         renderStartupTasks(composition.startupTasks || []);
     },
+    applyMainTranslations,
     renderActiveDataset,
+    refreshProductConsoleStateChips,
     renderDatasetEditorSelection
 });
 

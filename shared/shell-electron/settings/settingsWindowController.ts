@@ -14,6 +14,7 @@ export interface SettingsWindowControllerOptions {
 export interface SettingsWindowController {
     getWindow(): BrowserWindow | null;
     open(): BrowserWindow;
+    refresh(): void;
     notifySaved(): void;
 }
 
@@ -58,6 +59,16 @@ export const createSettingsWindowController = function(
             return win && !win.isDestroyed() ? win : null;
         },
         open,
+        refresh: function(): void {
+            if (!win || win.isDestroyed()) {
+                return;
+            }
+
+            win.webContents.send(
+                applicationSettingsEventChannels.settingsLoaded,
+                options.readPayload()
+            );
+        },
         notifySaved: function(): void {
             if (!win || win.isDestroyed()) {
                 return;

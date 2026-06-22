@@ -10,6 +10,9 @@ import {
     invokeTypedIpcRoute,
     type IpcInvokeTransport
 } from "../core/ipc/typedIpc";
+import type {
+    ProductConsoleStateChip
+} from "../core/contracts/productContribution";
 
 
 export interface ProductDialogCommandPayload {
@@ -31,6 +34,7 @@ export interface ProductDialogCommandResult {
 
 export const dialogRuntimeIpcChannels = {
     callExternal: "base-app:callDialogExternal",
+    readConsoleStateChips: "base-app:readConsoleStateChips",
     executeDialog: "base-app:executeDialog",
     openProductDialog: "base-app:openProductDialog",
     getWorkingDirectory: "dialog:getWorkingDirectory",
@@ -53,6 +57,7 @@ export const dialogRuntimeEventChannels = {
 
 interface DialogRuntimeIpcRoutes {
     "base-app:callDialogExternal": { input: [string, Record<string, unknown>?]; result: DialogExternalCallResult };
+    "base-app:readConsoleStateChips": { input: [string]; result: ProductConsoleStateChip[] };
     "base-app:executeDialog": { input: [Partial<DialogExecutionRequest>]; result: DialogExecutionResult };
     "base-app:openProductDialog": { input: [{ dialogId?: string }]; result: { status: string; dialogId: string } };
     "dialog:getWorkingDirectory": { input: []; result: string };

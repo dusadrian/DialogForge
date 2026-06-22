@@ -18,6 +18,9 @@ import type {
 import type {
     EvaluatedMenuItem
 } from "../../../core/contracts/applicationComposition";
+import type {
+    ProductConsoleStateChipSnapshot
+} from "../../../core/contracts/productContribution";
 
 
 export interface MainRendererEventBindings {
@@ -28,6 +31,8 @@ export interface MainRendererEventBindings {
     handleRuntimeEvents(snapshot: RuntimeEventSnapshot): void;
     handleMainZoomFactor(state: { zoomFactor?: number }): void;
     handleActiveDataset(snapshot: ActiveDatasetSnapshot): void;
+    handleLanguageChanged(payload: Record<string, unknown>): void;
+    handleProductConsoleStateChips(snapshot: ProductConsoleStateChipSnapshot): void;
     handleTabularPreview(snapshot: TabularPreviewSnapshot): void;
     handleCellUpdate(result: CellUpdateResult | CellUpdateBatchResult): void;
     handleVariableMetadata(snapshot: VariableMetadataSnapshot): void;
@@ -49,6 +54,10 @@ export const bindMainRendererEvents = function(
     window.dialogForge.onRuntimeEvents(bindings.handleRuntimeEvents);
     window.dialogForge.onMainZoomFactor(bindings.handleMainZoomFactor);
     window.dialogForge.onActiveDataset(bindings.handleActiveDataset);
+    window.dialogForge.onLanguageChanged(bindings.handleLanguageChanged);
+    window.dialogForge.onProductConsoleStateChips(
+        bindings.handleProductConsoleStateChips
+    );
     window.dialogForge.onTabularPreview(bindings.handleTabularPreview);
     window.dialogForge.onCellUpdate(bindings.handleCellUpdate);
     window.dialogForge.onVariableMetadata(bindings.handleVariableMetadata);

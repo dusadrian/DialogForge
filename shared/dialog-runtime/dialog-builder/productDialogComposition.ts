@@ -41,6 +41,7 @@ export interface ProductDialogCompositionOptions {
     findDefinition(dialogId: string): DialogDefinition | undefined;
     getParentWindow(): BrowserWindow | null;
     publishCommand(command: string): void;
+    getLocale(): string;
 }
 
 
@@ -57,7 +58,8 @@ export const createProductDialogComposition = function(
     const readDialog = createProductDialogSourceReader({
         rootDir: options.rootDir,
         productId: options.productId,
-        findDefinition: options.findDefinition
+        findDefinition: options.findDefinition,
+        getLocale: options.getLocale
     });
     const readWorkspaceData = createProductDialogWorkspaceDataReader(
         options.runtimeSessionManager,

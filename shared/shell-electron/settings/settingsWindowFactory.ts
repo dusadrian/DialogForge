@@ -11,7 +11,7 @@ import {
 export interface SettingsWindowFactoryOptions {
     productId: string;
     settingsPath: string;
-    title: string;
+    title: string | (() => string);
     nativeWindowIconPath?: string;
     getParentWindow(): BrowserWindow | null;
 }
@@ -31,7 +31,9 @@ export const createSettingsWindowFactory = function(
                     height: 500,
                     resizable: false,
                     show: false,
-                    title: options.title,
+                    title: typeof options.title === "function"
+                        ? options.title()
+                        : options.title,
                     parent: options.getParentWindow() || undefined,
                     icon: options.nativeWindowIconPath || undefined,
                     webPreferences: {

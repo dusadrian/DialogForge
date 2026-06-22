@@ -89,6 +89,10 @@ import type {
     WorkspaceSnapshot
 } from "../../runtime/provider-contract/runtimeProvider";
 import type {
+    ProductConsoleStateChip,
+    ProductConsoleStateChipSnapshot
+} from "../../core/contracts/productContribution";
+import type {
     DatasetCellUpdatePatch,
     DatasetViewerCell,
     DatasetViewerContentPage,
@@ -168,6 +172,7 @@ declare global {
         executeInvisibleMutation(input: Partial<InvisibleMutationRequest>): Promise<InvisibleMutationResult>;
         executeRuntimeMethod(input: Partial<RuntimeExtensionMethodRequest>): Promise<RuntimeExtensionMethodResult>;
         callDialogExternal(name: string, parameters?: Record<string, unknown>): Promise<DialogExternalCallResult>;
+        readConsoleStateChips(dataset: string): Promise<ProductConsoleStateChip[]>;
         executeDialog(input: Partial<DialogExecutionRequest>): Promise<DialogExecutionResult>;
         copyPayloadToClipboard(payload: CopyPayload): Promise<ClipboardResult>;
         readClipboardText(): Promise<ClipboardResult>;
@@ -322,6 +327,8 @@ declare global {
         onWorkspace(callback: (snapshot: WorkspaceSnapshot) => void): void;
         onRuntimeEvents(callback: (snapshot: RuntimeEventSnapshot) => void): void;
         onActiveDataset(callback: (snapshot: ActiveDatasetSnapshot) => void): void;
+        onLanguageChanged(callback: (payload: Record<string, unknown>) => void): void;
+        onProductConsoleStateChips(callback: (snapshot: ProductConsoleStateChipSnapshot) => void): void;
         onTabularPreview(callback: (preview: TabularPreviewSnapshot) => void): void;
         onCellUpdate(callback: (result: CellUpdateResult | CellUpdateBatchResult) => void): void;
         onVariableMetadata(callback: (snapshot: VariableMetadataSnapshot) => void): void;

@@ -58,6 +58,7 @@ export interface ApplicationSettingsIpcControllerOptions {
     openAboutWindow(payload: AboutWindowPayload): void;
     buildAboutWindowPayload(): AboutWindowPayload;
     installApplicationMenu(): void;
+    applyLanguage(locale: string): void;
     sendToAllWindows(channel: string, payload: unknown): void;
     userDialogsDirectory(): string;
     translate(text: string): string;
@@ -171,8 +172,21 @@ export const createApplicationSettingsIpcController = function(
         const current = options.readSettings();
         const patch = isRecord(input) ? input : {};
         const next = mergeTerminalSettings(current, patch);
+        const currentLocale = String(
+            current.defaultLanguage || current.languageNS || "en_US"
+        );
+        const nextLocale = String(
+            next.defaultLanguage || next.languageNS || currentLocale
+        );
+
+        if (Object.prototype.hasOwnProperty.call(patch, "defaultLanguage")) {
+            next.languageNS = nextLocale;
+        }
 
         options.writeSettings(next);
+        if (nextLocale !== currentLocale) {
+            options.applyLanguage(nextLocale);
+        }
         options.sendToAllWindows(applicationSettingsEventChannels.settingsUpdated, next);
         options.installApplicationMenu();
         options.settingsWindowController.notifySaved();

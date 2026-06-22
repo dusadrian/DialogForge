@@ -144,7 +144,7 @@ const productPathArg = readOption("product-path", "")
     || String(process.env.DIALOGFORGE_PRODUCT_PATH || "").trim();
 const requestedProduct = readOption("product", "") || "base";
 const runtime = readOption("runtime", "r");
-const locale = readOption("locale", "en_US");
+const requestedLocale = readOption("locale", "");
 const electronSmokeMode = process.env.DIALOGFORGE_ELECTRON_SMOKE === "1";
 const electronSmokeTarget = String(process.env.DIALOGFORGE_ELECTRON_SMOKE_TARGET || "console").trim();
 const testUserDataPath = String(
@@ -171,12 +171,44 @@ catch (error: any) {
 }
 
 const product = location.id;
+const initialSettings = readEffectiveSettings({
+    systemSettingsPath: location.settingsPath,
+    userSettingsPath: path.join(app.getPath("userData"), "settings.json")
+});
+let locale = requestedLocale
+    || String(
+        initialSettings.defaultLanguage
+        || initialSettings.languageNS
+        || "en_US"
+    );
 const composition: ApplicationComposition = composeApplication({
     rootDir,
     location,
     runtime,
     locale
 });
+const applyLocale = function(nextLocale: string): void {
+    const localizedComposition = composeApplication({
+        rootDir,
+        location,
+        runtime,
+        locale: nextLocale
+    });
+
+    locale = localizedComposition.locale;
+    composition.locale = localizedComposition.locale;
+    composition.i18n = localizedComposition.i18n;
+    composition.features = localizedComposition.features;
+    composition.productCapabilities =
+        localizedComposition.productCapabilities;
+    composition.productAbout = localizedComposition.productAbout;
+    composition.startupTasks = localizedComposition.startupTasks;
+    composition.menu = localizedComposition.menu;
+    try {
+        void productDialogComposition.windowController.refreshLanguage();
+    }
+    catch {}
+};
 process.env.DIALOGFORGE_PRODUCT = product;
 process.env.DIALOGFORGE_ROOT = composition.rootDir;
 const rHelpServer = createRHelpServer();
@@ -300,6 +332,9 @@ const runtimeSessionBootstrap = createRuntimeSessionComposition({
 runtimeSessionManager = runtimeSessionBootstrap.runtimeSessionManager;
 const dialogExternalCallHost = runtimeSessionBootstrap.dialogExternalCallHost;
 const readDialogFilterState = runtimeSessionBootstrap.readFilterState;
+const readConsoleStateChips = runtimeSessionBootstrap.readConsoleStateChips;
+const shouldPublishConsoleStateChips =
+    runtimeSessionBootstrap.shouldPublishConsoleStateChips;
 
 const datasetEditorWarmCache = createDatasetEditorWarmCache(runtimeSessionManager);
 const importFileController = createImportFileController({
@@ -365,6 +400,14 @@ createDialogExternalCallIpcController({
                 ? readDialogFilterState(dataset)
                 : null
         });
+    },
+    shouldPublishConsoleStateChips,
+    readConsoleStateChips,
+    publishConsoleStateChips: function(chips): void {
+        sendToAllWindows(
+            applicationEventChannels.productConsoleStateChips,
+            chips
+        );
     }
 });
 
@@ -582,6 +625,7 @@ const applicationSupportWindows =
         },
         sendMenuCommand,
         sendToAllWindows,
+        applyLocale,
         translate: translateCompositionText
     });
 const installApplicationMenu =
@@ -626,6 +670,9 @@ productDialogComposition = createProductDialogComposition({
                 command
             );
         }
+    },
+    getLocale: function(): string {
+        return locale;
     }
 });
 const productDialogWindowController =
@@ -680,7 +727,9 @@ scriptEditorComposition = createScriptEditorComposition({
 
         return (settings.terminalSettings as Record<string, unknown>) || {};
     },
-    locale,
+    getLocale: function(): string {
+        return locale;
+    },
     runtimeSessionManager,
     ensureRuntimeReady: ensureRuntimeReadyForScriptEditor,
     executeVisibleCommand: executeVisibleCommandAndBroadcast
@@ -707,7 +756,9 @@ datasetEditorComposition = createDatasetEditorComposition({
     getZoomFactor: function(): number {
         return mainWindowZoomController.getZoomFactor();
     },
-    locale,
+    getLocale: function(): string {
+        return locale;
+    },
     readVariableColumnWidths: readDatasetEditorVariableColumnWidths,
     readTerminalSettings: function(): unknown {
         return readEffectiveSettings(settingsStoragePaths())

@@ -22,6 +22,7 @@ export interface ProductDialogSourceReaderOptions {
     findDefinition(
         dialogId: string
     ): ProductDialogSourceDefinition | null | undefined;
+    getLocale(): string;
 }
 
 
@@ -96,6 +97,65 @@ const mergeDialogDependencies = function(
 };
 
 
+const asRecord = function(value: unknown): Record<string, unknown> {
+    return value && typeof value === "object" && !Array.isArray(value)
+        ? value as Record<string, unknown>
+        : {};
+};
+
+
+const localizeDialogSource = function(
+    source: Record<string, unknown>,
+    requestedLocale: string
+): void {
+    const i18n = asRecord(source.i18n);
+    const locales = asRecord(i18n.locales);
+    const availableLocales = Object.keys(locales);
+    const requested = String(requestedLocale || "").trim();
+    const language = requested.split(/[-_]/)[0].toLowerCase();
+    const selectedLocale = availableLocales.includes(requested)
+        ? requested
+        : availableLocales.find((locale) => {
+            return locale.split(/[-_]/)[0].toLowerCase() === language;
+        }) || String(i18n.baseLocale || "").trim();
+    const translations = asRecord(locales[selectedLocale]);
+
+    if (Object.keys(translations).length === 0) {
+        return;
+    }
+
+    const properties = asRecord(source.properties);
+    const title = String(translations["dialog.title"] || "").trim();
+
+    if (title) {
+        properties.title = title;
+    }
+    properties.language = selectedLocale;
+    source.properties = properties;
+
+    if (!Array.isArray(source.elements)) {
+        return;
+    }
+
+    source.elements.forEach((value) => {
+        const element = asRecord(value);
+        const id = String(element.id || "").trim();
+
+        if (!id) {
+            return;
+        }
+
+        ["label", "value"].forEach((property) => {
+            const key = `elements.${id}.${property}`;
+
+            if (Object.prototype.hasOwnProperty.call(translations, key)) {
+                element[property] = String(translations[key] ?? "");
+            }
+        });
+    });
+};
+
+
 export const createProductDialogSourceReader = function(
     options: ProductDialogSourceReaderOptions
 ) {
@@ -130,6 +190,7 @@ export const createProductDialogSourceReader = function(
         const source = parsed as unknown as Record<string, unknown>;
         mergeDialogDependencies(source, definition);
         source.customJS = readDialogCustomJS(sourcePath, source);
+        localizeDialogSource(source, options.getLocale());
 
         return normalizeNewDialogForRuntime(
             parsed

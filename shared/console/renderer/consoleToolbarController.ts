@@ -2,6 +2,9 @@ import type {
     RuntimeSessionSnapshot
 } from "../../runtime/provider-contract/runtimeProvider";
 import { renderConsoleToolbar } from "./consoleToolbarView";
+import type {
+    ProductConsoleStateChip
+} from "../../core/contracts/productContribution";
 
 
 export interface ConsoleWorkingDirectoryResult {
@@ -17,6 +20,8 @@ export interface ConsoleToolbarControllerOptions {
     getWorkingDirectoryPath(): string;
     getHomeDirectoryPath(): string;
     getActiveDatasetName(): string;
+    getProductStateChips(): ProductConsoleStateChip[];
+    translate(key: string): string;
     setWorkingDirectoryPaths(path: string, home: string): void;
     readWorkingDirectory(): Promise<ConsoleWorkingDirectoryResult>;
     clearTranscriptEvents(): void;
@@ -56,7 +61,9 @@ export const createConsoleToolbarController = function(
             workingDirectoryPath:
                 options.getWorkingDirectoryPath(),
             homeDirectoryPath: options.getHomeDirectoryPath(),
-            activeDatasetName: options.getActiveDatasetName()
+            activeDatasetName: options.getActiveDatasetName(),
+            productStateChips: options.getProductStateChips(),
+            translate: options.translate
         });
     };
 

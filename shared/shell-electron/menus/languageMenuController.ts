@@ -9,13 +9,10 @@ export interface AvailableLocale {
 }
 
 export interface LanguageMenuControllerOptions {
-    currentLocale: string;
-    currentArgs(): string[];
+    currentLocale(): string;
     listAvailableLocales(): AvailableLocale[];
     translate(key: string): string;
-    persistLocale(locale: string): void;
-    relaunch(args: string[]): void;
-    exit(): void;
+    selectLocale(locale: string): void;
 }
 
 export interface LanguageMenuController {
@@ -25,44 +22,15 @@ export interface LanguageMenuController {
 }
 
 
-const localeRelaunchArgs = function(
-    args: string[],
-    nextLocale: string
-): string[] {
-    const nextArgs = args.slice();
-    const localeIndex = nextArgs.findIndex((arg) => {
-        return arg === "--locale";
-    });
-
-    if (localeIndex >= 0) {
-        if (localeIndex + 1 < nextArgs.length) {
-            nextArgs[localeIndex + 1] = nextLocale;
-        }
-        else {
-            nextArgs.push(nextLocale);
-        }
-
-        return nextArgs;
-    }
-
-    return nextArgs.concat(["--locale", nextLocale]);
-};
-
-
 export const createLanguageMenuController = function(
     options: LanguageMenuControllerOptions
 ): LanguageMenuController {
     const selectApplicationLocale = function(nextLocale: string): void {
-        if (nextLocale === options.currentLocale) {
+        if (nextLocale === options.currentLocale()) {
             return;
         }
 
-        options.persistLocale(nextLocale);
-        options.relaunch(localeRelaunchArgs(
-            options.currentArgs(),
-            nextLocale
-        ));
-        options.exit();
+        options.selectLocale(nextLocale);
     };
 
     const createLanguageMenuTemplate = function():
@@ -81,7 +49,7 @@ export const createLanguageMenuController = function(
                     id: `Language.${availableLocale.code}`,
                     label: availableLocale.label,
                     type: "radio" as const,
-                    checked: availableLocale.code === options.currentLocale,
+                    checked: availableLocale.code === options.currentLocale(),
                     click: () => {
                         selectApplicationLocale(availableLocale.code);
                     }

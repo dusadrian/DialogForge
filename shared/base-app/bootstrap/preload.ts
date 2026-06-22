@@ -534,6 +534,13 @@ const api: DialogForgeApi = {
             parameters || {}
         );
     },
+    readConsoleStateChips: function(dataset: string) {
+        return invokeDialogRuntimeRoute(
+            ipcRenderer,
+            dialogRuntimeIpcChannels.readConsoleStateChips,
+            dataset
+        );
+    },
     executeDialog: function(input: Partial<DialogExecutionRequest>) {
         return invokeDialogRuntimeRoute(
             ipcRenderer,
@@ -872,6 +879,12 @@ const api: DialogForgeApi = {
     },
     onActiveDataset: function(callback) {
         onApplicationEvent(ipcRenderer, applicationEventChannels.activeDataset, callback);
+    },
+    onLanguageChanged: function(callback) {
+        onApplicationEvent(ipcRenderer, applicationEventChannels.languageChanged, callback);
+    },
+    onProductConsoleStateChips: function(callback) {
+        onApplicationEvent(ipcRenderer, applicationEventChannels.productConsoleStateChips, callback);
     },
     onTabularPreview: function(callback) {
         onApplicationEvent(ipcRenderer, applicationEventChannels.tabularPreview, callback);

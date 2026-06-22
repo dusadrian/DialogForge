@@ -11,6 +11,9 @@ import type {
     ApplicationComposition
 } from "../../core/contracts/applicationComposition";
 import {
+    applicationEventChannels
+} from "../../base-app/bootstrap/applicationEvents";
+import {
     parseNewDialogJson
 } from "../../dialog-runtime/renderer/modules/dialogAdapter";
 import type {
@@ -22,6 +25,9 @@ import {
 import {
     createLanguageMenuController
 } from "../menus/languageMenuController";
+import {
+    localeDisplayName
+} from "../menus/localeDisplayName";
 import {
     createMenuCustomizationWindowController
 } from "../menus/menuCustomizationWindowController";
@@ -73,6 +79,7 @@ export interface ApplicationSupportWindowCompositionOptions {
     writeSettings(settings: Record<string, unknown>): void;
     sendMenuCommand: SendMenuCommand;
     sendToAllWindows(channel: string, payload: unknown): void;
+    applyLocale(locale: string): void;
     translate(
         key: string,
         values?: Record<string, string>
@@ -90,6 +97,9 @@ export const createApplicationSupportWindowComposition = function(
     };
     const menuCustomizationModel = createMenuCustomizationModel({
         menu: options.composition.menu,
+        readMenu: function() {
+            return options.composition.menu;
+        },
         productDialogs: options.composition.productDialogs,
         sharedDialogs: options.composition.sharedDialogs,
         userDialogsDirectory: options.userDialogsDirectory(),
@@ -115,23 +125,10 @@ export const createApplicationSupportWindowComposition = function(
             } catch {}
         });
 
-        let displayNames: Intl.DisplayNames | null = null;
-
-        try {
-            displayNames = new Intl.DisplayNames(
-                [options.composition.locale.replace("_", "-")],
-                { type: "language" }
-            );
-        } catch {
-            displayNames = null;
-        }
-
         return Array.from(codes).sort().map((code) => {
-            const languageTag = code.replace("_", "-");
-
             return {
                 code,
-                label: displayNames?.of(languageTag) || code
+                label: localeDisplayName(code)
             };
         });
     };
@@ -139,23 +136,13 @@ export const createApplicationSupportWindowComposition = function(
     let createMenuCustomizationWindow: () => BrowserWindow;
     let createDialogRuntimeRequirementsWindow: () => BrowserWindow;
     const languageMenuController = createLanguageMenuController({
-        currentLocale: options.composition.locale,
-        currentArgs: function(): string[] {
-            return process.argv.slice(1);
+        currentLocale: function(): string {
+            return options.composition.locale;
         },
         listAvailableLocales,
         translate: options.translate,
-        persistLocale: function(nextLocale): void {
-            options.writeSettings({
-                defaultLanguage: nextLocale,
-                languageNS: nextLocale
-            });
-        },
-        relaunch: function(args): void {
-            options.app.relaunch({ args });
-        },
-        exit: function(): void {
-            options.app.exit(0);
+        selectLocale: function(nextLocale): void {
+            applyLanguageLive(nextLocale, true);
         }
     });
     const applicationMenuInstaller = createApplicationMenuInstaller({
@@ -189,7 +176,9 @@ export const createApplicationSupportWindowComposition = function(
         createWindow: createSettingsWindowFactory({
             productId: options.productId,
             settingsPath: options.settingsPath,
-            title: options.translate("Settings"),
+            title: function(): string {
+                return options.translate("Settings");
+            },
             nativeWindowIconPath: options.nativeWindowIconPath,
             getParentWindow
         })
@@ -210,7 +199,9 @@ export const createApplicationSupportWindowComposition = function(
             createWindow: createDialogRuntimeRequirementsWindowFactory({
                 productId: options.productId,
                 settingsPath: options.settingsPath,
-                title: options.translate("Dialog Runtime Requirements"),
+                title: function(): string {
+                    return options.translate("Dialog Runtime Requirements");
+                },
                 nativeWindowIconPath: options.nativeWindowIconPath,
                 getParentWindow
             })
@@ -303,7 +294,9 @@ export const createApplicationSupportWindowComposition = function(
             createWindow: createMenuCustomizationWindowFactory({
                 productId: options.productId,
                 settingsPath: options.settingsPath,
-                title: options.translate("Customize the menu"),
+                title: function(): string {
+                    return options.translate("Customize the menu");
+                },
                 nativeWindowIconPath: options.nativeWindowIconPath,
                 getParentWindow
             })
@@ -324,17 +317,40 @@ export const createApplicationSupportWindowComposition = function(
         const yearText = currentYear > startYear
             ? `${startYear}-${currentYear}`
             : String(startYear);
+        const holder = about.copyrightHolder || about.authorName || productName;
+        const translateAboutItems = function(
+            items: string[],
+            keyPrefix: string,
+            itemPrefix: string
+        ): string[] {
+            return items.map((text, index) => {
+                const key = `${keyPrefix}.${itemPrefix}${index + 1}`;
+                const translated = options.translate(key);
+
+                if (translated !== key) {
+                    return translated;
+                }
+
+                return options.translate(text);
+            });
+        };
 
         return {
             title: options.translate("About {productName}", { productName }),
             version: options.translate("Version {version}", { version }),
-            body: about.body || [],
-            highlights: about.highlights || [],
+            body: translateAboutItems(about.body || [], "about.body", "b"),
+            highlights: translateAboutItems(
+                about.highlights || [],
+                "about.highlights",
+                "h"
+            ),
             authorLabel: options.translate(about.authorLabel || "Author:"),
             authorName: about.authorName || "",
             authorUrl: about.authorUrl || "",
-            copyright: `Copyright © ${yearText}, `
-                + `${about.copyrightHolder || about.authorName || productName}`
+            copyright: options.translate(
+                "Copyright © {yearText}, {holder}",
+                { yearText, holder }
+            )
         };
     };
     const aboutWindowController = createAboutWindowController({
@@ -351,6 +367,47 @@ export const createApplicationSupportWindowComposition = function(
     const createSettingsWindow = settingsWindowController.open;
     const createAboutWindow = function(): BrowserWindow {
         return aboutWindowController.open(buildAboutWindowPayload());
+    };
+    const applyLanguageLive = function(
+        nextLocale: string,
+        persist: boolean
+    ): void {
+        const locale = String(nextLocale || "").trim();
+
+        if (!locale || locale === options.composition.locale) {
+            return;
+        }
+
+        if (persist) {
+            options.writeSettings({
+                defaultLanguage: locale,
+                languageNS: locale
+            });
+        }
+
+        options.applyLocale(locale);
+        applicationMenuInstaller.install();
+        settingsWindowController.refresh();
+        runtimeRequirementsController.refresh();
+        menuCustomizationWindowController.refresh();
+        aboutWindowController.refresh(buildAboutWindowPayload());
+        settingsWindowController.getWindow()?.setTitle(
+            options.translate("Settings")
+        );
+        runtimeRequirementsController.getWindow()?.setTitle(
+            options.translate("Dialog Runtime Requirements")
+        );
+        menuCustomizationWindowController.getWindow()?.setTitle(
+            options.translate("Customize the menu")
+        );
+        options.sendToAllWindows(
+            applicationEventChannels.languageChanged,
+            {
+                languageNS: locale,
+                language: locale.split(/[-_]/)[0].toLowerCase(),
+                appPath: options.composition.rootDir
+            }
+        );
     };
 
     createApplicationSettingsIpcController({
@@ -376,6 +433,9 @@ export const createApplicationSupportWindowComposition = function(
         },
         buildAboutWindowPayload,
         installApplicationMenu: applicationMenuInstaller.install,
+        applyLanguage: function(locale): void {
+            applyLanguageLive(locale, false);
+        },
         sendToAllWindows: options.sendToAllWindows,
         userDialogsDirectory: options.userDialogsDirectory,
         translate: options.translate

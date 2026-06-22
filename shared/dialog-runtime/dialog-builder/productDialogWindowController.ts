@@ -44,6 +44,7 @@ export interface ProductDialogWindowController<WorkspaceSource> {
         dialogId?: string,
         source?: WorkspaceSource
     ): Promise<void>;
+    refreshLanguage(): Promise<void>;
 }
 
 
@@ -149,6 +150,33 @@ export const createProductDialogWindowController = function<WorkspaceSource>(
 
         return options.readInitialWorkspaceData(lastWorkspaceSource);
     };
+    const sendCreated = function(
+        window: BrowserWindow,
+        dialogId: string,
+        runtimeDialog: ProductDialogDefinition,
+        workspaceData: unknown
+    ): void {
+        if (window.isDestroyed()) {
+            return;
+        }
+
+        const currentWorkspaceData = withCurrentActiveDataset(workspaceData);
+
+        lastWorkspaceData = currentWorkspaceData;
+        window.setTitle(String(
+            runtimeDialog.properties?.title || dialogId
+        ));
+        window.webContents.send(dialogRuntimeEventChannels.created, {
+            dialogID: dialogId,
+            data: runtimeDialog,
+            lastState: options.sessions.getState(dialogId),
+            workspaceData: currentWorkspaceData
+        });
+        window.webContents.send(
+            dialogRuntimeEventChannels.incomingData,
+            currentWorkspaceData
+        );
+    };
     const open = function(dialogId: string): BrowserWindow {
         const existing = options.windows.focusExisting(dialogId);
 
@@ -225,32 +253,15 @@ export const createProductDialogWindowController = function<WorkspaceSource>(
             "shared/base-app/pages/dialogBuilder.html"
         ));
         window.webContents.once("did-finish-load", function(): void {
-            const sendCreated = function(workspaceData: unknown): void {
-                if (window.isDestroyed()) {
-                    return;
-                }
-
-                const currentWorkspaceData = withCurrentActiveDataset(
-                    workspaceData
-                );
-
-                lastWorkspaceData = currentWorkspaceData;
-                window.webContents.send(dialogRuntimeEventChannels.created, {
-                    dialogID: dialogId,
-                    data: runtimeDialog,
-                    lastState: options.sessions.getState(dialogId),
-                    workspaceData: currentWorkspaceData
-                });
-                window.webContents.send(
-                    dialogRuntimeEventChannels.incomingData,
-                    currentWorkspaceData
-                );
-            };
-
             void readPreparedWorkspaceData().then(function(
                 initialWorkspaceData
             ): void {
-                sendCreated(initialWorkspaceData);
+                sendCreated(
+                    window,
+                    dialogId,
+                    runtimeDialog,
+                    initialWorkspaceData
+                );
             });
         });
         window.once("ready-to-show", function(): void {
@@ -267,6 +278,18 @@ export const createProductDialogWindowController = function<WorkspaceSource>(
 
     return {
         open,
-        refreshWorkspaceData
+        refreshWorkspaceData,
+        refreshLanguage: async function(): Promise<void> {
+            const workspaceData = await readPreparedWorkspaceData();
+
+            options.windows.forEachLive(function(dialogId, window): void {
+                sendCreated(
+                    window,
+                    dialogId,
+                    options.readDialog(dialogId),
+                    workspaceData
+                );
+            });
+        }
     };
 };

@@ -33,7 +33,7 @@ export interface DatasetEditorCompositionOptions {
     pagePath: string;
     showOnOpen: boolean;
     getZoomFactor(): number;
-    locale: string;
+    getLocale(): string;
     readVariableColumnWidths(): Record<string, number>;
     readTerminalSettings(): unknown;
     listDatasetNames(): Promise<string[]>;
@@ -87,7 +87,7 @@ export const createDatasetEditorComposition = function(
         createInitPayload: function(): Record<string, unknown> {
             return {
                 appPath: options.rootDir,
-                languageNS: options.locale,
+                languageNS: options.getLocale(),
                 datasetName: "",
                 datasetNames: [],
                 variableColumnWidths: options.readVariableColumnWidths(),

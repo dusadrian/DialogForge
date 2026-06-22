@@ -110,10 +110,6 @@ export const createDialogLabelBuilder = function(
             : 0;
         const baseLeft = ensureNumber(spec.left, 0);
         const baseTop = ensureNumber(spec.top, 0);
-        const baseText = asText(
-            spec.baseText,
-            asText(spec.text, "")
-        );
 
         label.dataset.value = asText(spec.text, "");
         label.dataset.maxWidth = String(maximumWidth);
@@ -181,39 +177,6 @@ export const createDialogLabelBuilder = function(
             label.style.alignItems = verticalAlign;
             label.style.justifyContent = "flex-start";
             label.style.removeProperty("max-height");
-        };
-
-        const measureTextWidth = function(
-            text: string
-        ): number {
-            const probe = document.createElement("div");
-            probe.textContent = text;
-            probe.style.position = "absolute";
-            probe.style.visibility = "hidden";
-            probe.style.pointerEvents = "none";
-            probe.style.fontSize = fontSize + "px";
-            probe.style.fontWeight = fontWeight;
-            probe.style.lineHeight = "1.2";
-            probe.style.whiteSpace = "nowrap";
-            probe.style.display = "block";
-            probe.style.width = "auto";
-            probe.style.maxWidth = maximumWidth > 0
-                ? maximumWidth + "px"
-                : "";
-            root.appendChild(probe);
-
-            const measured = Math.max(
-                0,
-                Math.ceil(probe.scrollWidth || 0),
-                Math.ceil(
-                    probe.getBoundingClientRect().width || 0
-                )
-            );
-            probe.remove();
-
-            return maximumWidth > 0
-                ? Math.min(measured + 2, maximumWidth)
-                : measured + 2;
         };
 
         let control: ReturnType<
@@ -328,12 +291,19 @@ export const createDialogLabelBuilder = function(
                 : "";
             host.style.width = width + "px";
 
+            const wrappedTextHeight =
+                lineClamp > 1 && naturalWidth > width
+                    ? Math.ceil(
+                        fontSize * 1.2 * Math.max(1, lineClamp)
+                    )
+                    : 0;
             const height = Math.max(
                 0,
                 Math.ceil(host.scrollHeight || 0),
                 Math.ceil(
                     host.getBoundingClientRect().height || 0
                 ),
+                wrappedTextHeight,
                 singleLineHeight
             );
             const boxWidth =
@@ -398,39 +368,6 @@ export const createDialogLabelBuilder = function(
             if (resetToBase) {
                 left = baseLeft;
                 top = baseTop;
-
-                if (
-                    alignment === "right"
-                    && rotation === 0
-                ) {
-                    left =
-                        baseLeft
-                        + measureTextWidth(baseText)
-                        - boxWidth;
-                }
-                else if (
-                    alignment === "center"
-                    && rotation === 0
-                ) {
-                    left = Math.round(
-                        baseLeft
-                        + measureTextWidth(baseText) / 2
-                        - boxWidth / 2
-                    );
-                }
-
-                if (rotation === 0) {
-                    if (valign === "bottom") {
-                        top = baseTop + singleLineHeight - boxHeight;
-                    }
-                    else if (valign === "middle") {
-                        top = Math.round(
-                            baseTop
-                            + singleLineHeight / 2
-                            - boxHeight / 2
-                        );
-                    }
-                }
             }
 
             label.style.left = left + "px";

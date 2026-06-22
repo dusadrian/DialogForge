@@ -34,6 +34,9 @@ import {
 import {
     shellWindowEventChannels
 } from "../../shell-electron/windows/shellWindowIpc";
+import type {
+    ProductConsoleStateChipSnapshot
+} from "../../core/contracts/productContribution";
 
 
 export const applicationEventChannels = {
@@ -43,6 +46,7 @@ export const applicationEventChannels = {
     workspace: "base-app:workspace",
     runtimeEvents: "base-app:runtime-events",
     activeDataset: "base-app:active-dataset",
+    productConsoleStateChips: "base-app:product-console-state-chips",
     tabularPreview: "base-app:tabular-preview",
     cellUpdate: "base-app:cell-update",
     variableMetadata: "base-app:variable-metadata",
@@ -69,6 +73,7 @@ interface ApplicationEventPayloads {
     "base-app:workspace": WorkspaceSnapshot;
     "base-app:runtime-events": RuntimeEventSnapshot;
     "base-app:active-dataset": ActiveDatasetSnapshot;
+    "base-app:product-console-state-chips": ProductConsoleStateChipSnapshot;
     "base-app:tabular-preview": TabularPreviewSnapshot;
     "base-app:cell-update": CellUpdateResult | CellUpdateBatchResult;
     "base-app:variable-metadata": VariableMetadataSnapshot;
