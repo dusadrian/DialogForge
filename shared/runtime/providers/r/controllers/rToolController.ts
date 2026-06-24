@@ -38,6 +38,45 @@ const defaultCompletionPackages = [
 ];
 
 
+const hasOpenStringCompletionContext = function(code: string): boolean {
+    let quote = "";
+    let escaped = false;
+
+    for (let index = 0; index < code.length; index += 1) {
+        const character = code[index];
+
+        if (escaped) {
+            escaped = false;
+            continue;
+        }
+
+        if (character === "\\") {
+            escaped = true;
+            continue;
+        }
+
+        if (!quote) {
+            if (character === "\"" || character === "'") {
+                quote = character;
+            }
+
+            continue;
+        }
+
+        if (character === quote) {
+            quote = "";
+        }
+    }
+
+    return Boolean(quote);
+};
+
+
+const hasContextualCompletionRequest = function(code: string): boolean {
+    return code.includes("$") || hasOpenStringCompletionContext(code);
+};
+
+
 const addCompletionLabels = function(
     labels: Map<string, { label: string; kind: string }>,
     source: unknown,
@@ -152,6 +191,7 @@ export const createRToolController = function(
             }
 
             const prefix = String(request.prefix || "");
+            const code = String(request.code || "");
             const completionItems = new Map<
                 string,
                 { label: string; kind: string }
@@ -183,7 +223,7 @@ export const createRToolController = function(
             };
             const workspacePayload = await readCompletionPayload({
                 prefix,
-                code: request.code || "",
+                code,
                 cursorColumn: request.cursorColumn || 0,
                 package: request.packageName || "",
                 includeInternals: request.includeInternals === true,
@@ -193,9 +233,8 @@ export const createRToolController = function(
             addRuntimeCompletionItems(workspacePayload.items);
             addRuntimeCompletionItems(workspacePayload.symbols);
 
-            const hasContextualItems = Array.isArray(workspacePayload.items)
-                && workspacePayload.items.length > 0;
-            const packages = request.packageName || hasContextualItems
+            const packages = request.packageName
+                || hasContextualCompletionRequest(code)
                 ? []
                 : defaultCompletionPackages;
 

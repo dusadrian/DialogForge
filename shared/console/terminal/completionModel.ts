@@ -105,6 +105,7 @@ export const createCompletionModel = function(
             context.mode !== "path"
             && context.mode !== "dollar"
             && context.mode !== "data-mask-variable"
+            && context.mode !== "symbol"
         ) {
             return [];
         }
@@ -118,6 +119,7 @@ export const createCompletionModel = function(
                 ? code.length + 1
                 : Math.max(1, Number(cursorColumn) || 1);
             const result = await fetchCompletions({
+                prefix: String(context.token || ""),
                 code,
                 cursorColumn: column
             }, timeoutMs);

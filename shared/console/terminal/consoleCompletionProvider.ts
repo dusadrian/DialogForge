@@ -114,7 +114,7 @@ export const registerConsoleCompletionProvider = function(
                         });
 
                         return {
-                            suggestions: labels.slice(0, 40).map((label) => ({
+                            suggestions: labels.map((label) => ({
                                 label,
                                 kind: kindByLabel.get(label)
                                     || monaco.languages

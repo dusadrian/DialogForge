@@ -202,6 +202,35 @@ runtime_completion_from_package <- function(package, include_internals) {
 }
 
 
+runtime_completion_from_search_path <- function(prefix) {
+    prefix <- as.character(prefix %||% "")
+    symbols <- character(0)
+    search_entries <- tryCatch(search(), error = function(error) character(0))
+
+    for (entry in search_entries) {
+        values <- tryCatch(
+            ls(
+                envir = as.environment(entry),
+                all.names = identical(entry, ".GlobalEnv")
+            ),
+            error = function(error) character(0)
+        )
+
+        if (length(values)) {
+            symbols <- c(symbols, as.character(values))
+        }
+    }
+
+    symbols <- unique(symbols[nzchar(symbols)])
+
+    if (nzchar(prefix)) {
+        symbols <- symbols[startsWith(symbols, prefix)]
+    }
+
+    as.character(symbols)
+}
+
+
 runtime_completion_request <- function(params) {
     prefix <- as.character(params$prefix %||% "")
     package <- as.character(params$package %||% "")
@@ -240,14 +269,7 @@ runtime_completion_request <- function(params) {
         ))
     }
 
-    symbols <- tryCatch(
-        ls(envir = .GlobalEnv, all.names = TRUE),
-        error = function(error) character(0)
-    )
-
-    if (nzchar(prefix)) {
-        symbols <- symbols[startsWith(symbols, prefix)]
-    }
+    symbols <- runtime_completion_from_search_path(prefix)
 
     list(
         ok = TRUE,

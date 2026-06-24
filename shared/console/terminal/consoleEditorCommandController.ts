@@ -326,10 +326,14 @@ export const wireConsoleEditorCommands = function(
                 const context = bindings.getCompletionModel?.()
                     ?.getCompletionContext?.(modelValue);
 
-                if (context?.mode === "path") {
-                    event.preventDefault();
-                    event.stopPropagation();
+                if (!context) {
+                    return;
+                }
 
+                event.preventDefault();
+                event.stopPropagation();
+
+                if (context.mode === "path") {
                     const replaceText = String(
                         context.replaceText || context.token || ""
                     );
@@ -367,6 +371,9 @@ export const wireConsoleEditorCommands = function(
                     });
                     return;
                 }
+
+                triggerSuggestion();
+                return;
             }
 
             if (
