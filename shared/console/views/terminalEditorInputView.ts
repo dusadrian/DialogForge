@@ -130,6 +130,7 @@ export const createTerminalConsoleEditorInputView = (deps: {
     setInputValue: inputStateController.setValue,
     clearInput: inputStateController.clear,
     requestFocus: inputStateController.requestFocus,
+    requestPromptFocus: inputStateController.requestPromptFocus,
     refreshInteractivity,
     refreshPrompt,
     scrollToPrompt: deps.scrollToPrompt,

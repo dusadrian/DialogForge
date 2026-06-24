@@ -180,6 +180,18 @@ export const createMainConsoleCoordinator = function(
         commandHost().focus();
     };
 
+    const focusAfterPromptLayout = function(): void {
+        focus();
+
+        requestAnimationFrame(function(): void {
+            focus();
+
+            requestAnimationFrame(function(): void {
+                focus();
+            });
+        });
+    };
+
     const executeCurrent = async function(): Promise<void> {
         const text = getText().trim();
 
@@ -203,7 +215,7 @@ export const createMainConsoleCoordinator = function(
             if (event.key === "ArrowDown") {
                 event.preventDefault();
                 getSurface().scrollToBottom();
-                focus();
+                focusAfterPromptLayout();
                 return;
             }
 
@@ -259,6 +271,7 @@ export const createMainConsoleCoordinator = function(
         getText,
         setText,
         focus,
+        focusAfterPromptLayout,
         executeText,
         executeCurrent,
         handleFallbackKeydown,

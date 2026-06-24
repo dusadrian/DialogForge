@@ -218,6 +218,8 @@ const interruptConsoleExecution = mainConsoleCoordinator.interrupt;
 const initializeConsoleFlow = mainConsoleCoordinator.initializeFlow;
 const initializeVisibleCommandEditor = mainConsoleCoordinator.initializeInput;
 const focusVisibleCommandInput = mainConsoleCoordinator.focus;
+const focusVisibleCommandInputAfterPromptLayout =
+    mainConsoleCoordinator.focusAfterPromptLayout;
 const setVisibleCommandText = mainConsoleCoordinator.setText;
 const executeVisibleCommandText = mainConsoleCoordinator.executeText;
 const executeVisibleCommand = mainConsoleCoordinator.executeCurrent;
@@ -1128,7 +1130,7 @@ const mainUiBindingController = createMainUiBindingController({
         },
         focusConsolePrompt: function(): void {
             mainConsoleCoordinator.scrollToBottom();
-            mainConsoleCoordinator.focus();
+            focusVisibleCommandInputAfterPromptLayout();
         },
         getDatasetCommand: function(event): string | null {
             const target = event.target as HTMLElement | null;

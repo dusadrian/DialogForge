@@ -31,6 +31,7 @@ export interface ConsoleEditorInputStateController {
     insertTextAtSelection(value: string): void;
     showContextualHelp(): void;
     requestFocus(): void;
+    requestPromptFocus(): void;
     hasPendingFocus(): boolean;
     clearPendingFocus(): void;
     focus(): void;
@@ -246,6 +247,11 @@ export const createConsoleEditorInputStateController = function(
         pendingFocus = false;
     };
 
+    const requestPromptFocus = function(): void {
+        pendingFocus = true;
+        focus();
+    };
+
     const onEditorReady = function(): void {
         if (pendingText !== null) {
             const nextText = pendingText;
@@ -275,6 +281,7 @@ export const createConsoleEditorInputStateController = function(
         requestFocus: function(): void {
             pendingFocus = true;
         },
+        requestPromptFocus,
         hasPendingFocus: function(): boolean {
             return pendingFocus;
         },

@@ -14,6 +14,7 @@ export interface ConsoleEditorSubmissionBindings {
     setInputValue(value: string): void;
     clearInput(): void;
     requestFocus(): void;
+    requestPromptFocus(): void;
     refreshInteractivity(): void;
     refreshPrompt(): void;
     scrollToPrompt?(): void;
@@ -152,6 +153,7 @@ export const createConsoleEditorSubmissionController = function(
                     : null
             });
             bindings.refreshInteractivity();
+            bindings.requestPromptFocus();
         }
     };
 
