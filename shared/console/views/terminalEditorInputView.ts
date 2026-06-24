@@ -33,6 +33,7 @@ export const createTerminalConsoleEditorInputView = (deps: {
   adjustFontSize?: (delta: number) => number | void;
   showHelpTopic?: (request: { query: string; topic: string; package?: string; allowSearch?: boolean }) => void;
   scrollToPrompt?: () => void;
+  recordBlankInput?: (code: string) => void;
 }) => {
   let mounted = false;
   let disposed = false;
@@ -134,6 +135,7 @@ export const createTerminalConsoleEditorInputView = (deps: {
     refreshInteractivity,
     refreshPrompt,
     scrollToPrompt: deps.scrollToPrompt,
+    recordBlankInput: deps.recordBlankInput,
     checkFragment: deps.isCodeFragmentComplete,
     executeCode: deps.executeCode,
     debugLog: deps.debugLog,

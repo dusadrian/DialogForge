@@ -8,6 +8,10 @@ const {
 const {
     createConsoleTranscriptService
 } = require("../../shared/console/services/consoleTranscriptService");
+const {
+    ActivityItemInput,
+    ActivityItemInputState
+} = require("../../shared/console/services/consoleRuntimeItems");
 
 const verifyTranscriptPrunesOldActivities = function() {
     const transcript = createConsoleTranscriptService({
@@ -59,6 +63,23 @@ const verifyTranscriptKeepsActivePromptWhilePruning = function() {
     assert.strictEqual(transcript.getActiveRequest().activityId, "activity_0");
 };
 
+const verifyTranscriptRecordsBlankPromptInput = function() {
+    const transcript = createConsoleTranscriptService({
+        maxRuntimeActivities: 3
+    });
+
+    transcript.recordBlankInput("");
+
+    const items = transcript.getRuntimeItems();
+
+    assert.strictEqual(items.length, 1);
+    assert.strictEqual(items[0].activityItems.length, 1);
+    assert.ok(items[0].activityItems[0] instanceof ActivityItemInput);
+    assert.strictEqual(items[0].activityItems[0].state, ActivityItemInputState.Completed);
+    assert.strictEqual(items[0].activityItems[0].inputPrompt, "> ");
+    assert.strictEqual(items[0].activityItems[0].code, "");
+};
+
 const verifySessionDedupeStateIsBounded = function() {
     const sessionState = createConsoleSessionState(() => "ready");
 
@@ -93,6 +114,7 @@ const verifySessionDedupeStateIsBounded = function() {
 
 verifyTranscriptPrunesOldActivities();
 verifyTranscriptKeepsActivePromptWhilePruning();
+verifyTranscriptRecordsBlankPromptInput();
 verifySessionDedupeStateIsBounded();
 
 console.log("Console retention bounds verified.");

@@ -138,6 +138,22 @@ export const createConsoleTranscriptService = (deps?: {
     );
   };
 
+  const recordBlankInput = (code?: string) => {
+    const activityId = makeId('blank_input');
+    addOrUpdateRuntimeItemActivity(
+      activityId,
+      new ActivityItemInput(
+        makeId('input'),
+        activityId,
+        new Date(),
+        ActivityItemInputState.Completed,
+        String(promptState?.inputPrompt || '> '),
+        String(promptState?.continuationPrompt || '+ '),
+        normalizeConsoleCommandText(code || '')
+      )
+    );
+  };
+
   const recordRuntimeMessageStream = (message: {
     id?: string;
     parent_id?: string | null;
@@ -260,6 +276,7 @@ export const createConsoleTranscriptService = (deps?: {
 
   return {
     clear,
+    recordBlankInput,
     recordRuntimeMessageInput,
     recordRuntimeMessageStream,
     recordRuntimeMessagePrompt,

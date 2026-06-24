@@ -187,6 +187,9 @@ export const createConsoleSurface = function(
             showHelpTopic: options.showHelpTopic,
             scrollToPrompt: function(): void {
                 flow?.scrollToBottom?.();
+            },
+            recordBlankInput: function(code: string): void {
+                transcript?.recordBlankInput?.(code);
             }
         });
         commandInput.mount(inputHost);

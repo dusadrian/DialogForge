@@ -18,6 +18,7 @@ export interface ConsoleEditorSubmissionBindings {
     refreshInteractivity(): void;
     refreshPrompt(): void;
     scrollToPrompt?(): void;
+    recordBlankInput?(code: string): void;
     checkFragment(code: string): Promise<ConsoleFragmentState>;
     executeCode(code: string): Promise<ConsoleSubmissionResult>;
     debugLog?(message: string, data?: unknown): void;
@@ -83,6 +84,17 @@ export const createConsoleEditorSubmissionController = function(
 
         if (!code.trim()) {
             debugLog("editorInput:onEnter:empty");
+            bindings.recordBlankInput?.(code);
+            bindings.clearInput();
+            bindings.refreshPrompt();
+            bindings.requestFocus();
+
+            try {
+                bindings.scrollToPrompt?.();
+            }
+            catch {}
+
+            bindings.requestPromptFocus();
             return;
         }
 
