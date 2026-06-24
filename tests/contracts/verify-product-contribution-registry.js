@@ -6,14 +6,14 @@ const path = require("path");
 const { getProductContribution } = require("../../shared/base-app/bootstrap/productContributionRegistry");
 const { resolveProductLocation } = require("../../shared/base-app/bootstrap/productResolver");
 const rootDir = process.cwd();
-const electronMainPath = path.join(rootDir, "build/scripts/electron-main.ts");
+const electronMainPath = path.join(rootDir, "scripts/electron-main.js");
 const electronMainSource = fs.readFileSync(electronMainPath, "utf8");
 const runtimeSessionCompositionSource = fs.readFileSync(path.join(
     rootDir,
     "shared/shell-electron/runtime/runtimeSessionComposition.ts"
 ), "utf8");
 const productResolverSource = fs.readFileSync(path.join(rootDir, "shared/base-app/bootstrap/productResolver.ts"), "utf8");
-const packageProductSource = fs.readFileSync(path.join(rootDir, "build/scripts/package-product.ts"), "utf8");
+const packageProductSource = fs.readFileSync(path.join(rootDir, "scripts/package-product.js"), "utf8");
 const mainStartupControllerSource = fs.readFileSync(path.join(rootDir, "shared/base-app/features/main-window/mainStartupController.ts"), "utf8");
 assert.ok(!electronMainSource.includes("../../products/"), "Electron main must not import product implementation files directly.");
 assert.ok(runtimeSessionCompositionSource.includes('from "../../base-app/bootstrap/productContributionRegistry"'), "Electron runtime composition must resolve product-owned behavior through the contribution registry.");

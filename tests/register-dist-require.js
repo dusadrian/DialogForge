@@ -9,7 +9,7 @@ const originalResolveFilename = Module._resolveFilename;
 const distModuleRequest = function(request) {
     const prefixes = [
         "../../shared/",
-        "../../build/"
+        "../../scripts/"
     ];
     const prefix = prefixes.find((candidate) => {
         return request.startsWith(candidate);

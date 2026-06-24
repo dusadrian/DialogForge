@@ -11,7 +11,7 @@ const node_child_process_1 = require("node:child_process");
 const playwright_1 = require("playwright");
 const { findMainWindowPage, productLaunchArgs } = require("./product-launch");
 const projectRoot = node_process_1.default.cwd();
-const mainEntry = node_path_1.default.join(projectRoot, "dist/build/scripts/electron-main.js");
+const mainEntry = node_path_1.default.join(projectRoot, "dist/scripts/electron-main.js");
 const defaultDatasetCandidates = [
     node_path_1.default.join(node_os_1.default.homedir(), "ess9en.rds"),
     node_path_1.default.join(node_os_1.default.homedir(), "ess9ro.rds")

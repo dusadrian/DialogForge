@@ -16,7 +16,6 @@
         "outDir": "dist"
     },
     "include": [
-        "shared/**/*.ts",
-        "build/**/*.ts"
+        "shared/**/*.ts"
     ]
 }

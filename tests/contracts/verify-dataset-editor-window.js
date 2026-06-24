@@ -22,7 +22,7 @@ const pagePath = path.join(rootDir, "shared/base-app/pages/datasetEditor.html");
 const distPagePath = path.join(rootDir, "dist/shared/base-app/pages/datasetEditor.html");
 const interfacePath = path.join(rootDir, "shared/base-app/modules/datasetEditorInterface.ts");
 const clientPath = path.join(rootDir, "shared/base-app/modules/datasetViewerClient.ts");
-const electronMainPath = path.join(rootDir, "build/scripts/electron-main.ts");
+const electronMainPath = path.join(rootDir, "scripts/electron-main.js");
 const runtimeBroadcastBridgePath = path.join(
     rootDir,
     "shared/shell-electron/runtime/runtimeBroadcastBridge.ts"

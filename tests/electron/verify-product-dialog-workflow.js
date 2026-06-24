@@ -19,7 +19,7 @@ const {
 const projectRoot = process.cwd();
 const mainEntry = path.join(
     projectRoot,
-    "dist/build/scripts/electron-main.js"
+    "dist/scripts/electron-main.js"
 );
 const productPath = String(
     process.env.DIALOGFORGE_ELECTRON_PRODUCT_PATH || ""
@@ -158,7 +158,7 @@ const stageProduct = function() {
         [
             path.join(
                 projectRoot,
-                "dist/build/scripts/package-product.js"
+                "dist/scripts/package-product.js"
             ),
             "--product-path",
             productPath,

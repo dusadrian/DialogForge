@@ -7,7 +7,7 @@ const rootDir = process.cwd();
 const pagePath = path.join(rootDir, "shared/base-app/pages/devDiagnostics.html");
 const distPagePath = path.join(rootDir, "dist/shared/base-app/pages/devDiagnostics.html");
 const preloadPath = path.join(rootDir, "shared/base-app/bootstrap/preload.ts");
-const mainPath = path.join(rootDir, "build/scripts/electron-main.ts");
+const mainPath = path.join(rootDir, "scripts/electron-main.js");
 const devDiagnosticsWindowPath = path.join(
     rootDir,
     "shared/shell-electron/windows/devDiagnosticsWindowController.ts"

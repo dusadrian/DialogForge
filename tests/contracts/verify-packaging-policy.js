@@ -10,14 +10,14 @@ const read = function(relativePath) {
     return fs.readFileSync(path.join(rootDir, relativePath), "utf8");
 };
 const packageAction = read(".github/actions/package-product/action.yml");
-const packageProduct = read("build/scripts/package-product.ts");
-const electronMain = read("build/scripts/electron-main.ts");
-const copyStatic = read("build/scripts/copy-static.ts");
-const macosNotarization = read("build/scripts/macos-notarization.ts");
+const packageProduct = read("scripts/package-product.js");
+const electronMain = read("scripts/electron-main.js");
+const copyStatic = read("scripts/copy-static.js");
+const macosNotarization = read("scripts/macos-notarization.js");
 const packagedDependencies = read(
-    "build/scripts/packagedRuntimeDependencies.ts"
+    "scripts/packagedRuntimeDependencies.js"
 );
-const renameMacArtifacts = read("build/scripts/rename-binaries-mac.ts");
+const renameMacArtifacts = read("scripts/rename-binaries-mac.js");
 const packageJson = JSON.parse(read("package.json"));
 const productWorkflowPaths = [
     ".github/workflows/build-dialogr-linux.yml",

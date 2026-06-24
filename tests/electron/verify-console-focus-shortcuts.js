@@ -9,7 +9,7 @@ const node_child_process_1 = require("node:child_process");
 const playwright_1 = require("playwright");
 const { findMainWindowPage, productLaunchArgs } = require("./product-launch");
 const projectRoot = node_process_1.default.cwd();
-const mainEntry = node_path_1.default.join(projectRoot, "dist/build/scripts/electron-main.js");
+const mainEntry = node_path_1.default.join(projectRoot, "dist/scripts/electron-main.js");
 const productPath = String(
     node_process_1.default.env.DIALOGFORGE_ELECTRON_PRODUCT_PATH || ""
 ).trim();
@@ -19,7 +19,7 @@ const stageProduct = function () {
         [
             node_path_1.default.join(
                 projectRoot,
-                "dist/build/scripts/package-product.js"
+                "dist/scripts/package-product.js"
             ),
             "--product-path",
             productPath,
