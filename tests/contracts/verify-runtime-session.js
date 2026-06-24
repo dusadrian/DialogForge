@@ -1429,7 +1429,21 @@ const verifyMissingLifecycle = async function () {
     assert.strictEqual(started.status, "failed");
     assert.strictEqual(started.connection, "missing");
 };
+const verifyCommentOnlyRCommandsAreTranscriptOnly = function () {
+    const source = fs.readFileSync(path.join(
+        __dirname,
+        "../../shared/runtime/providers/r/session/runtimeProcessController.ts"
+    ), "utf8");
+
+    assert.ok(source.includes("const isCommentOnlyRInput = function(commandText: string): boolean"));
+    assert.ok(source.includes("trimmed.startsWith(\"#\")"));
+    assert.ok(source.includes("if (isCommentOnlyRInput(request.text))"));
+    assert.ok(source.includes("createTranscriptEvent(\"submitted\", request)"));
+    assert.ok(source.includes("createTranscriptEvent(\"completed\", request"));
+    assert.ok(!source.includes("createTranscriptEvent(\"output\", request, {\n                    message: \"NULL\""));
+};
 const run = async function () {
+    verifyCommentOnlyRCommandsAreTranscriptOnly();
     await verifyCommandRequiresReadySession();
     await verifyProductCommandRequiresReadySession();
     await verifyInvisibleQueryRequiresReadySession();

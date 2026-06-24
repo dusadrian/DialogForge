@@ -77,6 +77,20 @@ const transcriptHasFailure = function(transcriptEvents: TranscriptEvent[]): bool
 };
 
 
+const isCommentOnlyRInput = function(commandText: string): boolean {
+    const text = String(commandText || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+
+    if (!text.trim()) {
+        return true;
+    }
+
+    return text.split("\n").every((line) => {
+        const trimmed = line.trim();
+
+        return !trimmed || trimmed.startsWith("#");
+    });
+};
+
 
 export const createRRuntimeProcessController = function(
     options: RRuntimeProcessControllerOptions
@@ -131,6 +145,15 @@ export const createRRuntimeProcessController = function(
             text: commandText,
             source
         });
+
+        if (isCommentOnlyRInput(request.text)) {
+            return [
+                createTranscriptEvent("submitted", request),
+                createTranscriptEvent("completed", request, {
+                    state: "idle"
+                })
+            ];
+        }
 
         if (!client) {
             return [
