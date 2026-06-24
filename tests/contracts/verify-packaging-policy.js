@@ -82,8 +82,10 @@ assert.ok(
     macosNotarization.includes('path.join(productRoot, "product.json")')
     && macosNotarization.includes('`_${version}_silicon.dmg`')
     && macosNotarization.includes('"--output-format",\n            "json"')
-    && macosNotarization.includes("normalizedRight - normalizedLeft"),
-    "macOS notarization must derive product DMGs and report only the latest history entry"
+    && macosNotarization.includes("normalizedRight - normalizedLeft")
+    && macosNotarization.includes("}).slice(0, 2);")
+    && macosNotarization.includes("Submission ${String(index + 1)}:"),
+    "macOS notarization must derive product DMGs and report the last two history entries"
 );
 dialogRWorkflowPaths.forEach((relativePath) => {
     const workflow = read(relativePath);

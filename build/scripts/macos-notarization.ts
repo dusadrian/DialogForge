@@ -130,9 +130,9 @@ const readHistory = function(): NotaryHistoryEntry[] {
 };
 
 
-const latestHistoryEntry = function(
+const latestHistoryEntries = function(
     history: NotaryHistoryEntry[]
-): NotaryHistoryEntry | null {
+): NotaryHistoryEntry[] {
     return history.slice().sort((left, right) => {
         const leftTime = Date.parse(String(left.createdDate || ""));
         const rightTime = Date.parse(String(right.createdDate || ""));
@@ -140,7 +140,7 @@ const latestHistoryEntry = function(
         const normalizedRight = Number.isFinite(rightTime) ? rightTime : 0;
 
         return normalizedRight - normalizedLeft;
-    })[0] || null;
+    }).slice(0, 2);
 };
 
 
@@ -159,16 +159,23 @@ const submit = function(productId: string): void {
 
 
 const showLatestHistory = function(): void {
-    const latest = latestHistoryEntry(readHistory());
+    const latest = latestHistoryEntries(readHistory());
 
-    if (!latest) {
+    if (latest.length === 0) {
         throw new Error("No notarization submissions were returned.");
     }
 
-    console.log(`Name: ${String(latest.name || "(unknown)")}`);
-    console.log(`Status: ${String(latest.status || "(unknown)")}`);
-    console.log(`Created: ${String(latest.createdDate || "(unknown)")}`);
-    console.log(`ID: ${String(latest.id || "(unknown)")}`);
+    latest.forEach((entry, index) => {
+        if (index > 0) {
+            console.log("");
+        }
+
+        console.log(`Submission ${String(index + 1)}:`);
+        console.log(`Name: ${String(entry.name || "(unknown)")}`);
+        console.log(`Status: ${String(entry.status || "(unknown)")}`);
+        console.log(`Created: ${String(entry.createdDate || "(unknown)")}`);
+        console.log(`ID: ${String(entry.id || "(unknown)")}`);
+    });
 };
 
 
