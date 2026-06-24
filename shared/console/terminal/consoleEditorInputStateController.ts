@@ -241,6 +241,20 @@ export const createConsoleEditorInputStateController = function(
         }
         catch {}
 
+        try {
+            const position = editor.getPosition?.();
+
+            if (position) {
+                editor.revealPositionInCenterIfOutsideViewport?.(position);
+            }
+        }
+        catch {}
+
+        try {
+            editor.render?.();
+        }
+        catch {}
+
         timingLog("editor:focus:applied", {
             sinceEnterMs: bindings.getActiveCommandElapsedMs()
         });

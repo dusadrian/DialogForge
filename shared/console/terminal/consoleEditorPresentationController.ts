@@ -197,13 +197,57 @@ export const createConsoleEditorPresentationController = function(
 
         refreshPrompt();
 
+        const editorHasFocus = function(): boolean {
+            try {
+                return Boolean(editor?.hasTextFocus?.());
+            }
+            catch {
+                return false;
+            }
+        };
+
+        const revealEditorCursor = function(): void {
+            try {
+                const position = editor?.getPosition?.();
+
+                if (position) {
+                    editor?.revealPositionInCenterIfOutsideViewport?.(
+                        position
+                    );
+                }
+            }
+            catch {}
+
+            try {
+                editor?.render?.();
+            }
+            catch {}
+        };
+
         if (
             promptVisible
-            && bindings.hasPendingFocus()
             && editor
+            && (
+                bindings.hasPendingFocus()
+                || !editorHasFocus()
+            )
         ) {
             try {
                 editor.focus?.();
+            }
+            catch {}
+            revealEditorCursor();
+
+            try {
+                requestAnimationFrame(function(): void {
+                    if (!editorHasFocus()) {
+                        try {
+                            editor?.focus?.();
+                        }
+                        catch {}
+                    }
+                    revealEditorCursor();
+                });
             }
             catch {}
 

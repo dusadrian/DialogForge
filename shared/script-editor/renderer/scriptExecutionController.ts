@@ -203,21 +203,28 @@ export const createScriptExecutionController = function(
             return;
         }
 
-        const plan = await planConsoleInputExecution(
-            code,
-            checkFragment
-        );
+        const plan = picked.usedSelection
+            ? {
+                chunks: [code],
+                incomplete: false,
+                remainder: ""
+            }
+            : await planConsoleInputExecution(
+                code,
+                checkFragment
+            );
+        const chunks = plan.chunks;
 
-        if (plan.chunks.length > 0) {
+        if (chunks.length > 0) {
             void options.transport.invoke(
                 "base-app:runScriptCodeBatch",
-                { chunks: plan.chunks }
+                { chunks }
             );
         }
 
         if (
             !picked.usedSelection
-            && plan.chunks.length > 0
+            && chunks.length > 0
             && !plan.incomplete
         ) {
             advanceCursor(

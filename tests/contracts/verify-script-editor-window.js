@@ -31,6 +31,8 @@ const preload = fs.readFileSync(preloadPath, "utf8");
 const hostBridge = fs.readFileSync(hostBridgePath, "utf8");
 const globals = fs.readFileSync(globalsPath, "utf8");
 const scriptEditorIpc = fs.readFileSync(path.join(rootDir, "shared/script-editor/scriptEditorIpc.ts"), "utf8");
+const scriptExecutionController = fs.readFileSync(path.join(rootDir, "shared/script-editor/renderer/scriptExecutionController.ts"), "utf8");
+const scriptStatement = fs.readFileSync(path.join(rootDir, "shared/script-editor/run/scriptStatement.ts"), "utf8");
 const renderer = [
     readTypeScriptTree(path.join(rootDir, "shared/script-editor/renderer")),
     scriptEditorIpc
@@ -92,6 +94,12 @@ assert.ok(page.includes("id=\"root\"") &&
     assert.ok(renderer.includes(marker), "script editor renderer must preserve behavior marker: " + marker);
 });
 assert.ok(!mainPage.includes("id=\"scriptEditorPanel\""), "main page must not include the embedded script editor panel");
+assert.ok(scriptExecutionController.includes("picked.usedSelection") &&
+    scriptExecutionController.includes("chunks: [code]") &&
+    scriptExecutionController.includes("await planConsoleInputExecution"), "script editor selected runs must avoid line-by-line completeness checks for long selected commands");
+assert.ok(scriptStatement.includes("LONG_BLOCK_FRAGMENT_SCAN_THRESHOLD") &&
+    scriptStatement.includes("const blockCode = String(model.getText(blockStart, blockEnd) || \"\")") &&
+    scriptStatement.includes("const state = await checkFragment(blockCode)"), "script editor statement discovery must avoid exhaustive fragment scans for long contiguous blocks");
 [
     "options.dialogForge.openScriptEditor()",
     "const openScriptFile = window.dialogForge.openScriptFileInEditor;",

@@ -32,6 +32,7 @@ const sourceAboutWindowFactoryPath = path.join(rootDir, "shared/shell-electron/e
 const sourceApplicationSupportWindowsPath = path.join(rootDir, "shared/shell-electron/windows/applicationSupportWindowComposition.ts");
 const sourceConsoleEditorCommandPath = path.join(rootDir, "shared/console/terminal/consoleEditorCommandController.ts");
 const sourceConsoleInputStatePath = path.join(rootDir, "shared/console/terminal/consoleEditorInputStateController.ts");
+const sourceConsolePresentationPath = path.join(rootDir, "shared/console/terminal/consoleEditorPresentationController.ts");
 const sourceAppCodiconPath = path.join(rootDir, "shared/base-app/pages/shared/appCodicon.css");
 const sourceVscodeCodiconPath = path.join(rootDir, "shared/base-app/pages/shared/vscodeCodicon.css");
 const preloadPath = path.join(rootDir, "shared/base-app/bootstrap/preload.ts");
@@ -60,6 +61,7 @@ const sourceAboutWindowFactory = fs.readFileSync(sourceAboutWindowFactoryPath, "
 const sourceApplicationSupportWindows = fs.readFileSync(sourceApplicationSupportWindowsPath, "utf8");
 const sourceConsoleEditorCommand = fs.readFileSync(sourceConsoleEditorCommandPath, "utf8");
 const sourceConsoleInputState = fs.readFileSync(sourceConsoleInputStatePath, "utf8");
+const sourceConsolePresentation = fs.readFileSync(sourceConsolePresentationPath, "utf8");
 const sourceAppCodicon = fs.readFileSync(sourceAppCodiconPath, "utf8");
 const sourceVscodeCodicon = fs.readFileSync(sourceVscodeCodiconPath, "utf8");
 const preloadScript = fs.readFileSync(preloadPath, "utf8");
@@ -430,6 +432,15 @@ assert.ok(!visibleCommandTextHandler.includes("await refreshWorkspace();"), "vis
 assert.ok(!visibleCommandTextHandler.includes("await refreshRuntimeEvents();"), "visible command renderer path must not synchronously refresh runtime events");
 assert.ok(sourceConsoleSurface.includes('import { createTerminalConsoleEditorInputView } from "../views/terminalEditorInputView";'), "main page must load the DialogR terminal editor input view");
 assert.ok(rendererSource.includes("createTerminalConsoleEditorInputView"), "main renderer must mount the visible command input through the DialogR terminal editor input view");
+assert.ok(sourceConsolePresentation.includes("promptVisible") &&
+    sourceConsolePresentation.includes("&& editor") &&
+    sourceConsolePresentation.includes("requestAnimationFrame(function(): void") &&
+    sourceConsolePresentation.includes("editor?.hasTextFocus?.()") &&
+    sourceConsolePresentation.includes("editor?.render?.();") &&
+    sourceConsoleInputState.includes("editor.render?.();") &&
+    sourceConsolePresentation.includes("editor?.focus?.();") &&
+    sourceConsoleSurface.includes("const returningToCommandPrompt = Boolean(activePromptId);") &&
+    sourceConsoleSurface.includes("if (returningToCommandPrompt)"), "console prompt must enforce missing Monaco focus without refocusing on every transcript render");
 assert.ok(rendererSource.includes("const checkCodeFragmentComplete = async function") &&
     rendererSource.includes('method: "check_completeness"'), "main renderer must use runtime-backed completeness checks for console input");
 assert.ok(!sourceHtml.includes(">1 + 1</div>"), "main console must not seed the visible command input with smoke-test code");

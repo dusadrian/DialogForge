@@ -19,6 +19,9 @@ export interface ScriptStatement {
 }
 
 
+const LONG_BLOCK_FRAGMENT_SCAN_THRESHOLD = 24;
+
+
 const lineIsBlank = function(
     model: ScriptStatementModel,
     lineNumber: number
@@ -74,6 +77,19 @@ export const findScriptStatementAtLine = async function(
 
     while (blockEnd < lineCount && !lineIsBlank(model, blockEnd + 1)) {
         blockEnd += 1;
+    }
+
+    if (blockEnd - blockStart + 1 >= LONG_BLOCK_FRAGMENT_SCAN_THRESHOLD) {
+        const blockCode = String(model.getText(blockStart, blockEnd) || "");
+        const state = await checkFragment(blockCode);
+
+        if (state === "complete" || state === "unknown") {
+            return {
+                startLine: blockStart,
+                endLine: blockEnd,
+                code: blockCode
+            };
+        }
     }
 
     for (let span = 0; span <= blockEnd - blockStart; span += 1) {

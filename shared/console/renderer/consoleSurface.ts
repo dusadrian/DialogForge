@@ -134,8 +134,16 @@ export const createConsoleSurface = function(
             const nextPromptId = String(activeRequest?.promptId || "");
 
             if (!nextPromptId) {
+                const returningToCommandPrompt = Boolean(activePromptId);
                 activePromptId = "";
                 requestInput?.setPasswordMode?.(false);
+
+                if (returningToCommandPrompt) {
+                    requestAnimationFrame(function(): void {
+                        commandInput?.focus?.();
+                    });
+                }
+
                 return;
             }
 
