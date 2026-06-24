@@ -37,6 +37,9 @@ const readRuntimeDialog = createProductDialogSourceReader({
     productId: "base",
     findDefinition: function(dialogId) {
         return dialogId === dialog.id ? dialog : null;
+    },
+    getLocale: function() {
+        return "en_US";
     }
 });
 const runtimeDialog = readRuntimeDialog(dialog.id);

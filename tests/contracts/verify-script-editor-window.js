@@ -85,7 +85,9 @@ assert.ok(page.includes("id=\"root\"") &&
     "event.dataTransfer.dropEffect = \"copy\"",
     "createScriptEditorCloseCoordinator",
     "resolveDirtyScriptTabsForClose",
-    "\"base-app:script-editor-close-save-result\""
+    "\"base-app:script-editor-close-save-result\"",
+    "window.dialogForge?.checkScriptFragment(",
+    "window.dialogForge?.runScriptCodeBatch("
 ].forEach((marker) => {
     assert.ok(renderer.includes(marker), "script editor renderer must preserve behavior marker: " + marker);
 });

@@ -81,7 +81,7 @@ assert.ok(
 assert.ok(
     macosNotarization.includes('path.join(productRoot, "product.json")')
     && macosNotarization.includes('`_${version}_silicon.dmg`')
-    && macosNotarization.includes('"--output-format",\n            "json"')
+    && macosNotarization.includes('"--output-format",\n        "json"')
     && macosNotarization.includes("normalizedRight - normalizedLeft")
     && macosNotarization.includes("}).slice(0, 2);")
     && macosNotarization.includes("Submission ${String(index + 1)}:"),
@@ -152,7 +152,7 @@ const assertProductPlatformWorkflow = function(
     );
     assert.ok(
         workflow.includes(`platform: ${platform}`)
-        && workflow.includes(`runner: ${runner}`),
+        && workflow.includes(`runs-on: ${runner}`),
         relativePath + " must own the expected platform runner"
     );
 

@@ -81,7 +81,7 @@ const readOption = function (name, fallback) {
     }
     return fallback;
 };
-const rootDir = path.resolve(__dirname, "../..");
+const rootDir = path.resolve(__dirname, "..");
 const productPathArg = readOption("product-path", "")
     || String(process.env.DIALOGFORGE_PRODUCT_PATH || "").trim();
 const requestedProduct = readOption("product", "") || "base";

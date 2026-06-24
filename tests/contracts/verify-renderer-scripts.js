@@ -71,6 +71,7 @@ const mainScript = fs.readFileSync(path.resolve(path.dirname(pagePath), "./main.
 const rendererSource = [
     sourceMain,
     readTypeScriptTree(path.join(rootDir, "shared/base-app/features")),
+    readTypeScriptTree(path.join(rootDir, "shared/dataset-editor")),
     readTypeScriptTree(path.join(rootDir, "shared/console")),
     readTypeScriptTree(path.join(rootDir, "shared/runtime/providers/r/files"))
 ].join("\n");
@@ -91,7 +92,7 @@ assert.ok(sourceDatasetInteraction.includes("const layoutController") &&
 assert.ok(sourceDatasetInteraction.includes("syncColumnOrder: layoutController.syncColumnOrder"), "main renderer must synchronize dataset column order from tabular previews");
 assert.ok(sourceCompletionContext.includes("mode: \"path\"") &&
     sourceCompletionContext.includes("replaceText: stringContent"), "main renderer completion model must expose DialogR-style path completion context");
-assert.ok(sourceConsoleEditorCommand.includes("context?.mode === \"path\"") &&
+assert.ok(sourceConsoleEditorCommand.includes("context.mode === \"path\"") &&
     sourceConsoleEditorCommand.includes("getRuntimeCompletionSuggestions?.(") &&
     sourceConsoleEditorCommand.includes("items.length === 1") &&
     sourceConsoleEditorCommand.includes("dm.pathCompletion"), "console input must apply a single runtime filename completion on first Tab");
@@ -138,13 +139,14 @@ const datasetTablesScript = fs.readFileSync(path.resolve(path.dirname(pagePath),
 assert.ok(sourceHtml.includes('class="dm-console-active-dataset" id="consoleActiveDataset" hidden'), "main page must use the DialogR active dataset pill, not the generic console chip");
 assert.ok(sourceHtml.includes('class="dm-console-active-dataset-label" id="consoleActiveDatasetLabel">Active:</span>') &&
     sourceHtml.includes('class="dm-console-active-dataset-name" id="consoleActiveDatasetName"'), "main page must render DialogR-style Active: dataset text");
-assert.ok(sourceHtml.includes(".dm-console-active-dataset {") &&
-    sourceHtml.includes("border: 1px solid rgba(47, 125, 79, 0.28);") &&
-    sourceHtml.includes("background: rgba(47, 125, 79, 0.08);"), "main page must preserve DialogR active dataset pill styling");
+const activeDatasetStyleSource = sourceHtml + "\n" + sourceAppCodicon;
+assert.ok(activeDatasetStyleSource.includes(".dm-console-active-dataset") &&
+    activeDatasetStyleSource.includes("border: 1px solid rgba(47, 125, 79, 0.28);") &&
+    activeDatasetStyleSource.includes("background: rgba(47, 125, 79, 0.08);"), "main page must preserve DialogR active dataset pill styling");
 assert.ok(!sourceHtml.includes('<span class="consoleChip" id="consoleActiveDataset" hidden>'), "active dataset must not use the generic consoleChip styling");
 assert.ok(sourceConsoleToolbar.includes('const activeDatasetLabel = elementById(document, "consoleActiveDatasetLabel");') &&
-    sourceConsoleToolbar.includes('activeDatasetLabel.textContent = "Active:";') &&
-    sourceConsoleToolbar.includes('"Active dataset: " + datasetName'), "main renderer must maintain the DialogR active dataset label and accessibility text");
+    sourceConsoleToolbar.includes('activeDatasetLabel.textContent = state.translate("Active") + ":";') &&
+    sourceConsoleToolbar.includes('state.translate("Active dataset") + ": " + datasetName'), "main renderer must maintain the DialogR active dataset label and accessibility text");
 [
     "id=\"workspacePane\"",
     "workspace-pane-hidden",
@@ -264,7 +266,7 @@ assert.ok(rendererSource.includes('event.type === "prompt_state"') &&
     assert.ok(rendererSource.includes(expected), "terminal Monaco input must bind command history navigation: " + expected);
 });
 [
-    "request.uiCommandVisibility =\n                            bindings.getUiCommandVisibility();",
+    "request.uiCommandVisibility = bindings.getUiCommandVisibility();",
     "uiCommandVisibility: bindings.getCommandVisibility()"
 ].forEach((expected) => {
     assert.ok(rendererSource.includes(expected), "renderer import paths must honor DialogR UI action command visibility: " + expected);
@@ -412,7 +414,8 @@ assert.ok(!sourceHtml.includes("<span class=\"consoleChip dm-console-cwd\" id=\"
         sourceHtml.includes(expected), "main console toolbar must use shared DialogR toolbar/icon styling: " + expected);
 });
 assert.ok(rendererSource.includes("\"console-runtime-busy\"") &&
-    rendererSource.includes("const label = visible ? \"Hide Workspace\" : \"Show Workspace\";") &&
+    rendererSource.includes("const labelKey = visible ? \"Hide Workspace\" : \"Show Workspace\";") &&
+    rendererSource.includes("options.translate(labelKey)") &&
     rendererSource.includes("icon.classList.toggle(\"codicon-chevron-left\", visible)") &&
     rendererSource.includes("icon.classList.toggle(\"codicon-chevron-right\", !visible)"), "main renderer must keep toolbar busy state and workspace chevron state in sync with DialogR behavior");
 assert.ok(sourceHtml.includes(".workspace-pane-action .workspace-broom-icon"), "workspace pane clear action must use the DialogR broom icon structure");

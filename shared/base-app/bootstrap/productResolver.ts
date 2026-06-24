@@ -78,17 +78,22 @@ export const resolveProductLocation = function(
     }
 
     const stagedRootPath = path.join(rootDir, "products", resolvedProductId);
-    const hasStagedContribution = fs.existsSync(
-        path.join(stagedRootPath, "bootstrap/productContribution.js")
-    );
+    const distStagedRootPath = path.join(rootDir, "dist/products", resolvedProductId);
+    const compiledRootPath = [
+        stagedRootPath,
+        distStagedRootPath,
+        resolvedRoot
+    ].find((candidateRootPath) => {
+        return fs.existsSync(
+            path.join(candidateRootPath, "bootstrap/productContribution.js")
+        );
+    });
 
     return {
         id: resolvedProductId,
         source: "product",
         rootPath: resolvedRoot,
-        compiledRootPath: hasStagedContribution
-            ? stagedRootPath
-            : resolvedRoot,
+        compiledRootPath: compiledRootPath || resolvedRoot,
         manifestPath,
         settingsPath: path.join(resolvedRoot, "settings/settings.json"),
         i18nPath: path.join(resolvedRoot, "i18n"),
