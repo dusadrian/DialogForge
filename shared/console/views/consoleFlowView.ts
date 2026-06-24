@@ -105,7 +105,16 @@ export const createConsoleFlowView = (deps: {
       if (slot) return slot;
       if (requestInputHost) return requestInputHost;
     }
-    return inputHost;
+    if (inputHost) {
+      const inputStyle = window.getComputedStyle(inputHost);
+      if (inputStyle.display !== 'none' && inputHost.offsetHeight > 0) {
+        return inputHost;
+      }
+    }
+
+    return itemsHost?.lastElementChild instanceof HTMLElement
+      ? itemsHost.lastElementChild
+      : inputHost;
   };
 
   const scrollToBottom = () => {

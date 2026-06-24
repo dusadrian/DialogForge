@@ -21,6 +21,7 @@ import {
 } from "./consoleItemRenderers";
 
 const DEFAULT_ITEM_HEIGHT = 24;
+const DEFAULT_LINE_HEIGHT = 20;
 const OVERSCAN_PIXELS = 640;
 const INITIAL_RENDER_COUNT = 80;
 
@@ -71,16 +72,69 @@ const renderConsoleTranscriptItemNode = function(
 
 const measuredHeight = function(
     heights: Map<string, number>,
-    key: string
+    key: string,
+    item: RuntimeItem
 ): number {
     const value = heights.get(key);
     return value && Number.isFinite(value) && value > 0
         ? value
-        : DEFAULT_ITEM_HEIGHT;
+        : estimateItemHeight(item);
+};
+
+const estimateActivityLineCount = function(item: RuntimeItemActivity): number {
+    return Math.max(
+        1,
+        item.activityItems.reduce((lineCount, activityItem) => {
+            if ("code" in activityItem) {
+                return lineCount
+                    + Math.max(
+                        1,
+                        String(activityItem.code || "").split("\n").length
+                    );
+            }
+
+            if ("outputLines" in activityItem) {
+                return lineCount
+                    + Math.max(
+                        1,
+                        Number(activityItem.outputLines?.length || 0)
+                    );
+            }
+
+            if ("prompt" in activityItem) {
+                return lineCount
+                    + Math.max(
+                        1,
+                        String(activityItem.prompt || "").split("\n").length
+                    );
+            }
+
+            return lineCount + 1;
+        }, 0)
+    );
+};
+
+const estimateItemHeight = function(item: RuntimeItem): number {
+    if (item instanceof RuntimeItemActivity) {
+        return Math.max(
+            DEFAULT_ITEM_HEIGHT,
+            estimateActivityLineCount(item) * DEFAULT_LINE_HEIGHT
+        );
+    }
+
+    if (item instanceof RuntimeItemPendingInput) {
+        return Math.max(
+            DEFAULT_ITEM_HEIGHT,
+            String(item.code || "").split("\n").length * DEFAULT_LINE_HEIGHT
+        );
+    }
+
+    return DEFAULT_ITEM_HEIGHT;
 };
 
 const sumHeights = function(
     keys: string[],
+    items: RuntimeItem[],
     heights: Map<string, number>,
     start: number,
     end: number
@@ -88,7 +142,7 @@ const sumHeights = function(
     let total = 0;
 
     for (let index = start; index < end; index += 1) {
-        total += measuredHeight(heights, keys[index]);
+        total += measuredHeight(heights, keys[index], items[index]);
     }
 
     return total;
@@ -96,6 +150,7 @@ const sumHeights = function(
 
 const calculateVisibleRange = function(
     keys: string[],
+    items: RuntimeItem[],
     heights: Map<string, number>,
     viewport: HTMLElement | null,
     host: HTMLElement | null
@@ -115,7 +170,7 @@ const calculateVisibleRange = function(
             start: 0,
             end,
             top: 0,
-            bottom: sumHeights(keys, heights, end, keys.length)
+            bottom: sumHeights(keys, items, heights, end, keys.length)
         };
     }
 
@@ -128,7 +183,7 @@ const calculateVisibleRange = function(
     let top = 0;
 
     while (start < keys.length) {
-        const nextHeight = measuredHeight(heights, keys[start]);
+        const nextHeight = measuredHeight(heights, keys[start], items[start]);
         if (top + nextHeight >= wantedTop) {
             break;
         }
@@ -140,7 +195,7 @@ const calculateVisibleRange = function(
     let bottomEdge = top;
 
     while (end < keys.length && bottomEdge <= wantedBottom) {
-        bottomEdge += measuredHeight(heights, keys[end]);
+        bottomEdge += measuredHeight(heights, keys[end], items[end]);
         end += 1;
     }
 
@@ -152,7 +207,7 @@ const calculateVisibleRange = function(
         start,
         end,
         top,
-        bottom: sumHeights(keys, heights, end, keys.length)
+        bottom: sumHeights(keys, items, heights, end, keys.length)
     };
 };
 
@@ -250,6 +305,7 @@ const ConsoleTranscriptIsland = function(
     const range = useMemo(
         () => calculateVisibleRange(
             keys,
+            props.items,
             heightsRef.current,
             props.viewport,
             hostRef.current

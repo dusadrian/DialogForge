@@ -94,9 +94,11 @@ assert.ok(page.includes("id=\"root\"") &&
     assert.ok(renderer.includes(marker), "script editor renderer must preserve behavior marker: " + marker);
 });
 assert.ok(!mainPage.includes("id=\"scriptEditorPanel\""), "main page must not include the embedded script editor panel");
-assert.ok(scriptExecutionController.includes("picked.usedSelection") &&
+assert.ok(scriptExecutionController.includes("const runAsSingleChunk =") &&
+    scriptExecutionController.includes("picked.usedSelection || code.includes") &&
+    scriptExecutionController.includes("runAsSingleChunk") &&
     scriptExecutionController.includes("chunks: [code]") &&
-    scriptExecutionController.includes("await planConsoleInputExecution"), "script editor selected runs must avoid line-by-line completeness checks for long selected commands");
+    scriptExecutionController.includes("await planConsoleInputExecution"), "script editor selected and multiline statement runs must avoid line-by-line completeness checks for long commands");
 assert.ok(scriptStatement.includes("LONG_BLOCK_FRAGMENT_SCAN_THRESHOLD") &&
     scriptStatement.includes("const blockCode = String(model.getText(blockStart, blockEnd) || \"\")") &&
     scriptStatement.includes("const state = await checkFragment(blockCode)"), "script editor statement discovery must avoid exhaustive fragment scans for long contiguous blocks");

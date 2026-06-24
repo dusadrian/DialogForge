@@ -203,7 +203,8 @@ export const createScriptExecutionController = function(
             return;
         }
 
-        const plan = picked.usedSelection
+        const runAsSingleChunk = picked.usedSelection || code.includes("\n");
+        const plan = runAsSingleChunk
             ? {
                 chunks: [code],
                 incomplete: false,

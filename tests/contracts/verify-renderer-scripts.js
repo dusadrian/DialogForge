@@ -27,6 +27,8 @@ const sourceTerminalInputPath = path.join(rootDir, "shared/console/views/termina
 const sourceCompletionContextPath = path.join(rootDir, "shared/console/terminal/completionContext.ts");
 const sourceConsoleSurfacePath = path.join(rootDir, "shared/console/renderer/consoleSurface.ts");
 const sourceConsoleCoordinatorPath = path.join(rootDir, "shared/console/renderer/mainConsoleCoordinator.ts");
+const sourceConsoleFlowViewPath = path.join(rootDir, "shared/console/views/consoleFlowView.ts");
+const sourceConsoleTranscriptIslandPath = path.join(rootDir, "shared/console/views/consoleTranscriptIsland.ts");
 const sourceConsoleToolbarPath = path.join(rootDir, "shared/console/renderer/consoleToolbarView.ts");
 const sourceAboutWindowFactoryPath = path.join(rootDir, "shared/shell-electron/external/aboutWindowFactory.ts");
 const sourceApplicationSupportWindowsPath = path.join(rootDir, "shared/shell-electron/windows/applicationSupportWindowComposition.ts");
@@ -56,6 +58,8 @@ const sourceTerminalInput = fs.readFileSync(sourceTerminalInputPath, "utf8");
 const sourceCompletionContext = fs.readFileSync(sourceCompletionContextPath, "utf8");
 const sourceConsoleSurface = fs.readFileSync(sourceConsoleSurfacePath, "utf8");
 const sourceConsoleCoordinator = fs.readFileSync(sourceConsoleCoordinatorPath, "utf8");
+const sourceConsoleFlowView = fs.readFileSync(sourceConsoleFlowViewPath, "utf8");
+const sourceConsoleTranscriptIsland = fs.readFileSync(sourceConsoleTranscriptIslandPath, "utf8");
 const sourceConsoleToolbar = fs.readFileSync(sourceConsoleToolbarPath, "utf8");
 const sourceAboutWindowFactory = fs.readFileSync(sourceAboutWindowFactoryPath, "utf8");
 const sourceApplicationSupportWindows = fs.readFileSync(sourceApplicationSupportWindowsPath, "utf8");
@@ -441,6 +445,11 @@ assert.ok(sourceConsolePresentation.includes("promptVisible") &&
     sourceConsolePresentation.includes("editor?.focus?.();") &&
     sourceConsoleSurface.includes("const returningToCommandPrompt = Boolean(activePromptId);") &&
     sourceConsoleSurface.includes("if (returningToCommandPrompt)"), "console prompt must enforce missing Monaco focus without refocusing on every transcript render");
+assert.ok(sourceConsoleFlowView.includes("inputStyle.display !== 'none' && inputHost.offsetHeight > 0") &&
+    sourceConsoleFlowView.includes("itemsHost.lastElementChild"), "console scrolling must target transcript rows while the live prompt host has no layout");
+assert.ok(sourceConsoleTranscriptIsland.includes("estimateActivityLineCount") &&
+    sourceConsoleTranscriptIsland.includes("String(activityItem.code || \"\")") &&
+    sourceConsoleTranscriptIsland.includes(".split(\"\\n\").length"), "console transcript virtualization must estimate multiline input height before DOM measurement");
 assert.ok(rendererSource.includes("const checkCodeFragmentComplete = async function") &&
     rendererSource.includes('method: "check_completeness"'), "main renderer must use runtime-backed completeness checks for console input");
 assert.ok(!sourceHtml.includes(">1 + 1</div>"), "main console must not seed the visible command input with smoke-test code");
