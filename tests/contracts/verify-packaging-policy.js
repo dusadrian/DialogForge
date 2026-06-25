@@ -132,6 +132,15 @@ assert.deepEqual(
     ["nsis", "portable"],
     "Windows packaging must produce installer and standalone executables"
 );
+assert.ok(
+    packageAction.includes("uses: azure/login@v1")
+    && packageAction.includes("uses: azure/artifact-signing-action@v1")
+    && packageAction.includes("endpoint: https://plc.codesigning.azure.net/")
+    && packageAction.includes("signing-account-name: dusadrian")
+    && packageAction.includes("certificate-profile-name: electron-profile")
+    && packageAction.includes("files-folder-filter: exe"),
+    "Windows package builds must sign generated executable artifacts"
+);
 assert.deepEqual(
     packageJson.build.mac.target[0].arch,
     ["arm64"],
@@ -203,6 +212,34 @@ assertProductPlatformWorkflow(
     "macos-15-intel",
     "--arch x64"
 );
+[
+    ".github/workflows/build-dialogr-windows.yml",
+    ".github/workflows/build-dialogqca-windows.yml"
+].forEach((relativePath) => {
+    const workflow = read(relativePath);
+
+    assert.ok(
+        workflow.includes("id-token: write")
+        && workflow.includes("azure_application_id: ${{ secrets.AZURE_APPLICATION_ID }}")
+        && workflow.includes("azure_tenant_id: ${{ secrets.AZURE_TENANT_ID }}")
+        && workflow.includes("azure_subscription_id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}")
+        && !workflow.includes("environment: signing"),
+        relativePath + " must make Azure signing credentials available to Windows packaging"
+    );
+});
+[
+    ".github/workflows/build-dialogr.yml",
+    ".github/workflows/build-dialogqca.yml"
+].forEach((relativePath) => {
+    const workflow = read(relativePath);
+
+    assert.ok(
+        workflow.includes("windows:")
+        && workflow.includes("permissions:")
+        && workflow.includes("id-token: write"),
+        relativePath + " must grant OIDC to the called Windows signing workflow"
+    );
+});
 
 [
     [".github/workflows/build-dialogr.yml", "build-dialogr"],
@@ -245,6 +282,12 @@ assert.ok(
     "electron-builder output paths must use the Windows-safe equals form"
 );
 assert.ok(
+    packageProduct.includes('require.resolve("electron/package.json"')
+    && packageProduct.includes("`--config.electronVersion=${electronVersion}`")
+    && !packageProduct.includes("--config.electronVersion=40.6.1"),
+    "product packaging must use the installed Electron runtime version"
+);
+assert.ok(
     packageProduct.includes(
         "process.env.DIALOGFORGE_PRODUCT_PATH = path.join(__dirname"
     )
@@ -258,6 +301,21 @@ assert.ok(
         "`--config.extraMetadata.productName=${productName}`"
     ),
     "packaged products must expose the product name to Electron at runtime"
+);
+assert.ok(
+    packageProduct.includes("readProductDescription")
+    && packageProduct.includes("Missing description in ${manifestPath}.")
+    && packageProduct.includes(
+        "`--config.extraMetadata.description=${productDescription}`"
+    )
+    && !packageProduct.includes("`--config.description=${productDescription}`"),
+    "packaged products must use the selected product description"
+);
+assert.ok(
+    !packageProduct.includes("windowsAzureSigningConfig")
+    && !packageProduct.includes("AZURE_TRUSTED_SIGNING_ENDPOINT")
+    && !packageProduct.includes("--config.win.azureSignOptions"),
+    "Windows signing must be handled by the workflow after electron-builder packaging"
 );
 [
     "`--config.linux.artifactName=${fileName}_${version}_intel.AppImage`",

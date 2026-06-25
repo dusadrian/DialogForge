@@ -98,6 +98,17 @@ const electronBuilderBinary = function () {
         paths: [distDir]
     });
 };
+const electronRuntimeVersion = function () {
+    const packagePath = require.resolve("electron/package.json", {
+        paths: [distDir]
+    });
+    const packageJson = JSON.parse(fs.readFileSync(packagePath, "utf8"));
+    const version = String(packageJson.version || "").trim();
+    if (!version) {
+        throw new Error(`Unable to read Electron runtime version from ${packagePath}.`);
+    }
+    return version;
+};
 const createMacConfigPath = function (arch) {
     const configPath = path.join(distDir, "electron-builder-macos.override.json");
     const packageJsonPath = path.join(distDir, "package.json");
@@ -132,6 +143,13 @@ const readProductDefaultRuntimeProvider = function (productManifest, runtimeProv
         return explicitDefault;
     }
     return runtimeProviders[0] || "r";
+};
+const readProductDescription = function (productManifest, manifestPath) {
+    const description = String(productManifest.description || "").trim();
+    if (!description) {
+        throw new Error(`Missing description in ${manifestPath}.`);
+    }
+    return description;
 };
 const platformFlags = function (platform, arch) {
     if (platform === "linux") {
@@ -290,9 +308,11 @@ const main = function () {
     const runtimeProviders = readProductRuntimeProviders(productManifest);
     const defaultRuntimeProvider = readProductDefaultRuntimeProvider(productManifest, runtimeProviders);
     const productVersion = String(productManifest.version || "").trim();
+    const productDescription = readProductDescription(productManifest, location.manifestPath);
     const outputDir = path.join(projectRoot, "build/output");
     const noSign = Boolean(selection.nosign);
     const mainFile = generatedMainFile(location.id);
+    const electronVersion = electronRuntimeVersion();
     const productName = String(productManifest.name || location.id).trim() || location.id;
     const appId = String(productManifest.appId || "").trim()
         || defaultAppId(location.id);
@@ -321,10 +341,11 @@ const main = function () {
     assertPackagedRuntimeDependencies();
     try {
         const builderArgs = [
-            "--config.electronVersion=40.6.1",
+            `--config.electronVersion=${electronVersion}`,
             `--config.extraMetadata.main=${mainFile}`,
             `--config.extraMetadata.productName=${productName}`,
             `--config.extraMetadata.version=${productVersion}`,
+            `--config.extraMetadata.description=${productDescription}`,
             `--config.directories.output=${outputDir}`,
             `--config.appId=${appId}`,
             `--config.productName=${productName}`,
