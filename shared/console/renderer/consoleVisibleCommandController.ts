@@ -1,6 +1,7 @@
 import type {
     RuntimeSessionSnapshot
 } from "../../runtime/provider-contract/runtimeProvider";
+import { normalizeConsoleCommandText } from "../commandText";
 
 
 export interface ConsoleVisibleCommandControllerOptions {
@@ -32,7 +33,7 @@ export const createConsoleVisibleCommandController = function(
         rawText: string,
         source: string
     ): Promise<"ok" | void> {
-        const text = String(rawText || "").trim();
+        const text = normalizeConsoleCommandText(rawText).trim();
 
         if (!text) {
             return;

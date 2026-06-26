@@ -35,6 +35,7 @@ const verifierGroups = {
         "verify:renderer-scripts",
         "verify:shared-assets",
         "verify:shared-dialog-sources",
+        "verify:console-command-text",
         "verify:console-history-persistence",
         "verify:workspace-pane",
         "verify:runtime-panels",

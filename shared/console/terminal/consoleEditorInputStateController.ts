@@ -133,9 +133,7 @@ export const createConsoleEditorInputStateController = function(
             return;
         }
 
-        const text = String(rawText || "")
-            .replace(/\r\n/g, "\n")
-            .replace(/\r/g, "\n");
+        const text = normalizeConsoleCommandText(rawText);
 
         if (!text) {
             return;

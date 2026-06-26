@@ -1,3 +1,5 @@
+import { normalizeConsoleCommandText } from "../commandText";
+
 export type ConsoleSubmissionResult = "ok" | "incomplete" | void;
 export type ConsoleFragmentState =
     | "complete"
@@ -35,9 +37,7 @@ export interface ConsoleEditorSubmissionController {
 
 
 const normalizedCode = function(value: string): string {
-    return String(value || "")
-        .replace(/\r\n/g, "\n")
-        .replace(/\r/g, "\n");
+    return normalizeConsoleCommandText(value);
 };
 
 

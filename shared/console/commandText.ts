@@ -1,6 +1,11 @@
 export const normalizeConsoleLineEndings = (value: unknown): string =>
   String(value ?? '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 
+const normalizeCopiedUnicodeSpaces = (value: string): string => value.replace(
+  /[\u00A0\u1680\u2000-\u200A\u202F\u205F\u3000]/g,
+  ' '
+);
+
 const looksLikeBareRepoHost = (value: string): boolean => {
   const trimmed = String(value || '').trim();
   if (!trimmed) return false;
@@ -20,7 +25,7 @@ const normalizeInstallPackagesRepos = (source: string): string => source.replace
 );
 
 export const normalizeConsoleCommandText = (value: unknown): string => {
-  const source = normalizeConsoleLineEndings(value);
+  const source = normalizeCopiedUnicodeSpaces(normalizeConsoleLineEndings(value));
   return /install\.packages\s*\(/i.test(source)
     ? normalizeInstallPackagesRepos(source)
     : source;

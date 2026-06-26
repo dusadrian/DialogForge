@@ -13,6 +13,7 @@ import {
 import {
     createConsoleVisibleCommandController
 } from "./consoleVisibleCommandController";
+import { normalizeConsoleCommandText } from "../commandText";
 
 
 export interface MainConsoleCoordinatorBindings {
@@ -166,9 +167,7 @@ export const createMainConsoleCoordinator = function(
             return;
         }
 
-        commandHost().textContent = String(value || "")
-            .replace(/\r\n/g, "\n")
-            .replace(/\r/g, "\n");
+        commandHost().textContent = normalizeConsoleCommandText(value);
     };
 
     const focus = function(): void {
