@@ -72,6 +72,7 @@ jobs:
     needs: prepare-release
     if: ${{ always() && (needs.prepare-release.result == 'success' || needs.prepare-release.result == 'skipped') }}
     runs-on: windows-latest
+    environment: signing
     steps:
       - name: Check out DialogForge
         uses: actions/checkout@v5

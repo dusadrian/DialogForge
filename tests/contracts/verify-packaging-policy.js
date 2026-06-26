@@ -223,7 +223,7 @@ assertProductPlatformWorkflow(
         && workflow.includes("azure_application_id: ${{ secrets.AZURE_APPLICATION_ID }}")
         && workflow.includes("azure_tenant_id: ${{ secrets.AZURE_TENANT_ID }}")
         && workflow.includes("azure_subscription_id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}")
-        && !workflow.includes("environment: signing"),
+        && workflow.includes("environment: signing"),
         relativePath + " must make Azure signing credentials available to Windows packaging"
     );
 });
