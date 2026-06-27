@@ -137,6 +137,10 @@ The archive should round-trip to the dialog directory without losing the split b
 
 When unpacked, the archive should produce the editable dialog directory.
 
+For the full source-owned dialog authoring workflow, including development
+import behavior, registry entries, menu entries, capabilities, translations, and
+product validation, see [Adding Dialogs](adding-dialogs.md).
+
 ### How The Repo Should Reference Dialogs
 
 Any registry or manifest that points at a dialog should point at the dialog directory.

@@ -19,6 +19,7 @@ export interface ProductDialogSourceDefinition {
 export interface ProductDialogSourceReaderOptions {
     rootDir: string;
     productId: string;
+    productRootPath?: string;
     findDefinition(
         dialogId: string
     ): ProductDialogSourceDefinition | null | undefined;
@@ -189,9 +190,8 @@ export const createProductDialogSourceReader = function(
                     definition.sourceFile
                 )
                 : path.join(
-                    options.rootDir,
-                    "products",
-                    options.productId,
+                    options.productRootPath
+                        || path.join(options.rootDir, "products", options.productId),
                     "dialogs",
                     definition.sourceFile
                 );

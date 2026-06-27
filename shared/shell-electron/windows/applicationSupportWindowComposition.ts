@@ -8,7 +8,8 @@ import type {
 } from "electron";
 
 import type {
-    ApplicationComposition
+    ApplicationComposition,
+    DialogDefinition
 } from "../../core/contracts/applicationComposition";
 import {
     applicationEventChannels
@@ -95,11 +96,37 @@ export const createApplicationSupportWindowComposition = function(
 
         return win && !win.isDestroyed() ? win : null;
     };
+    const readDialogRegistry = function(registryPath: string): DialogDefinition[] {
+        try {
+            const parsed = JSON.parse(fs.readFileSync(registryPath, "utf8"));
+
+            return Array.isArray(parsed) ? parsed as DialogDefinition[] : [];
+        }
+        catch {
+            return [];
+        }
+    };
+    const readSharedDialogs = function(): DialogDefinition[] {
+        return readDialogRegistry(
+            path.join(options.composition.rootDir, "shared/base-app/dialogs/dialogs.json")
+        );
+    };
+    const readProductDialogs = function(): DialogDefinition[] {
+        if (options.composition.location.source === "base") {
+            return [];
+        }
+
+        return readDialogRegistry(
+            path.join(options.composition.location.rootPath, "dialogs/dialogs.json")
+        );
+    };
     const menuCustomizationModel = createMenuCustomizationModel({
         menu: options.composition.menu,
         readMenu: function() {
             return options.composition.menu;
         },
+        readProductDialogs,
+        readSharedDialogs,
         productDialogs: options.composition.productDialogs,
         sharedDialogs: options.composition.sharedDialogs,
         userDialogsDirectory: options.userDialogsDirectory(),
@@ -438,6 +465,10 @@ export const createApplicationSupportWindowComposition = function(
         },
         sendToAllWindows: options.sendToAllWindows,
         userDialogsDirectory: options.userDialogsDirectory,
+        rootDir: options.composition.rootDir,
+        productLocation: options.composition.location,
+        defaultRuntimeProvider: options.composition.product.defaultRuntimeProvider
+            || options.composition.runtime.id,
         translate: options.translate
     });
 

@@ -1,5 +1,4 @@
 import * as fs from "fs";
-import * as path from "path";
 import type {
     Dialog,
     IpcMain,
@@ -7,13 +6,16 @@ import type {
     IpcMainInvokeEvent
 } from "electron";
 
-import {
-    normalizeNewDialogForRuntime,
-    parseNewDialogJson
-} from "../../dialog-runtime/renderer/modules/dialogAdapter";
+import type {
+    ResolvedProductLocation
+} from "../../core/contracts/productLocation";
 import {
     updateDialogRuntimeRequirements
 } from "../../dialog-runtime/requirements/dialogRuntimeRequirements";
+import {
+    importDialogPackage,
+    planDialogPackageImport
+} from "./dialogPackageImport";
 import type {
     DialogRuntimeRequirementsWindowController
 } from "../../dialog-runtime/requirements/dialogRuntimeRequirementsWindowController";
@@ -61,6 +63,9 @@ export interface ApplicationSettingsIpcControllerOptions {
     applyLanguage(locale: string): void;
     sendToAllWindows(channel: string, payload: unknown): void;
     userDialogsDirectory(): string;
+    rootDir: string;
+    productLocation: ResolvedProductLocation;
+    defaultRuntimeProvider: string;
     translate(text: string): string;
 }
 
@@ -259,12 +264,12 @@ export const createApplicationSettingsIpcController = function(
         const picked = await options.dialog.showOpenDialog(
             menuCustomizationWindow,
             {
-                title: options.translate("Choose dialog JSON"),
+                title: options.translate("Choose DialogCreator package"),
                 properties: ["openFile"],
                 filters: [
                     {
-                        name: "JSON",
-                        extensions: ["json"]
+                        name: "DialogCreator package",
+                        extensions: ["dc.zip"]
                     }
                 ]
             }
@@ -277,39 +282,21 @@ export const createApplicationSettingsIpcController = function(
         const sourcePath = picked.filePaths[0];
 
         try {
-            const raw = fs.readFileSync(sourcePath, "utf8");
-            const parsed = parseNewDialogJson(raw);
-            const normalized = normalizeNewDialogForRuntime(parsed);
-            const properties =
-                normalized.properties && typeof normalized.properties === "object"
-                    ? normalized.properties as unknown as Record<string, unknown>
-                    : {};
-            const sourceName = path.basename(sourcePath, path.extname(sourcePath));
-            const id = String(properties.name || sourceName)
-                .trim()
-                .replace(/[^A-Za-z0-9._-]+/g, "_");
+            const target = {
+                rootDir: options.rootDir,
+                location: options.productLocation,
+                defaultRuntimeProvider: options.defaultRuntimeProvider
+            };
+            const plan = planDialogPackageImport(sourcePath, target);
 
-            if (!id) {
-                throw new Error("Dialog ID is empty.");
-            }
-
-            fs.mkdirSync(options.userDialogsDirectory(), {
-                recursive: true
-            });
-
-            const targetPath = path.join(
-                options.userDialogsDirectory(),
-                `${id}.json`
-            );
-
-            if (fs.existsSync(targetPath)) {
+            if (fs.existsSync(plan.targetDirectory)) {
                 const overwrite = await options.dialog.showMessageBox(
                     menuCustomizationWindow,
                     {
                         type: "question",
                         title: options.translate("Already exists"),
                         message: options.translate(
-                            "A dialog with this name already exists. Overwrite?"
+                            "A dialog package with this name already exists. Overwrite?"
                         ),
                         buttons: [
                             options.translate("No"),
@@ -325,17 +312,17 @@ export const createApplicationSettingsIpcController = function(
                 }
             }
 
-            fs.writeFileSync(targetPath, raw, "utf8");
+            const imported = importDialogPackage(sourcePath, target);
             options.menuCustomizationWindowController.notifyDialogBrowsed({
-                id,
-                name: String(properties.title || properties.name || id)
+                id: imported.id,
+                name: imported.label
             });
         } catch (error) {
             await options.dialog.showMessageBox(menuCustomizationWindow, {
                 type: "error",
                 title: options.translate("Error"),
                 message: options.translate(
-                    "Selected file is not a valid dialog JSON."
+                    "Selected file is not a valid DialogCreator package."
                 ),
                 detail: error instanceof Error ? error.message : String(error),
                 buttons: [

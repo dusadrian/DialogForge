@@ -36,6 +36,7 @@ export interface ProductDialogCompositionOptions {
     ipcMain: IpcMain;
     rootDir: string;
     productId: string;
+    productRootPath?: string;
     nativeWindowIconPath?: string;
     runtimeSessionManager: RuntimeSessionManager;
     findDefinition(dialogId: string): DialogDefinition | undefined;
@@ -58,6 +59,7 @@ export const createProductDialogComposition = function(
     const readDialog = createProductDialogSourceReader({
         rootDir: options.rootDir,
         productId: options.productId,
+        productRootPath: options.productRootPath,
         findDefinition: options.findDefinition,
         getLocale: options.getLocale
     });

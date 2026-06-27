@@ -780,7 +780,7 @@ const applyLocalizedTexts = () => {
   byId<HTMLDivElement>('paneHeadProperties').textContent = t('Properties');
   byId<HTMLDivElement>('hintRenameNode').textContent = t('Double-click a node to rename it.');
   byId<HTMLLabelElement>('labelPropLabel').textContent = t('Label');
-  byId<HTMLLabelElement>('labelPropDialogFile').textContent = t('Dialog File');
+  byId<HTMLLabelElement>('labelPropDialogFile').textContent = t('Dialog Package');
   byId<HTMLLabelElement>('labelPropRuntimeProvider').textContent = t('Runtime Provider');
   byId<HTMLLabelElement>('labelPropShortcut').textContent = t('Shortcut');
   byId<HTMLLabelElement>('labelPropDependencies').textContent = t('Dependencies (packages)');
@@ -865,7 +865,7 @@ window.dialogForge.menuCustomization.onBrowsed((args: unknown) => {
   if (node && node.type === 'dialog') {
     node.id = id;
     node.name = dialogTitleById(id);
-    byId<HTMLInputElement>('propDialogFile').value = `${id}.json`;
+    byId<HTMLInputElement>('propDialogFile').value = `${id}.dc.zip`;
     byId<HTMLInputElement>('propLabel').value = node.name;
     renderTree();
     syncPropsFromSelection();

@@ -479,6 +479,7 @@ productDialogComposition = (0, productDialogComposition_1.createProductDialogCom
     ipcMain: electron_1.ipcMain,
     rootDir: composition.rootDir,
     productId: product,
+    productRootPath: composition.location.rootPath,
     nativeWindowIconPath: composition.nativeWindowIconPath || undefined,
     runtimeSessionManager,
     findDefinition: findProductDialogDefinition,

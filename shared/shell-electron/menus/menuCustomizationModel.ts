@@ -26,6 +26,8 @@ export interface MenuCustomizationNode {
 export interface MenuCustomizationModelOptions {
     menu: EvaluatedMenuItem[];
     readMenu?(): EvaluatedMenuItem[];
+    readProductDialogs?(): DialogDefinition[];
+    readSharedDialogs?(): DialogDefinition[];
     productDialogs: DialogDefinition[];
     sharedDialogs: DialogDefinition[];
     userDialogsDirectory: string;
@@ -45,6 +47,18 @@ export const createMenuCustomizationModel = function(
 ): MenuCustomizationModel {
     const readMenu = function(): EvaluatedMenuItem[] {
         return options.readMenu ? options.readMenu() : options.menu;
+    };
+
+    const readProductDialogs = function(): DialogDefinition[] {
+        return options.readProductDialogs
+            ? options.readProductDialogs()
+            : options.productDialogs;
+    };
+
+    const readSharedDialogs = function(): DialogDefinition[] {
+        return options.readSharedDialogs
+            ? options.readSharedDialogs()
+            : options.sharedDialogs;
     };
 
     const nodeFromItem = function(
@@ -109,8 +123,8 @@ export const createMenuCustomizationModel = function(
     const findDialog = function(
         dialogId: string
     ): DialogDefinition | undefined {
-        const registered = options.productDialogs
-            .concat(options.sharedDialogs)
+        const registered = readProductDialogs()
+            .concat(readSharedDialogs())
             .find((definition) => {
                 return definition.id === dialogId;
             });
