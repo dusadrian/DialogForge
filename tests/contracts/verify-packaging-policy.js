@@ -103,6 +103,7 @@ assert.ok(
     && generateCoreSdk.includes("@dialogforge/core")
     && generateCoreSdk.includes("PRODUCT_CONTRIBUTION_CONTRACT_VERSION")
     && generateCoreSdk.includes('path.join(rootDir, "node_modules", "@dialogforge", "core")')
+    && copyStatic.includes('"@dialogforge/core": sourcePackage.version')
     && copyStatic.includes("node_modules/@dialogforge/core/**/*"),
     "builds must stage the product-facing @dialogforge/core SDK contract"
 );

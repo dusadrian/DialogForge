@@ -34,6 +34,12 @@ const sourceActionFile = path.join(
     path.dirname(dialog.sourceFile),
     "actions.js"
 );
+const stagedActionFile = path.join(
+    rootDir,
+    "dist/shared/base-app/dialogs",
+    path.dirname(dialog.sourceFile),
+    "actions.js"
+);
 const sourceElements = readDialogSourceElements(rootDir, dialog);
 validateDialogSourceFile(path.join(rootDir, "shared/base-app/dialogs", dialog.sourceFile));
 assert.ok(sourceDialog.properties);
@@ -42,6 +48,12 @@ assert.ok(fs.readFileSync(sourceActionFile, "utf8").includes("const filePath"));
 assert.ok(sourceDialog.elements);
 assert.strictEqual(sourceElements.status, "ready");
 assert.strictEqual(sourceElements.controls.length, sourceDialog.elements.length);
+if (fs.existsSync(path.join(rootDir, "dist"))) {
+    assert.ok(
+        fs.existsSync(stagedActionFile),
+        "build output must stage shared dialog actions.js files"
+    );
+}
 const readRuntimeDialog = createProductDialogSourceReader({
     rootDir,
     productId: "base",

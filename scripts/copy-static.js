@@ -69,6 +69,10 @@ const copyPackageJson = function () {
     const targetPackage = {
         ...sourcePackage,
         main: "scripts/electron-main.js",
+        dependencies: {
+            ...sourcePackage.dependencies,
+            "@dialogforge/core": sourcePackage.version
+        },
         build: {
             ...sourcePackage.build,
             files: [
@@ -101,6 +105,7 @@ const walk = function (dirPath) {
         }
         const staticJavaScript = entry.name.endsWith(".js")
             && (entryPath.includes(path.join("shared", "base-app", "pages", "shared"))
+                || entryPath.includes(path.join("shared", "base-app", "dialogs"))
                 || entryPath.startsWith(path.join(sourceRoot, "scripts") + path.sep));
         if (staticJavaScript || /\.(html|css|json|R|svg|png|ico|icns|ttf|txt)$/.test(entry.name)) {
             copyFile(entryPath);
