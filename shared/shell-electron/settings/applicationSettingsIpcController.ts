@@ -66,6 +66,7 @@ export interface ApplicationSettingsIpcControllerOptions {
     rootDir: string;
     productLocation: ResolvedProductLocation;
     defaultRuntimeProvider: string;
+    visibleRuntimeProviderIds: string[];
     translate(text: string): string;
 }
 
@@ -84,6 +85,42 @@ const mergeTerminalSettings = function(
             {},
             isRecord(current.terminalSettings) ? current.terminalSettings : {},
             isRecord(patch.terminalSettings) ? patch.terminalSettings : {}
+        )
+    });
+};
+
+
+const mergeRuntimeStartup = function(
+    current: ApplicationSettings,
+    patch: ApplicationSettings,
+    visibleRuntimeProviderIds: string[],
+    defaultRuntimeProvider: string
+): ApplicationSettings {
+    if (!isRecord(patch.runtimeStartup)) {
+        return patch;
+    }
+
+    const currentStartup = isRecord(current.runtimeStartup)
+        ? current.runtimeStartup
+        : {};
+    const visibleProviders = visibleRuntimeProviderIds.map((providerId) => {
+        return String(providerId || "").trim();
+    }).filter(Boolean);
+    const defaultProvider = String(defaultRuntimeProvider || "").trim();
+    const requestedProvider = String(patch.runtimeStartup.providerId || "").trim();
+    const currentProvider = String(currentStartup.providerId || "").trim();
+    const providerId = visibleProviders.includes(requestedProvider)
+        ? requestedProvider
+        : visibleProviders.includes(currentProvider)
+            ? currentProvider
+            : visibleProviders[0] || defaultProvider;
+
+    return Object.assign({}, patch, {
+        runtimeStartup: Object.assign(
+            {},
+            currentStartup,
+            patch.runtimeStartup,
+            { providerId }
         )
     });
 };
@@ -176,7 +213,15 @@ export const createApplicationSettingsIpcController = function(
     ) => {
         const current = options.readSettings();
         const patch = isRecord(input) ? input : {};
-        const next = mergeTerminalSettings(current, patch);
+        const next = mergeTerminalSettings(
+            current,
+            mergeRuntimeStartup(
+                current,
+                patch,
+                options.visibleRuntimeProviderIds,
+                options.defaultRuntimeProvider
+            )
+        );
         const currentLocale = String(
             current.defaultLanguage || current.languageNS || "en_US"
         );

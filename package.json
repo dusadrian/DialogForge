@@ -44,6 +44,26 @@
         "verify:r-process-lifecycle": "node -r ./tests/register-dist-require.js tests/contracts/verify-r-process-lifecycle.js",
         "verify:r-visible-command": "node -r ./tests/register-dist-require.js tests/contracts/verify-r-visible-command.js",
         "verify:r-workspace-runtime-control": "node -r ./tests/register-dist-require.js tests/contracts/verify-r-workspace-runtime-control.js",
+        "verify:web-r-runtime-providers": "node -r ./tests/register-dist-require.js tests/contracts/verify-web-r-runtime-providers.js",
+        "verify:runtime-provider-selection": "node -r ./tests/register-dist-require.js tests/contracts/verify-runtime-provider-selection.js",
+        "verify:runtime-transport": "node -r ./tests/register-dist-require.js tests/contracts/verify-runtime-transport.js",
+        "verify:server-r-lifecycle": "node -r ./tests/register-dist-require.js tests/contracts/verify-server-r-lifecycle.js",
+        "verify:server-r-transport-routing": "node -r ./tests/register-dist-require.js tests/contracts/verify-server-r-transport-routing.js",
+        "verify:webr-lifecycle": "node -r ./tests/register-dist-require.js tests/contracts/verify-webr-lifecycle.js",
+        "verify:webr-transport-routing": "node -r ./tests/register-dist-require.js tests/contracts/verify-webr-transport-routing.js",
+        "verify:webr-runtime-bridge-hardening": "node -r ./tests/register-dist-require.js tests/contracts/verify-webr-runtime-bridge-hardening.js",
+        "verify:webr-asset-base-resolution": "node -r ./tests/register-dist-require.js tests/contracts/verify-webr-asset-base-resolution.js",
+        "verify:webr-node-worker-path": "node -r ./tests/register-dist-require.js tests/contracts/verify-webr-node-worker-path.js",
+        "verify:webr-filesystem-mount-boundary": "node -r ./tests/register-dist-require.js tests/contracts/verify-webr-filesystem-mount-boundary.js",
+        "verify:webr-bootstrap-hook": "node -r ./tests/register-dist-require.js tests/contracts/verify-webr-bootstrap-hook.js",
+        "verify:webr-package-library-policy": "node -r ./tests/register-dist-require.js tests/contracts/verify-webr-package-library-policy.js",
+        "verify:webr-transcript-and-readiness": "node -r ./tests/register-dist-require.js tests/contracts/verify-webr-transcript-and-readiness.js",
+        "verify:provider-selection-settings": "node tests/contracts/verify-provider-selection-settings.js",
+        "verify:browser-composition-entrypoint": "node tests/contracts/verify-browser-composition-entrypoint.js",
+        "verify:browser-storage-file-adapters": "node tests/contracts/verify-browser-storage-file-adapters.js",
+        "verify:browser-dialog-surface": "node tests/contracts/verify-browser-dialog-surface.js",
+        "verify:browser-auxiliary-surfaces": "node tests/contracts/verify-browser-auxiliary-surfaces.js",
+        "verify:browser-rendered-parity": "node tests/contracts/verify-browser-rendered-parity.js",
         "verify:package-install-workflow": "node -r ./tests/register-dist-require.js tests/contracts/verify-package-install-workflow.js",
         "verify:packaging-policy": "node -r ./tests/register-dist-require.js tests/contracts/verify-packaging-policy.js",
         "verify:core-sdk": "node tests/contracts/verify-core-sdk.js",
@@ -103,7 +123,8 @@
     "dependencies": {
         "monaco-editor": "^0.55.1",
         "preact": "^10.29.2",
-        "sortablejs": "^1.15.7"
+        "sortablejs": "^1.15.7",
+        "webr": "^0.6.0"
     },
     "build": {
         "directories": {

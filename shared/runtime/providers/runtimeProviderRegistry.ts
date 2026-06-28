@@ -6,11 +6,15 @@ import type {
 } from "../provider-contract/runtimeProvider";
 import { createRuntimeProvider as createRRuntimeProvider } from "./r/runtimeProvider";
 import { createRuntimeProvider as createPythonRuntimeProvider } from "./python/runtimeProvider";
+import { createRuntimeProvider as createServerRRuntimeProvider } from "./server-r/runtimeProvider";
+import { createRuntimeProvider as createWebRRuntimeProvider } from "./webr/runtimeProvider";
 
 
 export const runtimeProviderFactories: RuntimeProviderRegistry = {
     r: createRRuntimeProvider,
-    python: createPythonRuntimeProvider
+    python: createPythonRuntimeProvider,
+    "server-r": createServerRRuntimeProvider,
+    webr: createWebRRuntimeProvider
 };
 
 

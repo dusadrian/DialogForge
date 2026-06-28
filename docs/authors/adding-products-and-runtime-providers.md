@@ -646,6 +646,23 @@ Use the persisted startup provider on reopen so the app comes back in the same r
 
 If the user changes the provider during the session, update the persisted startup provider immediately instead of waiting for shutdown.
 
+For DialogR web work, keep the provider ids explicit:
+
+- `r` means local desktop R launched by the Electron host;
+- `server-r` means a future server-managed R session;
+- `webr` means the experimental in-browser WebR provider backed by the
+  maintained `webr` npm package.
+
+Do not create a separate DialogR product just to choose between these runtime
+execution modes. The product remains DialogR; the runtime provider changes.
+
+Host policy decides which providers ordinary users see. The Electron host keeps
+`server-r` and `webr` hidden from normal provider choices, and ignores persisted
+web-only provider values when selecting the desktop startup provider. An
+explicit runtime override can still select a supported provider for advanced
+testing. A web host should prefer web-capable providers such as `server-r` or
+`webr` when the product declares them.
+
 #### `startup/startup-tasks.json`
 
 This file defines startup work.

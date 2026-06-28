@@ -2,6 +2,10 @@
 
 const fs = require("node:fs");
 const path = require("node:path");
+const { spawnSync } = require("node:child_process");
+
+
+let stagedProductPath = "";
 
 
 const readRequiredProductPath = function() {
@@ -32,11 +36,49 @@ const readProductId = function(productPath) {
 };
 
 
+const stageProduct = function(productPath) {
+    const resolvedProductPath = path.resolve(productPath);
+
+    if (stagedProductPath === resolvedProductPath) {
+        return;
+    }
+
+    const projectRoot = process.cwd();
+    const result = spawnSync(
+        process.execPath,
+        [
+            path.join(projectRoot, "dist/scripts/package-product.js"),
+            "--product-path",
+            resolvedProductPath,
+            "--stage-only"
+        ],
+        {
+            cwd: projectRoot,
+            env: process.env,
+            stdio: "inherit"
+        }
+    );
+
+    if (result.error) {
+        throw result.error;
+    }
+
+    if (result.status !== 0) {
+        throw new Error(`Product staging exited with status ${result.status}.`);
+    }
+
+    stagedProductPath = resolvedProductPath;
+};
+
+
 const productLaunchArgs = function(mainEntry) {
+    const productPath = readRequiredProductPath();
+    stageProduct(productPath);
+
     return [
         mainEntry,
         "--product-path",
-        readRequiredProductPath()
+        productPath
     ];
 };
 

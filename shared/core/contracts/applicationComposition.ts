@@ -4,6 +4,10 @@ import type {
     RuntimeSessionSnapshot
 } from "../../runtime/provider-contract/runtimeProvider";
 import type { ResolvedProductLocation } from "./productLocation";
+import type {
+    RuntimeHostKind,
+    RuntimeProviderSelection
+} from "./runtimeProviderSelection";
 
 
 export type LocaleStrings = Record<string, string>;
@@ -178,6 +182,8 @@ export interface ApplicationCompositionOptions {
     rootDir: string;
     location: ResolvedProductLocation;
     runtime?: string;
+    persistedRuntimeProvider?: string;
+    hostKind?: RuntimeHostKind;
     locale?: string;
 }
 
@@ -188,6 +194,7 @@ export interface ApplicationComposition {
     product: ProductManifest;
     location: ResolvedProductLocation;
     runtime: RuntimeProviderManifest;
+    runtimeProviderSelection: RuntimeProviderSelection;
     runtimeSession: RuntimeSessionSnapshot;
     i18n: LocaleStrings;
     features: FeatureEvaluation[];

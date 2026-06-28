@@ -3,9 +3,10 @@ import * as path from "path";
 
 import { baseFeatureRequirements } from "../../runtime/capabilities/featureRequirements";
 import {
-    assertRuntimeProviderIsRegistered,
-    getRuntimeProvider
+    getRuntimeProvider,
+    listRuntimeProviderIds
 } from "../../runtime/providers/runtimeProviderRegistry";
+import { selectRuntimeProvider } from "../../core/contracts/runtimeProviderSelection";
 import { resolveProductIconPath } from "./productAssets";
 import {
     readJsonForValidation,
@@ -666,33 +667,22 @@ export const composeApplication = function(options: ApplicationCompositionOption
     const location = options.location;
     const locale = options.locale || "en_US";
     const product = readProduct(location);
+    const productSettings = readProductSettings(location);
     const supportedRuntimeProviders = readProductRuntimeProviders(product);
     const defaultRuntimeProvider = readProductDefaultRuntimeProvider(
         product,
         supportedRuntimeProviders
     );
-    const selectedRuntime = options.runtime || defaultRuntimeProvider;
-
-    if (supportedRuntimeProviders.length > 0) {
-        supportedRuntimeProviders.forEach((runtimeProviderId) => {
-            assertRuntimeProviderIsRegistered(runtimeProviderId);
-        });
-    }
-    else {
-        assertRuntimeProviderIsRegistered(defaultRuntimeProvider);
-    }
-
-    assertRuntimeProviderIsRegistered(selectedRuntime);
-
-    if (
-        supportedRuntimeProviders.length > 0
-        && !supportedRuntimeProviders.includes(selectedRuntime)
-    ) {
-        throw new Error(
-            `Runtime provider "${selectedRuntime}" is not supported by product "${product.id}". ` +
-            `Supported providers: ${supportedRuntimeProviders.join(", ")}`
-        );
-    }
+    const runtimeProviderSelection = selectRuntimeProvider({
+        hostKind: options.hostKind || "electron",
+        explicitProviderId: options.runtime,
+        persistedProviderId: options.persistedRuntimeProvider
+            || productSettings.runtimeStartup?.providerId,
+        productRuntimeProviders: supportedRuntimeProviders,
+        defaultRuntimeProvider,
+        registeredProviderIds: listRuntimeProviderIds()
+    });
+    const selectedRuntime = runtimeProviderSelection.selectedProviderId;
 
     const runtimeProvider = getRuntimeProvider(selectedRuntime, {
         rootDir,
@@ -705,7 +695,6 @@ export const composeApplication = function(options: ApplicationCompositionOption
     const sharedDialogs = readSharedDialogs(rootDir);
     const featureEntrypoints = readFeatureEntrypoints(rootDir);
     const productAbout = readProductAbout(location);
-    const productSettings = readProductSettings(location);
     const productDialogs = applyProductSettingsToDialogs(
         readProductDialogs(location),
         productSettings
@@ -732,6 +721,7 @@ export const composeApplication = function(options: ApplicationCompositionOption
         product,
         location,
         runtime,
+        runtimeProviderSelection,
         runtimeSession,
         i18n,
         features,

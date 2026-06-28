@@ -1,6 +1,8 @@
 type SettingsPayload = {
     settings?: Record<string, unknown>;
     locales?: Array<{ code: string; label: string }>;
+    runtimeProviders?: Array<{ id: string; label?: string }>;
+    selectedRuntimeProvider?: string;
     strings?: Record<string, string>;
 };
 
@@ -44,6 +46,11 @@ const selectionOptions = [
     "rgba(170, 140, 80, 0.42)",
     "rgba(150, 120, 180, 0.42)"
 ];
+
+
+const isRecord = function(value: unknown): value is Record<string, unknown> {
+    return !!value && typeof value === "object" && !Array.isArray(value);
+};
 
 
 const byId = function<T extends HTMLElement>(id: string): T {
@@ -147,6 +154,7 @@ const translate = function(strings: Record<string, string>, key: string): string
 const applyText = function(strings: Record<string, string>): void {
     byId<HTMLHeadingElement>("settingsTitle").textContent = translate(strings, "Settings");
     byId<HTMLLabelElement>("labelLanguage").textContent = translate(strings, "Language");
+    byId<HTMLLabelElement>("labelRuntimeProvider").textContent = translate(strings, "Runtime Provider");
     byId<HTMLLabelElement>("labelTerminalFont").textContent = translate(strings, "Terminal Font");
     byId<HTMLLabelElement>("labelTerminalCursor").textContent = translate(strings, "Terminal Cursor");
     byId<HTMLLabelElement>("labelTerminalCursorBlink").textContent = translate(strings, "Terminal Cursor Blink");
@@ -172,10 +180,24 @@ const renderSettings = function(payload: SettingsPayload): void {
     const locales = Array.isArray(payload.locales) && payload.locales.length > 0
         ? payload.locales
         : [{ code: "en_US", label: "English (United States)" }];
+    const visibleRuntimeProviders = Array.isArray(payload.runtimeProviders)
+        && payload.runtimeProviders.length > 0
+        ? payload.runtimeProviders
+        : [{ id: "r", label: "R" }];
+    const runtimeStartup = isRecord(settings.runtimeStartup)
+        ? settings.runtimeStartup
+        : {};
+    const selectedRuntimeProvider = String(
+        payload.selectedRuntimeProvider ||
+        runtimeStartup.providerId ||
+        visibleRuntimeProviders[0].id ||
+        "r"
+    );
 
     applyText(payload.strings || {});
 
     const language = byId<HTMLElement>("defaultLanguage");
+    const runtimeProvider = byId<HTMLElement>("runtimeProvider");
     const terminalFont = byId<HTMLElement>("terminalFont");
     const cursorStyle = byId<HTMLElement>("terminalCursorStyle");
     const cursorBlink = byId<HTMLElement>("terminalCursorBlink");
@@ -191,6 +213,12 @@ const renderSettings = function(payload: SettingsPayload): void {
             label: locale.label
         };
     }));
+    setOptions(runtimeProvider, visibleRuntimeProviders.map((provider) => {
+        return {
+            value: provider.id,
+            label: provider.label || provider.id
+        };
+    }));
     setOptions(terminalFont, fontOptions);
     setOptions(cursorStyle, cursorOptions);
     setOptions(cursorBlink, booleanOptions);
@@ -199,6 +227,7 @@ const renderSettings = function(payload: SettingsPayload): void {
     setOptions(inputMode, ["console", "terminal"]);
 
     writeValue(language, settings.defaultLanguage || "en_US");
+    writeValue(runtimeProvider, selectedRuntimeProvider);
     writeValue(terminalFont, normalizeFontChoice(terminalSettings.fontFamily));
     writeValue(cursorStyle, terminalSettings.cursorStyle);
     writeValue(cursorBlink, String(Boolean(terminalSettings.cursorBlink)));
@@ -220,6 +249,9 @@ const renderSettings = function(payload: SettingsPayload): void {
                 inputMode: readValue(inputMode) === "terminal" ? "terminal" : "console",
                 showFullErrorContext: readValue(errorContext) === "true"
             },
+            runtimeStartup: Object.assign({}, runtimeStartup, {
+                providerId: readValue(runtimeProvider) || selectedRuntimeProvider
+            }),
             enableAuthoringFeatures: readChecked(authoring)
         });
     };

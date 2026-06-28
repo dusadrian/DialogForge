@@ -93,6 +93,10 @@ const composition = composeApplicationModule.composeApplication({
     rootDir,
     location,
     runtime,
+    persistedRuntimeProvider: initialSettings.runtimeStartup
+        ? initialSettings.runtimeStartup.providerId
+        : "",
+    hostKind: "electron",
     locale
 });
 
@@ -108,6 +112,10 @@ const applyLocale = function (nextLocale) {
         rootDir,
         location,
         runtime,
+        persistedRuntimeProvider: initialSettings.runtimeStartup
+            ? initialSettings.runtimeStartup.providerId
+            : "",
+        hostKind: "electron",
         locale: nextLocale
     });
     locale = localizedComposition.locale;

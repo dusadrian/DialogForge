@@ -1,3 +1,12 @@
+import type {
+    RuntimeTransportAuthPolicy,
+    RuntimeTransportConnectProbe,
+    RuntimeTransportController,
+    RuntimeTransportCredential,
+    RuntimeTransportSnapshot
+} from "../transport/runtimeTransport";
+
+
 export type RuntimeCapability =
     | "commands.visible"
     | "commands.invisible"
@@ -31,6 +40,27 @@ export interface RuntimeProviderManifest {
     language: string;
     status: string;
     capabilities: RuntimeCapability[];
+    policies?: RuntimeProviderPolicies;
+}
+
+
+export interface RuntimeProviderPolicies {
+    packages?: RuntimePackagePolicy;
+    filesystem?: RuntimeFilesystemPolicy;
+}
+
+
+export interface RuntimePackagePolicy {
+    availability: string;
+    installation: string;
+    message: string;
+}
+
+
+export interface RuntimeFilesystemPolicy {
+    access: string;
+    persistence: string;
+    message: string;
 }
 
 
@@ -39,6 +69,7 @@ export interface RuntimeSessionSnapshot {
     status: string;
     connection: string;
     message: string;
+    transport?: RuntimeTransportSnapshot;
 }
 
 
@@ -838,6 +869,7 @@ export interface RuntimeProvider {
     productCommandController?: RuntimeProductCommandController;
     extensionController?: RuntimeExtensionController;
     eventController?: RuntimeEventController;
+    transportController?: RuntimeTransportController;
     readOnlyAdapter?: RuntimeReadOnlyAdapter;
 }
 
@@ -845,6 +877,11 @@ export interface RuntimeProviderOptions {
     rootDir?: string;
     productId?: string;
     processLifecycle?: boolean;
+    transportEndpoint?: string;
+    transportAuthPolicy?: RuntimeTransportAuthPolicy;
+    transportCredential?: RuntimeTransportCredential;
+    transportConnectProbe?: RuntimeTransportConnectProbe;
+    runtimeBootstrap?: unknown;
     onTranscriptEvents?: (events: TranscriptEvent[]) => void;
     onUnexpectedExit?: (details: {
         code: number | null;

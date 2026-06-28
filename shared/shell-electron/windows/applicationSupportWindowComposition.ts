@@ -197,6 +197,17 @@ export const createApplicationSupportWindowComposition = function(
             return {
                 settings: options.readSettings(),
                 locales: listAvailableLocales(),
+                runtimeProviders:
+                    options.composition.runtimeProviderSelection.choices.filter((choice) => {
+                        return choice.visible;
+                    }).map((choice) => {
+                        return {
+                            id: choice.id,
+                            label: choice.id
+                        };
+                    }),
+                selectedRuntimeProvider:
+                    options.composition.runtimeProviderSelection.selectedProviderId,
                 strings: options.composition.i18n
             };
         },
@@ -469,6 +480,8 @@ export const createApplicationSupportWindowComposition = function(
         productLocation: options.composition.location,
         defaultRuntimeProvider: options.composition.product.defaultRuntimeProvider
             || options.composition.runtime.id,
+        visibleRuntimeProviderIds:
+            options.composition.runtimeProviderSelection.visibleProviderIds,
         translate: options.translate
     });
 
