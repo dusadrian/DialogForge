@@ -1,6 +1,7 @@
 "use strict";
 const productContribution = {
     id: "FixtureProduct",
+    dialogForgeProductContract: 1,
     createDialogExternalCallHosts: function() {
         return {
             fixture: {

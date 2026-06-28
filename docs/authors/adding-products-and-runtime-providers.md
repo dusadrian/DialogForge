@@ -395,6 +395,7 @@ The product contribution connects product-owned code to the shared app.
 It usually supplies:
 
 - product id;
+- DialogForge product-contribution contract version;
 - product-specific external call hosts;
 - product-specific capability wiring;
 - product-level adapters for dialogs or other product-specific hooks.
@@ -406,9 +407,99 @@ The compiled contribution must be a CommonJS module that exports one of:
 - `productContribution`;
 - `default`, containing the contribution object.
 
-The contribution object must satisfy:
+The contribution object must satisfy DialogForge's product-facing core SDK. The
+SDK is for people who edit product wiring, not for people who only add ordinary
+dialogs. Most dialog authors can stay in `dialog.json`, `actions.js`,
+`dialogs/dialogs.json`, `menu/menu.json`, capability files, and locale files.
 
-- [`shared/core/contracts/productContribution.ts`](../../shared/core/contracts/productContribution.ts)
+Use the SDK when you edit:
+
+- `bootstrap/productContribution.ts`;
+- product-level external call hosts;
+- product-level console state chips;
+- product-level runtime method calls.
+
+The SDK is staged inside DialogForge:
+
+- staged package: `dist/sdk/core`;
+- package name: `@dialogforge/core`.
+
+Build or refresh it from the DialogForge repository with:
+
+```sh
+npm run sdk:core
+```
+
+During local development, the product repository points a dev dependency at
+that staged package. If DialogForge and the product repository are siblings,
+the product `package.json` usually contains:
+
+```json
+{
+    "devDependencies": {
+        "@dialogforge/core": "file:../DialogForge/dist/sdk/core"
+    }
+}
+```
+
+After changing `package.json`, run this from the product repository:
+
+```sh
+npm install
+```
+
+Then import the public product contract from `@dialogforge/core`:
+
+```ts
+import {
+    PRODUCT_CONTRIBUTION_CONTRACT_VERSION,
+    type ProductContribution
+} from "@dialogforge/core";
+
+export const productContribution: ProductContribution = {
+    id: "MyProduct",
+    dialogForgeProductContract: PRODUCT_CONTRIBUTION_CONTRACT_VERSION,
+    createDialogExternalCallHosts: function() {
+        return {};
+    }
+};
+```
+
+The package contains the runtime value for
+`PRODUCT_CONTRIBUTION_CONTRACT_VERSION` plus the TypeScript types for product
+contributions, external dialog calls, console state chips, and runtime extension
+method calls. Use that SDK surface instead of importing from DialogForge's
+`shared/` tree.
+
+Set `dialogForgeProductContract` to the current
+`PRODUCT_CONTRIBUTION_CONTRACT_VERSION` exported by `@dialogforge/core`.
+DialogForge validates the staged contribution before loading or packaging a
+product. It fails with a product contribution validation error when:
+
+- the contribution does not export an object as `productContribution` or
+  `default`;
+- `id` is missing or does not match the selected product's `product.json`;
+- `dialogForgeProductContract` is present but unsupported;
+- `createDialogExternalCallHosts` is missing;
+- optional console-state chip fields have the wrong shape.
+
+For a human contributor, the usual setup sequence is:
+
+1. Clone or update DialogForge.
+2. In DialogForge, run `npm install` if dependencies are not installed.
+3. In DialogForge, run `npm run sdk:core`.
+4. In the product repository, make sure `@dialogforge/core` points to
+   `file:../DialogForge/dist/sdk/core` or the equivalent relative path for your
+   checkout layout.
+5. In the product repository, run `npm install`.
+6. Edit `bootstrap/productContribution.ts`.
+7. Run the product's check command, usually `npm run check`.
+8. From DialogForge, run `npm run dev:product -- /path/to/MyProduct` to see the
+   product in the app.
+
+For an agent, keep the same boundary: product code may import
+`@dialogforge/core`, but should not import DialogForge private `shared/` files
+for product contribution types.
 
 ### Suggested Product File Map
 
@@ -627,6 +718,7 @@ For a product directory:
 
 ```sh
 npm start -- /path/to/MyProduct
+npm run dev:product -- /path/to/MyProduct
 npm run build -- /path/to/MyProduct
 npm run build -- /path/to/MyProduct --platform mac
 npm run build -- /path/to/MyProduct --platform win --nosign
@@ -635,6 +727,13 @@ npm run build -- /path/to/MyProduct --platform win --nosign
 `npm start` without a product path starts the shared DialogForge base app.
 `npm start -- /path/to/MyProduct` builds the shared base app and starts it with
 the selected product path.
+
+`npm run dev:product -- /path/to/MyProduct` builds the shared base app once,
+starts Electron with the selected product, watches the product directory, and
+restages changed product files into DialogForge's `dist/products/<productId>`
+area. After a successful restage, Electron is restarted automatically so
+startup-owned product contribution, menu, locale, and dialog registry changes
+are picked up without a manual rebuild-and-restart loop.
 
 `npm run build` without a product path builds the shared DialogForge base app
 only. `npm run build -- /path/to/MyProduct` builds the shared base app and then
@@ -789,10 +888,34 @@ ABC/
     runtime-r/
 ```
 
+Product `dialog.json` files should use DialogForge's editor schema:
+
+```text
+DialogForge/schemas/dialog.schema.json
+```
+
+For VS Code in a product repository next to DialogForge, `.vscode/settings.json`
+can contain:
+
+```json
+{
+    "json.schemas": [
+        {
+            "fileMatch": ["dialogs/**/dialog.json"],
+            "url": "../DialogForge/schemas/dialog.schema.json"
+        }
+    ]
+}
+```
+
+This is an editing aid, not a second source of truth. DialogForge also validates
+registered dialog files during staging and packaging.
+
 Then you would:
 
 - keep `ABC` as a separate repository from DialogForge;
 - export `productContribution` from `bootstrap/productContribution.ts`;
+- set `dialogForgeProductContract` from `@dialogforge/core`;
 - let DialogForge compile and stage the contribution when a product path is
   selected;
 - keep product-specific dialogs and menus inside the product directory;
@@ -806,6 +929,8 @@ Before you call a new runtime provider or product complete, check these things:
 - the file belongs to the right owner;
 - the selected product path resolves to the intended product;
 - the compiled contribution exports `productContribution` or `default`;
+- the contribution id and `dialogForgeProductContract` match DialogForge's
+  current contract;
 - the shared contract describes the data it sends or receives;
 - the code is readable in the repo's style;
 - the code does not leak ownership into the wrong layer;

@@ -66,7 +66,13 @@ export const applicationEventChannels = {
 } as const;
 
 
-interface ApplicationEventPayloads {
+export type ApplicationEventChannel =
+    typeof applicationEventChannels[
+        keyof typeof applicationEventChannels
+    ];
+
+
+export interface ApplicationEventPayloads {
     "base-app:menu-command": EvaluatedMenuItem;
     "base-app:runtime-session": RuntimeSessionSnapshot;
     "base-app:runtime-transcript": TranscriptEvent[];

@@ -1,46 +1,44 @@
 "use strict";
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
-Object.defineProperty(exports, "__esModule", { value: true });
-const path = __importStar(require("path"));
-const child_process_1 = require("child_process");
-const fs = __importStar(require("fs"));
-const runtimeProviderRegistry_1 = require("../shared/runtime/providers/runtimeProviderRegistry");
-const productResolver_1 = require("../shared/base-app/bootstrap/productResolver");
-const packagedRuntimeDependencies_1 = require("./packagedRuntimeDependencies");
+
+const path = require("path");
+const { spawnSync } = require("child_process");
+const fs = require("fs");
+const {
+    assertRuntimeProviderIsRegistered
+} = require("../shared/runtime/providers/runtimeProviderRegistry");
+const {
+    resolveProductLocation
+} = require("../shared/base-app/bootstrap/productResolver");
+const {
+    getProductContribution
+} = require("../shared/base-app/bootstrap/productContributionRegistry");
+const {
+    validateDialogRegistry,
+    validateI18nDirectory
+} = require("../shared/base-app/bootstrap/productAssetValidation");
+const {
+    packagedRuntimeDependencies
+} = require("./packagedRuntimeDependencies");
 const distDir = path.resolve(__dirname, "..");
 const projectRoot = path.resolve(__dirname, "../..");
+
+
+/**
+ * @typedef {Object} ProductPackageSelection
+ * @property {string} productPath
+ * @property {string} platform
+ * @property {string=} arch
+ * @property {boolean=} nosign
+ * @property {boolean=} stageOnly
+ */
+
+
+/**
+ * Read the command-line contract used by both local product packaging and the
+ * start/dev staging helpers.
+ *
+ * @returns {ProductPackageSelection}
+ */
 const parseArgs = function () {
     const selection = {};
     for (let index = 2; index < process.argv.length; index += 1) {
@@ -151,6 +149,13 @@ const readProductDescription = function (productManifest, manifestPath) {
     }
     return description;
 };
+
+
+/**
+ * @param {string} platform
+ * @param {string=} arch
+ * @returns {string[]}
+ */
 const platformFlags = function (platform, arch) {
     if (platform === "linux") {
         return ["--linux"];
@@ -163,6 +168,14 @@ const platformFlags = function (platform, arch) {
         arch === "x64" ? "--x64" : "--arm64"
     ];
 };
+
+
+/**
+ * @param {string} platform
+ * @param {string} productName
+ * @param {string} version
+ * @returns {string[]}
+ */
 const artifactNameConfig = function (platform, productName, version) {
     const fileName = productName.replace(/\s+/g, "_");
     if (platform === "linux") {
@@ -179,7 +192,7 @@ const artifactNameConfig = function (platform, productName, version) {
     return [];
 };
 const renameMacArtifacts = function (productName, version, arch) {
-    const result = (0, child_process_1.spawnSync)(process.execPath, [
+    const result = spawnSync(process.execPath, [
         path.join(distDir, "scripts/rename-binaries-mac.js"),
         "--root",
         projectRoot,
@@ -203,6 +216,12 @@ const renameMacArtifacts = function (productName, version, arch) {
 const safeEntryName = function (productId) {
     return productId.replace(/[^A-Za-z0-9_-]/g, "-");
 };
+
+
+/**
+ * @param {string} productId
+ * @returns {string}
+ */
 const generatedMainFile = function (productId) {
     const fileName = `electron-main-product-${safeEntryName(productId)}.js`;
     const filePath = path.join(distDir, "scripts", fileName);
@@ -227,13 +246,19 @@ const iconConfig = function (iconBasePath) {
     ];
 };
 const assertPackagedRuntimeDependencies = function () {
-    const missing = packagedRuntimeDependencies_1.packagedRuntimeDependencies.filter((packageName) => {
+    const missing = packagedRuntimeDependencies.filter((packageName) => {
         return !fs.existsSync(path.join(distDir, "node_modules", packageName, "package.json"));
     });
     if (missing.length > 0) {
         throw new Error("Missing staged runtime dependencies: " + missing.join(", "));
     }
 };
+
+
+/**
+ * @param {string} sourcePath
+ * @param {string} targetPath
+ */
 const copyProductSourceFiles = function (sourcePath, targetPath) {
     fs.cpSync(sourcePath, targetPath, {
         recursive: true,
@@ -251,6 +276,12 @@ const copyProductSourceFiles = function (sourcePath, targetPath) {
         }
     });
 };
+
+
+/**
+ * @param {import("../shared/core/contracts/productLocation").ResolvedProductLocation} location
+ * @param {string} targetPath
+ */
 const compileProductContribution = function (location, targetPath) {
     const tsconfigPath = path.join(location.rootPath, "tsconfig.json");
     if (!fs.existsSync(tsconfigPath)) {
@@ -259,7 +290,7 @@ const compileProductContribution = function (location, targetPath) {
     const tscPath = require.resolve("typescript/bin/tsc", {
         paths: [distDir]
     });
-    const result = (0, child_process_1.spawnSync)(process.execPath, [
+    const result = spawnSync(process.execPath, [
         tscPath,
         "-p",
         tsconfigPath,
@@ -281,6 +312,15 @@ const compileProductContribution = function (location, targetPath) {
         throw new Error(`Product contribution check failed with exit code ${String(result.status)}.`);
     }
 };
+
+
+/**
+ * Copy, validate, and compile the selected product into DialogForge's staging
+ * area. The returned path is the product root used by packaging and dev mode.
+ *
+ * @param {import("../shared/core/contracts/productLocation").ResolvedProductLocation} location
+ * @returns {string}
+ */
 const stageProductForPackaging = function (location) {
     const targetPath = path.join(distDir, "products", location.id);
     fs.rmSync(targetPath, {
@@ -291,6 +331,13 @@ const stageProductForPackaging = function (location) {
         recursive: true
     });
     copyProductSourceFiles(location.rootPath, targetPath);
+    validateI18nDirectory(path.join(targetPath, "i18n"));
+
+    const dialogRegistryPath = path.join(targetPath, "dialogs/dialogs.json");
+    if (fs.existsSync(dialogRegistryPath)) {
+        validateDialogRegistry(dialogRegistryPath, path.join(targetPath, "dialogs"));
+    }
+
     compileProductContribution(location, targetPath);
     const stagedContributionPath = path.join(targetPath, "bootstrap/productContribution.js");
     if (!fs.existsSync(stagedContributionPath)) {
@@ -298,11 +345,16 @@ const stageProductForPackaging = function (location) {
             `Ensure the product contains a TypeScript tsconfig.json or a plain ` +
             `bootstrap/productContribution.js contribution.`);
     }
+    getProductContribution({
+        ...location,
+        compiledRootPath: targetPath
+    });
+
     return targetPath;
 };
 const main = function () {
     const selection = parseArgs();
-    const location = (0, productResolver_1.resolveProductLocation)(projectRoot, "base", selection.productPath);
+    const location = resolveProductLocation(projectRoot, "base", selection.productPath);
     const stagedProductPath = stageProductForPackaging(location);
     const productManifest = readProductManifest(path.join(stagedProductPath, "product.json"));
     const runtimeProviders = readProductRuntimeProviders(productManifest);
@@ -322,11 +374,11 @@ const main = function () {
         : "";
     if (runtimeProviders.length > 0) {
         runtimeProviders.forEach((runtimeProviderId) => {
-            (0, runtimeProviderRegistry_1.assertRuntimeProviderIsRegistered)(runtimeProviderId);
+            assertRuntimeProviderIsRegistered(runtimeProviderId);
         });
     }
     else {
-        (0, runtimeProviderRegistry_1.assertRuntimeProviderIsRegistered)(defaultRuntimeProvider);
+        assertRuntimeProviderIsRegistered(defaultRuntimeProvider);
     }
     if (runtimeProviders.length > 0
         && !runtimeProviders.includes(defaultRuntimeProvider)) {
@@ -358,7 +410,7 @@ const main = function () {
         if (noSign && selection.platform === "macos") {
             builderArgs.push("--config.mac.identity=null", "--config.mac.hardenedRuntime=false");
         }
-        const result = (0, child_process_1.spawnSync)(process.execPath, [electronBuilderBinary(), ...builderArgs], {
+        const result = spawnSync(process.execPath, [electronBuilderBinary(), ...builderArgs], {
             cwd: distDir,
             stdio: "inherit"
         });

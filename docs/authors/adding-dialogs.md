@@ -110,6 +110,53 @@ For a shared dialog, use:
 `sourceFile` is relative to the owning `dialogs/` directory. `targetHome`
 describes the owning directory, not just the JSON file.
 
+DialogForge validates each registered `sourceFile` before packaging a product.
+The referenced `dialog.json` is checked against
+[`schemas/dialog.schema.json`](../../schemas/dialog.schema.json) and must be
+valid JSON with:
+
+- a root object;
+- `properties.name`;
+- `properties.title`;
+- an `elements` array;
+- element objects with `type` and either `id`, `name`, or `nameid`;
+- string-valued entries inside dialog-local `i18n.locales`, when present.
+
+### Editor Help For `dialog.json`
+
+DialogCreator is the preferred place to design and edit dialogs. If you inspect
+or adjust a `dialog.json` file in VS Code, attach the schema so the editor can
+show field names, descriptions, and basic mistakes while you type.
+
+For DialogForge itself, add this to `.vscode/settings.json`:
+
+```json
+{
+    "json.schemas": [
+        {
+            "fileMatch": ["shared/base-app/dialogs/**/dialog.json"],
+            "url": "./schemas/dialog.schema.json"
+        }
+    ]
+}
+```
+
+For a sibling product repository next to DialogForge, use:
+
+```json
+{
+    "json.schemas": [
+        {
+            "fileMatch": ["dialogs/**/dialog.json"],
+            "url": "../DialogForge/schemas/dialog.schema.json"
+        }
+    ]
+}
+```
+
+If your folders are arranged differently, keep `fileMatch` the same and adjust
+only the `url` so it points to DialogForge's `schemas/dialog.schema.json`.
+
 ## Linking The Dialog To A Menu
 
 Product menu entries live in the product repository under `menu/menu.json`.

@@ -46,7 +46,7 @@
                 "elements.6989c2a8-8257-4f84-a5b4-0752ae4e30f2.value": "Encoding:",
                 "elements.5d1069a5-ce2b-4df0-b571-c971fcedcc17.value": "Type",
                 "elements.b6c15e61-7ae8-4db1-bb02-3560a9d8be33.value": "text",
-                "elements.75027939-9261-4be0-9438-d6946523ea43.value": "binary"
+                "elements.75027939-9261-4be0-9438-d6946523ea43.value": "proprietary"
             },
             "de_DE": {
                 "custom.unknownFileType": "Unbekannter Dateityp",
@@ -78,7 +78,7 @@
                 "elements.6989c2a8-8257-4f84-a5b4-0752ae4e30f2.value": "Kodierung:",
                 "elements.5d1069a5-ce2b-4df0-b571-c971fcedcc17.value": "Typ",
                 "elements.b6c15e61-7ae8-4db1-bb02-3560a9d8be33.value": "Text",
-                "elements.75027939-9261-4be0-9438-d6946523ea43.value": "binär"
+                "elements.75027939-9261-4be0-9438-d6946523ea43.value": "proprietär"
             },
             "fr_FR": {
                 "custom.unknownFileType": "Type de fichier inconnu",
@@ -110,7 +110,7 @@
                 "elements.6989c2a8-8257-4f84-a5b4-0752ae4e30f2.value": "Encodage :",
                 "elements.5d1069a5-ce2b-4df0-b571-c971fcedcc17.value": "Type",
                 "elements.b6c15e61-7ae8-4db1-bb02-3560a9d8be33.value": "texte",
-                "elements.75027939-9261-4be0-9438-d6946523ea43.value": "binaire"
+                "elements.75027939-9261-4be0-9438-d6946523ea43.value": "propriétaire"
             },
             "pl_PL": {
                 "custom.unknownFileType": "Nieznany typ pliku",
@@ -142,7 +142,7 @@
                 "elements.6989c2a8-8257-4f84-a5b4-0752ae4e30f2.value": "Kodowanie:",
                 "elements.5d1069a5-ce2b-4df0-b571-c971fcedcc17.value": "Typ",
                 "elements.b6c15e61-7ae8-4db1-bb02-3560a9d8be33.value": "tekst",
-                "elements.75027939-9261-4be0-9438-d6946523ea43.value": "binarny"
+                "elements.75027939-9261-4be0-9438-d6946523ea43.value": "własnościowy"
             },
             "ro_RO": {
                 "custom.unknownFileType": "Tip de fișier necunoscut",
@@ -174,7 +174,7 @@
                 "elements.6989c2a8-8257-4f84-a5b4-0752ae4e30f2.value": "Codificare:",
                 "elements.5d1069a5-ce2b-4df0-b571-c971fcedcc17.value": "Tip",
                 "elements.b6c15e61-7ae8-4db1-bb02-3560a9d8be33.value": "text",
-                "elements.75027939-9261-4be0-9438-d6946523ea43.value": "binar"
+                "elements.75027939-9261-4be0-9438-d6946523ea43.value": "proprietar"
             },
             "el_GR": {
                 "custom.unknownFileType": "Άγνωστος τύπος αρχείου",
@@ -206,7 +206,7 @@
                 "elements.6989c2a8-8257-4f84-a5b4-0752ae4e30f2.value": "Κωδικοποίηση:",
                 "elements.5d1069a5-ce2b-4df0-b571-c971fcedcc17.value": "Τύπος",
                 "elements.b6c15e61-7ae8-4db1-bb02-3560a9d8be33.value": "κείμενο",
-                "elements.75027939-9261-4be0-9438-d6946523ea43.value": "δυαδικό"
+                "elements.75027939-9261-4be0-9438-d6946523ea43.value": "ιδιόκτητο"
             },
             "es_ES": {
                 "custom.unknownFileType": "Tipo de archivo desconocido",
@@ -238,7 +238,7 @@
                 "elements.6989c2a8-8257-4f84-a5b4-0752ae4e30f2.value": "Codificación:",
                 "elements.5d1069a5-ce2b-4df0-b571-c971fcedcc17.value": "Tipo",
                 "elements.b6c15e61-7ae8-4db1-bb02-3560a9d8be33.value": "texto",
-                "elements.75027939-9261-4be0-9438-d6946523ea43.value": "binario"
+                "elements.75027939-9261-4be0-9438-d6946523ea43.value": "propietario"
             }
         }
     },
@@ -946,7 +946,7 @@
             "maxWidth": 200,
             "lineClamp": 1,
             "fontColor": "#000000",
-            "value": "binary",
+            "value": "proprietary",
             "align": "left",
             "rotate": 0,
             "isEnabled": true,

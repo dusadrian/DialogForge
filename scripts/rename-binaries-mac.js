@@ -1,21 +1,18 @@
 "use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-Object.defineProperty(exports, "__esModule", { value: true });
+
 /**
  * Renames macOS DMG artifacts to stable intel/silicon filenames.
  * Also removes generated update metadata files from build/output.
  */
-const fs_1 = __importDefault(require("fs"));
-const path_1 = __importDefault(require("path"));
-const maybe = path_1.default.resolve(__dirname, "..");
+const fs = require("fs");
+const path = require("path");
+const maybe = path.resolve(__dirname, "..");
 const rootIndex = process.argv.indexOf("--root");
 const cliRoot = rootIndex >= 0 ? String(process.argv[rootIndex + 1] || "").trim() : "";
-const root = cliRoot || (fs_1.default.existsSync(path_1.default.join(maybe, "package.json"))
+const root = cliRoot || (fs.existsSync(path.join(maybe, "package.json"))
     ? maybe
-    : path_1.default.resolve(__dirname, "../.."));
-const pkg = JSON.parse(fs_1.default.readFileSync(path_1.default.join(root, "package.json"), "utf8"));
+    : path.resolve(__dirname, "../.."));
+const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
 const versionIndex = process.argv.indexOf("--version");
 const cliVersion = versionIndex >= 0
     ? String(process.argv[versionIndex + 1] || "").trim()
@@ -29,7 +26,7 @@ const name = cliProductName
     || (pkg.build && pkg.build.productName)
     || String(pkg.name || "");
 const nameFile = name.replace(/\s+/g, "_");
-const out = path_1.default.join(root, "build", "output");
+const out = path.join(root, "build", "output");
 const versionVariants = Array.from(new Set([
     version,
     version
@@ -42,14 +39,14 @@ const arch = process.argv.includes("--arch")
     : String(process.env.DIALOGFORGE_MAC_ARCH || "arm64").trim();
 const targetArch = arch === "x64" ? "x64" : "arm64";
 const listDmgArtifacts = function () {
-    if (!fs_1.default.existsSync(out)) {
+    if (!fs.existsSync(out)) {
         return [];
     }
-    return fs_1.default.readdirSync(out)
+    return fs.readdirSync(out)
         .filter((file) => /\.dmg$/i.test(file))
         .map((file) => {
-        const fullPath = path_1.default.join(out, file);
-        const stat = fs_1.default.statSync(fullPath);
+        const fullPath = path.join(out, file);
+        const stat = fs.statSync(fullPath);
         return {
             name: file,
             path: fullPath,
@@ -80,19 +77,19 @@ const renameArtifact = function (artifact, targetName, kind) {
         const known = listDmgArtifacts().map((entry) => entry.name).join(", ");
         throw new Error(`${kind} artifact not found in build/output. Found: ${known || "(none)"}`);
     }
-    const targetPath = path_1.default.join(out, targetName);
+    const targetPath = path.join(out, targetName);
     if (artifact.path !== targetPath) {
-        fs_1.default.renameSync(artifact.path, targetPath);
+        fs.renameSync(artifact.path, targetPath);
     }
     console.log(`Renamed ${artifact.name} -> ${targetName}`);
 };
 const removeMetadataArtifacts = function () {
-    if (!fs_1.default.existsSync(out)) {
+    if (!fs.existsSync(out)) {
         return;
     }
-    fs_1.default.readdirSync(out).forEach((file) => {
+    fs.readdirSync(out).forEach((file) => {
         if (/\.(yml|yaml|blockmap)$/i.test(file)) {
-            fs_1.default.rmSync(path_1.default.join(out, file), { force: true });
+            fs.rmSync(path.join(out, file), { force: true });
             console.log(`Removed ${file}`);
         }
     });

@@ -33,3 +33,8 @@ Use the selected product repository's `i18n` directory for product-specific text
 4. product selected locale
 
 Product strings may override shared strings, but overrides should be intentional.
+
+Every `i18n/*.json` file is validated when DialogForge composes or packages a
+product. Locale files must be valid JSON objects with string values. A syntax
+error or non-string value is reported with the exact file path before packaging
+continues.

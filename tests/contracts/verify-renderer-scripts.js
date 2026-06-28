@@ -108,6 +108,10 @@ assert.ok(sourceConsoleSurface.includes('from "../views/terminalEditorInputView"
     sourceConsoleEditorCommand.includes("KeyCode.F1") &&
     sourceTerminalInput.includes("showHelpTopic?:") &&
     sourceConsoleCoordinator.includes("source: \"base-app.console-help\""), "console input must preserve DialogR F1 contextual help through the shared help window");
+assert.ok(preloadScript.includes("const onAppEvent = function<Channel extends ApplicationEventChannel>") &&
+    preloadScript.includes("const invokeDatasetEditor = function<") &&
+    preloadScript.includes("const invokeScriptEditor = function<") &&
+    preloadScript.includes("const sendScriptEditor = function<"), "preload must keep owner-typed local IPC wrappers instead of repeating raw transport plumbing");
 assert.ok(sourceConsoleToolbar.includes("formatConsoleWorkingDirectory") &&
     sourceConsoleToolbar.includes("return \"~\"") &&
     sourceConsoleToolbar.includes("return \"~/\" + normalized.slice(home.length + 1)") &&

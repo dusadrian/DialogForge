@@ -29,6 +29,8 @@ const verifierGroups = {
         "verify:r-workspace-runtime-control",
         "verify:package-install-workflow",
         "verify:packaging-policy",
+        "verify:core-sdk",
+        "verify:product-watch",
         "verify:product-contribution-registry",
         "verify:python-readonly-adapter",
         "verify:verifier-groups",

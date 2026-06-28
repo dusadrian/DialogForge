@@ -11,6 +11,8 @@ const read = function(relativePath) {
 };
 const packageAction = read(".github/actions/package-product/action.yml");
 const packageProduct = read("scripts/package-product.js");
+const generateCoreSdk = read("scripts/generate-core-sdk.js");
+const watchProduct = read("scripts/watch-product.js");
 const electronMain = read("scripts/electron-main.js");
 const copyStatic = read("scripts/copy-static.js");
 const macosNotarization = read("scripts/macos-notarization.js");
@@ -19,6 +21,16 @@ const packagedDependencies = read(
 );
 const renameMacArtifacts = read("scripts/rename-binaries-mac.js");
 const packageJson = JSON.parse(read("package.json"));
+const scriptSources = fs.readdirSync(path.join(rootDir, "scripts"))
+    .filter((entry) => {
+        return entry.endsWith(".js");
+    })
+    .map((entry) => {
+        return {
+            relativePath: path.join("scripts", entry),
+            source: read(path.join("scripts", entry))
+        };
+    });
 const productWorkflowPaths = [
     ".github/workflows/build-dialogr-linux.yml",
     ".github/workflows/build-dialogr-windows.yml",
@@ -38,6 +50,20 @@ const dialogQCAWorkflowPaths = productWorkflowPaths.filter((relativePath) => {
 });
 
 
+scriptSources.forEach((script) => {
+    [
+        "__createBinding",
+        "__setModuleDefault",
+        "__importStar",
+        "__importDefault",
+        "Object.defineProperty(exports"
+    ].forEach((compiledHelper) => {
+        assert.ok(
+            !script.source.includes(compiledHelper),
+            script.relativePath + " must be checked in as human-authored JavaScript"
+        );
+    });
+});
 assert.ok(
     productWorkflows.every((workflow) => {
         return workflow.includes("prepare-release:")
@@ -65,6 +91,27 @@ assert.ok(
     copyStatic.includes("packagedRuntimeDependencies.forEach")
     && packageProduct.includes("assertPackagedRuntimeDependencies();"),
     "production dependencies must be staged and checked before packaging"
+);
+assert.ok(
+    packageProduct.includes("validateI18nDirectory")
+    && packageProduct.includes("validateDialogRegistry"),
+    "product staging must validate contributor-authored locale and dialog source files"
+);
+assert.ok(
+    packageJson.scripts.build.includes("node scripts/generate-core-sdk.js")
+    && packageJson.scripts["sdk:core"] === "node scripts/generate-core-sdk.js"
+    && generateCoreSdk.includes("@dialogforge/core")
+    && generateCoreSdk.includes("PRODUCT_CONTRIBUTION_CONTRACT_VERSION")
+    && generateCoreSdk.includes('path.join(rootDir, "node_modules", "@dialogforge", "core")')
+    && copyStatic.includes("node_modules/@dialogforge/core/**/*"),
+    "builds must stage the product-facing @dialogforge/core SDK contract"
+);
+assert.ok(
+    packageJson.scripts["dev:product"] === "npm run build && node scripts/watch-product.js"
+    && watchProduct.includes('"--stage-only"')
+    && watchProduct.includes('"dist/scripts/electron-main.js"')
+    && watchProduct.includes("readTreeSnapshot"),
+    "product development mode must restage watched product files and restart Electron"
 );
 [
     "submit:DialogR",

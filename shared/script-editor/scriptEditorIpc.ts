@@ -45,7 +45,7 @@ export const scriptEditorEventChannels = {
 } as const;
 
 
-interface ScriptEditorCommands {
+export interface ScriptEditorCommands {
     "base-app:updateScriptEditorDirtyState": [{
         dirty?: boolean;
         filePath?: string;
@@ -138,6 +138,14 @@ type InvokeArguments<
 > = ScriptEditorIpcInputs[Channel] extends undefined
     ? []
     : [ScriptEditorIpcInputs[Channel]];
+
+
+export type ScriptEditorIpcRoutes = {
+    [Channel in ScriptEditorIpcChannel]: {
+        input: InvokeArguments<Channel>;
+        result: ScriptEditorIpcResults[Channel];
+    };
+};
 
 
 export const invokeScriptEditorRoute = function<

@@ -1,78 +1,55 @@
 "use strict";
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
-Object.defineProperty(exports, "__esModule", { value: true });
-const fs = __importStar(require("fs"));
-const path = __importStar(require("path"));
-const electron_1 = require("electron");
-const composeApplication_1 = require("../shared/base-app/bootstrap/composeApplication");
-const productResolver_1 = require("../shared/base-app/bootstrap/productResolver");
-const applicationEvents_1 = require("../shared/base-app/bootstrap/applicationEvents");
-const consoleHistorySettingsStore_1 = require("../shared/console/services/consoleHistorySettingsStore");
-const consoleHistoryIpcController_1 = require("../shared/console/services/consoleHistoryIpcController");
-const importFileController_1 = require("../shared/runtime/tabular-data/importFileController");
-const importFileIpcController_1 = require("../shared/runtime/tabular-data/importFileIpcController");
-const externalCallIpcController_1 = require("../shared/dialog-runtime/custom-js/externalCallIpcController");
-const productDialogRuntimeComposition_1 = require("../shared/dialog-runtime/dialog-builder/productDialogRuntimeComposition");
-const productDialogComposition_1 = require("../shared/dialog-runtime/dialog-builder/productDialogComposition");
-const datasetEditorWarmCache_1 = require("../shared/dataset-editor/main-process/datasetEditorWarmCache");
-const datasetEditorComposition_1 = require("../shared/dataset-editor/main-process/datasetEditorComposition");
-const datasetEditorSettings_1 = require("../shared/dataset-editor/main-process/datasetEditorSettings");
-const datasetViewerReadIpcController_1 = require("../shared/dataset-editor/main-process/datasetViewerReadIpcController");
-const scriptEditorComposition_1 = require("../shared/script-editor/main-process/scriptEditorComposition");
-const shellFileDialogController_1 = require("../shared/shell-electron/filesystem/shellFileDialogController");
-const shellFileDialogIpcController_1 = require("../shared/shell-electron/filesystem/shellFileDialogIpcController");
-const plotDownloadController_1 = require("../shared/shell-electron/external/plotDownloadController");
-const externalWindowComposition_1 = require("../shared/shell-electron/external/externalWindowComposition");
-const mainWindowComposition_1 = require("../shared/shell-electron/windows/mainWindowComposition");
-const workspacePaneWindowComposition_1 = require("../shared/shell-electron/windows/workspacePaneWindowComposition");
-const applicationShellIpcComposition_1 = require("../shared/shell-electron/windows/applicationShellIpcComposition");
-const runtimeLifecycleComposition_1 = require("../shared/shell-electron/lifecycle/runtimeLifecycleComposition");
-const electronApplicationLifecycle_1 = require("../shared/shell-electron/lifecycle/electronApplicationLifecycle");
-const workspaceQuitDialogController_1 = require("../shared/shell-electron/lifecycle/workspaceQuitDialogController");
-const runtimeRecoveryDialogController_1 = require("../shared/shell-electron/lifecycle/runtimeRecoveryDialogController");
-const runtimeRestartComposition_1 = require("../shared/shell-electron/lifecycle/runtimeRestartComposition");
-const runtimeIpcComposition_1 = require("../shared/shell-electron/runtime/runtimeIpcComposition");
-const runtimeSessionComposition_1 = require("../shared/shell-electron/runtime/runtimeSessionComposition");
-const electronSmokeRunner_1 = require("../shared/shell-electron/smoke/electronSmokeRunner");
-const rHelpServer_1 = require("../shared/runtime/providers/r/help/rHelpServer");
-const rHelpPageProxy_1 = require("../shared/runtime/providers/r/help/rHelpPageProxy");
-const nodeResourceClient_1 = require("../shared/core/host/nodeResourceClient");
-const packageInstallDialogController_1 = require("../shared/runtime/providers/r/dependencies/packageInstallDialogController");
-const settingsStorage_1 = require("../shared/shell-electron/settings/settingsStorage");
-const applicationSupportWindowComposition_1 = require("../shared/shell-electron/windows/applicationSupportWindowComposition");
+
+const fs = require("fs");
+const path = require("path");
+const electron = require("electron");
+const composeApplicationModule = require("../shared/base-app/bootstrap/composeApplication");
+const productResolver = require("../shared/base-app/bootstrap/productResolver");
+const applicationEvents = require("../shared/base-app/bootstrap/applicationEvents");
+const consoleHistorySettingsStoreModule = require("../shared/console/services/consoleHistorySettingsStore");
+const consoleHistoryIpcController = require("../shared/console/services/consoleHistoryIpcController");
+const importFileControllerModule = require("../shared/runtime/tabular-data/importFileController");
+const importFileIpcController = require("../shared/runtime/tabular-data/importFileIpcController");
+const externalCallIpcController = require("../shared/dialog-runtime/custom-js/externalCallIpcController");
+const productDialogRuntimeComposition = require("../shared/dialog-runtime/dialog-builder/productDialogRuntimeComposition");
+const productDialogCompositionModule = require("../shared/dialog-runtime/dialog-builder/productDialogComposition");
+const datasetEditorWarmCacheModule = require("../shared/dataset-editor/main-process/datasetEditorWarmCache");
+const datasetEditorCompositionModule = require("../shared/dataset-editor/main-process/datasetEditorComposition");
+const datasetEditorSettingsModule = require("../shared/dataset-editor/main-process/datasetEditorSettings");
+const datasetViewerReadIpcController = require("../shared/dataset-editor/main-process/datasetViewerReadIpcController");
+const scriptEditorCompositionModule = require("../shared/script-editor/main-process/scriptEditorComposition");
+const shellFileDialogControllerModule = require("../shared/shell-electron/filesystem/shellFileDialogController");
+const shellFileDialogIpcController = require("../shared/shell-electron/filesystem/shellFileDialogIpcController");
+const plotDownloadControllerModule = require("../shared/shell-electron/external/plotDownloadController");
+const externalWindowCompositionModule = require("../shared/shell-electron/external/externalWindowComposition");
+const mainWindowCompositionModule = require("../shared/shell-electron/windows/mainWindowComposition");
+const workspacePaneWindowComposition = require("../shared/shell-electron/windows/workspacePaneWindowComposition");
+const applicationShellIpcComposition = require("../shared/shell-electron/windows/applicationShellIpcComposition");
+const runtimeLifecycleCompositionModule = require("../shared/shell-electron/lifecycle/runtimeLifecycleComposition");
+const electronApplicationLifecycle = require("../shared/shell-electron/lifecycle/electronApplicationLifecycle");
+const workspaceQuitDialogControllerModule = require("../shared/shell-electron/lifecycle/workspaceQuitDialogController");
+const runtimeRecoveryDialogControllerModule = require("../shared/shell-electron/lifecycle/runtimeRecoveryDialogController");
+const runtimeRestartComposition = require("../shared/shell-electron/lifecycle/runtimeRestartComposition");
+const runtimeIpcCompositionModule = require("../shared/shell-electron/runtime/runtimeIpcComposition");
+const runtimeSessionCompositionModule = require("../shared/shell-electron/runtime/runtimeSessionComposition");
+const electronSmokeRunner = require("../shared/shell-electron/smoke/electronSmokeRunner");
+const rHelpServerModule = require("../shared/runtime/providers/r/help/rHelpServer");
+const rHelpPageProxyModule = require("../shared/runtime/providers/r/help/rHelpPageProxy");
+const nodeResourceClientModule = require("../shared/core/host/nodeResourceClient");
+const packageInstallDialogControllerModule = require("../shared/runtime/providers/r/dependencies/packageInstallDialogController");
+const settingsStorage = require("../shared/shell-electron/settings/settingsStorage");
+const applicationSupportWindowCompositionModule = require("../shared/shell-electron/windows/applicationSupportWindowComposition");
 const args = process.argv.slice(2);
+
+
+/**
+ * Read the last occurrence of a named command-line option from Electron's
+ * argv. Environment variables handle packaged product selection separately.
+ *
+ * @param {string} name
+ * @param {string} fallback
+ * @returns {string}
+ */
 const readOption = function (name, fallback) {
     for (let index = args.length - 2; index >= 0; index -= 1) {
         if (args[index] === "--" + name && args[index + 1]) {
@@ -91,35 +68,43 @@ const electronSmokeMode = process.env.DIALOGFORGE_ELECTRON_SMOKE === "1";
 const electronSmokeTarget = String(process.env.DIALOGFORGE_ELECTRON_SMOKE_TARGET || "console").trim();
 const testUserDataPath = String(process.env.DIALOGFORGE_TEST_USER_DATA_PATH || "").trim();
 if (testUserDataPath) {
-    electron_1.app.setPath("userData", testUserDataPath);
+    electron.app.setPath("userData", testUserDataPath);
 }
 let location;
 try {
-    location = (0, productResolver_1.resolveProductLocation)(rootDir, requestedProduct, productPathArg);
+    location = productResolver.resolveProductLocation(rootDir, requestedProduct, productPathArg);
 }
 catch (error) {
     console.error("Startup Error:", error.message);
-    electron_1.dialog.showErrorBox("Startup Error", error.message);
-    electron_1.app.quit();
+    electron.dialog.showErrorBox("Startup Error", error.message);
+    electron.app.quit();
     process.exit(1);
 }
 const product = location.id;
-const initialSettings = (0, settingsStorage_1.readEffectiveSettings)({
+const initialSettings = settingsStorage.readEffectiveSettings({
     systemSettingsPath: location.settingsPath,
-    userSettingsPath: path.join(electron_1.app.getPath("userData"), "settings.json")
+    userSettingsPath: path.join(electron.app.getPath("userData"), "settings.json")
 });
 let locale = requestedLocale
     || String(initialSettings.defaultLanguage
         || initialSettings.languageNS
         || "en_US");
-const composition = (0, composeApplication_1.composeApplication)({
+const composition = composeApplicationModule.composeApplication({
     rootDir,
     location,
     runtime,
     locale
 });
+
+
+/**
+ * Recompose locale-owned application state without replacing the long-lived
+ * runtime/session objects.
+ *
+ * @param {string} nextLocale
+ */
 const applyLocale = function (nextLocale) {
-    const localizedComposition = (0, composeApplication_1.composeApplication)({
+    const localizedComposition = composeApplicationModule.composeApplication({
         rootDir,
         location,
         runtime,
@@ -141,9 +126,9 @@ const applyLocale = function (nextLocale) {
 };
 process.env.DIALOGFORGE_PRODUCT = product;
 process.env.DIALOGFORGE_ROOT = composition.rootDir;
-const rHelpServer = (0, rHelpServer_1.createRHelpServer)();
-const resourceClient = (0, nodeResourceClient_1.createNodeResourceClient)();
-const rHelpPageProxy = (0, rHelpPageProxy_1.createRHelpPageProxy)({
+const rHelpServer = rHelpServerModule.createRHelpServer();
+const resourceClient = nodeResourceClientModule.createNodeResourceClient();
+const rHelpPageProxy = rHelpPageProxyModule.createRHelpPageProxy({
     rewriteUrl: rHelpServer.rewriteUrl,
     resourceClient
 });
@@ -154,7 +139,7 @@ let productDialogComposition;
 let datasetEditorComposition;
 const mainWindowMinWidth = 800;
 const mainWindowMinHeight = 600;
-const plotDownloadController = (0, plotDownloadController_1.createPlotDownloadController)({
+const plotDownloadController = plotDownloadControllerModule.createPlotDownloadController({
     resourceClient
 });
 let externalWindowComposition;
@@ -166,6 +151,11 @@ const appendRuntimeBootLog = function (message) {
     }
     catch { }
 };
+
+
+/**
+ * @returns {Promise<string[]>}
+ */
 const listDatasetEditorDatasetNames = async function () {
     const workspace = await runtimeSessionManager.listWorkspaceObjects();
     return workspace.objects.filter((object) => {
@@ -177,50 +167,50 @@ const listDatasetEditorDatasetNames = async function () {
 const settingsStoragePaths = function () {
     return {
         systemSettingsPath: location.settingsPath,
-        userSettingsPath: path.join(electron_1.app.getPath("userData"), "settings.json")
+        userSettingsPath: path.join(electron.app.getPath("userData"), "settings.json")
     };
 };
-const workspacePaneWindowController = (0, workspacePaneWindowComposition_1.createWorkspacePaneWindowComposition)({
-    ipcMain: electron_1.ipcMain,
-    screen: electron_1.screen,
+const workspacePaneWindowController = workspacePaneWindowComposition.createWorkspacePaneWindowComposition({
+    ipcMain: electron.ipcMain,
+    screen: electron.screen,
     minimumWidth: mainWindowMinWidth,
     readSettings: function () {
-        return (0, settingsStorage_1.readEffectiveSettings)(settingsStoragePaths());
+        return settingsStorage.readEffectiveSettings(settingsStoragePaths());
     },
     writeSettings: function (settings) {
-        (0, settingsStorage_1.writeUserSettings)(settingsStoragePaths(), settings);
+        settingsStorage.writeUserSettings(settingsStoragePaths(), settings);
     }
 });
 const userDialogsDirectory = function () {
-    return path.join(electron_1.app.getPath("userData"), "dialogs");
+    return path.join(electron.app.getPath("userData"), "dialogs");
 };
-const datasetEditorSettings = (0, datasetEditorSettings_1.createDatasetEditorSettings)({
+const datasetEditorSettings = datasetEditorSettingsModule.createDatasetEditorSettings({
     readSettings: function () {
-        return (0, settingsStorage_1.readEffectiveSettings)(settingsStoragePaths());
+        return settingsStorage.readEffectiveSettings(settingsStoragePaths());
     },
     writeSettings: function (settings) {
-        (0, settingsStorage_1.writeUserSettings)(settingsStoragePaths(), settings);
+        settingsStorage.writeUserSettings(settingsStoragePaths(), settings);
     }
 });
 const readDatasetEditorVariableColumnWidths = datasetEditorSettings.readVariableColumnWidths;
 const writeDatasetEditorVariableColumnWidths = datasetEditorSettings.writeVariableColumnWidths;
 const datasetEditorUiCommandVisibility = datasetEditorSettings.uiCommandVisibility;
 const uiActionCommandVisibility = datasetEditorSettings.uiCommandVisibility;
-const consoleHistorySettingsStore = (0, consoleHistorySettingsStore_1.createConsoleHistorySettingsStore)({
+const consoleHistorySettingsStore = consoleHistorySettingsStoreModule.createConsoleHistorySettingsStore({
     defaultProductId: product,
     defaultRuntimeId: runtime,
     readSettings: function () {
-        return (0, settingsStorage_1.readEffectiveSettings)(settingsStoragePaths());
+        return settingsStorage.readEffectiveSettings(settingsStoragePaths());
     },
     writeSettings: function (settings) {
-        (0, settingsStorage_1.writeUserSettings)(settingsStoragePaths(), settings);
+        settingsStorage.writeUserSettings(settingsStoragePaths(), settings);
     }
 });
-(0, consoleHistoryIpcController_1.createConsoleHistoryIpcController)({
-    ipcMain: electron_1.ipcMain,
+consoleHistoryIpcController.createConsoleHistoryIpcController({
+    ipcMain: electron.ipcMain,
     historyStore: consoleHistorySettingsStore
 });
-const runtimeSessionBootstrap = (0, runtimeSessionComposition_1.createRuntimeSessionComposition)({
+const runtimeSessionBootstrap = runtimeSessionCompositionModule.createRuntimeSessionComposition({
     location,
     composition,
     runtimeId: runtime,
@@ -237,14 +227,14 @@ const dialogExternalCallHost = runtimeSessionBootstrap.dialogExternalCallHost;
 const readDialogFilterState = runtimeSessionBootstrap.readFilterState;
 const readConsoleStateChips = runtimeSessionBootstrap.readConsoleStateChips;
 const shouldPublishConsoleStateChips = runtimeSessionBootstrap.shouldPublishConsoleStateChips;
-const datasetEditorWarmCache = (0, datasetEditorWarmCache_1.createDatasetEditorWarmCache)(runtimeSessionManager);
-const importFileController = (0, importFileController_1.createImportFileController)({
+const datasetEditorWarmCache = datasetEditorWarmCacheModule.createDatasetEditorWarmCache(runtimeSessionManager);
+const importFileController = importFileControllerModule.createImportFileController({
     executeRuntimeMethod: function (request) {
         return runtimeSessionManager.executeRuntimeMethod(request);
     }
 });
-(0, importFileIpcController_1.createImportFileIpcController)({
-    ipcMain: electron_1.ipcMain,
+importFileIpcController.createImportFileIpcController({
+    ipcMain: electron.ipcMain,
     importFileController
 });
 const invalidateInitialDatasetPreview = datasetEditorWarmCache.invalidate;
@@ -252,8 +242,8 @@ const readInitialDatasetPreview = datasetEditorWarmCache.readPreview;
 const readInitialVariableMetadataBatch = datasetEditorWarmCache.readVariableMetadata;
 const warmInitialDatasetPreview = datasetEditorWarmCache.warmPreview;
 const warmInitialVariableMetadata = datasetEditorWarmCache.warmVariableMetadata;
-(0, datasetViewerReadIpcController_1.createDatasetViewerReadIpcController)({
-    ipcMain: electron_1.ipcMain,
+datasetViewerReadIpcController.createDatasetViewerReadIpcController({
+    ipcMain: electron.ipcMain,
     runtimeSessionManager,
     readInitialDatasetPreview,
     readInitialVariableMetadataBatch,
@@ -272,12 +262,12 @@ const autoStartRuntime = async function () {
     await runtimeLifecycleComposition.autoStartRuntime();
 };
 const sendToAllWindows = function (channel, payload) {
-    electron_1.BrowserWindow.getAllWindows().forEach((win) => {
+    electron.BrowserWindow.getAllWindows().forEach((win) => {
         win.webContents.send(channel, payload);
     });
 };
-(0, externalCallIpcController_1.createDialogExternalCallIpcController)({
-    ipcMain: electron_1.ipcMain,
+externalCallIpcController.createDialogExternalCallIpcController({
+    ipcMain: electron.ipcMain,
     host: dialogExternalCallHost,
     publishFilterState: function (dataset) {
         sendToAllWindows("filterStateChanged", {
@@ -290,7 +280,7 @@ const sendToAllWindows = function (channel, payload) {
     shouldPublishConsoleStateChips,
     readConsoleStateChips,
     publishConsoleStateChips: function (chips) {
-        sendToAllWindows(applicationEvents_1.applicationEventChannels.productConsoleStateChips, chips);
+        sendToAllWindows(applicationEvents.applicationEventChannels.productConsoleStateChips, chips);
     }
 });
 const sendMenuCommand = function (command) {
@@ -306,11 +296,11 @@ const sendMenuCommand = function (command) {
         createDialogRuntimeRequirementsWindow();
         return;
     }
-    sendToAllWindows(applicationEvents_1.applicationEventChannels.menuCommand, command);
+    sendToAllWindows(applicationEvents.applicationEventChannels.menuCommand, command);
 };
-const runtimeIpcComposition = (0, runtimeIpcComposition_1.createRuntimeIpcComposition)({
-    ipcMain: electron_1.ipcMain,
-    clipboard: electron_1.clipboard,
+const runtimeIpcComposition = runtimeIpcCompositionModule.createRuntimeIpcComposition({
+    ipcMain: electron.ipcMain,
+    clipboard: electron.clipboard,
     runtimeSessionManager,
     datasetWarmCache: datasetEditorWarmCache,
     datasetEditorUiCommandVisibility,
@@ -340,8 +330,8 @@ const runtimeIpcComposition = (0, runtimeIpcComposition_1.createRuntimeIpcCompos
     }
 });
 const { sendRuntimeSession, sendTranscriptEvents, refreshWorkspaceAndBroadcast, sendActiveDataset, broadcastRuntimeEvents, executeVisibleCommandAndBroadcast } = runtimeIpcComposition;
-(0, productDialogRuntimeComposition_1.registerProductDialogRuntimeComposition)({
-    ipcMain: electron_1.ipcMain,
+productDialogRuntimeComposition.registerProductDialogRuntimeComposition({
+    ipcMain: electron.ipcMain,
     runtimeSessionManager,
     productId: product,
     getUiCommandVisibility: uiActionCommandVisibility,
@@ -360,7 +350,7 @@ const ensureRuntimeReadyForScriptEditor = async function () {
     sendRuntimeSession(snapshot);
     return snapshot.status === "ready";
 };
-const mainWindowComposition = (0, mainWindowComposition_1.createMainWindowComposition)({
+const mainWindowComposition = mainWindowCompositionModule.createMainWindowComposition({
     rootDir: composition.rootDir,
     productId: product,
     settingsPath: location.settingsPath,
@@ -372,10 +362,10 @@ const mainWindowComposition = (0, mainWindowComposition_1.createMainWindowCompos
         return !electronSmokeMode || electronSmokeTarget === "workspace-pane";
     },
     readSettings: function () {
-        return (0, settingsStorage_1.readEffectiveSettings)(settingsStoragePaths());
+        return settingsStorage.readEffectiveSettings(settingsStoragePaths());
     },
     writeSettings: function (settings) {
-        (0, settingsStorage_1.writeUserSettings)(settingsStoragePaths(), settings);
+        settingsStorage.writeUserSettings(settingsStoragePaths(), settings);
     },
     workspacePaneWindowController
 });
@@ -388,27 +378,27 @@ const translateCompositionText = function (key, values = {}) {
     });
     return text;
 };
-const shellFileDialogController = (0, shellFileDialogController_1.createShellFileDialogController)({
-    dialog: electron_1.dialog,
+const shellFileDialogController = shellFileDialogControllerModule.createShellFileDialogController({
+    dialog: electron.dialog,
     translate: translateCompositionText
 });
-(0, shellFileDialogIpcController_1.createShellFileDialogIpcController)({
-    ipcMain: electron_1.ipcMain,
+shellFileDialogIpcController.createShellFileDialogIpcController({
+    ipcMain: electron.ipcMain,
     fileDialogController: shellFileDialogController
 });
-const packageInstallDialogController = (0, packageInstallDialogController_1.createPackageInstallDialogController)({
-    dialog: electron_1.dialog,
+const packageInstallDialogController = packageInstallDialogControllerModule.createPackageInstallDialogController({
+    dialog: electron.dialog,
     translate: translateCompositionText
 });
-const workspaceQuitDialogController = (0, workspaceQuitDialogController_1.createWorkspaceQuitDialogController)({
-    dialog: electron_1.dialog,
+const workspaceQuitDialogController = workspaceQuitDialogControllerModule.createWorkspaceQuitDialogController({
+    dialog: electron.dialog,
     translate: translateCompositionText
 });
-const runtimeRecoveryDialogController = (0, runtimeRecoveryDialogController_1.createRuntimeRecoveryDialogController)({
-    dialog: electron_1.dialog,
+const runtimeRecoveryDialogController = runtimeRecoveryDialogControllerModule.createRuntimeRecoveryDialogController({
+    dialog: electron.dialog,
     productName: composition.product.name
 });
-runtimeLifecycleComposition = (0, runtimeLifecycleComposition_1.createRuntimeLifecycleComposition)({
+runtimeLifecycleComposition = runtimeLifecycleCompositionModule.createRuntimeLifecycleComposition({
     runtimeSessionManager,
     composition,
     productId: product,
@@ -433,13 +423,13 @@ runtimeLifecycleComposition = (0, runtimeLifecycleComposition_1.createRuntimeLif
     chooseWorkspaceQuitAction: workspaceQuitDialogController.chooseWorkspaceQuitAction,
     showWorkspaceSaveFailure: workspaceQuitDialogController.showWorkspaceSaveFailure,
     quitApp: function () {
-        electron_1.app.quit();
+        electron.app.quit();
     }
 });
-const applicationSupportWindows = (0, applicationSupportWindowComposition_1.createApplicationSupportWindowComposition)({
-    app: electron_1.app,
-    ipcMain: electron_1.ipcMain,
-    dialog: electron_1.dialog,
+const applicationSupportWindows = applicationSupportWindowCompositionModule.createApplicationSupportWindowComposition({
+    app: electron.app,
+    ipcMain: electron.ipcMain,
+    dialog: electron.dialog,
     composition,
     productId: product,
     settingsPath: location.settingsPath,
@@ -450,10 +440,10 @@ const applicationSupportWindows = (0, applicationSupportWindowComposition_1.crea
         return mainWindow;
     },
     readSettings: function () {
-        return (0, settingsStorage_1.readEffectiveSettings)(settingsStoragePaths());
+        return settingsStorage.readEffectiveSettings(settingsStoragePaths());
     },
     writeSettings: function (settings) {
-        (0, settingsStorage_1.writeUserSettings)(settingsStoragePaths(), settings);
+        settingsStorage.writeUserSettings(settingsStoragePaths(), settings);
     },
     sendMenuCommand,
     sendToAllWindows,
@@ -475,8 +465,8 @@ const findProductDialogDefinition = function (dialogId) {
     }
     return findDialogDefinitionForMenu(dialogId);
 };
-productDialogComposition = (0, productDialogComposition_1.createProductDialogComposition)({
-    ipcMain: electron_1.ipcMain,
+productDialogComposition = productDialogCompositionModule.createProductDialogComposition({
+    ipcMain: electron.ipcMain,
     rootDir: composition.rootDir,
     productId: product,
     productRootPath: composition.location.rootPath,
@@ -488,7 +478,7 @@ productDialogComposition = (0, productDialogComposition_1.createProductDialogCom
     },
     publishCommand: function (command) {
         if (mainWindow && !mainWindow.isDestroyed()) {
-            mainWindow.webContents.send(applicationEvents_1.applicationEventChannels.dialogCommandPreview, command);
+            mainWindow.webContents.send(applicationEvents.applicationEventChannels.dialogCommandPreview, command);
         }
     },
     getLocale: function () {
@@ -496,12 +486,12 @@ productDialogComposition = (0, productDialogComposition_1.createProductDialogCom
     }
 });
 const productDialogWindowController = productDialogComposition.windowController;
-externalWindowComposition = (0, externalWindowComposition_1.createExternalWindowComposition)({
-    ipcMain: electron_1.ipcMain,
-    shell: electron_1.shell,
-    dialog: electron_1.dialog,
-    clipboard: electron_1.clipboard,
-    downloadsPath: electron_1.app.getPath("downloads"),
+externalWindowComposition = externalWindowCompositionModule.createExternalWindowComposition({
+    ipcMain: electron.ipcMain,
+    shell: electron.shell,
+    dialog: electron.dialog,
+    clipboard: electron.clipboard,
+    downloadsPath: electron.app.getPath("downloads"),
     rootDir: composition.rootDir,
     productId: product,
     settingsPath: location.settingsPath,
@@ -521,8 +511,8 @@ externalWindowComposition = (0, externalWindowComposition_1.createExternalWindow
     }
 });
 const createDevDiagnosticsWindow = externalWindowComposition.createDevDiagnosticsWindow;
-scriptEditorComposition = (0, scriptEditorComposition_1.createScriptEditorComposition)({
-    ipcMain: electron_1.ipcMain,
+scriptEditorComposition = scriptEditorCompositionModule.createScriptEditorComposition({
+    ipcMain: electron.ipcMain,
     rootDir: composition.rootDir,
     productId: product,
     settingsPath: location.settingsPath,
@@ -534,7 +524,7 @@ scriptEditorComposition = (0, scriptEditorComposition_1.createScriptEditorCompos
         return mainWindowZoomController.getZoomFactor();
     },
     readTerminalSettings: function () {
-        const settings = (0, settingsStorage_1.readEffectiveSettings)(settingsStoragePaths());
+        const settings = settingsStorage.readEffectiveSettings(settingsStoragePaths());
         return settings.terminalSettings || {};
     },
     getLocale: function () {
@@ -548,8 +538,8 @@ const scriptEditorWindowController = scriptEditorComposition.windowController;
 const openScriptEditorWindow = scriptEditorComposition.openWindow;
 const insertCodeInScriptEditor = scriptEditorComposition.insertCode;
 const openScriptFilePathInScriptEditor = scriptEditorComposition.openFilePath;
-datasetEditorComposition = (0, datasetEditorComposition_1.createDatasetEditorComposition)({
-    ipcMain: electron_1.ipcMain,
+datasetEditorComposition = datasetEditorCompositionModule.createDatasetEditorComposition({
+    ipcMain: electron.ipcMain,
     rootDir: composition.rootDir,
     productId: product,
     settingsPath: location.settingsPath,
@@ -565,7 +555,7 @@ datasetEditorComposition = (0, datasetEditorComposition_1.createDatasetEditorCom
     },
     readVariableColumnWidths: readDatasetEditorVariableColumnWidths,
     readTerminalSettings: function () {
-        return (0, settingsStorage_1.readEffectiveSettings)(settingsStoragePaths())
+        return settingsStorage.readEffectiveSettings(settingsStoragePaths())
             .terminalSettings || {};
     },
     listDatasetNames: listDatasetEditorDatasetNames,
@@ -584,18 +574,18 @@ datasetEditorComposition = (0, datasetEditorComposition_1.createDatasetEditorCom
 });
 const datasetEditorWindowController = datasetEditorComposition.windowController;
 const openDatasetEditorWindow = datasetEditorComposition.open;
-(0, applicationShellIpcComposition_1.registerApplicationShellIpc)({
-    ipcMain: electron_1.ipcMain,
+applicationShellIpcComposition.registerApplicationShellIpc({
+    ipcMain: electron.ipcMain,
     getComposition: function () {
         return composition;
     },
     openDevDiagnostics: createDevDiagnosticsWindow,
     showDevDiagnostics: !electronSmokeMode
 });
-(0, runtimeRestartComposition_1.registerRuntimeRestartComposition)({
-    ipcMain: electron_1.ipcMain,
+runtimeRestartComposition.registerRuntimeRestartComposition({
+    ipcMain: electron.ipcMain,
     runtimeSessionManager,
-    temporaryDirectory: electron_1.app.getPath("temp"),
+    temporaryDirectory: electron.app.getPath("temp"),
     packageInstallDialogController,
     getMainWindow: function () {
         return mainWindow;
@@ -609,8 +599,8 @@ const openDatasetEditorWindow = datasetEditorComposition.open;
     refreshWorkspace: refreshWorkspaceAndBroadcast,
     captureWorkspaceBaseline
 });
-(0, electronApplicationLifecycle_1.bindElectronApplicationLifecycle)({
-    app: electron_1.app,
+electronApplicationLifecycle.bindElectronApplicationLifecycle({
+    app: electron.app,
     smokeMode: electronSmokeMode,
     initializeZoom: mainWindowZoomController.initialize,
     installApplicationMenu,
@@ -620,7 +610,7 @@ const openDatasetEditorWindow = datasetEditorComposition.open;
     },
     autoStartRuntime,
     runSmoke: function (win) {
-        return (0, electronSmokeRunner_1.runElectronSmoke)({
+        return electronSmokeRunner.runElectronSmoke({
             win,
             product,
             runtime,

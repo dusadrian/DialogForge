@@ -1,41 +1,10 @@
 "use strict";
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
-Object.defineProperty(exports, "__esModule", { value: true });
-const fs = __importStar(require("fs"));
-const path = __importStar(require("path"));
-const packagedRuntimeDependencies_1 = require("./packagedRuntimeDependencies");
+
+const fs = require("fs");
+const path = require("path");
+const {
+    packagedRuntimeDependencies
+} = require("./packagedRuntimeDependencies");
 const parentDir = path.resolve(__dirname, "..");
 const runningFromDist = path.basename(parentDir) === "dist";
 const rootDir = runningFromDist
@@ -44,12 +13,23 @@ const rootDir = runningFromDist
 const sourceRoot = runningFromDist
     ? path.resolve(rootDir, "..")
     : parentDir;
+
+
+/**
+ * @param {string} sourcePath
+ */
 const copyFile = function (sourcePath) {
     const relativePath = path.relative(sourceRoot, sourcePath);
     const targetPath = path.join(rootDir, relativePath);
     fs.mkdirSync(path.dirname(targetPath), { recursive: true });
     fs.copyFileSync(sourcePath, targetPath);
 };
+
+
+/**
+ * @param {string} sourcePath
+ * @param {string} targetPath
+ */
 const copyDirectory = function (sourcePath, targetPath) {
     fs.mkdirSync(path.dirname(targetPath), { recursive: true });
     fs.cpSync(sourcePath, targetPath, {
@@ -57,6 +37,11 @@ const copyDirectory = function (sourcePath, targetPath) {
         force: true
     });
 };
+
+
+/**
+ * @param {string} targetPath
+ */
 const removeGeneratedDirectory = function (targetPath) {
     fs.rmSync(targetPath, {
         recursive: true,
@@ -89,8 +74,10 @@ const copyPackageJson = function () {
             files: [
                 "scripts/**/*",
                 "shared/**/*",
+                "schemas/**/*",
                 "products/**/*",
-                ...packagedRuntimeDependencies_1.packagedRuntimeDependencies.map((packageName) => {
+                "node_modules/@dialogforge/core/**/*",
+                ...packagedRuntimeDependencies.map((packageName) => {
                     return `node_modules/${packageName}/**/*`;
                 }),
                 "package.json"
@@ -121,10 +108,10 @@ const walk = function (dirPath) {
     });
 };
 cleanGeneratedAssetDirectories();
-["shared", "scripts"].forEach((dirName) => {
+["shared", "scripts", "schemas"].forEach((dirName) => {
     walk(path.join(sourceRoot, dirName));
 });
 copyPackageJson();
-packagedRuntimeDependencies_1.packagedRuntimeDependencies.forEach((packageName) => {
+packagedRuntimeDependencies.forEach((packageName) => {
     copyDirectory(path.join(sourceRoot, "node_modules", packageName), path.join(rootDir, "node_modules", packageName));
 });

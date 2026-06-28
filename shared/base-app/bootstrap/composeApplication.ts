@@ -7,6 +7,10 @@ import {
     getRuntimeProvider
 } from "../../runtime/providers/runtimeProviderRegistry";
 import { resolveProductIconPath } from "./productAssets";
+import {
+    readJsonForValidation,
+    validateLocaleFile
+} from "./productAssetValidation";
 import type { RuntimeProviderManifest } from "../../runtime/provider-contract/runtimeProvider";
 import type {
     ApplicationComposition,
@@ -99,16 +103,25 @@ const mergeObjects = function<T extends Record<string, unknown>>(base: T, extra:
 };
 
 
+const readLocaleJson = function(filePath: string): LocaleStrings {
+    if (!fs.existsSync(filePath)) {
+        return {};
+    }
+
+    validateLocaleFile(filePath);
+
+    return readJsonForValidation(filePath, "Locale file") as LocaleStrings;
+};
+
+
 const readI18n = function(rootDir: string, location: ResolvedProductLocation, locale: string): LocaleStrings {
-    const sharedEnglish = readJson<LocaleStrings>(
-        path.join(rootDir, "shared/base-app/i18n/en_US.json"),
-        {}
+    const sharedEnglish = readLocaleJson(
+        path.join(rootDir, "shared/base-app/i18n/en_US.json")
     );
     const sharedLocale = locale === "en_US"
         ? {}
-        : readJson<LocaleStrings>(
-            path.join(rootDir, "shared/base-app/i18n", `${locale}.json`),
-            {}
+        : readLocaleJson(
+            path.join(rootDir, "shared/base-app/i18n", `${locale}.json`)
         );
     const shared = mergeObjects(sharedEnglish, sharedLocale);
 
@@ -116,15 +129,13 @@ const readI18n = function(rootDir: string, location: ResolvedProductLocation, lo
         return shared;
     }
 
-    const productEnglish = readJson<LocaleStrings>(
-        path.join(location.i18nPath, "en_US.json"),
-        {}
+    const productEnglish = readLocaleJson(
+        path.join(location.i18nPath, "en_US.json")
     );
     const productLocale = locale === "en_US"
         ? {}
-        : readJson<LocaleStrings>(
-            path.join(location.i18nPath, `${locale}.json`),
-            {}
+        : readLocaleJson(
+            path.join(location.i18nPath, `${locale}.json`)
         );
 
     return mergeObjects(mergeObjects(shared, productEnglish), productLocale);

@@ -72,7 +72,7 @@ interface DatasetEditorCommands {
 }
 
 
-interface DatasetEditorIpcRoutes {
+export interface DatasetEditorIpcRoutes {
     "base-app:getDatasetEditorDocument": { input: []; result: DatasetEditorDocumentState };
     "base-app:openDatasetEditor": { input: [string]; result: DatasetEditorDocumentState };
     "datasetEditor:setVariableColumnWidths": { input: [Record<string, unknown>]; result: boolean };

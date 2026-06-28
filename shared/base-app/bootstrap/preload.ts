@@ -60,11 +60,14 @@ import {
 } from "../../shell-electron/settings/applicationSettingsIpc";
 import {
     applicationEventChannels,
-    onApplicationEvent
+    onApplicationEvent,
+    type ApplicationEventChannel,
+    type ApplicationEventPayloads
 } from "./applicationEvents";
 import {
     datasetEditorIpcChannels,
-    invokeDatasetEditorRoute
+    invokeDatasetEditorRoute,
+    type DatasetEditorIpcRoutes
 } from "../../dataset-editor/datasetEditorIpc";
 import {
     dialogRuntimeIpcChannels,
@@ -117,6 +120,8 @@ import type {
 import {
     invokeScriptEditorRoute,
     sendScriptEditorCommand,
+    type ScriptEditorCommands,
+    type ScriptEditorIpcRoutes,
     scriptEditorEventChannels,
     scriptEditorIpcChannels
 } from "../../script-editor/scriptEditorIpc";
@@ -134,6 +139,44 @@ const asRecord = function(value: unknown): Record<string, unknown> {
 
 // Keep the host bridge as the single Electron compatibility seam.
 const hostBridge = createDialogForgeHostBridge(ipcRenderer);
+
+
+const onAppEvent = function<Channel extends ApplicationEventChannel>(
+    channel: Channel,
+    callback: (payload: ApplicationEventPayloads[Channel]) => void
+) {
+    onApplicationEvent(ipcRenderer, channel, callback);
+};
+
+
+const invokeDatasetEditor = function<
+    Channel extends keyof DatasetEditorIpcRoutes & string
+>(
+    channel: Channel,
+    ...args: DatasetEditorIpcRoutes[Channel]["input"]
+): Promise<DatasetEditorIpcRoutes[Channel]["result"]> {
+    return invokeDatasetEditorRoute(ipcRenderer, channel, ...args);
+};
+
+
+const invokeScriptEditor = function<
+    Channel extends keyof ScriptEditorIpcRoutes & string
+>(
+    channel: Channel,
+    ...args: ScriptEditorIpcRoutes[Channel]["input"]
+): Promise<ScriptEditorIpcRoutes[Channel]["result"]> {
+    return invokeScriptEditorRoute(ipcRenderer, channel, ...args);
+};
+
+
+const sendScriptEditor = function<
+    Channel extends keyof ScriptEditorCommands & string
+>(
+    channel: Channel,
+    ...args: ScriptEditorCommands[Channel]
+) {
+    sendScriptEditorCommand(ipcRenderer, channel, ...args);
+};
 
 
 const api: DialogForgeApi = {
@@ -207,16 +250,12 @@ const api: DialogForgeApi = {
         );
     },
     checkScriptFragment: function(input: { code?: string }) {
-        return invokeScriptEditorRoute(
-            ipcRenderer,
-            scriptEditorIpcChannels.checkFragment,
+        return invokeScriptEditor(scriptEditorIpcChannels.checkFragment,
             input
         );
     },
     runScriptCodeBatch: function(input: { chunks?: string[] }) {
-        return invokeScriptEditorRoute(
-            ipcRenderer,
-            scriptEditorIpcChannels.runCodeBatch,
+        return invokeScriptEditor(scriptEditorIpcChannels.runCodeBatch,
             input
         );
     },
@@ -592,23 +631,19 @@ const api: DialogForgeApi = {
         );
     },
     getScriptEditorDocument: function() {
-        return invokeScriptEditorRoute(ipcRenderer, scriptEditorIpcChannels.getDocument);
+        return invokeScriptEditor(scriptEditorIpcChannels.getDocument);
     },
     openScriptEditor: function() {
-        return invokeScriptEditorRoute(ipcRenderer, scriptEditorIpcChannels.openEditor);
+        return invokeScriptEditor(scriptEditorIpcChannels.openEditor);
     },
     insertScriptEditorCode: function(input: { code?: string }) {
-        return invokeScriptEditorRoute(ipcRenderer, scriptEditorIpcChannels.insertCode, input);
+        return invokeScriptEditor(scriptEditorIpcChannels.insertCode, input);
     },
     getDatasetEditorDocument: function() {
-        return invokeDatasetEditorRoute(
-            ipcRenderer,
-            datasetEditorIpcChannels.getDocument
-        );
+        return invokeDatasetEditor(datasetEditorIpcChannels.getDocument);
     },
     openDatasetEditor: function(objectName: string) {
-        return invokeDatasetEditorRoute(
-            ipcRenderer,
+        return invokeDatasetEditor(
             datasetEditorIpcChannels.openEditor,
             objectName
         );
@@ -621,11 +656,10 @@ const api: DialogForgeApi = {
         );
     },
     openScriptFileInEditor: function() {
-        return invokeScriptEditorRoute(ipcRenderer, scriptEditorIpcChannels.openFileInEditor);
+        return invokeScriptEditor(scriptEditorIpcChannels.openFileInEditor);
     },
     openScriptFilePathInEditor: function(filePath: string) {
-        return invokeScriptEditorRoute(
-            ipcRenderer,
+        return invokeScriptEditor(
             scriptEditorIpcChannels.openFilePathInEditor,
             filePath
         );
@@ -638,24 +672,23 @@ const api: DialogForgeApi = {
         );
     },
     openScriptFile: function() {
-        return invokeScriptEditorRoute(ipcRenderer, scriptEditorIpcChannels.openFile);
+        return invokeScriptEditor(scriptEditorIpcChannels.openFile);
     },
     openScriptFilePath: function(filePath: string) {
-        return invokeScriptEditorRoute(ipcRenderer, scriptEditorIpcChannels.openFilePath, filePath);
+        return invokeScriptEditor(scriptEditorIpcChannels.openFilePath, filePath);
     },
     listScriptDirectory: function(input: { dirPath?: string }) {
-        return invokeScriptEditorRoute(ipcRenderer, scriptEditorIpcChannels.listDirectory, input);
+        return invokeScriptEditor(scriptEditorIpcChannels.listDirectory, input);
     },
     datasetViewer: {
         getSchema: function(name: string) {
-            return invokeDatasetEditorRoute(
-                ipcRenderer,
+            return invokeDatasetEditor(
                 datasetEditorIpcChannels.getSchema,
                 { name }
             );
         },
         updateCell: function(name: string, patch: DatasetCellUpdatePatch) {
-            return invokeDatasetEditorRoute(ipcRenderer, datasetEditorIpcChannels.updateCell, {
+            return invokeDatasetEditor(datasetEditorIpcChannels.updateCell, {
                 name,
                 row: patch?.row,
                 column: patch?.column,
@@ -667,7 +700,7 @@ const api: DialogForgeApi = {
             column: string,
             options?: { decreasing?: boolean; naLast?: boolean; emptyLast?: boolean }
         ) {
-            return invokeDatasetEditorRoute(ipcRenderer, datasetEditorIpcChannels.sortRows, {
+            return invokeDatasetEditor(datasetEditorIpcChannels.sortRows, {
                 name,
                 column,
                 decreasing: options?.decreasing === true,
@@ -680,7 +713,7 @@ const api: DialogForgeApi = {
             column: string,
             nextName: string
         ) {
-            return invokeDatasetEditorRoute(ipcRenderer, datasetEditorIpcChannels.updateColumnName, {
+            return invokeDatasetEditor(datasetEditorIpcChannels.updateColumnName, {
                 name,
                 column,
                 nextName
@@ -691,7 +724,7 @@ const api: DialogForgeApi = {
             row: number,
             nextName: string
         ) {
-            return invokeDatasetEditorRoute(ipcRenderer, datasetEditorIpcChannels.updateRowName, {
+            return invokeDatasetEditor(datasetEditorIpcChannels.updateRowName, {
                 name,
                 row,
                 nextName
@@ -703,7 +736,7 @@ const api: DialogForgeApi = {
             nextName: string,
             position: "before" | "after"
         ) {
-            return invokeDatasetEditorRoute(ipcRenderer, datasetEditorIpcChannels.insertRow, {
+            return invokeDatasetEditor(datasetEditorIpcChannels.insertRow, {
                 name,
                 row,
                 nextName,
@@ -711,13 +744,13 @@ const api: DialogForgeApi = {
             });
         },
         removeRow: function(name: string, row: number) {
-            return invokeDatasetEditorRoute(ipcRenderer, datasetEditorIpcChannels.removeRow, {
+            return invokeDatasetEditor(datasetEditorIpcChannels.removeRow, {
                 name,
                 row
             });
         },
         removeColumn: function(name: string, column: string) {
-            return invokeDatasetEditorRoute(ipcRenderer, datasetEditorIpcChannels.removeColumn, {
+            return invokeDatasetEditor(datasetEditorIpcChannels.removeColumn, {
                 name,
                 column
             });
@@ -728,7 +761,7 @@ const api: DialogForgeApi = {
             nextName: string,
             position: "before" | "after"
         ) {
-            return invokeDatasetEditorRoute(ipcRenderer, datasetEditorIpcChannels.insertColumn, {
+            return invokeDatasetEditor(datasetEditorIpcChannels.insertColumn, {
                 name,
                 column,
                 nextName,
@@ -736,27 +769,26 @@ const api: DialogForgeApi = {
             });
         },
         getContent: function(name: string, request?: DatasetViewerContentRequest) {
-            return invokeDatasetEditorRoute(ipcRenderer, datasetEditorIpcChannels.getContent, {
+            return invokeDatasetEditor(datasetEditorIpcChannels.getContent, {
                 name,
                 ...request
             });
         },
         getFilterMask: function(name: string, rowStart: number, rowCount: number) {
-            return invokeDatasetEditorRoute(ipcRenderer, datasetEditorIpcChannels.getFilterMask, {
+            return invokeDatasetEditor(datasetEditorIpcChannels.getFilterMask, {
                 name,
                 rowStart,
                 rowCount
             });
         },
         getVariables: function(name: string) {
-            return invokeDatasetEditorRoute(
-                ipcRenderer,
+            return invokeDatasetEditor(
                 datasetEditorIpcChannels.getVariables,
                 { name }
             );
         },
         getVariablesBatch: function(name: string, start: number, count: number) {
-            return invokeDatasetEditorRoute(ipcRenderer, datasetEditorIpcChannels.getVariablesBatch, {
+            return invokeDatasetEditor(datasetEditorIpcChannels.getVariablesBatch, {
                 name,
                 start,
                 count
@@ -767,7 +799,7 @@ const api: DialogForgeApi = {
             variableName: string,
             patch: DatasetVariableUpdatePatch
         ) {
-            return invokeDatasetEditorRoute(ipcRenderer, datasetEditorIpcChannels.updateVariable, {
+            return invokeDatasetEditor(datasetEditorIpcChannels.updateVariable, {
                 name,
                 variableName,
                 ...patch
@@ -775,24 +807,22 @@ const api: DialogForgeApi = {
         }
     },
     saveScriptFile: function(input: { filePath?: string; content?: string }) {
-        return invokeScriptEditorRoute(ipcRenderer, scriptEditorIpcChannels.saveFile, input);
+        return invokeScriptEditor(scriptEditorIpcChannels.saveFile, input);
     },
     saveScriptFileAs: function(input: { filePath?: string; content?: string }) {
-        return invokeScriptEditorRoute(ipcRenderer, scriptEditorIpcChannels.saveFileAs, input);
+        return invokeScriptEditor(scriptEditorIpcChannels.saveFileAs, input);
     },
     updateScriptEditorDirtyState: function(input: { dirty?: boolean; filePath?: string; content?: string }) {
-        sendScriptEditorCommand(
-            ipcRenderer,
+        sendScriptEditor(
             scriptEditorEventChannels.updateDirtyState,
             input
         );
     },
     confirmScriptEditorSave: function(input: { filePath?: string }) {
-        return invokeScriptEditorRoute(ipcRenderer, scriptEditorIpcChannels.confirmSave, input);
+        return invokeScriptEditor(scriptEditorIpcChannels.confirmSave, input);
     },
     sendScriptEditorCloseSaveResult: function(input: { requestId?: string; ok?: boolean }) {
-        sendScriptEditorCommand(
-            ipcRenderer,
+        sendScriptEditor(
             scriptEditorEventChannels.closeSaveResult,
             input
         );
@@ -863,78 +893,70 @@ const api: DialogForgeApi = {
         );
     },
     onMenuCommand: function(callback) {
-        onApplicationEvent(ipcRenderer, applicationEventChannels.menuCommand, callback);
+        onAppEvent(applicationEventChannels.menuCommand, callback);
     },
     onRuntimeSession: function(callback) {
-        onApplicationEvent(ipcRenderer, applicationEventChannels.runtimeSession, callback);
+        onAppEvent(applicationEventChannels.runtimeSession, callback);
     },
     onRuntimeTranscript: function(callback) {
-        onApplicationEvent(ipcRenderer, applicationEventChannels.runtimeTranscript, callback);
+        onAppEvent(applicationEventChannels.runtimeTranscript, callback);
     },
     onWorkspace: function(callback) {
-        onApplicationEvent(ipcRenderer, applicationEventChannels.workspace, callback);
+        onAppEvent(applicationEventChannels.workspace, callback);
     },
     onRuntimeEvents: function(callback) {
-        onApplicationEvent(ipcRenderer, applicationEventChannels.runtimeEvents, callback);
+        onAppEvent(applicationEventChannels.runtimeEvents, callback);
     },
     onActiveDataset: function(callback) {
-        onApplicationEvent(ipcRenderer, applicationEventChannels.activeDataset, callback);
+        onAppEvent(applicationEventChannels.activeDataset, callback);
     },
     onLanguageChanged: function(callback) {
-        onApplicationEvent(ipcRenderer, applicationEventChannels.languageChanged, callback);
+        onAppEvent(applicationEventChannels.languageChanged, callback);
     },
     onProductConsoleStateChips: function(callback) {
-        onApplicationEvent(ipcRenderer, applicationEventChannels.productConsoleStateChips, callback);
+        onAppEvent(applicationEventChannels.productConsoleStateChips, callback);
     },
     onTabularPreview: function(callback) {
-        onApplicationEvent(ipcRenderer, applicationEventChannels.tabularPreview, callback);
+        onAppEvent(applicationEventChannels.tabularPreview, callback);
     },
     onCellUpdate: function(callback) {
-        onApplicationEvent(ipcRenderer, applicationEventChannels.cellUpdate, callback);
+        onAppEvent(applicationEventChannels.cellUpdate, callback);
     },
     onVariableMetadata: function(callback) {
-        onApplicationEvent(ipcRenderer, applicationEventChannels.variableMetadata, callback);
+        onAppEvent(applicationEventChannels.variableMetadata, callback);
     },
     onValueLabels: function(callback) {
-        onApplicationEvent(ipcRenderer, applicationEventChannels.valueLabels, callback);
+        onAppEvent(applicationEventChannels.valueLabels, callback);
     },
     onDeclaredMissing: function(callback) {
-        onApplicationEvent(ipcRenderer, applicationEventChannels.declaredMissing, callback);
+        onAppEvent(applicationEventChannels.declaredMissing, callback);
     },
     onImportResult: function(callback) {
-        onApplicationEvent(ipcRenderer, applicationEventChannels.importResult, callback);
+        onAppEvent(applicationEventChannels.importResult, callback);
     },
     onClipboardResult: function(callback) {
-        onApplicationEvent(ipcRenderer, applicationEventChannels.clipboardResult, callback);
+        onAppEvent(applicationEventChannels.clipboardResult, callback);
     },
     onDialogCommandPreview: function(callback) {
-        onApplicationEvent(
-            ipcRenderer,
-            applicationEventChannels.dialogCommandPreview,
-            callback
-        );
+        onAppEvent(applicationEventChannels.dialogCommandPreview, callback);
     },
     onPlotViewerUpdate: function(callback) {
-        onApplicationEvent(ipcRenderer, applicationEventChannels.plotViewerUpdate, callback);
+        onAppEvent(applicationEventChannels.plotViewerUpdate, callback);
     },
     onDatasetEditorOpen: function(callback) {
-        onApplicationEvent(ipcRenderer, applicationEventChannels.datasetEditorOpen, callback);
+        onAppEvent(applicationEventChannels.datasetEditorOpen, callback);
     },
     onMainZoomFactor: function(callback) {
-        onApplicationEvent(ipcRenderer, applicationEventChannels.mainZoomFactor, callback);
+        onAppEvent(applicationEventChannels.mainZoomFactor, callback);
     },
     onScriptEditorInsertCode: function(callback) {
-        onApplicationEvent(ipcRenderer, applicationEventChannels.scriptEditorInsertCode, callback);
+        onAppEvent(applicationEventChannels.scriptEditorInsertCode, callback);
     },
     onScriptEditorOpenFile: function(callback) {
-        onApplicationEvent(ipcRenderer, applicationEventChannels.scriptEditorOpenFile, callback);
+        onAppEvent(applicationEventChannels.scriptEditorOpenFile, callback);
     },
     onScriptEditorRequestSaveForClose: function(callback) {
-        onApplicationEvent(
-            ipcRenderer,
-            applicationEventChannels.scriptEditorRequestSaveForClose,
-            callback
-        );
+        onAppEvent(applicationEventChannels.scriptEditorRequestSaveForClose, callback);
     },
     ...hostBridge
 };

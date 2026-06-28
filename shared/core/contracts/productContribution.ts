@@ -6,6 +6,9 @@ import type {
 } from "../../runtime/provider-contract/runtimeProvider";
 
 
+export const PRODUCT_CONTRIBUTION_CONTRACT_VERSION = 1;
+
+
 export interface ProductConsoleStateChip {
     id: string;
     labelKey: string;
@@ -32,6 +35,7 @@ export interface ProductContributionContext {
 
 export interface ProductContribution {
     id: string;
+    dialogForgeProductContract?: typeof PRODUCT_CONTRIBUTION_CONTRACT_VERSION;
     createDialogExternalCallHosts(
         context: ProductContributionContext
     ): Record<string, DialogExternalCallHost>;
