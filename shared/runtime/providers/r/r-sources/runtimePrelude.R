@@ -32,6 +32,7 @@ plot_last_signature <- ""
 
 
 json_escape_code <- function(code) {
+    if (is.na(code)) return("\\ufffd")
     if (code == 34L) return("\\\"")
     if (code == 92L) return("\\\\")
     if (code == 8L) return("\\b")
