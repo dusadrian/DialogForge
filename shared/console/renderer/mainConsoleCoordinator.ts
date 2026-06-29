@@ -131,6 +131,10 @@ export const createMainConsoleCoordinator = function(
                 return executeText(code, "base-app.visible-command");
             },
             interruptExecution: interrupt,
+            recordHelpCommand: function(code: string): void {
+                bindings.recordHistory(code);
+                bindings.registerCompletionInput(code);
+            },
             showHelpTopic: function(request): void {
                 bindings.openHelpTopic({
                     topic: request.topic,

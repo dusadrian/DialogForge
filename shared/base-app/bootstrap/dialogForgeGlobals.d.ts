@@ -165,6 +165,7 @@ declare global {
         openHelpTopic(input: Partial<HelpTopicRequest>): Promise<HelpTopicResult>;
         getHelpDocument(): Promise<{ title: string; body: string }>;
         openHelpCommandUrl(url: string): Promise<unknown>;
+        fetchRHelpPage(url: string): Promise<unknown>;
         runHelpExample(input: { topic?: string; package?: string }): Promise<unknown>;
         readCompletions(input: Partial<CompletionRequest>): Promise<CompletionResult>;
         checkDependencies(input: Partial<DependencyCheckRequest>): Promise<DependencyCheckResult>;

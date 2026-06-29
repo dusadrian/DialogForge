@@ -121,19 +121,26 @@ export const createExternalWindowComposition = function(
         const hasChooser = result.status === "ready"
             && Array.isArray(result.matches)
             && result.matches.length > 0;
+        const hasPath = result.status === "ready" && result.path;
 
-        if (hasBody || hasChooser) {
-            const port = await options.startHelpServer();
-            const toHelpUrl = function(pathValue: string): string {
-                const helpPath = String(pathValue || "");
+        if (hasBody || hasChooser || hasPath) {
+            let sourceUrl = "";
+            let chooserBody = "";
 
-                return `http://127.0.0.1:${port}`
-                    + (helpPath.startsWith("/") ? helpPath : `/${helpPath}`);
-            };
-            const sourceUrl = result.path ? toHelpUrl(result.path) : "";
-            const chooserBody = hasChooser
-                ? buildHelpChooserDocument(result, toHelpUrl)
-                : "";
+            if (hasChooser || (!hasBody && hasPath)) {
+                const port = await options.startHelpServer();
+                const toHelpUrl = function(pathValue: string): string {
+                    const helpPath = String(pathValue || "");
+
+                    return `http://127.0.0.1:${port}`
+                        + (helpPath.startsWith("/") ? helpPath : `/${helpPath}`);
+                };
+
+                sourceUrl = result.path ? toHelpUrl(result.path) : "";
+                chooserBody = hasChooser
+                    ? buildHelpChooserDocument(result, toHelpUrl)
+                    : "";
+            }
 
             helpDocumentState = {
                 title: "R Help - " + title,
@@ -146,7 +153,15 @@ export const createExternalWindowComposition = function(
             );
             const helpPageUrl = new URL(`file://${helpPagePath}`);
 
-            if (sourceUrl) {
+            if (hasBody) {
+                helpPageUrl.searchParams.set(
+                    "doc",
+                    Buffer.from(result.body, "utf8").toString("base64")
+                );
+                if (sourceUrl) {
+                    helpPageUrl.searchParams.set("base", sourceUrl);
+                }
+            } else if (sourceUrl) {
                 helpPageUrl.searchParams.set("src", sourceUrl);
             } else {
                 helpPageUrl.searchParams.set(

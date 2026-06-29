@@ -40,6 +40,7 @@ export interface ConsoleSurfaceOptions {
         code: string
     ) => Promise<"ok" | "incomplete" | void>;
     interruptExecution: () => Promise<void>;
+    recordHelpCommand?: (code: string) => void;
     showHelpTopic: (request: {
         query: string;
         topic: string;
@@ -195,6 +196,10 @@ export const createConsoleSurface = function(
             showHelpTopic: options.showHelpTopic,
             scrollToPrompt: function(): void {
                 flow?.scrollToBottom?.();
+            },
+            recordHelpCommand: function(code: string): void {
+                options.recordHelpCommand?.(code);
+                transcript?.recordBlankInput?.(code);
             },
             recordBlankInput: function(code: string): void {
                 transcript?.recordBlankInput?.(code);

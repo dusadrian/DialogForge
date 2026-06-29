@@ -142,9 +142,12 @@ export const createRToolController = function(
                 });
             }
 
+            const method = request.allowSearch
+                ? "search_help_topic"
+                : "show_help_topic";
             const result = await client.execute({
                 id: options.createRequestId("help-topic"),
-                method: "show_help_topic",
+                method,
                 params: {
                     topic: request.topic,
                     package: request.package || "",
@@ -165,13 +168,7 @@ export const createRToolController = function(
                 title: String(payload.title || request.topic),
                 path,
                 matches,
-                body: String(
-                    payload.body
-                    || path
-                    || payload.url
-                    || payload.topic
-                    || ""
-                ),
+                body: String(payload.body || ""),
                 message: result.ok
                     ? "R runtime-control resolved help topic."
                     : String(

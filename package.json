@@ -75,6 +75,7 @@
         "verify:shared-assets": "node -r ./tests/register-dist-require.js tests/contracts/verify-shared-assets.js",
         "verify:shared-dialog-sources": "node -r ./tests/register-dist-require.js tests/contracts/verify-shared-dialog-sources.js",
         "verify:console-command-text": "node -r ./tests/register-dist-require.js tests/contracts/verify-console-command-text.js",
+        "verify:console-help-command": "node -r ./tests/register-dist-require.js tests/contracts/verify-console-help-command.js",
         "verify:console-history-persistence": "node -r ./tests/register-dist-require.js tests/contracts/verify-console-history-persistence.js",
         "verify:workspace-pane": "node -r ./tests/register-dist-require.js tests/contracts/verify-workspace-pane.js",
         "verify:runtime-panels": "node -r ./tests/register-dist-require.js tests/contracts/verify-runtime-panels.js",

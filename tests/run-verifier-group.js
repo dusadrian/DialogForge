@@ -38,6 +38,7 @@ const verifierGroups = {
         "verify:shared-assets",
         "verify:shared-dialog-sources",
         "verify:console-command-text",
+        "verify:console-help-command",
         "verify:console-history-persistence",
         "verify:workspace-pane",
         "verify:runtime-panels",

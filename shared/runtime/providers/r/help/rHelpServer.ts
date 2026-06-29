@@ -1,5 +1,6 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "child_process";
 import * as os from "os";
+import * as path from "path";
 
 
 const normalizedEnvironment = function(): Record<string, string> {
@@ -15,6 +16,11 @@ const normalizedEnvironment = function(): Record<string, string> {
 };
 
 
+const rScriptName = function(): string {
+    return process.platform === "win32" ? "Rscript.exe" : "Rscript";
+};
+
+
 const resolveRCommand = function(): string {
     const configured = String(
         process.env.DIALOGFORGE_R_BINARY ||
@@ -23,10 +29,16 @@ const resolveRCommand = function(): string {
     ).trim();
 
     if (configured) {
-        return configured;
+        const basename = path.basename(configured).toLowerCase();
+
+        if (basename === "rscript" || basename === "rscript.exe") {
+            return configured;
+        }
+
+        return path.join(path.dirname(configured), rScriptName());
     }
 
-    return process.platform === "win32" ? "Rterm.exe" : "R";
+    return rScriptName();
 };
 
 
@@ -56,10 +68,13 @@ export const createRHelpServer = function() {
                 HOME: String(process.env.HOME || os.homedir())
             });
             const script = [
-                "invisible(capture.output(suppressWarnings(try(tools::startDynamicHelp(NA), silent=TRUE))))",
-                "port <- 0L",
+                "options(help.ports=as.integer(seq(22000, 22999)))",
+                "port <- suppressWarnings(tryCatch(tools::startDynamicHelp(NA), error=function(e) 0L))",
+                "port <- suppressWarnings(as.integer(port))",
+                "if (!isTRUE(is.finite(port)) || is.na(port) || port <= 0L) port <- 0L",
                 "for (.i in seq_len(100L)) {",
-                'port <- tryCatch(get("httpdPort", envir=asNamespace("tools"))(), error=function(e) 0L)',
+                'if (isTRUE(is.finite(port)) && !is.na(port) && port > 0L) break',
+                'port <- suppressWarnings(tryCatch(as.integer(get("httpdPort", envir=asNamespace("tools"))()), error=function(e) 0L))',
                 "if (isTRUE(is.finite(port)) && !is.na(port) && port > 0L) break",
                 "Sys.sleep(0.05)",
                 "}",
@@ -69,9 +84,6 @@ export const createRHelpServer = function() {
                 "repeat Sys.sleep(3600)"
             ].join("; ");
             const child = spawn(resolveRCommand(), [
-                "--vanilla",
-                "--quiet",
-                "--slave",
                 "-e",
                 script
             ], {

@@ -527,6 +527,9 @@ const api: DialogForgeApi = {
     openHelpCommandUrl: function(url: string) {
         return invokeHelpRoute(ipcRenderer, helpIpcChannels.openCommandUrl, url);
     },
+    fetchRHelpPage: function(url: string) {
+        return invokeHelpRoute(ipcRenderer, helpIpcChannels.fetchRPage, url);
+    },
     runHelpExample: function(input: { topic?: string; package?: string }) {
         return invokeHelpRoute(ipcRenderer, helpIpcChannels.runExample, input);
     },

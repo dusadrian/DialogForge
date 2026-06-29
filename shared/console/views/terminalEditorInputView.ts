@@ -34,6 +34,7 @@ export const createTerminalConsoleEditorInputView = (deps: {
   showHelpTopic?: (request: { query: string; topic: string; package?: string; allowSearch?: boolean }) => void;
   scrollToPrompt?: () => void;
   recordBlankInput?: (code: string) => void;
+  recordHelpCommand?: (code: string) => void;
 }) => {
   let mounted = false;
   let disposed = false;
@@ -136,6 +137,8 @@ export const createTerminalConsoleEditorInputView = (deps: {
     refreshPrompt,
     scrollToPrompt: deps.scrollToPrompt,
     recordBlankInput: deps.recordBlankInput,
+    recordHelpCommand: deps.recordHelpCommand,
+    showHelpTopic: deps.showHelpTopic,
     checkFragment: deps.isCodeFragmentComplete,
     executeCode: deps.executeCode,
     debugLog: deps.debugLog,

@@ -1,4 +1,8 @@
 import { normalizeConsoleCommandText } from "../commandText";
+import {
+    parseConsoleHelpCommand,
+    type ConsoleHelpTopicRequest
+} from "./contextualHelp";
 
 export type ConsoleSubmissionResult = "ok" | "incomplete" | void;
 export type ConsoleFragmentState =
@@ -21,6 +25,8 @@ export interface ConsoleEditorSubmissionBindings {
     refreshPrompt(): void;
     scrollToPrompt?(): void;
     recordBlankInput?(code: string): void;
+    recordHelpCommand?(code: string): void;
+    showHelpTopic?(request: ConsoleHelpTopicRequest): void;
     checkFragment(code: string): Promise<ConsoleFragmentState>;
     executeCode(code: string): Promise<ConsoleSubmissionResult>;
     debugLog?(message: string, data?: unknown): void;
@@ -102,6 +108,29 @@ export const createConsoleEditorSubmissionController = function(
             sessionPhase,
             code: code.length > 220 ? `${code.slice(0, 220)}...` : code
         });
+
+        const helpRequest = parseConsoleHelpCommand(code);
+
+        if (helpRequest) {
+            debugLog("editorInput:onEnter:help", {
+                topic: helpRequest.topic,
+                package: helpRequest.package || "",
+                allowSearch: helpRequest.allowSearch === true
+            });
+            bindings.clearInput();
+            bindings.recordHelpCommand?.(code);
+            bindings.showHelpTopic?.(helpRequest);
+            bindings.refreshPrompt();
+            bindings.requestFocus();
+
+            try {
+                bindings.scrollToPrompt?.();
+            }
+            catch {}
+
+            bindings.requestPromptFocus();
+            return;
+        }
 
         commandStartAt = Date.now();
         timingLog("editor:onEnter:start", {

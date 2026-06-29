@@ -59,6 +59,32 @@ const parseCandidate = function(value: string): ContextualTopic | null {
 };
 
 
+export const parseConsoleHelpCommand = function(
+    value: unknown
+): ConsoleHelpTopicRequest | null {
+    const raw = String(value ?? "").trim();
+
+    if (!raw || raw.includes("\n") || !raw.startsWith("?")) {
+        return null;
+    }
+
+    const search = raw.startsWith("??");
+    const candidate = raw.slice(search ? 2 : 1).trim();
+    const parsed = parseCandidate(candidate);
+
+    if (!parsed?.topic) {
+        return null;
+    }
+
+    return {
+        query: raw,
+        topic: parsed.topic,
+        package: parsed.package,
+        allowSearch: search
+    };
+};
+
+
 const isIdentifierChar = function(value: string): boolean {
     return /[A-Za-z0-9._]/.test(value);
 };

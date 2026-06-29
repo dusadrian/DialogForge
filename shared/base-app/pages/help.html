@@ -314,6 +314,30 @@
           } catch {}
         };
 
+        const fetchHelpHtml = async (nextUrl) => {
+          if (isLocalHelpUrl(nextUrl) && window.dialogForge?.fetchRHelpPage) {
+            const result = await window.dialogForge.fetchRHelpPage(nextUrl);
+            if (!result || result.ok !== true) {
+              throw new Error(String(result && (result.error || result.status) || 'help-fetch-failed'));
+            }
+            return {
+              text: String(result.text || ''),
+              url: String(result.url || nextUrl)
+            };
+          }
+
+          const response = await fetch(nextUrl);
+
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+          }
+
+          return {
+            text: await response.text(),
+            url: String(response.url || nextUrl)
+          };
+        };
+
         const loadHelpUrl = async (targetUrl, options = {}) => {
           const nextUrl = String(targetUrl || '').trim();
           if (!nextUrl || !frame) return;
@@ -325,14 +349,9 @@
             '</body></html>'
           ].join('');
           try {
-            const response = await fetch(nextUrl);
-
-            if (!response.ok) {
-              throw new Error(`HTTP ${response.status}`);
-            }
-
-            const text = await response.text();
-            const resolvedUrl = String(response.url || nextUrl);
+            const fetched = await fetchHelpHtml(nextUrl);
+            const text = String(fetched.text || '');
+            const resolvedUrl = String(fetched.url || nextUrl);
 
             if (options.record !== false) {
               recordHistory({ kind: 'url', url: resolvedUrl });
