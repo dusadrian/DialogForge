@@ -1,10 +1,9 @@
 export const normalizeConsoleLineEndings = (value: unknown): string =>
   String(value ?? '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 
-const normalizeCopiedUnicodeSpaces = (value: string): string => value.replace(
-  /[\u00A0\u1680\u2000-\u200A\u202F\u205F\u3000]/g,
-  ' '
-);
+const normalizeCopiedUnicodeSpaces = (value: string): string => value
+  .replace(/[\u00A0\u1680\u2000-\u200A\u202F\u205F\u3000]/g, ' ')
+  .replace(/[\u200B-\u200D\u2060\uFEFF]/g, ' ');
 
 const looksLikeBareRepoHost = (value: string): boolean => {
   const trimmed = String(value || '').trim();

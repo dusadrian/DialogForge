@@ -29,6 +29,12 @@ assert.strictEqual(
 );
 
 assert.strictEqual(
+    normalizeConsoleCommandText('ess\u200B<-\u2060readRDS("~/ess9ro.rds")'),
+    'ess <- readRDS("~/ess9ro.rds")',
+    "console command text must normalize zero-width copied space characters"
+);
+
+assert.strictEqual(
     normalizeConsoleCommandText('install.packages("QCA", repos = "cran.r-project.org")'),
     'install.packages("QCA", repos = "https://cran.r-project.org")',
     "console command text must preserve package repository normalization"

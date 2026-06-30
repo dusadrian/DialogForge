@@ -2,6 +2,7 @@ import type * as Monaco from "monaco-editor";
 import {
     planConsoleInputExecution
 } from "../../console/terminal/consoleInputExecution";
+import { normalizeConsoleCommandText } from "../../console/commandText";
 import { buildContextualHelpRequest } from "../../console/terminal/contextualHelp";
 import type { ScriptDocument } from "../state/scriptDocument";
 import {
@@ -130,7 +131,9 @@ export const createScriptExecutionController = function(
 
         if (selection && !selection.isEmpty?.()) {
             return {
-                code: String(model.getValueInRange(selection) || ""),
+                code: normalizeConsoleCommandText(
+                    model.getValueInRange(selection)
+                ),
                 lineNumber: Number(
                     selection.endLineNumber
                     || selection.startLineNumber
@@ -150,7 +153,7 @@ export const createScriptExecutionController = function(
         const statement = await findStatement(lineNumber);
 
         return {
-            code: String(statement.code || ""),
+            code: normalizeConsoleCommandText(statement.code),
             lineNumber: Number(statement.startLine || lineNumber),
             endLineNumber: Number(statement.endLine || lineNumber),
             usedSelection: false

@@ -13,6 +13,7 @@ import {
     createScriptFileResult,
     type ScriptFileResult
 } from "../../shell-electron/filesystem/scriptFileResult";
+import { normalizeConsoleCommandText } from "../../console/commandText";
 import { createVisibleCommandRequest } from "../../runtime/commands/commandProtocol";
 import {
     createRuntimeExtensionMethodRequest
@@ -202,7 +203,7 @@ export const createScriptEditorIpcController = function(
     ) => {
         const chunks = Array.isArray(input?.chunks)
             ? input.chunks.map((chunk) => {
-                return String(chunk || "").trim();
+                return normalizeConsoleCommandText(chunk).trim();
             }).filter((chunk) => {
                 return chunk.length > 0;
             })
