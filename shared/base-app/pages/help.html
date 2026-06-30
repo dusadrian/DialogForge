@@ -177,8 +177,14 @@
         const locationEl = document.getElementById('helpLocation');
         const initialUrl = String(params.get('src') || '').trim();
         const initialDoc = String(params.get('doc') || '').trim();
+        const initialBase = String(params.get('base') || '').trim();
+        const initialTopic = String(params.get('topic') || '').trim();
+        const initialPackage = String(params.get('package') || '').trim();
         const baseTitle = String(params.get('title') || 'R Help').trim() || 'R Help';
         let currentUrl = initialUrl;
+        let currentTopic = initialTopic;
+        let currentPackage = initialPackage;
+        let consoleSyntaxModulePromise = null;
         const historyEntries = [];
         let historyIndex = -1;
         const escapeHtml = (value) =>
@@ -200,6 +206,93 @@
           } catch {
             return false;
           }
+        };
+
+        const getDialogForgeApi = () => {
+          if (window.dialogForge) {
+            return window.dialogForge;
+          }
+
+          try {
+            return window.parent && window.parent !== window ? window.parent.dialogForge : null;
+          } catch {
+            return null;
+          }
+        };
+
+        const readHelpUrlMetadata = (value) => {
+          try {
+            const parsed = new URL(String(value || ''), window.location.href);
+            const match = parsed.pathname.match(/\/library\/([^/]+)\/(?:html\/([^/?#]+)|Example\/([^/?#]+))$/);
+
+            if (!match) return null;
+            const packageName = decodeURIComponent(String(match[1] || ''));
+            const topic = decodeURIComponent(String(match[2] || match[3] || '')).replace(/\.html$/i, '');
+
+            if (!packageName || !topic || /^00Index$/i.test(topic)) return null;
+            return { packageName, topic };
+          } catch {
+            return null;
+          }
+        };
+
+        const loadConsoleSyntaxModule = async () => {
+          if (consoleSyntaxModulePromise) {
+            return consoleSyntaxModulePromise;
+          }
+
+          consoleSyntaxModulePromise = (async () => {
+            let lastError = null;
+            const requireFn = typeof require === 'function' ? require : null;
+
+            if (requireFn) {
+              try {
+                return requireFn('../../console/consoleSyntax.js');
+              } catch (error) {
+                lastError = error;
+              }
+            }
+
+            const candidates = [
+              new URL('../../console/consoleSyntax.js', window.location.href).toString(),
+              '/browser-esm/shared/console/consoleSyntax.js'
+            ];
+
+            for (const candidate of candidates) {
+              try {
+                return await import(candidate);
+              } catch (error) {
+                lastError = error;
+              }
+            }
+
+            throw lastError || new Error('console-syntax-module-unavailable');
+          })();
+
+          return consoleSyntaxModulePromise;
+        };
+
+        const colorizeHelpCodeBlocks = async () => {
+          try {
+            const doc = frame?.contentDocument;
+
+            if (!doc) return;
+            const syntax = await loadConsoleSyntaxModule();
+            const colorize = syntax?.colorizeConsoleRCodeInto;
+
+            if (typeof colorize !== 'function') return;
+            const blocks = Array.from(doc.querySelectorAll('pre code, pre'));
+
+            for (const block of blocks) {
+              const target = block;
+
+              if (!target || target.nodeType !== 1) continue;
+              if (target.dataset.dialogForgeConsoleSyntax === 'true') continue;
+              if (target.closest?.('.output,.warning,.error,.message')) continue;
+              target.dataset.dialogForgeConsoleSyntax = 'true';
+              await colorize(target, target.textContent || '');
+            }
+          } catch {}
         };
 
         const getCurrentEntry = () =>
@@ -301,7 +394,7 @@
 
         const openCommandUrl = (url) => {
           try {
-            window.dialogForge?.openHelpCommandUrl(String(url || ''));
+            getDialogForgeApi()?.openHelpCommandUrl(String(url || ''));
           } catch {}
         };
 
@@ -315,8 +408,10 @@
         };
 
         const fetchHelpHtml = async (nextUrl) => {
-          if (isLocalHelpUrl(nextUrl) && window.dialogForge?.fetchRHelpPage) {
-            const result = await window.dialogForge.fetchRHelpPage(nextUrl);
+          const api = getDialogForgeApi();
+
+          if (isLocalHelpUrl(nextUrl) && api?.fetchRHelpPage) {
+            const result = await api.fetchRHelpPage(nextUrl);
             if (!result || result.ok !== true) {
               throw new Error(String(result && (result.error || result.status) || 'help-fetch-failed'));
             }
@@ -352,6 +447,12 @@
             const fetched = await fetchHelpHtml(nextUrl);
             const text = String(fetched.text || '');
             const resolvedUrl = String(fetched.url || nextUrl);
+            const metadata = readHelpUrlMetadata(resolvedUrl);
+
+            if (metadata) {
+              currentTopic = metadata.topic;
+              currentPackage = metadata.packageName;
+            }
 
             if (options.record !== false) {
               recordHistory({ kind: 'url', url: resolvedUrl });
@@ -374,12 +475,13 @@
         };
 
         const loadHelpDoc = (html, baseUrl, options = {}) => {
+          const base = String(baseUrl || initialBase || '');
           if (options.record !== false) {
-            recordHistory({ kind: 'doc', html: String(html || ''), baseUrl: String(baseUrl || '') });
+            recordHistory({ kind: 'doc', html: String(html || ''), baseUrl: base });
           } else {
             updateToolbarState();
           }
-          renderHelpPage(String(html || ''), String(baseUrl || ''));
+          renderHelpPage(String(html || ''), base);
         };
 
         const openHistoryIndex = async (nextIndex) => {
@@ -411,6 +513,11 @@
             void openHistoryIndex(0);
           });
         }
+        if (frame) {
+          frame.addEventListener('load', () => {
+            void colorizeHelpCodeBlocks();
+          });
+        }
 
         window.addEventListener('message', (event) => {
           const data = event.data || {};
@@ -422,6 +529,15 @@
             document.title = String(data.title || '').trim()
               ? `${baseTitle} - ${String(data.title || '').trim()}`
               : baseTitle;
+            try {
+              if (window.parent && window.parent !== window) {
+                window.parent.postMessage({
+                  id: 'app-help-complete',
+                  url: currentUrl,
+                  title: String(data.title || '').trim()
+                }, '*');
+              }
+            } catch {}
             return;
           }
           if (String(data.id || '') !== 'app-help-navigate') return;
@@ -444,7 +560,7 @@
             const decoded = typeof atob === 'function'
               ? decodeURIComponent(escape(atob(initialDoc)))
               : initialDoc;
-            loadHelpDoc(decoded, '', { record: true });
+            loadHelpDoc(decoded, initialBase, { record: true });
             document.title = baseTitle;
           } catch {
             document.title = baseTitle;

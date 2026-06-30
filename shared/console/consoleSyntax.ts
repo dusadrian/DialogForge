@@ -72,6 +72,66 @@ export const ensureConsoleTheme = (monaco: typeof Monaco) => {
     consoleThemeRegistered = true;
   } catch {}
 };
+
+const loadScript = function(src: string): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    const existing = document.querySelector(`script[src="${src}"]`) as HTMLScriptElement | null;
+
+    if (existing) {
+      resolve();
+      return;
+    }
+
+    const script = document.createElement('script');
+
+    script.src = src;
+    script.async = true;
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error(`monaco-loader-script-failed: ${src}`));
+    (document.head || document.documentElement).appendChild(script);
+  });
+};
+
+const ensureBrowserMonacoLoaded = async function(win: MonacoRendererWindow): Promise<typeof Monaco> {
+  await loadScript('/monaco/vs/loader.js');
+
+  const amdRequire = Reflect.get(win, 'require') as MonacoAmdRequire;
+
+  if (!amdRequire?.config) {
+    throw new Error('monaco-amd-require-unavailable');
+  }
+
+  win.MonacoEnvironment = {
+    globalAPI: true,
+    getWorkerUrl: () => {
+      const bootstrap = `
+self.MonacoEnvironment = { baseUrl: '/monaco/' };
+importScripts('/monaco/vs/base/worker/workerMain.js');
+`;
+      return `data:text/javascript;charset=utf-8,${encodeURIComponent(bootstrap)}`;
+    }
+  };
+
+  amdRequire.config({ paths: { vs: '/monaco/vs' } });
+
+  await new Promise<void>((resolve, reject) => {
+    try {
+      amdRequire(
+        ['vs/editor/editor.main'],
+        () => resolve(),
+        (error: unknown) => reject(error)
+      );
+    } catch (error) {
+      reject(error);
+    }
+  });
+
+  monacoRef = win.monaco || null;
+  if (!monacoRef) throw new Error('monaco-global-missing');
+  win.__dmMonacoReady = true;
+  return monacoRef;
+};
+
 export const ensureConsoleMonacoLoaded = async (): Promise<typeof Monaco> => {
   const win = window as MonacoRendererWindow;
   const getAmdRequire = function(): MonacoAmdRequire | null {
@@ -97,6 +157,10 @@ export const ensureConsoleMonacoLoaded = async (): Promise<typeof Monaco> => {
   if (monacoLoadPromise) return monacoLoadPromise;
 
   monacoLoadPromise = (async () => {
+    if (typeof Reflect.get(win, 'require') !== 'function') {
+      return ensureBrowserMonacoLoaded(win);
+    }
+
     try {
       // eslint-disable-next-line @typescript-eslint/no-var-requires
       const direct = require('monaco-editor') as typeof Monaco;
@@ -233,6 +297,68 @@ export const ensureConsoleSyntaxReady = async () => {
   return monaco;
 };
 
+type InlineTokenStyle = {
+  color: string;
+  fontStyle: string;
+  fontWeight: string;
+  textDecorationLine: string;
+};
+
+const readInlineTokenStyles = function(html: string): Map<string, InlineTokenStyle> {
+  const styles = new Map<string, InlineTokenStyle>();
+  const scratch = document.createElement('div');
+
+  scratch.setAttribute('aria-hidden', 'true');
+  scratch.style.position = 'absolute';
+  scratch.style.left = '-10000px';
+  scratch.style.top = '-10000px';
+  scratch.style.width = '1px';
+  scratch.style.height = '1px';
+  scratch.style.overflow = 'hidden';
+  scratch.innerHTML = html;
+
+  const host = document.body || document.documentElement;
+  host.appendChild(scratch);
+
+  try {
+    scratch.querySelectorAll('[class]').forEach((node) => {
+      const el = node as HTMLElement;
+      const key = String(el.className || '').trim();
+
+      if (!key || styles.has(key)) return;
+      const computed = window.getComputedStyle(el);
+
+      styles.set(key, {
+        color: computed.color,
+        fontStyle: computed.fontStyle,
+        fontWeight: computed.fontWeight,
+        textDecorationLine: computed.textDecorationLine
+      });
+    });
+  } finally {
+    scratch.remove();
+  }
+
+  return styles;
+};
+
+const applyInlineTokenStyles = function(
+  target: HTMLElement,
+  styles: Map<string, InlineTokenStyle>
+): void {
+  target.querySelectorAll('[class]').forEach((node) => {
+    const el = node as HTMLElement;
+    const key = String(el.className || '').trim();
+    const style = styles.get(key);
+
+    if (!style) return;
+    el.style.color = style.color;
+    el.style.fontStyle = style.fontStyle;
+    el.style.fontWeight = style.fontWeight;
+    el.style.textDecorationLine = style.textDecorationLine;
+  });
+};
+
 export const colorizeConsoleRCodeInto = async (target: HTMLElement, text: string) => {
   const source = String(text ?? '');
   target.style.fontVariantLigatures = 'none';
@@ -250,8 +376,21 @@ export const colorizeConsoleRCodeInto = async (target: HTMLElement, text: string
       target.textContent = source;
       return;
     }
+    const inlineTokenStyles = readInlineTokenStyles(html);
     target.innerHTML = html;
+    applyInlineTokenStyles(target, inlineTokenStyles);
     try {
+      const walker = document.createTreeWalker(target, NodeFilter.SHOW_TEXT);
+      const textNodes: Text[] = [];
+
+      while (walker.nextNode()) {
+        textNodes.push(walker.currentNode as Text);
+      }
+
+      for (const node of textNodes) {
+        node.nodeValue = String(node.nodeValue || '').replace(/\u00a0/g, ' ');
+      }
+
       target.querySelectorAll('*').forEach((node) => {
         const el = node as HTMLElement;
         el.style.fontVariantLigatures = 'none';
