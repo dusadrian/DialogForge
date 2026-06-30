@@ -198,6 +198,43 @@ const resolveRCommand = function(
 };
 
 
+const localeValueUsesUtf8 = function(value: string | undefined): boolean {
+    return /utf-?8/i.test(String(value || ""));
+};
+
+
+const defaultUtf8LocaleForPlatform = function(platform: NodeJS.Platform): string {
+    if (platform === "win32") {
+        return "English_United States.UTF-8";
+    }
+
+    return platform === "darwin" ? "en_US.UTF-8" : "C.UTF-8";
+};
+
+
+export const normalizeRRuntimeLocaleEnvironment = function(
+    env: Record<string, string>,
+    platform: NodeJS.Platform
+): Record<string, string> {
+    const result = Object.assign({}, env);
+    const fallbackLocale = defaultUtf8LocaleForPlatform(platform);
+
+    if (result.LC_ALL && !localeValueUsesUtf8(result.LC_ALL)) {
+        delete result.LC_ALL;
+    }
+
+    if (!localeValueUsesUtf8(result.LC_CTYPE)) {
+        result.LC_CTYPE = fallbackLocale;
+    }
+
+    if (!localeValueUsesUtf8(result.LANG)) {
+        result.LANG = result.LC_CTYPE || fallbackLocale;
+    }
+
+    return result;
+};
+
+
 export const createRRuntimeLaunchPlan = function(options: RRuntimeLaunchPlanOptions): RRuntimeLaunchPlan {
     const rootDir = normalizeRootDir(options.rootDir);
     const workingDirectory = resolveRuntimeWorkingDirectory(rootDir);
@@ -217,6 +254,8 @@ export const createRRuntimeLaunchPlan = function(options: RRuntimeLaunchPlanOpti
         }
     });
 
+    const runtimeEnv = normalizeRRuntimeLocaleEnvironment(baseEnv, platform);
+
     return {
         command: resolveRCommand(options.command, env, platform),
         args: [
@@ -227,7 +266,7 @@ export const createRRuntimeLaunchPlan = function(options: RRuntimeLaunchPlanOpti
             launcherPath
         ],
         cwd: workingDirectory,
-        env: Object.assign({}, baseEnv, {
+        env: Object.assign({}, runtimeEnv, {
             DM_RUNTIME_CONTROL_LAUNCHER: launcherPath,
             DM_RUNTIME_CONTROL_META: paths.metaPath,
             DM_RUNTIME_EVENTS: paths.eventsPath,
