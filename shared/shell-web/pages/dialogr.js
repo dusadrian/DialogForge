@@ -6227,7 +6227,21 @@ const closeMenus = function() {
     });
 };
 
+const isBrowserPackageMenuRoot = function(item) {
+    return String(item?.id || "") === "Packages";
+};
+
+const isBrowserPackageInstallCommand = function(item) {
+    return item?.type === "product-command"
+        && Array.isArray(item.rPackages)
+        && item.rPackages.length > 0;
+};
+
 const isMenuActionSupported = function(item) {
+    if (isBrowserPackageInstallCommand(item)) {
+        return false;
+    }
+
     return item.type === "product-dialog"
         || item.type === "shared-dialog"
         || item.type === "product-command"
@@ -6272,8 +6286,7 @@ const executeMenuItem = async function(item) {
         return;
     }
 
-    if (item.type === "product-command" && Array.isArray(item.rPackages) && item.rPackages.length) {
-        await executeVisibleCommand(`install.packages(c(${item.rPackages.map(JSON.stringify).join(", ")}))`);
+    if (isBrowserPackageInstallCommand(item)) {
         return;
     }
 
@@ -6424,6 +6437,10 @@ const renderMenu = function(menu) {
     elements.menuBar.replaceChildren();
 
     for (const item of menu || []) {
+        if (isBrowserPackageMenuRoot(item)) {
+            continue;
+        }
+
         const root = document.createElement("div");
         const button = document.createElement("button");
         const popup = document.createElement("div");
@@ -6535,7 +6552,7 @@ const mountProductPackageLibrary = async function(runtime) {
     };
 };
 
-const runMoodleLaunchCode = function(runtime) {
+const loadMoodleLaunchDataset = async function(runtime) {
     const launchCode = String(state.moodleLaunchCode || "").trim();
 
     if (!launchCode || state.moodleLaunchCodeProcessed) {
@@ -6544,18 +6561,32 @@ const runMoodleLaunchCode = function(runtime) {
 
     state.moodleLaunchCodeProcessed = true;
 
-    runtime.evalRVoid(
-        `webrmoodle::parse_launch_code(${JSON.stringify(launchCode)})`
-    )
-        .then(async () => {
-            await refreshWebRWorkspacePane();
-        })
-        .catch((error) => {
-            appendTranscript(
-                error instanceof Error ? error.message : String(error),
-                "web-transcript__line--stderr"
-            );
-        });
+    try {
+        const response = await fetch(
+            `/api/launch/${encodeURIComponent(launchCode)}/dataset.rds`
+        );
+
+        if (!response.ok) {
+            throw new Error(`Launch dataset could not be loaded: HTTP ${response.status}`);
+        }
+
+        const bytes = new Uint8Array(await response.arrayBuffer());
+        const launchDatasetPath = `/launch/${launchCode}.rds`;
+
+        await ensureWebRDirectory(runtime, "/launch");
+        await runtime.FS.writeFile(launchDatasetPath, bytes);
+        await runtime.evalRVoid(
+            `dataset <- readRDS(${JSON.stringify(launchDatasetPath)})`
+        );
+        state.activeDatasetName = "dataset";
+        await refreshWebRWorkspacePane();
+    }
+    catch (error) {
+        appendTranscript(
+            error instanceof Error ? error.message : String(error),
+            "web-transcript__line--stderr"
+        );
+    }
 };
 
 const ensureRuntime = async function() {
@@ -6589,8 +6620,8 @@ const ensureRuntime = async function() {
         state.runtimeReady = true;
         state.activeDatasetName = "";
         await refreshWebRWorkspacePane();
+        await loadMoodleLaunchDataset(runtime);
         setRuntimeStatus("WebR ready");
-        runMoodleLaunchCode(runtime);
         prewarmPlotInfrastructure(runtime);
 
         return runtime;
@@ -8322,10 +8353,24 @@ const handleDialogRuntimeMessage = async function(event) {
         let value = null;
 
         if (message.type === "listObjects") {
+            if (!workspaceObjectNames().length && state.runtimeReady) {
+                await refreshWebRWorkspaceSurfaces();
+            }
+
             value = workspaceObjectNames();
         }
+        else if (message.type === "getActiveDataset") {
+            value = state.activeDatasetName || "";
+        }
         else if (message.type === "listColumns") {
-            value = workspaceColumnEntries(String(message.payload?.dataset || state.activeDatasetName || ""));
+            const datasetName = String(message.payload?.dataset || state.activeDatasetName || "");
+
+            value = workspaceColumnEntries(datasetName);
+            if (datasetName && !value.length && state.runtimeReady) {
+                await refreshWebRWorkspacePane();
+                notifyBrowserDialogsWorkspaceChanged();
+                value = workspaceColumnEntries(datasetName);
+            }
         }
         else if (message.type === "externalCall") {
             const callName = String(message.payload?.name || "");

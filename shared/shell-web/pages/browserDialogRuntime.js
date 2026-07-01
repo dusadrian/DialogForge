@@ -23,6 +23,7 @@ const datasetBindings = [];
 const dialogBindingState = createDialogBindingState();
 const activeTriggers = new Set();
 let workspaceObjectCache = [];
+let activeDatasetCache = "";
 const workspaceColumnCache = new Map();
 let hoveredSearchContainer = null;
 let activeSearchContainer = null;
@@ -32,6 +33,9 @@ let lastSyntax = "";
 let requestSequence = 0;
 
 const parentOwnedExternalCalls = new Set([
+    "bindCrosstabsWorkspace",
+    "bindFrequenciesWorkspace",
+    "bindSummaryWorkspaceUpdates",
     "getDatasetVariablesForDialog",
     "getFilterState",
     "setFilterState",
@@ -267,8 +271,24 @@ const readWorkspaceColumnEntries = async function(dataset) {
     return entries;
 };
 
+const readActiveDatasetName = async function() {
+    const dataset = await requestParent("getActiveDataset", {});
+    const name = String(dataset || "").trim();
+
+    activeDatasetCache = name;
+
+    return name;
+};
+
 const refreshWorkspaceCache = async function() {
     await readWorkspaceObjectNames();
+    await readActiveDatasetName();
+};
+
+const refreshWorkspaceColumnCache = async function() {
+    for (const name of workspaceObjectCache) {
+        await readWorkspaceColumnEntries(name);
+    }
 };
 
 const bindDatasetControls = async function(datasetControl, variableControls) {
@@ -1375,7 +1395,12 @@ const setOptions = function(name, values) {
     }
 
     if (isCustomListNode(control.valueNode)) {
-        setCustomOptions(control, values);
+        markWorkspaceObjectBinding(control, values);
+        const shouldTriggerChange = setCustomOptions(control, values);
+
+        if (shouldTriggerChange) {
+            Promise.resolve().then(() => trigger("change", control.name));
+        }
         return;
     }
 
@@ -1453,10 +1478,7 @@ const setValue = function(name, value) {
         return;
     }
 
-    if (
-        control.valueNode instanceof HTMLInputElement
-        && (control.valueNode.type === "checkbox" || control.valueNode.type === "radio")
-    ) {
+    if ("checked" in control.valueNode) {
         control.valueNode.checked = bool(value, control.valueNode.checked);
         syncCheckedControl(control);
         return;
@@ -1687,6 +1709,18 @@ const summaryControlsFromParameters = function(parameters = {}) {
     };
 };
 
+const controlNameFromReference = function(value) {
+    if (typeof value === "string") {
+        return value.trim();
+    }
+
+    if (value && typeof value === "object") {
+        return String(value.name || value.id || value.nameid || value.controlName || "").trim();
+    }
+
+    return "";
+};
+
 const isControlChecked = function(name) {
     const control = controls.get(String(name || ""));
 
@@ -1709,7 +1743,7 @@ const hasSummaryStatisticSelection = function(parameters) {
 
 const syncSummaryStatisticSelection = function(parameters) {
     const summaryControls = summaryControlsFromParameters(parameters);
-    const active = String(parameters?.active || "").trim();
+    const active = controlNameFromReference(parameters?.active);
 
     if (!active || !isControlChecked(active)) {
         return {
@@ -1836,12 +1870,18 @@ const applySharedControlUpdate = function(value) {
     const controlSelections = value.controlSelections && typeof value.controlSelections === "object"
         ? value.controlSelections
         : {};
+    const checked = value.checked && typeof value.checked === "object"
+        ? value.checked
+        : {};
 
     Object.keys(controlValues).forEach((name) => {
         setOptions(name, controlValues[name]);
     });
     Object.keys(controlSelections).forEach((name) => {
         setSelected(name, controlSelections[name]);
+    });
+    Object.keys(checked).forEach((name) => {
+        setValue(name, checked[name]);
     });
 };
 
@@ -1870,6 +1910,13 @@ const callSharedExternal = async function(name, parameters = {}) {
         setAddRemoveButtonDirection(parameters.direction);
     }
 
+    if (name === "refreshSummarySyntax" && typeof result.value === "string") {
+        notifyParent({
+            type: "syntaxUpdate",
+            command: result.value
+        });
+    }
+
     applySharedControlUpdate(result.value);
 
     return result.value;
@@ -1877,6 +1924,14 @@ const callSharedExternal = async function(name, parameters = {}) {
 
 const callExternal = async function(name, parameters = {}) {
     const sharedValue = await callSharedExternal(name, parameters);
+
+    if (name === "syncSummaryStatisticSelection") {
+        const localValue = syncSummaryStatisticSelection(parameters);
+
+        applySharedControlUpdate(localValue);
+
+        return Object.assign({}, sharedValue || {}, localValue);
+    }
 
     if (sharedValue !== null) {
         return sharedValue;
@@ -1920,10 +1975,6 @@ const callExternal = async function(name, parameters = {}) {
 
     if (name === "hasSummaryStatisticSelection") {
         return hasSummaryStatisticSelection(parameters);
-    }
-
-    if (name === "syncSummaryStatisticSelection") {
-        return syncSummaryStatisticSelection(parameters);
     }
 
     if (name === "refreshSummarySyntax") {
@@ -2115,7 +2166,7 @@ const runtimeValues = [
     },
     async function() {
         return {
-            datasetName: workspaceObjectCache[0] || "",
+            datasetName: activeDatasetCache || workspaceObjectCache[0] || "",
             mode: "Variable"
         };
     },
@@ -2132,7 +2183,7 @@ const runtimeValues = [
     },
     async function() {
         return {
-            datasetName: workspaceObjectCache[0] || ""
+            datasetName: activeDatasetCache || workspaceObjectCache[0] || ""
         };
     },
     getImportPreview,
@@ -2143,7 +2194,7 @@ const runtimeValues = [
         notifyParent({
             type: "stateUpdate",
             stateKind: "goto",
-            dataset: workspaceObjectCache[0] || "",
+            dataset: activeDatasetCache || workspaceObjectCache[0] || "",
             value: {
                 caseNumber: Number(caseNumber) || 1
             }
@@ -2157,7 +2208,7 @@ const runtimeValues = [
         notifyParent({
             type: "stateUpdate",
             stateKind: "goto",
-            dataset: workspaceObjectCache[0] || "",
+            dataset: activeDatasetCache || workspaceObjectCache[0] || "",
             value: {
                 variableName: String(variableName || "")
             }
@@ -2257,6 +2308,7 @@ const initializeDialog = async function() {
     }
 
     await refreshWorkspaceCache();
+    await refreshWorkspaceColumnCache();
     await executeActions(actions);
     notifyParent({
         type: "dialogReady",

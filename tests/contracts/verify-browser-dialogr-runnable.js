@@ -154,6 +154,19 @@ const assertSourceContracts = function() {
     assert.ok(html.includes("web-script-editor__monaco"));
     assert.ok(html.includes(".dm-script-toolbar"));
     assert.ok(html.includes(".dm-script-tabs"));
+    assert.ok(
+        html.includes(".dialogforge-web-data-editor-window .dataset-grid th.row-index,\n        .dialogforge-web-data-editor-window .dataset-grid td.row-index")
+            && html.includes("position: sticky;\n            left: 0;\n            z-index: 2;"),
+        "DialogR browser data editor must keep the row-number gutter and its top-left header cell fixed together"
+    );
+    assert.ok(
+        !html.includes(".dialogforge-web-data-editor-window .dataset-grid tbody td.row-index {\n            position: sticky;"),
+        "DialogR browser data editor must not make only body row headers sticky"
+    );
+    assert.ok(
+        !html.includes(".dialogforge-web-data-editor-window .dataset-grid--data th[data-data-header],\n        .dialogforge-web-data-editor-window .dataset-grid--data td[data-row-name]"),
+        "DialogR browser data editor must not override row-name cells back to non-sticky positioning"
+    );
     assert.ok(html.includes("No objects in workspace"));
     assert.ok(html.includes("id=\"commandPane\""));
     assert.ok(html.includes("id=\"commandActions\""));
@@ -168,7 +181,8 @@ const assertSourceContracts = function() {
     assert.ok(html.includes("id=\"visibleCommandInput\""));
     assert.ok(script.includes('import("/webr/webr.js")'));
     assert.ok(script.includes("readMoodleLaunchCode()"));
-    assert.ok(script.includes("webrmoodle::parse_launch_code"));
+    assert.ok(script.includes("/api/launch/"));
+    assert.ok(script.includes("dataset <- readRDS(${JSON.stringify(launchDatasetPath)})"));
     assert.ok(script.includes("window.history.replaceState"));
     assert.ok(
         script.includes("webr::shim_install()"),
@@ -179,8 +193,73 @@ const assertSourceContracts = function() {
         "DialogR browser WebR startup must not seed a default iris dataset"
     );
     assert.ok(
+        script.includes("if (!workspaceObjectNames().length && state.runtimeReady)")
+            && script.includes("await refreshWebRWorkspaceSurfaces();")
+            && script.includes("message.type === \"getActiveDataset\"")
+            && script.includes("value = state.activeDatasetName || \"\";")
+            && script.includes("if (datasetName && !value.length && state.runtimeReady)")
+            && script.includes("notifyBrowserDialogsWorkspaceChanged();"),
+        "DialogR browser host must refresh stale WebR workspace state before answering dialog object/column requests"
+    );
+    assert.ok(
         browserDialogRuntime.includes("buildSummaryCommand"),
         "Browser dialog runtime must use the shared/DialogR summary command builder"
+    );
+    assert.ok(
+        browserDialogRuntime.includes("\"bindFrequenciesWorkspace\"")
+            && browserDialogRuntime.includes("\"bindCrosstabsWorkspace\"")
+            && browserDialogRuntime.includes("\"bindSummaryWorkspaceUpdates\"")
+            && browserDialogRuntime.includes("\"getDatasetVariablesForDialog\"")
+            && browserDialogRuntime.includes("return await requestParent(\"listColumns\", parameters);")
+            && browserDialogRuntime.includes("return await bindDatasetControls("),
+        "Browser dialog runtime must route live workspace bindings through the browser/WebR parent state"
+    );
+    assert.ok(
+        browserDialogRuntime.includes("markWorkspaceObjectBinding(control, values);")
+            && browserDialogRuntime.includes("const shouldTriggerChange = setCustomOptions(control, values);")
+            && browserDialogRuntime.includes("Promise.resolve().then(() => trigger(\"change\", control.name));"),
+        "Browser dialog runtime must auto-select and trigger workspace dataset containers populated through shared control updates"
+    );
+    assert.ok(
+        browserDialogRuntime.includes("const refreshWorkspaceColumnCache = async function()")
+            && browserDialogRuntime.includes("await refreshWorkspaceColumnCache();")
+            && browserDialogRuntime.includes("await executeActions(actions);"),
+        "Browser dialog runtime must warm column metadata before actions that use synchronous listColumns()"
+    );
+    assert.ok(
+        browserDialogRuntime.includes("let activeDatasetCache = \"\";")
+            && browserDialogRuntime.includes("requestParent(\"getActiveDataset\", {})")
+            && browserDialogRuntime.includes("datasetName: activeDatasetCache || workspaceObjectCache[0] || \"\"")
+            && browserDialogRuntime.includes("dataset: activeDatasetCache || workspaceObjectCache[0] || \"\""),
+        "Browser dialog runtime must use the parent active dataset for dataset-editor and Go to context"
+    );
+    assert.ok(
+        browserDialogRuntime.includes("const checked = value.checked && typeof value.checked === \"object\"")
+            && browserDialogRuntime.includes("Object.keys(checked).forEach((name) => {")
+            && browserDialogRuntime.includes("setValue(name, checked[name]);"),
+        "Browser dialog runtime must apply checked-state updates returned by shared dialog external calls"
+    );
+    assert.ok(
+        browserDialogRuntime.includes("if (\"checked\" in control.valueNode)")
+            && browserDialogRuntime.includes("syncCheckedControl(control);"),
+        "Browser dialog runtime must programmatically update custom DialogR checkbox/radio controls"
+    );
+    assert.ok(
+        browserDialogRuntime.includes("const controlNameFromReference = function(value)")
+            && browserDialogRuntime.includes("const active = controlNameFromReference(parameters?.active);"),
+        "Browser dialog runtime must accept DialogR control references when syncing summary statistics"
+    );
+    assert.ok(
+        browserDialogRuntime.includes("if (name === \"syncSummaryStatisticSelection\")")
+            && browserDialogRuntime.includes("const localValue = syncSummaryStatisticSelection(parameters);")
+            && browserDialogRuntime.includes("applySharedControlUpdate(localValue);"),
+        "Browser dialog runtime must apply summary statistic sync against live custom checkbox state"
+    );
+    assert.ok(
+        browserDialogRuntime.includes("name === \"refreshSummarySyntax\" && typeof result.value === \"string\"")
+            && browserDialogRuntime.includes("type: \"syntaxUpdate\"")
+            && browserDialogRuntime.includes("command: result.value"),
+        "Browser dialog runtime must update the command constructor when shared refreshSummarySyntax handles a dialog action"
     );
     assert.ok(
         summaryBindings.includes("wsummary(") && summaryBindings.includes("wmeasures("),
@@ -197,6 +276,16 @@ const assertSourceContracts = function() {
     assert.ok(
         script.includes("runtime.installPackages(packageNames, { quiet: false })"),
         "DialogR browser console must route package installs through WebR.installPackages()"
+    );
+    assert.ok(
+        script.includes("isBrowserPackageMenuRoot") &&
+        script.includes('String(item?.id || "") === "Packages"'),
+        "DialogR browser menu must hide the Packages menu root for student launches"
+    );
+    assert.ok(
+        script.includes("isBrowserPackageInstallCommand") &&
+        script.includes("return false;"),
+        "DialogR browser menu must not expose product package-install commands"
     );
     assert.ok(
         script.includes("ensureDialogRuntimePackages"),
@@ -230,7 +319,8 @@ const assertSourceContracts = function() {
         "DialogR browser must check whether dialog package requirements are installed"
     );
     assert.ok(
-        script.includes("executeVisibleCommand(`library(${packageName})`)"),
+        script.includes("createVisibleCommandActivity(`library(${packageName})`)") &&
+            script.includes("activitiesByPackage"),
         "DialogR browser must visibly load missing dialog package requirements"
     );
     assert.ok(
@@ -476,11 +566,23 @@ const assertSourceContracts = function() {
     assert.ok(webServer.includes("using the existing local DialogR WebR package library"));
     assert.ok(webServer.includes("pathname === \"/webr/loader.js\""));
     assert.ok(webServer.includes("pathname === \"/start\""));
-    assert.ok(webServer.includes("\"webrmoodle\""));
+    assert.ok(webServer.includes("DIALOGFORGE_LAUNCH_DATA_ROOT"));
+    assert.ok(webServer.includes("isSafeLaunchToken"));
 };
 
 
 const assertServerContracts = async function() {
+    const previousLaunchDataRoot = process.env.DIALOGFORGE_LAUNCH_DATA_ROOT;
+    const launchDataRoot = fs.mkdtempSync(path.join(os.tmpdir(), "dialogforge-launch-"));
+    const launchToken = "EN-DS-26-0001";
+
+    fs.writeFileSync(path.join(launchDataRoot, `${launchToken}.rds`), Buffer.from("rds"));
+    fs.writeFileSync(path.join(launchDataRoot, `${launchToken}.json`), JSON.stringify({
+        course: "contract-test",
+        exercise: "launch-dataset"
+    }));
+    process.env.DIALOGFORGE_LAUNCH_DATA_ROOT = launchDataRoot;
+
     const server = serverModule.createWebDialogRDevServer({
         productPath: "/Users/dusadrian/Documents/GitHub/DialogR"
     });
@@ -495,11 +597,33 @@ const assertServerContracts = async function() {
         assert.ok(page.headers["cross-origin-embedder-policy"]);
         assert.ok(page.body.toString("utf8").includes("DialogR Web"));
 
-        const startPage = await request(port, "/start?k=DS-7F3K-921A");
+        const startPage = await request(port, "/start?k=EN-DS-26-0001");
 
         assert.strictEqual(startPage.statusCode, 200);
         assert.match(String(startPage.headers["content-type"]), /text\/html/);
         assert.ok(startPage.body.toString("utf8").includes("DialogR Web"));
+
+        const launchMetadata = await request(port, `/api/launch/${launchToken}/metadata`);
+        const launchMetadataJson = JSON.parse(launchMetadata.body.toString("utf8"));
+
+        assert.strictEqual(launchMetadata.statusCode, 200);
+        assert.strictEqual(launchMetadataJson.ok, true);
+        assert.strictEqual(launchMetadataJson.token, launchToken);
+        assert.strictEqual(launchMetadataJson.datasetName, "dataset");
+        assert.strictEqual(launchMetadataJson.datasetFile, `${launchToken}.rds`);
+        assert.strictEqual(launchMetadataJson.hasDataset, true);
+        assert.strictEqual(launchMetadataJson.datasetUrl, `/api/launch/${launchToken}/dataset.rds`);
+
+        const launchDataset = await request(port, launchMetadataJson.datasetUrl);
+
+        assert.strictEqual(launchDataset.statusCode, 200);
+        assert.strictEqual(launchDataset.body.toString("utf8"), "rds");
+        assert.match(String(launchDataset.headers["content-type"]), /application\/octet-stream/);
+        assert.match(String(launchDataset.headers["cache-control"]), /no-store/);
+
+        const invalidLaunch = await request(port, "/api/launch/%2e%2e/dataset.rds");
+
+        assert.strictEqual(invalidLaunch.statusCode, 400);
 
         const script = await request(port, "/shared/shell-web/pages/dialogr.js");
 
@@ -535,7 +659,7 @@ const assertServerContracts = async function() {
             "yaml"
         ]);
         assert.ok(libraryJson.recommendedPackages.includes("knitr"));
-        assert.ok(libraryJson.recommendedPackages.includes("webrmoodle"));
+        assert.ok(!libraryJson.recommendedPackages.includes("webrmoodle"));
 
         const libraryData = await request(port, libraryJson.dataUrl);
 
@@ -570,6 +694,17 @@ const assertServerContracts = async function() {
     }
     finally {
         await close(server);
+        fs.rmSync(launchDataRoot, {
+            force: true,
+            recursive: true
+        });
+
+        if (typeof previousLaunchDataRoot === "string") {
+            process.env.DIALOGFORGE_LAUNCH_DATA_ROOT = previousLaunchDataRoot;
+        }
+        else {
+            delete process.env.DIALOGFORGE_LAUNCH_DATA_ROOT;
+        }
     }
 };
 
@@ -1378,6 +1513,29 @@ const assertRenderedContracts = async function() {
         await page.waitForFunction(() => {
             return window.dialogForgeWebConsole?.session?.getSessionPhase?.() === "ready";
         }, { timeout: 90000 });
+        await page.evaluate(async () => {
+            await window.dialogForgeWebConsole.executeVisibleCommand("data(iris); iris <- as.data.frame(iris)");
+        });
+        await page.locator("#consoleActiveDataset", {
+            hasText: "iris"
+        }).waitFor({ timeout: 30000 });
+        await page.waitForFunction(async () => {
+            const model = window.dialogForgeWebConsole?.completionModel;
+            const context = model?.getCompletionContext("iris$");
+
+            if (!model || context?.objectName !== "iris") {
+                return false;
+            }
+
+            const suggestions = await model.getRuntimeCompletionSuggestions(
+                context,
+                "iris$",
+                6,
+                1000
+            );
+
+            return suggestions.some((item) => String(item.label || "") === "Species");
+        }, null, { timeout: 30000 });
         await page.evaluate(() => {
             window.dialogForgeWebConsole.coordinator.setText("if (TRUE) {");
             window.dialogForgeWebConsole.coordinator.focus();
@@ -1481,10 +1639,8 @@ const assertRenderedContracts = async function() {
         await page.locator(".dialogforge-web-script-editor-window .dm-script-tab.active", {
             hasText: "Untitled.R •"
         }).waitFor({ timeout: 10000 });
-        await page.evaluate(() => {
-            window.confirm = () => true;
-        });
         await page.locator(".dialogforge-web-script-editor-window .dialogforge-web-dialog__close").click();
+        await page.locator("[data-script-editor-close-decision='dont-save']").click();
         await page.locator(".dialogforge-web-script-editor-layer").waitFor({ state: "detached", timeout: 10000 });
 
         const runDialog = async function(plan) {
@@ -1511,8 +1667,38 @@ const assertRenderedContracts = async function() {
                 assert.ok(Math.abs(frameBox.height - plan.contentHeight) < 2);
             }
 
+            const datasetSelection = (plan.selections || []).find((selection) => {
+                return selection.name === "c_datasets";
+            });
+
+            if (datasetSelection) {
+                await selectControl(frame, datasetSelection.name, datasetSelection.value);
+            }
+
             if (plan.expectedOptions) {
                 for (const expected of plan.expectedOptions) {
+                    for (const value of expected.values) {
+                        try {
+                            await frame.locator(
+                                `[data-control-name="${expected.name}"] .container-item`,
+                                { hasText: value }
+                            ).waitFor({ state: "visible", timeout: 30000 });
+                        }
+                        catch (error) {
+                            const rendered = await frame.locator(`[data-control-name="${expected.name}"]`).evaluateAll((nodes) => {
+                                return nodes.map((node) => {
+                                    return {
+                                        tag: node.tagName,
+                                        classes: node.getAttribute("class"),
+                                        text: node.textContent
+                                    };
+                                });
+                            });
+
+                            throw new Error(`Control ${expected.name} did not render expected option ${value}: ${JSON.stringify(rendered)}`);
+                        }
+                    }
+
                     const options = await frame.locator(
                         `[data-control-name="${expected.name}"] .container-item`
                     ).evaluateAll((rows) => {
@@ -1677,7 +1863,16 @@ const assertRenderedContracts = async function() {
                 + `[data-control-name="${name}"] .dm-choice-item[data-value="${value}"]`
             ).first();
 
-            await row.waitFor({ state: "visible", timeout: 30000 });
+            try {
+                await row.waitFor({ state: "visible", timeout: 30000 });
+            }
+            catch (error) {
+                const rendered = await frame.locator(`[data-control-name="${name}"]`).evaluateAll((nodes) => {
+                    return nodes.map((node) => node.textContent || "").join("\n---\n");
+                });
+
+                throw new Error(`Control ${name} did not render value ${value}. Rendered content: ${rendered}`);
+            }
             if (await row.evaluate((node) => {
                 return node.classList.contains("active")
                     || node.classList.contains("is-asc")

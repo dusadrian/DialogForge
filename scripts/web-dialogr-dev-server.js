@@ -18,8 +18,7 @@ const recommendedWebRPackageLibraryPackages = [
     "evaluate",
     "highr",
     "xfun",
-    "yaml",
-    "webrmoodle"
+    "yaml"
 ];
 
 const productWebRLibraryReleaseBaseUrl = "https://github.com/dusadrian/binaries/releases/download/WebR";
@@ -574,6 +573,134 @@ const sendJson = function(response, value) {
 };
 
 
+const sendJsonStatus = function(response, status, value) {
+    send(response, status, {
+        "Content-Type": "application/json; charset=utf-8"
+    }, `${JSON.stringify(value, null, 4)}\n`);
+};
+
+
+const isSafeLaunchToken = function(token) {
+    return typeof token === "string" && /^[A-Za-z0-9-]+$/.test(token);
+};
+
+
+const resolveLaunchDataRoot = function(rootDir) {
+    return path.resolve(
+        process.env.DIALOGFORGE_LAUNCH_DATA_ROOT
+            || "/home/webr/launch-data"
+    );
+};
+
+
+const resolveLaunchDatasetFile = function(launchDataRoot, token) {
+    if (!isSafeLaunchToken(token)) {
+        return null;
+    }
+
+    return path.join(launchDataRoot, `${token}.rds`);
+};
+
+
+const resolveLaunchMetadataFile = function(launchDataRoot, token) {
+    if (!isSafeLaunchToken(token)) {
+        return null;
+    }
+
+    return path.join(launchDataRoot, `${token}.json`);
+};
+
+
+const readLaunchRoute = function(pathname) {
+    if (!pathname.startsWith("/api/launch/")) {
+        return null;
+    }
+
+    const parts = pathname.slice("/api/launch/".length).split("/");
+
+    if (parts.length !== 2) {
+        return {
+            invalid: true
+        };
+    }
+
+    return {
+        token: parts[0],
+        resource: parts[1]
+    };
+};
+
+
+const readLaunchTokenQuery = function(parsedUrl) {
+    const query = new URLSearchParams(parsedUrl.query || "");
+    const token = String(query.get("k") || "").trim();
+
+    return token || "";
+};
+
+
+const sendLaunchMetadata = function(response, launchDataRoot, token) {
+    if (!isSafeLaunchToken(token)) {
+        sendJsonStatus(response, 400, {
+            ok: false,
+            message: "Invalid launch token."
+        });
+        return;
+    }
+
+    const metadataPath = resolveLaunchMetadataFile(launchDataRoot, token);
+    const datasetPath = resolveLaunchDatasetFile(launchDataRoot, token);
+    const metadata = metadataPath && fs.existsSync(metadataPath)
+        ? readJson(metadataPath, {})
+        : {};
+
+    if (!datasetPath || !fs.existsSync(datasetPath) || !fs.statSync(datasetPath).isFile()) {
+        sendJsonStatus(response, 404, {
+            ok: false,
+            message: "Launch token was not found."
+        });
+        return;
+    }
+
+    sendJson(response, Object.assign({}, metadata, {
+        ok: true,
+        token,
+        datasetName: "dataset",
+        datasetFile: `${token}.rds`,
+        hasDataset: true,
+        datasetUrl: `/api/launch/${encodeURIComponent(token)}/dataset.rds`
+    }));
+};
+
+
+const sendLaunchDataset = function(response, launchDataRoot, token) {
+    if (!isSafeLaunchToken(token)) {
+        sendJsonStatus(response, 400, {
+            ok: false,
+            message: "Invalid launch token."
+        });
+        return;
+    }
+
+    const datasetPath = resolveLaunchDatasetFile(launchDataRoot, token);
+
+    if (!datasetPath || !fs.existsSync(datasetPath) || !fs.statSync(datasetPath).isFile()) {
+        sendJsonStatus(response, 404, {
+            ok: false,
+            message: "Launch dataset was not found."
+        });
+        return;
+    }
+
+    send(response, 200, {
+        "Content-Type": "application/octet-stream",
+        "Cache-Control": "no-store",
+        "Content-Disposition": `inline; filename="${token}.rds"`,
+        "Cross-Origin-Resource-Policy": "same-origin"
+    }, fs.readFileSync(datasetPath));
+};
+
+
 const resolveSafeFile = function(root, requestPath) {
     const decoded = decodeURIComponent(requestPath);
     const target = path.resolve(root, decoded.replace(/^\/+/, ""));
@@ -617,6 +744,7 @@ const createWebDialogRDevServer = function(options) {
     const monacoRoot = findRuntimeDependencyRoot(rootDir, sourceRoot, "monaco-editor", "min");
     const preactRoot = findRuntimeDependencyRoot(rootDir, sourceRoot, "preact");
     const productWebRLibraryDir = findProductWebRLibraryDir(productPath);
+    const launchDataRoot = resolveLaunchDataRoot(rootDir);
 
     return http.createServer((request, response) => {
         const parsed = url.parse(request.url || "/");
@@ -624,6 +752,18 @@ const createWebDialogRDevServer = function(options) {
 
         try {
             if (pathname === "/" || pathname === "/dialogr" || pathname === "/start") {
+                const launchToken = pathname === "/start"
+                    ? readLaunchTokenQuery(parsed)
+                    : "";
+
+                if (launchToken && !isSafeLaunchToken(launchToken)) {
+                    sendJsonStatus(response, 400, {
+                        ok: false,
+                        message: "Invalid launch token."
+                    });
+                    return;
+                }
+
                 serveFile(
                     response,
                     path.join(rootDir, "shared/shell-web/pages/dialogr.html")
@@ -633,6 +773,34 @@ const createWebDialogRDevServer = function(options) {
 
             if (pathname === "/api/composition") {
                 sendJson(response, serializeComposition(rootDir, productPath));
+                return;
+            }
+
+            const launchRoute = readLaunchRoute(pathname);
+
+            if (launchRoute) {
+                if (launchRoute.invalid || !isSafeLaunchToken(launchRoute.token)) {
+                    sendJsonStatus(response, 400, {
+                        ok: false,
+                        message: "Invalid launch token."
+                    });
+                    return;
+                }
+
+                if (launchRoute.resource === "metadata") {
+                    sendLaunchMetadata(response, launchDataRoot, launchRoute.token);
+                    return;
+                }
+
+                if (launchRoute.resource === "dataset.rds") {
+                    sendLaunchDataset(response, launchDataRoot, launchRoute.token);
+                    return;
+                }
+
+                sendJsonStatus(response, 404, {
+                    ok: false,
+                    message: "Launch resource was not found."
+                });
                 return;
             }
 

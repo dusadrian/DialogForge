@@ -287,6 +287,67 @@ const verifyHost = async function () {
             cb_summary: false
         }
     });
+    assert.deepStrictEqual((await host.call("syncSummaryStatisticSelection", {
+        active: "cb_quantile",
+        __controlSnapshot: {
+            cb_quantile: {
+                name: "cb_quantile",
+                value: null,
+                selected: [],
+                checked: true,
+                visible: true,
+                enabled: true
+            },
+            cb_mode: {
+                name: "cb_mode",
+                value: null,
+                selected: [],
+                checked: true,
+                visible: true,
+                enabled: true
+            },
+            cb_mean: {
+                name: "cb_mean",
+                value: null,
+                selected: [],
+                checked: true,
+                visible: true,
+                enabled: true
+            },
+            cb_median: {
+                name: "cb_median",
+                value: null,
+                selected: [],
+                checked: true,
+                visible: true,
+                enabled: true
+            },
+            cb_iqr: {
+                name: "cb_iqr",
+                value: null,
+                selected: [],
+                checked: true,
+                visible: true,
+                enabled: true
+            }
+        },
+        controls: {
+            statistics: {
+                quantile: "cb_quantile",
+                mode: "cb_mode",
+                mean: "cb_mean",
+                median: "cb_median",
+                iqr: "cb_iqr"
+            }
+        }
+    })).value, {
+        checked: {
+            cb_mode: false,
+            cb_mean: false,
+            cb_median: false,
+            cb_iqr: false
+        }
+    });
     setSplitByState(host.state, {
         dataset: "survey",
         grouping: ["group"]
