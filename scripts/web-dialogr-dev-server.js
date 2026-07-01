@@ -18,7 +18,8 @@ const recommendedWebRPackageLibraryPackages = [
     "evaluate",
     "highr",
     "xfun",
-    "yaml"
+    "yaml",
+    "webrmoodle"
 ];
 
 const productWebRLibraryReleaseBaseUrl = "https://github.com/dusadrian/binaries/releases/download/WebR";
@@ -318,21 +319,23 @@ const ensureProductWebRLibrary = async function(productPath) {
 
     fs.mkdirSync(libraryDir, { recursive: true });
 
-    const missingAssetNames = productWebRLibraryAssets.filter((assetName) => {
-        return !fs.existsSync(path.join(libraryDir, assetName));
-    });
-
-    if (!missingAssetNames.length) {
-        console.log(`Using existing DialogR WebR package library at ${libraryDir}.`);
-        return libraryDir;
-    }
-
     let releaseAssets = new Map();
 
     try {
         releaseAssets = await readReleaseAssets();
     }
     catch (error) {
+        const missingAssetNames = productWebRLibraryAssets.filter((assetName) => {
+            return !fs.existsSync(path.join(libraryDir, assetName));
+        });
+
+        if (!missingAssetNames.length) {
+            console.warn(
+                "Could not read WebR release metadata; using the existing local DialogR WebR package library."
+            );
+            return libraryDir;
+        }
+
         console.warn(
             "Could not read WebR release metadata; missing assets will be downloaded from fixed release URLs."
         );
@@ -340,13 +343,17 @@ const ensureProductWebRLibrary = async function(productPath) {
 
     for (const assetName of productWebRLibraryAssets) {
         const targetPath = path.join(libraryDir, assetName);
+        const releaseAsset = releaseAssets.get(assetName);
 
-        if (fs.existsSync(targetPath)) {
-            console.log(`Keeping existing DialogR WebR package library asset ${assetName}.`);
+        if (releaseAsset && isLocalReleaseAssetCurrent(targetPath, releaseAsset)) {
+            console.log(`DialogR WebR package library asset ${assetName} is current.`);
             continue;
         }
 
-        const releaseAsset = releaseAssets.get(assetName);
+        if (!releaseAsset && fs.existsSync(targetPath)) {
+            console.log(`Keeping existing DialogR WebR package library asset ${assetName}.`);
+            continue;
+        }
 
         const sourceUrl = String(releaseAsset.browser_download_url || "")
             || `${productWebRLibraryReleaseBaseUrl}/${assetName}`;
@@ -616,7 +623,7 @@ const createWebDialogRDevServer = function(options) {
         const pathname = parsed.pathname || "/";
 
         try {
-            if (pathname === "/" || pathname === "/dialogr") {
+            if (pathname === "/" || pathname === "/dialogr" || pathname === "/start") {
                 serveFile(
                     response,
                     path.join(rootDir, "shared/shell-web/pages/dialogr.html")

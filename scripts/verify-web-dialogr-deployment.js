@@ -8,6 +8,7 @@ const baseUrl = String(process.argv[2] || process.env.DIALOGFORGE_WEB_URL || "ht
     .replace(/\/+$/g, "");
 
 const requiredEndpoints = [
+    "/start?k=DS-7F3K-921A",
     "/api/composition",
     "/vendor/preact/preact.module.js",
     "/webr/webr.js",

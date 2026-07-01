@@ -18,6 +18,8 @@ const state = {
     runtimeStartPromise: null,
     runtimeReady: false,
     runtimeStarting: false,
+    moodleLaunchCode: "",
+    moodleLaunchCodeProcessed: false,
     console: null,
     commandPreviewText: "",
     commandPreviewDialogId: "",
@@ -137,6 +139,24 @@ const normalizeCommandText = function(value) {
 
 const normalizeConstructedCommandText = function(value) {
     return normalizeCommandText(value).replace(/\n+$/g, "");
+};
+
+const readMoodleLaunchCode = function() {
+    const currentUrl = new URL(window.location.href);
+    const launchCode = String(currentUrl.searchParams.get("k") || "").trim();
+
+    if (!launchCode) {
+        return "";
+    }
+
+    currentUrl.searchParams.delete("k");
+    window.history.replaceState(
+        window.history.state,
+        document.title,
+        `${currentUrl.pathname}${currentUrl.search}${currentUrl.hash}` || "/"
+    );
+
+    return launchCode;
 };
 
 const escapeHtml = function(value) {
@@ -6515,6 +6535,29 @@ const mountProductPackageLibrary = async function(runtime) {
     };
 };
 
+const runMoodleLaunchCode = function(runtime) {
+    const launchCode = String(state.moodleLaunchCode || "").trim();
+
+    if (!launchCode || state.moodleLaunchCodeProcessed) {
+        return;
+    }
+
+    state.moodleLaunchCodeProcessed = true;
+
+    runtime.evalRVoid(
+        `webrmoodle::parse_launch_code(${JSON.stringify(launchCode)})`
+    )
+        .then(async () => {
+            await refreshWebRWorkspacePane();
+        })
+        .catch((error) => {
+            appendTranscript(
+                error instanceof Error ? error.message : String(error),
+                "web-transcript__line--stderr"
+            );
+        });
+};
+
 const ensureRuntime = async function() {
     if (state.runtimeReady) {
         return state.runtime;
@@ -6547,6 +6590,7 @@ const ensureRuntime = async function() {
         state.activeDatasetName = "";
         await refreshWebRWorkspacePane();
         setRuntimeStatus("WebR ready");
+        runMoodleLaunchCode(runtime);
         prewarmPlotInfrastructure(runtime);
 
         return runtime;
@@ -9100,6 +9144,8 @@ installCommandPaneActions();
 installCommandPaneResize();
 installWorkspacePaneActions();
 installBrowserHelpBridge();
+
+state.moodleLaunchCode = readMoodleLaunchCode();
 
 loadComposition()
     .then(async () => {

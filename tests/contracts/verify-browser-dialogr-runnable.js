@@ -167,6 +167,9 @@ const assertSourceContracts = function() {
     assert.ok(html.includes("id=\"consoleTerminal\""));
     assert.ok(html.includes("id=\"visibleCommandInput\""));
     assert.ok(script.includes('import("/webr/webr.js")'));
+    assert.ok(script.includes("readMoodleLaunchCode()"));
+    assert.ok(script.includes("webrmoodle::parse_launch_code"));
+    assert.ok(script.includes("window.history.replaceState"));
     assert.ok(
         script.includes("webr::shim_install()"),
         "DialogR browser WebR startup must shim install.packages() for wasm package installs"
@@ -468,9 +471,12 @@ const assertSourceContracts = function() {
     assert.ok(webServer.includes("https://github.com/dusadrian/binaries/releases/download/WebR"));
     assert.ok(webServer.includes("ensureProductWebRLibrary(productPath)"));
     assert.ok(webServer.includes("api.github.com/repos/dusadrian/binaries/releases/tags/WebR"));
+    assert.ok(webServer.includes("isLocalReleaseAssetCurrent(targetPath, releaseAsset)"));
     assert.ok(webServer.includes("findRuntimeDependencyRoot(rootDir, sourceRoot, \"webr\", \"dist\")"));
-    assert.ok(webServer.includes("Using existing DialogR WebR package library"));
+    assert.ok(webServer.includes("using the existing local DialogR WebR package library"));
     assert.ok(webServer.includes("pathname === \"/webr/loader.js\""));
+    assert.ok(webServer.includes("pathname === \"/start\""));
+    assert.ok(webServer.includes("\"webrmoodle\""));
 };
 
 
@@ -488,6 +494,12 @@ const assertServerContracts = async function() {
         assert.ok(page.headers["cross-origin-opener-policy"]);
         assert.ok(page.headers["cross-origin-embedder-policy"]);
         assert.ok(page.body.toString("utf8").includes("DialogR Web"));
+
+        const startPage = await request(port, "/start?k=DS-7F3K-921A");
+
+        assert.strictEqual(startPage.statusCode, 200);
+        assert.match(String(startPage.headers["content-type"]), /text\/html/);
+        assert.ok(startPage.body.toString("utf8").includes("DialogR Web"));
 
         const script = await request(port, "/shared/shell-web/pages/dialogr.js");
 
@@ -523,6 +535,7 @@ const assertServerContracts = async function() {
             "yaml"
         ]);
         assert.ok(libraryJson.recommendedPackages.includes("knitr"));
+        assert.ok(libraryJson.recommendedPackages.includes("webrmoodle"));
 
         const libraryData = await request(port, libraryJson.dataUrl);
 
