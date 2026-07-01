@@ -460,12 +460,17 @@ const assertSourceContracts = function() {
     assert.ok(packageJson.includes("\"dev:web-dialogr\""));
     assert.ok(packageJson.includes("--replace-port --product-path"));
     assert.ok(packageJson.includes("\"build:web-dialogr\""));
+    assert.ok(packageJson.includes("\"verify:web-dialogr-deployment\""));
+    assert.ok(copyStatic.includes("webRuntimeDependencies"));
+    assert.ok(copyStatic.includes("\"webr\""));
     assert.ok(webServer.includes("replaceListeningPort(options.port)"));
     assert.ok(webServer.includes("lsof"));
     assert.ok(webServer.includes("https://github.com/dusadrian/binaries/releases/download/WebR"));
     assert.ok(webServer.includes("ensureProductWebRLibrary(productPath)"));
     assert.ok(webServer.includes("api.github.com/repos/dusadrian/binaries/releases/tags/WebR"));
-    assert.ok(webServer.includes("isLocalReleaseAssetCurrent"));
+    assert.ok(webServer.includes("findRuntimeDependencyRoot(rootDir, sourceRoot, \"webr\", \"dist\")"));
+    assert.ok(webServer.includes("Using existing DialogR WebR package library"));
+    assert.ok(webServer.includes("pathname === \"/webr/loader.js\""));
 };
 
 
@@ -489,6 +494,7 @@ const assertServerContracts = async function() {
         assert.strictEqual(script.statusCode, 200);
         assert.match(String(script.headers["content-type"]), /javascript/);
         assert.ok(script.body.toString("utf8").includes("ensureRuntime"));
+        assert.ok(script.body.toString("utf8").includes("/shared/shell-web/build/dialogr-web-manifest.json"));
 
         const composition = await request(port, "/api/composition");
         const compositionJson = JSON.parse(composition.body.toString("utf8"));
@@ -496,6 +502,9 @@ const assertServerContracts = async function() {
         assert.strictEqual(composition.statusCode, 200);
         assert.strictEqual(compositionJson.product.id, "DialogR");
         assert.strictEqual(compositionJson.runtime.id, "webr");
+        assert.ok(compositionJson.menu.some((item) => {
+            return item.id === "Analyze" || item.label === "Analyze";
+        }));
         assert.ok(compositionJson.productDialogs.some((dialog) => {
             return dialog.id === "frequencies";
         }));
@@ -533,6 +542,12 @@ const assertServerContracts = async function() {
         assert.strictEqual(webr.statusCode, 200);
         assert.match(String(webr.headers["content-type"]), /javascript/);
         assert.ok(webr.body.length > 1000);
+
+        const webrLoaderAlias = await request(port, "/webr/loader.js");
+
+        assert.strictEqual(webrLoaderAlias.statusCode, 200);
+        assert.match(String(webrLoaderAlias.headers["content-type"]), /javascript/);
+        assert.ok(webrLoaderAlias.body.includes("WebR"));
 
         const monaco = await request(port, "/monaco/vs/loader.js");
 

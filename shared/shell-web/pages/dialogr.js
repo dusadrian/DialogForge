@@ -6175,11 +6175,18 @@ const runtimeSnapshot = function(status, message = "") {
 const loadComposition = async function() {
     const response = await fetch("/api/composition");
 
-    if (!response.ok) {
+    if (response.ok) {
+        state.composition = await response.json();
+        return;
+    }
+
+    const manifestResponse = await fetch("/shared/shell-web/build/dialogr-web-manifest.json");
+
+    if (!manifestResponse.ok) {
         throw new Error(await response.text());
     }
 
-    state.composition = await response.json();
+    state.composition = await manifestResponse.json();
 };
 
 const findProductDialog = function(dialogId) {

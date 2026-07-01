@@ -315,22 +315,38 @@ const touchDownloadedAsset = function(targetPath, asset) {
 
 const ensureProductWebRLibrary = async function(productPath) {
     const libraryDir = path.join(productPath, "library", "R");
-    const releaseAssets = await readReleaseAssets();
 
     fs.mkdirSync(libraryDir, { recursive: true });
 
+    const missingAssetNames = productWebRLibraryAssets.filter((assetName) => {
+        return !fs.existsSync(path.join(libraryDir, assetName));
+    });
+
+    if (!missingAssetNames.length) {
+        console.log(`Using existing DialogR WebR package library at ${libraryDir}.`);
+        return libraryDir;
+    }
+
+    let releaseAssets = new Map();
+
+    try {
+        releaseAssets = await readReleaseAssets();
+    }
+    catch (error) {
+        console.warn(
+            "Could not read WebR release metadata; missing assets will be downloaded from fixed release URLs."
+        );
+    }
+
     for (const assetName of productWebRLibraryAssets) {
         const targetPath = path.join(libraryDir, assetName);
-        const releaseAsset = releaseAssets.get(assetName);
 
-        if (!releaseAsset) {
-            throw new Error(`WebR release asset is missing: ${assetName}`);
-        }
-
-        if (isLocalReleaseAssetCurrent(targetPath, releaseAsset)) {
-            console.log(`DialogR WebR package library asset ${assetName} is current.`);
+        if (fs.existsSync(targetPath)) {
+            console.log(`Keeping existing DialogR WebR package library asset ${assetName}.`);
             continue;
         }
+
+        const releaseAsset = releaseAssets.get(assetName);
 
         const sourceUrl = String(releaseAsset.browser_download_url || "")
             || `${productWebRLibraryReleaseBaseUrl}/${assetName}`;
@@ -367,6 +383,7 @@ const contentTypes = {
     ".gz": "application/gzip",
     ".js": "text/javascript; charset=utf-8",
     ".json": "application/json; charset=utf-8",
+    ".map": "application/json; charset=utf-8",
     ".mjs": "text/javascript; charset=utf-8",
     ".png": "image/png",
     ".svg": "image/svg+xml; charset=utf-8",
@@ -388,6 +405,17 @@ const findSourceRootDir = function(rootDir) {
     return path.basename(rootDir) === "dist"
         ? path.resolve(rootDir, "..")
         : rootDir;
+};
+
+
+const findRuntimeDependencyRoot = function(rootDir, sourceRoot, packageName, packageSubPath = "") {
+    const stagedRoot = path.join(rootDir, "node_modules", packageName, packageSubPath);
+
+    if (fs.existsSync(stagedRoot)) {
+        return stagedRoot;
+    }
+
+    return path.join(sourceRoot, "node_modules", packageName, packageSubPath);
 };
 
 
@@ -502,6 +530,12 @@ const createBuildManifest = function(rootDir, productPath) {
             webrAssetBase: "node_modules/webr/dist",
             product: composition.product,
             runtime: composition.runtime,
+            runtimeProviderSelection: composition.runtimeProviderSelection,
+            runtimeSession: composition.runtimeSession,
+            sharedDialogs: composition.sharedDialogs,
+            productDialogs: composition.productDialogs,
+            menu: composition.menu,
+            windowTitle: composition.windowTitle,
             dialogs: composition.productDialogs.map((dialog) => {
                 return {
                     id: dialog.id,
@@ -572,9 +606,9 @@ const createWebDialogRDevServer = function(options) {
     const rootDir = findRootDir();
     const sourceRoot = findSourceRootDir(rootDir);
     const productPath = path.resolve(options.productPath || defaultDialogRPath);
-    const webrRoot = path.join(sourceRoot, "node_modules/webr/dist");
-    const monacoRoot = path.join(sourceRoot, "node_modules/monaco-editor/min");
-    const preactRoot = path.join(sourceRoot, "node_modules/preact");
+    const webrRoot = findRuntimeDependencyRoot(rootDir, sourceRoot, "webr", "dist");
+    const monacoRoot = findRuntimeDependencyRoot(rootDir, sourceRoot, "monaco-editor", "min");
+    const preactRoot = findRuntimeDependencyRoot(rootDir, sourceRoot, "preact");
     const productWebRLibraryDir = findProductWebRLibraryDir(productPath);
 
     return http.createServer((request, response) => {
@@ -661,6 +695,11 @@ const createWebDialogRDevServer = function(options) {
             }
 
             if (pathname.startsWith("/webr/")) {
+                if (pathname === "/webr/loader.js") {
+                    serveFile(response, path.join(webrRoot, "webr.js"));
+                    return;
+                }
+
                 serveFile(response, resolveSafeFile(
                     webrRoot,
                     pathname.replace(/^\/webr\//, "")

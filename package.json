@@ -14,6 +14,7 @@
         "dev:product": "npm run build && node scripts/watch-product.js",
         "dev:web-dialogr": "npm run build:web && node dist/scripts/web-dialogr-dev-server.js --replace-port --product-path /Users/dusadrian/Documents/GitHub/DialogR",
         "build:web-dialogr": "npm run build:web && node dist/scripts/web-dialogr-dev-server.js --build-only --product-path /Users/dusadrian/Documents/GitHub/DialogR",
+        "verify:web-dialogr-deployment": "node dist/scripts/verify-web-dialogr-deployment.js",
         "submit:DialogR": "tsc -p tsconfig.json && node scripts/copy-static.js && node dist/scripts/macos-notarization.js submit DialogR",
         "submit:DialogQCA": "tsc -p tsconfig.json && node scripts/copy-static.js && node dist/scripts/macos-notarization.js submit DialogQCA",
         "history": "tsc -p tsconfig.json && node scripts/copy-static.js && node dist/scripts/macos-notarization.js history",

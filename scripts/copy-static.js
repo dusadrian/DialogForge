@@ -14,6 +14,11 @@ const sourceRoot = runningFromDist
     ? path.resolve(rootDir, "..")
     : parentDir;
 const includeWebRuntime = process.argv.includes("--include-web-runtime");
+const webRuntimeDependencies = [
+    "monaco-editor",
+    "preact",
+    "webr"
+];
 
 
 /**
@@ -91,6 +96,11 @@ const copyPackageJson = function () {
     const targetPackage = {
         ...sourcePackage,
         main: "scripts/electron-main.js",
+        scripts: {
+            ...sourcePackage.scripts,
+            "serve:web-dialogr": "node scripts/web-dialogr-dev-server.js",
+            "verify:web-dialogr-deployment": "node scripts/verify-web-dialogr-deployment.js"
+        },
         dependencies: {
             ...desktopDependencies(sourcePackage.dependencies),
             "@dialogforge/core": sourcePackage.version
@@ -154,3 +164,11 @@ copyPackageJson();
 packagedRuntimeDependencies.forEach((packageName) => {
     copyDirectory(path.join(sourceRoot, "node_modules", packageName), path.join(rootDir, "node_modules", packageName));
 });
+if (includeWebRuntime) {
+    webRuntimeDependencies.forEach((packageName) => {
+        copyDirectory(
+            path.join(sourceRoot, "node_modules", packageName),
+            path.join(rootDir, "node_modules", packageName)
+        );
+    });
+}
