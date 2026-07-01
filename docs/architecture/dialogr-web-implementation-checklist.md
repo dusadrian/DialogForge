@@ -32,7 +32,7 @@ Current implementation: **100 / 100 points = 100%**
 | Add WebR transport adapter skeleton | 5 | done | `webr` uses a worker transport controller backed by the maintained `webr` npm package when a browser host can start WebAssembly workers. |
 | Implement WebR lifecycle | 5 | done | WebR now has a host-configured worker transport lifecycle with disconnected, connecting, connected, failed, and disconnected states; browser hosts can start the bundled WebR runtime. |
 | Implement WebR command/query/workspace path | 5 | done | Visible commands, invisible queries, workspace listing, tabular preview, help, and completions route through WebR worker transport methods, with initial package-backed command/query/workspace/dependency handling. |
-| Implement WebR package/filesystem policy | 5 | done | WebR manifest policies now state worker package availability, unsupported browser package installation, browser-virtual file access, and host-managed persistence. |
+| Implement WebR package/filesystem policy | 5 | done | WebR manifest policies now state worker package availability, WebAssembly binary-repository package installation, browser-virtual file access, and host-managed persistence. |
 | Update external DialogR product metadata | 5 | done | External DialogR now keeps `r` as the default and declares `server-r` plus `webr` as supported runtime providers. |
 | Add provider-selection UI/persistence | 5 | done | Settings now receives only host-visible runtime provider choices and persists runtime startup provider ids through the same visibility policy. |
 | Add browser host composition entrypoint | 5 | done | `shared/shell-web` now owns a browser host adapter and composition entrypoint using `hostKind: "web"` without Electron imports. |

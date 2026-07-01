@@ -4,17 +4,37 @@ import type {
     RuntimeProviderOptions,
     RuntimeProviderRegistry
 } from "../provider-contract/runtimeProvider";
-import { createRuntimeProvider as createRRuntimeProvider } from "./r/runtimeProvider";
-import { createRuntimeProvider as createPythonRuntimeProvider } from "./python/runtimeProvider";
-import { createRuntimeProvider as createServerRRuntimeProvider } from "./server-r/runtimeProvider";
-import { createRuntimeProvider as createWebRRuntimeProvider } from "./webr/runtimeProvider";
 
 
 export const runtimeProviderFactories: RuntimeProviderRegistry = {
-    r: createRRuntimeProvider,
-    python: createPythonRuntimeProvider,
-    "server-r": createServerRRuntimeProvider,
-    webr: createWebRRuntimeProvider
+    r: function(options: RuntimeProviderOptions = {}): RuntimeProvider {
+        const {
+            createRuntimeProvider
+        } = require("./r/runtimeProvider") as { createRuntimeProvider: RuntimeProviderFactory };
+
+        return createRuntimeProvider(options);
+    },
+    python: function(options: RuntimeProviderOptions = {}): RuntimeProvider {
+        const {
+            createRuntimeProvider
+        } = require("./python/runtimeProvider") as { createRuntimeProvider: RuntimeProviderFactory };
+
+        return createRuntimeProvider(options);
+    },
+    "server-r": function(options: RuntimeProviderOptions = {}): RuntimeProvider {
+        const {
+            createRuntimeProvider
+        } = require("./server-r/runtimeProvider") as { createRuntimeProvider: RuntimeProviderFactory };
+
+        return createRuntimeProvider(options);
+    },
+    webr: function(options: RuntimeProviderOptions = {}): RuntimeProvider {
+        const {
+            createRuntimeProvider
+        } = require("./webr/runtimeProvider") as { createRuntimeProvider: RuntimeProviderFactory };
+
+        return createRuntimeProvider(options);
+    }
 };
 
 

@@ -117,6 +117,23 @@ const getObject = function(value: unknown): Record<string, unknown> {
 };
 
 
+const getNameList = function(value: unknown): string[] {
+    if (!Array.isArray(value)) {
+        return [];
+    }
+
+    return value.map((entry) => {
+        if (entry && typeof entry === "object" && !Array.isArray(entry)) {
+            const record = entry as Record<string, unknown>;
+
+            return String(record.name || record.text || record.value || "").trim();
+        }
+
+        return String(entry || "").trim();
+    }).filter(Boolean);
+};
+
+
 const getControlSnapshot = function(parameters: Record<string, unknown>): Record<string, { selected?: unknown[] }> {
     const snapshot = parameters.__controlSnapshot;
 
@@ -174,7 +191,7 @@ export const createDialogExternalCallHost = function(options: DialogExternalCall
             const columns = dataset ? dataset.columns.slice() : [];
             const selected = getControlSnapshot(parameters)[controlName]?.selected;
             const selectedColumns = Array.isArray(selected)
-                ? selected.map(String).filter((entry) => {
+                ? getNameList(selected).filter((entry) => {
                     return columns.includes(entry);
                 })
                 : [];
@@ -205,7 +222,7 @@ export const createDialogExternalCallHost = function(options: DialogExternalCall
             if (name === "rememberVariableSelections") {
                 return ok(name, rememberVariableSelections(state, {
                     source: String(parameters.source || ""),
-                    dependents: Array.isArray(parameters.dependents) ? parameters.dependents.map(String) : []
+                    dependents: getNameList(parameters.dependents)
                 }));
             }
 
@@ -282,7 +299,7 @@ export const createDialogExternalCallHost = function(options: DialogExternalCall
                     sortdataset?: boolean;
                 } = {
                     dataset: String(parameters.dataset || ""),
-                    grouping: Array.isArray(parameters.grouping) ? parameters.grouping.map(String) : []
+                    grouping: getNameList(parameters.grouping)
                 };
 
                 if (Object.prototype.hasOwnProperty.call(parameters, "sortdataset")) {
@@ -312,7 +329,7 @@ export const createDialogExternalCallHost = function(options: DialogExternalCall
                 return ok(name, inheritSubsetDatasetState(state, {
                     source: String(parameters.source || ""),
                     target: String(parameters.target || ""),
-                    variables: Array.isArray(parameters.variables) ? parameters.variables.map(String) : []
+                    variables: getNameList(parameters.variables)
                 }));
             }
 
@@ -327,42 +344,42 @@ export const createDialogExternalCallHost = function(options: DialogExternalCall
 
             if (name === "keepSortByVariables") {
                 return ok(name, keepSortByVariables({
-                    sorting: Array.isArray(parameters.sorting) ? parameters.sorting.map(String) : [],
-                    variables: Array.isArray(parameters.variables) ? parameters.variables.map(String) : []
+                    sorting: getNameList(parameters.sorting),
+                    variables: getNameList(parameters.variables)
                 }));
             }
 
             if (name === "addSortByVariables") {
                 return ok(name, addSortByVariables({
-                    sorting: Array.isArray(parameters.sorting) ? parameters.sorting.map(String) : [],
-                    selected: Array.isArray(parameters.selected) ? parameters.selected.map(String) : []
+                    sorting: getNameList(parameters.sorting),
+                    selected: getNameList(parameters.selected)
                 }));
             }
 
             if (name === "removeSortByVariables") {
                 return ok(name, removeSortByVariables({
-                    sorting: Array.isArray(parameters.sorting) ? parameters.sorting.map(String) : [],
-                    selected: Array.isArray(parameters.selected) ? parameters.selected.map(String) : []
+                    sorting: getNameList(parameters.sorting),
+                    selected: getNameList(parameters.selected)
                 }));
             }
 
             if (name === "getSortByAvailableVariables") {
                 return ok(name, getSortByAvailableVariables({
-                    variables: Array.isArray(parameters.variables) ? parameters.variables.map(String) : [],
-                    sorting: Array.isArray(parameters.sorting) ? parameters.sorting.map(String) : []
+                    variables: getNameList(parameters.variables),
+                    sorting: getNameList(parameters.sorting)
                 }));
             }
 
             if (name === "getSortByChoiceItems") {
                 return ok(name, getSortByChoiceItems({
-                    sorting: Array.isArray(parameters.sorting) ? parameters.sorting.map(String) : []
+                    sorting: getNameList(parameters.sorting)
                 }));
             }
 
             if (name === "getSortByButtonDirection") {
                 return ok(name, getSortByButtonDirection({
-                    choiceSelected: Array.isArray(parameters.choiceSelected) ? parameters.choiceSelected.map(String) : [],
-                    variableSelected: Array.isArray(parameters.variableSelected) ? parameters.variableSelected.map(String) : []
+                    choiceSelected: getNameList(parameters.choiceSelected),
+                    variableSelected: getNameList(parameters.variableSelected)
                 }));
             }
 
@@ -391,11 +408,21 @@ export const createDialogExternalCallHost = function(options: DialogExternalCall
             }
 
             if (name === "buildSortByCommand") {
+                const datasetName = String(parameters.dataset || "");
+                const datasets = await resolveDatasets();
+                const dataset = datasets.find((entry) => {
+                    return entry.name === datasetName;
+                });
+                const variables = getNameList(parameters.variables).length > 0
+                    ? getNameList(parameters.variables)
+                    : dataset?.columns || [];
+
                 return ok(name, buildSortByCommand({
-                    dataset: String(parameters.dataset || ""),
-                    sorting: Array.isArray(parameters.sorting) ? parameters.sorting.map(String) : [],
+                    dataset: datasetName,
+                    sorting: getNameList(parameters.sorting),
                     createNew: parameters.createNew === true,
-                    datasetName: String(parameters.datasetName || "")
+                    datasetName: String(parameters.datasetName || ""),
+                    variables
                 }));
             }
 

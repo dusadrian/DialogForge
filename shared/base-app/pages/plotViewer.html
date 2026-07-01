@@ -784,6 +784,102 @@
     </div>
     <script>
       (function () {
+        if (window.dialogForge) return;
+
+        const plotViewerCallbacks = [];
+        const zoomCallbacks = [];
+
+        window.dialogForge = {
+          onPlotViewerUpdate: function (callback) {
+            if (typeof callback === 'function') {
+              plotViewerCallbacks.push(callback);
+            }
+          },
+          onMainZoomFactor: function (callback) {
+            if (typeof callback === 'function') {
+              zoomCallbacks.push(callback);
+            }
+          },
+          executeInvisibleMutation: function (request) {
+            if (
+              window.parent
+              && window.parent !== window
+              && window.parent.dialogForge
+              && typeof window.parent.dialogForge.executeInvisibleMutation === 'function'
+            ) {
+              return window.parent.dialogForge.executeInvisibleMutation(request || {});
+            }
+            window.parent.postMessage({
+              source: 'dialogforge.browser-plot-viewer',
+              type: 'executeInvisibleMutation',
+              request: request || {}
+            }, window.location.origin);
+            return Promise.resolve({ ok: true });
+          },
+          savePlot: function (request) {
+            if (
+              window.parent
+              && window.parent !== window
+              && window.parent.dialogForge
+              && typeof window.parent.dialogForge.savePlot === 'function'
+            ) {
+              return window.parent.dialogForge.savePlot(request || {});
+            }
+            window.parent.postMessage({
+              source: 'dialogforge.browser-plot-viewer',
+              type: 'savePlot',
+              request: request || {}
+            }, window.location.origin);
+            return Promise.resolve({ ok: true });
+          },
+          copyPlot: function (url) {
+            if (
+              window.parent
+              && window.parent !== window
+              && window.parent.dialogForge
+              && typeof window.parent.dialogForge.copyPlot === 'function'
+            ) {
+              return window.parent.dialogForge.copyPlot(String(url || ''));
+            }
+            window.parent.postMessage({
+              source: 'dialogforge.browser-plot-viewer',
+              type: 'copyPlot',
+              url: String(url || '')
+            }, window.location.origin);
+            return Promise.resolve({ ok: true });
+          }
+        };
+
+        window.addEventListener('message', function (event) {
+          if (
+            event.origin !== window.location.origin
+            || !event.data
+            || event.data.source !== 'dialogforge.browser-plot-host'
+          ) {
+            return;
+          }
+
+          if (event.data.type === 'plotViewerUpdate') {
+            plotViewerCallbacks.forEach(function (callback) {
+              try { callback(event.data.payload || {}); } catch {}
+            });
+          }
+
+          if (event.data.type === 'mainZoomFactor') {
+            zoomCallbacks.forEach(function (callback) {
+              try { callback(event.data.value); } catch {}
+            });
+          }
+        });
+
+        window.parent.postMessage({
+          source: 'dialogforge.browser-plot-viewer',
+          type: 'ready'
+        }, window.location.origin);
+      })();
+    </script>
+    <script>
+      (function () {
         const SQUARE_MODE_KEY = 'app.plotWindow.squareMode';
         const ZOOM_MODE_KEY = 'app.plotWindow.zoomMode';
         const HISTORY_VISIBLE_KEY = 'app.plotWindow.historyVisible';
@@ -959,8 +1055,14 @@
         };
 
         const derivePlotUrl = function (rawUrl, index, width, height) {
+          if (Array.isArray(latestPayload && latestPayload.urls)) {
+            return String(latestPayload.urls[Math.max(0, Number(index) || 0)] || '').trim();
+          }
+
           const url = String(rawUrl || '').trim();
           if (!url) return '';
+          if (/^(?:blob|data):/.test(url)) return url;
+
           try {
             const parsed = new URL(url);
             parsed.pathname = parsed.pathname.replace(/\/live$/, '/plot');
@@ -981,6 +1083,8 @@
         const deriveRenderersUrl = function (rawUrl) {
           const url = String(rawUrl || '').trim();
           if (!url) return '';
+          if (/^(?:blob|data):/.test(url)) return '';
+
           try {
             const parsed = new URL(url);
             parsed.pathname = parsed.pathname.replace(/\/live$/, '/renderers');
@@ -994,6 +1098,10 @@
         };
 
         const deriveThumbnailUrl = function (rawUrl, index, width, height) {
+          if (Array.isArray(latestPayload && latestPayload.urls)) {
+            return String(latestPayload.urls[Math.max(0, Number(index) || 0)] || '').trim();
+          }
+
           const url = derivePlotUrl(rawUrl, index, width, height);
           if (!url) return '';
           try {
@@ -1047,7 +1155,7 @@
           const selected = String(saveFormatSelectEl.value || 'png').trim().toLowerCase();
           const nextFormats = SAVE_FORMAT_ORDER.filter(function (format) {
             if (format === 'jpeg') {
-              return availableRendererIds.has('jpeg') || availableRendererIds.has('jpg') || availableRendererIds.has('png');
+              return availableRendererIds.has('jpeg') || availableRendererIds.has('jpg');
             }
             return availableRendererIds.has(format);
           });
@@ -1072,7 +1180,9 @@
           }
           const renderersUrl = deriveRenderersUrl(rawUrl);
           if (!renderersUrl) {
-            availableRendererIds = new Set(['png', 'svg']);
+            availableRendererIds = /^(?:blob|data):/.test(rawUrl)
+              ? new Set(['png'])
+              : new Set(['png', 'svg']);
             syncSaveFormatOptions();
             return;
           }
@@ -1170,7 +1280,24 @@
           const nextUrl = derivePlotUrl(rawUrl, currentPlotIndex, dims.width, dims.height);
           if (!nextUrl) return;
           if (frameEl.getAttribute('src') !== nextUrl) {
+            frameEl.onload = function () {
+              window.parent.postMessage({
+                source: 'dialogforge.browser-plot-viewer',
+                type: 'rendered',
+                renderToken: latestPayload && latestPayload.renderToken,
+                url: nextUrl,
+                index: currentPlotIndex
+              }, window.location.origin);
+            };
             frameEl.setAttribute('src', nextUrl);
+          } else if (frameEl.complete && frameEl.naturalWidth > 0) {
+            window.parent.postMessage({
+              source: 'dialogforge.browser-plot-viewer',
+              type: 'rendered',
+              renderToken: latestPayload && latestPayload.renderToken,
+              url: nextUrl,
+              index: currentPlotIndex
+            }, window.location.origin);
           }
           frameEl.style.display = 'block';
           syncSidebarHeightToPlot();

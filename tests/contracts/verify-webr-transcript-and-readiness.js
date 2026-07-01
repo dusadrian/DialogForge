@@ -29,6 +29,8 @@ const createRequest = function(id, method, params) {
 
 
 void (async function() {
+    const installLog = [];
+
     class FakeShelter {
         async captureR(code) {
             assert.strictEqual(code, "print(1)");
@@ -66,6 +68,9 @@ void (async function() {
                     assert.ok(code.includes(".DialogForgeValue"));
 
                     return "converted";
+                },
+                installPackages: async function(packages) {
+                    installLog.push(packages);
                 }
             };
         }
@@ -94,6 +99,36 @@ void (async function() {
     );
     assert.strictEqual(visible.value.transcriptEvents[1].streamName, "stdout");
     assert.strictEqual(visible.value.transcriptEvents[2].streamName, "stderr");
+
+    const install = await bridge.sendRequest(createRequest(
+        "visible-install",
+        webRTransportMethods.visibleCommand,
+        {
+            request: {
+                kind: "commands.visible",
+                text: "install.packages(c(\"admisc\", \"declared\"))",
+                source: "test",
+                createdAt: new Date().toISOString()
+            }
+        }
+    ));
+
+    assert.strictEqual(install.status, "ok");
+    assert.deepStrictEqual(installLog, [["admisc", "declared"]]);
+    assert.deepStrictEqual(
+        install.value.transcriptEvents.map((event) => event.type),
+        ["submitted", "output", "output", "completed"]
+    );
+    assert.ok(
+        install.value.transcriptEvents[1].message.includes("Installing WebR packages")
+    );
+    assert.ok(
+        install.value.transcriptEvents[2].message.includes("Installed WebR packages")
+    );
+    assert.ok(
+        install.value.transcriptEvents[2].message.startsWith("\n"),
+        "post-install message should start on a new transcript line"
+    );
 
     const invisible = await bridge.sendRequest(createRequest(
         "query-1",

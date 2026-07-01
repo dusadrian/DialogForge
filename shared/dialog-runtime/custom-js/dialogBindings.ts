@@ -58,6 +58,12 @@ export const createDialogBindingState = function(): DialogBindingState {
 
 
 const cleanName = function(value: unknown): string {
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+        const record = value as Record<string, unknown>;
+
+        return String(record.name || record.text || record.value || "").trim();
+    }
+
     return String(value || "").trim();
 };
 
@@ -66,6 +72,26 @@ const cleanNames = function(values: unknown): string[] {
     return Array.isArray(values)
         ? values.map(cleanName).filter(Boolean)
         : [];
+};
+
+
+const asRObjectReference = function(value: string): string {
+    if (/^[A-Za-z.][A-Za-z0-9._]*$/.test(value) && !/^\.[0-9]/.test(value)) {
+        return value;
+    }
+
+    return `\`${value.replace(/`/g, "\\`")}\``;
+};
+
+
+const asRColumnReference = function(dataset: string, column: string): string {
+    const datasetReference = asRObjectReference(dataset);
+
+    if (/^[A-Za-z.][A-Za-z0-9._]*$/.test(column) && !/^\.[0-9]/.test(column)) {
+        return `${datasetReference}$${column}`;
+    }
+
+    return `${datasetReference}$\`${column.replace(/`/g, "\\`")}\``;
 };
 
 
@@ -419,16 +445,26 @@ export const buildSortByCommand = function(input: {
     sorting: string[];
     createNew: boolean;
     datasetName: string;
+    variables?: string[];
 }): string {
     const dataset = cleanName(input.dataset);
     const sorting = cleanNames(input.sorting);
+    const variables = cleanNames(input.variables || []);
 
     if (!dataset || sorting.length === 0) {
         return "";
     }
 
     const target = getSortByTargetDataset(input);
-    const prefix = input.createNew && target && target !== dataset ? `${target} <- ` : `${dataset} <- `;
+    const datasetReference = asRObjectReference(dataset);
+    const targetReference = asRObjectReference(target || dataset);
+    const prefix = input.createNew && target && target !== dataset
+        ? `${targetReference} <- `
+        : `${datasetReference} <- `;
+    const orderTerms = sorting.map((column) => {
+        return asRColumnReference(dataset, column);
+    });
+    const dropArgument = variables.length === 1 ? ", drop = FALSE" : "";
 
-    return `${prefix}${dataset}[order(${sorting.join(", ")}), , drop = FALSE]\n`;
+    return `${prefix}${datasetReference}[order(${orderTerms.join(", ")}), ${dropArgument}]\n`;
 };

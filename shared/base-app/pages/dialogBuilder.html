@@ -33,7 +33,10 @@
     <script>
       (function () {
         if (typeof require !== 'function') {
-          console.error('Dialog runtime requires Node integration.');
+          const script = document.createElement('script');
+          script.type = 'module';
+          script.src = '/shared/shell-web/pages/browserDialogRuntime.js';
+          document.body.appendChild(script);
           return;
         }
 

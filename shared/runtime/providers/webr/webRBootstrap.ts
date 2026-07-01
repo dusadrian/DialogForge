@@ -23,6 +23,7 @@ export interface WebRBootstrapPlan {
 
 export interface WebRBootstrapResult {
     mounts: WebRFilesystemMountResult[];
+    packageInstallShim: boolean;
     sourceFiles: string[];
     commands: string[];
 }
@@ -37,6 +38,11 @@ const readStringArray = function(value: unknown): string[] {
     return Array.isArray(value)
         ? value.map(String).map((one) => one.trim()).filter(Boolean)
         : [];
+};
+
+
+const installPackageInstallShim = async function(runtime: WebR): Promise<void> {
+    await runtime.evalRVoid("webr::shim_install()");
 };
 
 
@@ -84,6 +90,8 @@ export const runWebRBootstrap = async function(
         mounts.push(await mountWebRFilesystem(runtime, mount));
     }
 
+    await installPackageInstallShim(runtime);
+
     for (const sourceFile of sourceFiles) {
         await runtime.evalRVoid(`source(${quoteRString(sourceFile)})`);
     }
@@ -94,6 +102,7 @@ export const runWebRBootstrap = async function(
 
     return {
         mounts,
+        packageInstallShim: true,
         sourceFiles,
         commands
     };

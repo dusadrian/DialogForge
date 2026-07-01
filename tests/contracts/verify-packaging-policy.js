@@ -93,6 +93,23 @@ assert.ok(
     "production dependencies must be staged and checked before packaging"
 );
 assert.ok(
+    packageJson.scripts.build.includes("node scripts/copy-static.js")
+    && !packageJson.scripts.build.includes("build-shell-web-modules")
+    && packageJson.scripts["build:web"].includes("node scripts/copy-static.js --include-web-runtime")
+    && packageJson.scripts["build:web"].includes("node scripts/build-shell-web-modules.js")
+    && copyStatic.includes("includeWebRuntime")
+    && copyStatic.includes("isWebRuntimePath")
+    && copyStatic.includes('"scripts", "web-dialogr-dev-server.js"')
+    && copyStatic.includes('"!shared/shell-web/**/*"')
+    && copyStatic.includes('"!shared/runtime/providers/server-r/**/*"')
+    && copyStatic.includes('"!shared/runtime/providers/webr/**/*"')
+    && copyStatic.includes('"!browser-esm/**/*"')
+    && copyStatic.includes('"!node_modules/webr/**/*"')
+    && copyStatic.includes('"node_modules/webr"')
+    && !packagedDependencies.includes('"webr"'),
+    "desktop package builds must be isolated from browser runtime staging"
+);
+assert.ok(
     packageProduct.includes("validateI18nDirectory")
     && packageProduct.includes("validateDialogRegistry"),
     "product staging must validate contributor-authored locale and dialog source files"

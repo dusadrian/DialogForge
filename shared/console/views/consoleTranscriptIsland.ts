@@ -174,7 +174,10 @@ const calculateVisibleRange = function(
         };
     }
 
-    const viewportTop = Math.max(0, viewport.scrollTop - host.offsetTop);
+    const hostTop = host.getBoundingClientRect().top
+        - viewport.getBoundingClientRect().top
+        + viewport.scrollTop;
+    const viewportTop = Math.max(0, viewport.scrollTop - Math.max(0, hostTop));
     const viewportBottom = viewportTop + Math.max(viewport.clientHeight, DEFAULT_ITEM_HEIGHT);
     const wantedTop = Math.max(0, viewportTop - OVERSCAN_PIXELS);
     const wantedBottom = viewportBottom + OVERSCAN_PIXELS;

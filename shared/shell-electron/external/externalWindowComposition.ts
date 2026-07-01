@@ -127,7 +127,7 @@ export const createExternalWindowComposition = function(
             let sourceUrl = "";
             let chooserBody = "";
 
-            if (hasChooser || (!hasBody && hasPath)) {
+            if (hasChooser || hasPath) {
                 const port = await options.startHelpServer();
                 const toHelpUrl = function(pathValue: string): string {
                     const helpPath = String(pathValue || "");
@@ -153,16 +153,13 @@ export const createExternalWindowComposition = function(
             );
             const helpPageUrl = new URL(`file://${helpPagePath}`);
 
-            if (hasBody) {
+            if (sourceUrl) {
+                helpPageUrl.searchParams.set("src", sourceUrl);
+            } else if (hasBody) {
                 helpPageUrl.searchParams.set(
                     "doc",
                     Buffer.from(result.body, "utf8").toString("base64")
                 );
-                if (sourceUrl) {
-                    helpPageUrl.searchParams.set("base", sourceUrl);
-                }
-            } else if (sourceUrl) {
-                helpPageUrl.searchParams.set("src", sourceUrl);
             } else {
                 helpPageUrl.searchParams.set(
                     "doc",
@@ -174,6 +171,10 @@ export const createExternalWindowComposition = function(
             }
 
             helpPageUrl.searchParams.set("title", "R Help");
+            helpPageUrl.searchParams.set("topic", result.topic || request.topic);
+            if (request.package) {
+                helpPageUrl.searchParams.set("package", request.package);
+            }
 
             await helpWindowController.load(
                 helpPageUrl.toString(),

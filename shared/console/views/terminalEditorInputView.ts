@@ -105,6 +105,7 @@ export const createTerminalConsoleEditorInputView = (deps: {
     resetHistory: () => historyController.reset(),
     isHistoryNavigating: () => historyController.isNavigating(),
     refreshPrompt,
+    scrollToPrompt: deps.scrollToPrompt,
     showHelpTopic: deps.showHelpTopic,
     timingLog: deps.timingLog
   });

@@ -73,6 +73,10 @@ void (async function() {
     ]);
     assert.strictEqual(created, 1);
     assert.strictEqual(initialized, 1);
+    assert.deepStrictEqual(operationOrder, [
+        "start:webr::shim_install()",
+        "end:webr::shim_install()"
+    ]);
 
     await Promise.all([
         bridge.sendRequest(createRequest(
@@ -89,6 +93,8 @@ void (async function() {
 
     assert.strictEqual(maxActiveOperations, 1);
     assert.deepStrictEqual(operationOrder, [
+        "start:webr::shim_install()",
+        "end:webr::shim_install()",
         "start:first",
         "end:first",
         "start:second",

@@ -38,3 +38,18 @@ overlay frame rather than rebuilding dialog controls or product dialog styling.
 surfaces. Settings and About are modal surfaces; Help and Plot Viewer are panels;
 Script Editor and Data Editor are routes because they are work surfaces rather
 than short dialogs.
+
+`pages/dialogr.html` is the current browser-runnable DialogR MVP. It is served
+by `scripts/web-dialogr-dev-server.js`, receives product/runtime/dialog metadata
+from the normal browser composition contract, loads WebR from the maintained
+`webr` package assets, and opens DialogR dialogs as modal frames.
+
+`pages/browserDialogRuntime.js` is the first browser-native dialog runtime for
+those frames. When `dialogBuilder.html` is loaded without Electron/Node
+integration, it loads this runtime, fetches real DialogR dialog JSON and
+`actions.js`, renders the imported controls in `#paper`, executes the imported
+action handlers, and posts generated commands back to the parent WebR host.
+Current verifier coverage proves this path with `frequencies`, `crosstable`,
+`onesamplettest`, `independentsamplesttest`, `splitby`, and `weightby`.
+The remaining DialogR dialogs need their heavier product external calls added
+incrementally rather than replacing this browser bridge.

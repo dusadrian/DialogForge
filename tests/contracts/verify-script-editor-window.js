@@ -21,12 +21,16 @@ const readTypeScriptTree = (directoryPath) => {
 const pagePath = path.join(rootDir, "shared/base-app/pages/scriptEditor.html");
 const distPagePath = path.join(rootDir, "dist/shared/base-app/pages/scriptEditor.html");
 const mainPagePath = path.join(rootDir, "shared/base-app/pages/main.html");
+const webDialogRPath = path.join(rootDir, "shared/shell-web/pages/dialogr.js");
+const webDialogRPagePath = path.join(rootDir, "shared/shell-web/pages/dialogr.html");
 const preloadPath = path.join(rootDir, "shared/base-app/bootstrap/preload.ts");
 const hostBridgePath = path.join(rootDir, "shared/base-app/bootstrap/dialogForgeHostBridge.ts");
 const globalsPath = path.join(rootDir, "shared/base-app/bootstrap/dialogForgeGlobals.d.ts");
 const electronMainPath = path.join(rootDir, "scripts/electron-main.js");
 const page = fs.readFileSync(pagePath, "utf8");
 const mainPage = fs.readFileSync(mainPagePath, "utf8");
+const webDialogR = fs.readFileSync(webDialogRPath, "utf8");
+const webDialogRPage = fs.readFileSync(webDialogRPagePath, "utf8");
 const preload = fs.readFileSync(preloadPath, "utf8");
 const hostBridge = fs.readFileSync(hostBridgePath, "utf8");
 const globals = fs.readFileSync(globalsPath, "utf8");
@@ -102,6 +106,10 @@ assert.ok(scriptExecutionController.includes("const runAsSingleChunk =") &&
 assert.ok(scriptStatement.includes("LONG_BLOCK_FRAGMENT_SCAN_THRESHOLD") &&
     scriptStatement.includes("const blockCode = String(model.getText(blockStart, blockEnd) || \"\")") &&
     scriptStatement.includes("const state = await checkFragment(blockCode)"), "script editor statement discovery must avoid exhaustive fragment scans for long contiguous blocks");
+assert.ok(webDialogR.includes("showScriptEditorCloseDecision"), "browser script editor must use a single close-decision modal");
+assert.ok(webDialogR.includes("\"Don't Save\", \"dont-save\""), "browser script editor close modal must preserve the Don't Save decision");
+assert.ok(!webDialogR.includes("Close ${fileName} without saving?"), "browser script editor must not cascade to a second close-without-saving prompt");
+assert.ok(webDialogRPage.includes(".dialogforge-web-confirm"), "browser script editor close modal must have a dedicated web modal style");
 [
     "options.dialogForge.openScriptEditor()",
     "const openScriptFile = window.dialogForge.openScriptFileInEditor;",

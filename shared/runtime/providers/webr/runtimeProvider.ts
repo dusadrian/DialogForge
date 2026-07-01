@@ -29,6 +29,7 @@ const manifest: RuntimeProviderManifest = {
         "commands.invisible",
         "workspace.objects",
         "workspace.activeDataset",
+        "data.import",
         "tabular.schema",
         "tabular.read",
         "tabular.rowNames",
@@ -41,8 +42,8 @@ const manifest: RuntimeProviderManifest = {
     policies: {
         packages: {
             availability: "worker-runtime",
-            installation: "unsupported",
-            message: "WebR package availability is checked inside the worker; package installation is not a DialogForge operation in the browser host."
+            installation: "webr-binary-repository",
+            message: "WebR package availability is checked inside the worker; install.packages() is shimmed to install from the WebR WebAssembly binary repository."
         },
         filesystem: {
             access: "browser-virtual",

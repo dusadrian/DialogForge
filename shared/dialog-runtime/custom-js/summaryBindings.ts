@@ -48,7 +48,7 @@ const summaryMeasureFunctions: Record<string, [string, boolean]> = {
 };
 
 
-const summaryMeasureOrder = ["mode", "mean", "median", "iqr", "range", "var", "sd"];
+export const summaryMeasureOrder = ["mode", "mean", "median", "iqr", "range", "var", "sd"];
 
 
 const getObject = function(value: unknown): Record<string, unknown> {

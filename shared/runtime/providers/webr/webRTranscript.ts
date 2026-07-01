@@ -19,16 +19,131 @@ interface WebRCaptureResult {
 }
 
 
+const splitTopLevelArguments = function(text: string): string[] {
+    const args: string[] = [];
+    let current = "";
+    let depth = 0;
+    let quote = "";
+    let escaped = false;
+
+    for (const char of text) {
+        if (escaped) {
+            current += char;
+            escaped = false;
+            continue;
+        }
+
+        if (char === "\\") {
+            current += char;
+            escaped = true;
+            continue;
+        }
+
+        if (quote) {
+            current += char;
+
+            if (char === quote) {
+                quote = "";
+            }
+            continue;
+        }
+
+        if (char === "\"" || char === "'") {
+            current += char;
+            quote = char;
+            continue;
+        }
+
+        if (char === "(" || char === "[" || char === "{") {
+            current += char;
+            depth += 1;
+            continue;
+        }
+
+        if (char === ")" || char === "]" || char === "}") {
+            current += char;
+            depth -= 1;
+            continue;
+        }
+
+        if (char === "," && depth === 0) {
+            args.push(current.trim());
+            current = "";
+            continue;
+        }
+
+        current += char;
+    }
+
+    if (current.trim()) {
+        args.push(current.trim());
+    }
+
+    return args;
+};
+
+
+const readQuotedPackageNames = function(value: string): string[] {
+    const text = value.trim();
+    const vector = text.match(/^c\s*\(([\s\S]*)\)$/);
+    const source = vector ? vector[1] : text;
+    const names: string[] = [];
+    const pattern = /(["'])((?:\\.|(?!\1).)*)\1/g;
+    let match: RegExpExecArray | null = null;
+
+    while ((match = pattern.exec(source))) {
+        names.push(match[2].replace(/\\(["'\\])/g, "$1"));
+    }
+
+    return names;
+};
+
+
+const readInstallPackagesCommand = function(text: string): string[] | null {
+    const match = text.trim().match(
+        /^(?:utils::)?install\.packages\s*\(([\s\S]*)\)\s*;?\s*$/
+    );
+
+    if (!match) {
+        return null;
+    }
+
+    const args = splitTopLevelArguments(match[1]);
+    const names = readQuotedPackageNames(args[0] || "").filter(Boolean);
+
+    return names.length ? names : null;
+};
+
+
 const readOutputText = function(output: WebRCapturedOutput): string {
-    if (typeof output.data === "string") {
-        return output.data;
+    const data = output.data;
+
+    if (typeof data === "string") {
+        return data;
     }
 
-    if (Array.isArray(output.data)) {
-        return output.data.map(String).join("\n");
+    if (Array.isArray(data)) {
+        return data.map(String).join("\n");
     }
 
-    return output.data == null ? "" : String(output.data);
+    if (data && typeof data === "object") {
+        const record = data as Record<string, unknown>;
+
+        for (const key of ["message", "text", "value"]) {
+            if (typeof record[key] === "string") {
+                return record[key] as string;
+            }
+        }
+
+        try {
+            return JSON.stringify(data);
+        }
+        catch {
+            return "";
+        }
+    }
+
+    return data == null ? "" : String(data);
 };
 
 
@@ -58,10 +173,25 @@ export const executeWebRVisibleCommand = async function(
             ): Promise<WebRCaptureResult>;
             purge?(): Promise<void>;
         }>;
+        installPackages?: (
+            packages: string | string[]
+        ) => Promise<void>;
     };
+    const packageNames = readInstallPackagesCommand(request.text);
 
     try {
-        if (runtimeWithShelter.Shelter) {
+        if (packageNames && runtimeWithShelter.installPackages) {
+            events.push(createTranscriptEvent("output", request, {
+                streamName: "stdout",
+                message: `Installing WebR package${packageNames.length === 1 ? "" : "s"}: ${packageNames.join(", ")}`
+            }));
+            await runtimeWithShelter.installPackages(packageNames);
+            events.push(createTranscriptEvent("output", request, {
+                streamName: "stdout",
+                message: `\nInstalled WebR package${packageNames.length === 1 ? "" : "s"}: ${packageNames.join(", ")}`
+            }));
+        }
+        else if (runtimeWithShelter.Shelter) {
             const shelter = await new runtimeWithShelter.Shelter();
 
             try {

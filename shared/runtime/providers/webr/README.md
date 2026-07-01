@@ -9,10 +9,11 @@ limits all need explicit provider behavior. It should therefore be implemented
 as its own provider instead of being hidden behind the local `r` provider.
 
 The provider exposes its browser limits through manifest policies. Package
-availability is checked by the worker runtime, but package installation is not a
-DialogForge browser-host operation. File access is browser-virtual, and durable
-persistence must be supplied by the host or product workflow rather than assumed
-to be a native filesystem path.
+availability is checked by the worker runtime, and `install.packages()` is
+shimmed during WebR bootstrap so it installs from the WebR WebAssembly binary
+package repository. File access is browser-virtual, and durable persistence must
+be supplied by the host or product workflow rather than assumed to be a native
+filesystem path.
 
 The runtime bridge dynamically imports `webr`, starts `new WebR(options).init()`,
 and routes visible commands, invisible queries, workspace listing, tabular

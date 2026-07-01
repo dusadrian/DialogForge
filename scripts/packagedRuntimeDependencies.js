@@ -5,8 +5,7 @@ const packagedRuntimeDependencies = [
     "marked",
     "monaco-editor",
     "preact",
-    "sortablejs",
-    "webr"
+    "sortablejs"
 ];
 
 

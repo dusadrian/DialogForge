@@ -24,22 +24,6 @@ export interface ConsoleEditorCommandBindings {
 }
 
 
-const readClipboardText = async function(): Promise<string> {
-    try {
-        if (navigator?.clipboard?.readText) {
-            const text = await navigator.clipboard.readText();
-
-            if (typeof text === "string") {
-                return text;
-            }
-        }
-    }
-    catch {}
-
-    return "";
-};
-
-
 const writeClipboardText = async function(text: string): Promise<boolean> {
     const normalized = String(text || "");
 
@@ -181,12 +165,6 @@ export const wireConsoleEditorCommands = function(
             editor.focus?.();
         }
         catch {}
-    };
-
-    const pasteClipboardText = function(): void {
-        void readClipboardText().then((text) => {
-            bindings.insertText(text);
-        });
     };
 
     const disposable = editor.onKeyDown((event: Monaco.IKeyboardEvent) => {
@@ -496,8 +474,6 @@ export const wireConsoleEditorCommands = function(
     editor.addCommand(KeyMod.CtrlCmd | KeyCode.Space, triggerSuggestion);
 
     editor.addCommand(KeyCode.F1, bindings.showContextualHelp);
-    editor.addCommand(KeyMod.CtrlCmd | KeyCode.KeyV, pasteClipboardText);
-    editor.addCommand(KeyMod.Shift | KeyCode.Insert, pasteClipboardText);
 
     return [disposable];
 };

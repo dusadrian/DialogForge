@@ -90,6 +90,10 @@ const assertSourceContracts = function() {
         path.join(projectRoot, "package.json"),
         "utf8"
     );
+    const webServer = fs.readFileSync(
+        path.join(projectRoot, "scripts/web-dialogr-dev-server.js"),
+        "utf8"
+    );
     const transcriptIsland = fs.readFileSync(
         path.join(projectRoot, "shared/console/views/consoleTranscriptIsland.ts"),
         "utf8"
@@ -166,6 +170,10 @@ const assertSourceContracts = function() {
     assert.ok(
         script.includes("webr::shim_install()"),
         "DialogR browser WebR startup must shim install.packages() for wasm package installs"
+    );
+    assert.ok(
+        !script.includes("data(iris)"),
+        "DialogR browser WebR startup must not seed a default iris dataset"
     );
     assert.ok(
         browserDialogRuntime.includes("buildSummaryCommand"),
@@ -251,6 +259,32 @@ const assertSourceContracts = function() {
     assert.ok(
         script.includes("renderMenu(composition.menu || [])"),
         "DialogR browser shell must render the composed top menu"
+    );
+    assert.ok(
+        !html.includes("Start WebR")
+            && !html.includes("id=\"startRuntime\"")
+            && !html.includes("id=\"runtimeStatus\"")
+            && !html.includes("id=\"productName\"")
+            && !html.includes("id=\"compositionMeta\""),
+        "DialogR browser shell must not render the removed top WebR information header"
+    );
+    assert.ok(
+        script.includes("await ensureRuntime();"),
+        "DialogR browser shell must start WebR automatically after composition"
+    );
+    assert.ok(
+        script.includes("commandPreviewDialogId")
+            && script.includes("state.commandPreviewDialogId === dialogId"),
+        "DialogR browser shell must clear a command preview when its owning dialog closes"
+    );
+    assert.ok(
+        script.includes('item?.type === "separator"')
+            && script.includes("createMenuSeparator"),
+        "DialogR browser shell must render menu separators as structural separator nodes"
+    );
+    assert.ok(
+        html.includes(".web-menu-separator"),
+        "DialogR browser shell must style structural menu separators"
     );
     assert.ok(
         script.includes("installDraggableModal"),
@@ -424,7 +458,14 @@ const assertSourceContracts = function() {
     assert.ok(browserDialogRuntime.includes("dm-choice-item"));
     assert.ok(copyStatic.includes("shared\", \"shell-web\", \"pages"));
     assert.ok(packageJson.includes("\"dev:web-dialogr\""));
+    assert.ok(packageJson.includes("--replace-port --product-path"));
     assert.ok(packageJson.includes("\"build:web-dialogr\""));
+    assert.ok(webServer.includes("replaceListeningPort(options.port)"));
+    assert.ok(webServer.includes("lsof"));
+    assert.ok(webServer.includes("https://github.com/dusadrian/binaries/releases/download/WebR"));
+    assert.ok(webServer.includes("ensureProductWebRLibrary(productPath)"));
+    assert.ok(webServer.includes("api.github.com/repos/dusadrian/binaries/releases/tags/WebR"));
+    assert.ok(webServer.includes("isLocalReleaseAssetCurrent"));
 };
 
 
@@ -518,10 +559,10 @@ const assertRenderedContracts = async function() {
         await page.goto(`http://127.0.0.1:${port}/`, {
             waitUntil: "domcontentloaded"
         });
-        await page.locator("#productName").waitFor({ state: "visible" });
-        await page.locator("#compositionMeta", {
-            hasText: "runtime: webr"
-        }).waitFor({ timeout: 10000 });
+        await page.locator("#webMenuBar").waitFor({ state: "visible" });
+        assert.strictEqual(await page.locator(".web-toolbar").count(), 0);
+        assert.strictEqual(await page.locator("#startRuntime").count(), 0);
+        assert.strictEqual(await page.locator("#runtimeStatus").count(), 0);
         await page.locator("#webDesktop").waitFor({ state: "visible" });
         await page.locator("#webWorkbenchWindow").waitFor({ state: "visible" });
         const workbenchBox = await page.locator("#webWorkbenchWindow").boundingBox();
@@ -591,18 +632,14 @@ const assertRenderedContracts = async function() {
             assert.ok(afterResize.width < beforeResize.width - 40);
             assert.ok(afterResize.height < beforeResize.height - 30);
         }
-        const title = await page.locator("#productName").textContent();
-        const meta = await page.locator("#compositionMeta").textContent();
-
         await page.locator('[data-console-transcript-island="preact"]').waitFor({
             state: "attached",
             timeout: 10000
         });
 
-        await page.locator("#startRuntime").click();
-        await page.locator("#runtimeStatus", {
-            hasText: "WebR ready"
-        }).waitFor({ timeout: 90000 });
+        await page.waitForFunction(() => {
+            return window.dialogForgeWebConsole?.session?.getSessionPhase?.() === "ready";
+        }, { timeout: 90000 });
         await page.locator("#consoleTerminal .monaco-editor").waitFor({
             state: "visible",
             timeout: 20000
@@ -654,6 +691,9 @@ const assertRenderedContracts = async function() {
         await page.locator("#consoleCwdText", {
             hasText: "~/DialogR"
         }).waitFor({ timeout: 10000 });
+        await page.evaluate(async () => {
+            await window.dialogForgeWebConsole.executeVisibleCommand("data(iris); iris <- as.data.frame(iris)");
+        });
         await page.locator("#consoleActiveDataset", {
             hasText: "iris"
         }).waitFor({ timeout: 10000 });
@@ -1307,9 +1347,9 @@ const assertRenderedContracts = async function() {
             assert.ok(Math.abs(beforeToggle.toolbarHeight - beforeToggle.workspaceHeaderHeight) < 1);
         }
         await page.locator("#consoleToolbarRestart").click();
-        await page.locator("#runtimeStatus", {
-            hasText: "WebR ready"
-        }).waitFor({ timeout: 90000 });
+        await page.waitForFunction(() => {
+            return window.dialogForgeWebConsole?.session?.getSessionPhase?.() === "ready";
+        }, { timeout: 90000 });
         await page.evaluate(() => {
             window.dialogForgeWebConsole.coordinator.setText("if (TRUE) {");
             window.dialogForgeWebConsole.coordinator.focus();
@@ -1339,6 +1379,19 @@ const assertRenderedContracts = async function() {
         await page.locator("#webMenuBar .web-menu-button", {
             hasText: "Analyze"
         }).waitFor({ state: "visible" });
+        await page.locator("#webMenuBar .web-menu-button", {
+            hasText: "Edit"
+        }).click();
+        await page.locator('#webMenuBar .web-menu-separator[data-menu-separator="EditNavigationSeparator"]').waitFor({
+            state: "visible"
+        });
+        assert.strictEqual(
+            await page.locator("#webMenuBar .web-menu-item", {
+                hasText: "EditNavigationSeparator"
+            }).count(),
+            0
+        );
+        await page.keyboard.press("Escape");
         await page.locator("#webMenuBar .web-menu-button", {
             hasText: "Analyze"
         }).click();
@@ -1620,6 +1673,23 @@ const assertRenderedContracts = async function() {
             await frame.locator(".smart-button", { hasText: label }).click();
         };
 
+        {
+            const frame = await openDialogFrame({
+                id: "frequencies",
+                label: "Frequency table"
+            });
+
+            await frame.locator(".smart-button").first().waitFor({ state: "visible" });
+            await selectControl(frame, "c_datasets", "iris");
+            await selectControl(frame, "c_variables", "Species");
+            await page.locator("#command", {
+                hasText: "wtable(Species)"
+            }).waitFor({ timeout: 10000 });
+            await page.locator(".dialogforge-web-dialog__close").click();
+            await page.locator(".dialogforge-web-dialog-layer").waitFor({ state: "detached" });
+            await page.locator("#commandPane").waitFor({ state: "hidden", timeout: 10000 });
+        }
+
         const runStatefulDialog = async function(plan) {
             await openDialogFromMenu(plan.label);
             await page.locator(".dialogforge-web-dialog-layer").waitFor({ state: "visible" });
@@ -1851,7 +1921,7 @@ const assertRenderedContracts = async function() {
             await frame.locator(".dm-choice-item", { hasText: "Species" }).waitFor({ state: "visible" });
             await clickSmartButton(frame, "OK");
             await page.locator("#consoleTerminal", {
-                hasText: "iris <- iris[order(Species), , drop = FALSE]"
+                hasText: "iris <- iris[order(iris$Species), ]"
             }).waitFor({ timeout: 30000 });
             await page.locator(".dialogforge-web-dialog-layer").waitFor({ state: "detached" });
         }

@@ -29,7 +29,7 @@ const ids = listRuntimeProviderIds();
 assert.ok(ids.includes("server-r"));
 assert.ok(ids.includes("webr"));
 assert.ok(packageJson.dependencies.webr);
-assert.ok(packagedRuntimeDependencies.includes('"webr"'));
+assert.ok(!packagedRuntimeDependencies.includes('"webr"'));
 assert.ok(runtimeBridgeSource.includes('from "webr"'));
 assert.ok(runtimeBridgeSource.includes("new WebRClass"));
 
@@ -61,7 +61,10 @@ assert.ok(webR.manifest.capabilities.includes("workspace.objects"));
 assert.ok(webR.manifest.capabilities.includes("dependencies.packages"));
 assert.ok(!webR.manifest.capabilities.includes("plots"));
 assert.strictEqual(webR.createSession().connection, "disconnected");
-assert.strictEqual(webR.manifest.policies.packages.installation, "unsupported");
+assert.strictEqual(
+    webR.manifest.policies.packages.installation,
+    "webr-binary-repository"
+);
 assert.strictEqual(webR.manifest.policies.filesystem.access, "browser-virtual");
 assert.ok(webR.readOnlyAdapter);
 

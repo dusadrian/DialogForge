@@ -124,8 +124,16 @@ assert.strictEqual(buildSortByCommand({
     dataset: "survey",
     sorting: ["score", "id"],
     createNew: true,
-    datasetName: "sorted_survey"
-}), "sorted_survey <- survey[order(score, id), , drop = FALSE]\n");
+    datasetName: "sorted_survey",
+    variables: ["id", "group", "score"]
+}), "sorted_survey <- survey[order(survey$score, survey$id), ]\n");
+assert.strictEqual(buildSortByCommand({
+    dataset: "mydata",
+    sorting: ["onecolumn"],
+    createNew: false,
+    datasetName: "",
+    variables: ["onecolumn"]
+}), "mydata <- mydata[order(mydata$onecolumn), , drop = FALSE]\n");
 const verifyHost = async function () {
     const host = createDialogExternalCallHost({
         datasets

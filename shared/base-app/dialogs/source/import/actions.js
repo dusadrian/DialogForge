@@ -286,6 +286,7 @@ const renderPreview = (payload) => {
     th.style.textAlign = 'left';
     th.style.padding = '4px 6px';
     th.style.borderBottom = '1px solid #d6d6d6';
+    th.style.borderRight = c === maxCols - 1 ? '' : '1px solid #cfcfcf';
     th.style.background = '#ededed';
     th.style.whiteSpace = 'nowrap';
     th.style.overflow = 'hidden';
@@ -306,6 +307,7 @@ const renderPreview = (payload) => {
       td.textContent = value;
       td.style.padding = '4px 6px';
       td.style.borderBottom = '1px solid #ececec';
+      td.style.borderRight = c === maxCols - 1 ? '' : '1px solid #e0e0e0';
       td.style.whiteSpace = 'nowrap';
       td.style.overflow = 'hidden';
       td.style.textOverflow = 'ellipsis';
@@ -343,7 +345,11 @@ setValue(select4, 'None');
 onClick(browse, async () => {
   const picked = await openImportFile();
   const nextPath = picked && picked.ok ? String(picked.filePath || '') : '';
-  if (!nextPath) return;
+  if (!nextPath) {
+    if (picked && picked.message) addError(input1, String(picked.message));
+    return;
+  }
+  clearError(input1);
   setValue(input1, nextPath);
   syncSuggestedDatasetName();
   await refreshPreview();

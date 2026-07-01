@@ -1,0 +1,15 @@
+{
+    "extends": "./tsconfig.json",
+    "compilerOptions": {
+        "module": "ES2022",
+        "moduleResolution": "bundler",
+        "outDir": "dist/browser-esm",
+        "declaration": false,
+        "sourceMap": false
+    },
+    "include": [
+        "shared/console/**/*.ts",
+        "shared/script-editor/run/**/*.ts",
+        "shared/dialog-runtime/custom-js/**/*.ts"
+    ]
+}

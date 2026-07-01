@@ -18,6 +18,7 @@ export interface ConsoleEditorInputStateBindings {
     resetHistory(): void;
     isHistoryNavigating(): boolean;
     refreshPrompt(): void;
+    scrollToPrompt?(): void;
     showHelpTopic?(request: ConsoleHelpTopicRequest): void;
     timingLog?(message: string, data?: unknown): void;
 }
@@ -168,6 +169,10 @@ export const createConsoleEditorInputStateController = function(
             }
 
             bindings.refreshPrompt();
+            try {
+                bindings.scrollToPrompt?.();
+            }
+            catch {}
         }
         catch {
             try {
@@ -176,6 +181,10 @@ export const createConsoleEditorInputStateController = function(
             catch {}
 
             bindings.refreshPrompt();
+            try {
+                bindings.scrollToPrompt?.();
+            }
+            catch {}
         }
     };
 

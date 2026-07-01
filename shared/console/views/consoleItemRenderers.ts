@@ -173,6 +173,8 @@ const createStyledMessageBlock = (
 const createInputLine = (prompt: string, text: string, promptWidthChars: number) => {
   const lineEl = document.createElement('div');
   styleRowBase(lineEl);
+  lineEl.dataset.consoleInputLine = 'true';
+  lineEl.dataset.consoleInputCode = text;
   lineEl.style.color = INPUT_COLOR;
 
   const promptEl = document.createElement('span');

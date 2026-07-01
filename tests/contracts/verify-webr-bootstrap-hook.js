@@ -74,9 +74,11 @@ void (async function() {
         ["unmount", "/app"],
         ["mkdir", "/app"],
         ["mount", "NODEFS", { root: "/tmp/dialogforge-app" }, "/app"],
+        ["evalRVoid", "webr::shim_install()"],
         ["evalRVoid", "source(\"/app/runtime.R\")"],
         ["evalRVoid", ".libPaths(c(.libPaths(), '/app/library'))"]
     ]);
+    assert.strictEqual(bridge.getBootstrapResult().packageInstallShim, true);
     assert.deepStrictEqual(bridge.getBootstrapResult().sourceFiles, ["/app/runtime.R"]);
     assert.deepStrictEqual(bridge.getBootstrapResult().commands, [
         ".libPaths(c(.libPaths(), '/app/library'))"

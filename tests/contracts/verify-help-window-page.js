@@ -28,6 +28,8 @@ const globals = fs.readFileSync(globalsPath, "utf8");
 const rToolController = fs.readFileSync(rToolControllerPath, "utf8");
 const consoleSyntaxPath = path.join(rootDir, "shared/console/consoleSyntax.ts");
 const consoleSyntax = fs.readFileSync(consoleSyntaxPath, "utf8");
+const browserDialogRPath = path.join(rootDir, "shared/shell-web/pages/dialogr.js");
+const browserDialogR = fs.readFileSync(browserDialogRPath, "utf8");
 const mainProcess = [
     main,
     helpIpc,
@@ -40,6 +42,7 @@ assert.ok(page.includes("app-help-navigate"), "help page must classify and route
 assert.ok(page.includes("getDialogForgeApi"), "help page must resolve Electron preload or browser parent help APIs");
 assert.ok(page.includes("window.parent.dialogForge"), "help page must support the browser-hosted parent help bridge");
 assert.ok(page.includes("window.parent && window.parent !== window"), "Electron help window must not relay completion messages to itself");
+assert.ok(page.includes("api.getConsoleSyntaxModule"), "browser-hosted help must reuse the parent workbench console syntax module");
 assert.ok(page.includes("openHelpCommandUrl(String(url || ''))"), "help page must route app help command URLs through the resolved help API");
 assert.ok(page.includes("fetchRHelpPage(nextUrl)"), "help page must fetch local R help through the resolved help API");
 assert.ok(!page.includes("id=\"helpRunExamples\""), "help toolbar must not expose a Run examples action");
@@ -61,6 +64,14 @@ assert.ok(page.includes("target.closest?.('.output,.warning,.error,.message')"),
 assert.ok(page.includes("readHelpUrlMetadata"), "help page must update topic/package metadata after local help navigation");
 assert.ok(page.includes("isLocalHelpUrl(nextUrl) && api?.fetchRHelpPage"), "local R help URLs must use the available R help fetch bridge");
 assert.ok(page.includes("font-family:\"Dialog Mono\""), "help page must preserve R code typography");
+assert.ok(
+    browserDialogR.includes("parseRHelpHttpdPath"),
+    "browser help bridge must route R help assets through the WebR httpd path parser"
+);
+assert.ok(
+    browserDialogR.includes("getConsoleSyntaxModule"),
+    "browser help bridge must expose the shared console syntax module to help.html"
+);
 assert.ok(preload.includes("openHelpTopic: function(input:"), "preload must expose openHelpTopic");
 assert.ok(preload.includes("getHelpDocument: function()"), "preload must expose getHelpDocument");
 assert.ok(preload.includes("openHelpCommandUrl: function(url:"), "preload must expose help command URL routing");
