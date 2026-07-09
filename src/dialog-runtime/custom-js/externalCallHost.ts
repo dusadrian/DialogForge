@@ -1,0 +1,500 @@
+import {
+    addSortByVariables,
+    bindSelectExpression,
+    buildSortByCommand,
+    clearFilterState,
+    clearSplitByState,
+    clearWeightByState,
+    createDialogBindingState,
+    getDatasetVariablesForDialog,
+    getFilterState,
+    getRememberedVariableDependents,
+    getSortByAvailableVariables,
+    getSortByButtonDirection,
+    getSortByChoiceItems,
+    getSortByTargetDataset,
+    getSplitByState,
+    getWeightByState,
+    inheritSubsetDatasetState,
+    keepSortByVariables,
+    rememberVariableSelections,
+    removeSortByVariables,
+    refreshSelectExpression,
+    setDialogButtonDirection,
+    setFilterState,
+    setSplitByState,
+    setWeightByState,
+    type DialogBindingState,
+    type DialogDatasetDescriptor
+} from "./dialogBindings";
+import {
+    hasSummaryStatisticSelection,
+    refreshSummarySyntax,
+    syncSummaryStatisticSelection
+} from "./summaryBindings";
+import type {
+    DialogExternalCallResult
+} from "../../core/contracts/dialogExternalCall";
+
+export type {
+    DialogExternalCallResult
+} from "../../core/contracts/dialogExternalCall";
+
+
+export interface DialogExternalCallHostOptions {
+    datasets?: DialogDatasetDescriptor[];
+    resolveDatasets?: () => Promise<DialogDatasetDescriptor[]> | DialogDatasetDescriptor[];
+    state?: DialogBindingState;
+}
+
+
+interface DialogControlUpdateResult {
+    controlValues: Record<string, unknown>;
+    controlSelections: Record<string, string[]>;
+}
+
+
+const implementedBindings = new Set([
+    "getDatasetVariablesForDialog",
+    "setFilterState",
+    "getFilterState",
+    "clearFilterState",
+    "setSplitByState",
+    "getSplitByState",
+    "clearSplitByState",
+    "setWeightByState",
+    "getWeightByState",
+    "clearWeightByState",
+    "keepSortByVariables",
+    "addSortByVariables",
+    "removeSortByVariables",
+    "getSortByAvailableVariables",
+    "getSortByChoiceItems",
+    "getSortByButtonDirection",
+    "buildSortByCommand",
+    "bindCrosstabsWorkspace",
+    "bindFrequenciesWorkspace",
+    "bindObjects",
+    "bindSummaryWorkspaceUpdates",
+    "getSortByTargetDataset",
+    "hasSummaryStatisticSelection",
+    "refreshDatasetEditor",
+    "refreshSummarySyntax",
+    "inheritSubsetDatasetState",
+    "rememberVariableSelections",
+    "bindSelectExpressionMonaco",
+    "refreshSelectExpressionMonaco",
+    "syncSummaryStatisticSelection",
+    "setSortByButtonDirection",
+    "setSplitByButtonDirection",
+    "setWeightByButtonDirection"
+]);
+
+
+const ok = function(name: string, value: unknown): DialogExternalCallResult {
+    return {
+        status: "ready",
+        name,
+        value,
+        message: "Dialog external call resolved."
+    };
+};
+
+
+const unsupported = function(name: string): DialogExternalCallResult {
+    return {
+        status: "unsupported",
+        name,
+        value: null,
+        message: "Dialog external call is not implemented."
+    };
+};
+
+
+const getObject = function(value: unknown): Record<string, unknown> {
+    return value && typeof value === "object" && !Array.isArray(value)
+        ? value as Record<string, unknown>
+        : {};
+};
+
+
+const getNameList = function(value: unknown): string[] {
+    if (!Array.isArray(value)) {
+        return [];
+    }
+
+    return value.map((entry) => {
+        if (entry && typeof entry === "object" && !Array.isArray(entry)) {
+            const record = entry as Record<string, unknown>;
+
+            return String(record.name || record.text || record.value || "").trim();
+        }
+
+        return String(entry || "").trim();
+    }).filter(Boolean);
+};
+
+
+const getObjectBindingVariableControls = function(value: unknown): string[] {
+    if (typeof value === "string") {
+        return getNameList([value]);
+    }
+
+    if (Array.isArray(value)) {
+        return getNameList(value);
+    }
+
+    if (!value || typeof value !== "object") {
+        return [];
+    }
+
+    return Object.values(value as Record<string, unknown>).flatMap((entry) => {
+        if (Array.isArray(entry)) {
+            return getNameList(entry);
+        }
+
+        return getNameList([entry]);
+    });
+};
+
+
+const getControlSnapshot = function(parameters: Record<string, unknown>): Record<string, { selected?: unknown[] }> {
+    const snapshot = parameters.__controlSnapshot;
+
+    return snapshot && typeof snapshot === "object" && !Array.isArray(snapshot)
+        ? snapshot as Record<string, { selected?: unknown[] }>
+        : {};
+};
+
+
+const getSelectedControlValue = function(parameters: Record<string, unknown>, controlName: string): string {
+    const selected = getControlSnapshot(parameters)[controlName]?.selected;
+
+    return Array.isArray(selected) ? String(selected[0] || "").trim() : "";
+};
+
+const readDialogVariableDescriptor = function(value: unknown): Record<string, unknown> | string {
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+        return value as Record<string, unknown>;
+    }
+
+    return String(value || "").trim();
+};
+
+const readDialogVariableName = function(value: unknown): string {
+    const descriptor = readDialogVariableDescriptor(value);
+
+    if (descriptor && typeof descriptor === "object") {
+        return String(descriptor.name || descriptor.text || descriptor.value || "").trim();
+    }
+
+    return String(descriptor || "").trim();
+};
+
+export const createDialogExternalCallHost = function(options: DialogExternalCallHostOptions = {}) {
+    const state = options.state || createDialogBindingState();
+
+    const resolveDatasets = async function(): Promise<DialogDatasetDescriptor[]> {
+        if (options.resolveDatasets) {
+            return options.resolveDatasets();
+        }
+
+        return options.datasets || [];
+    };
+
+    const createDatasetControlUpdate = async function(
+        parameters: Record<string, unknown>,
+        datasetControl: string,
+        variableControls: string[]
+    ): Promise<DialogControlUpdateResult> {
+        const datasets = await resolveDatasets();
+        const selectedDataset = getSelectedControlValue(parameters, datasetControl)
+            || String(datasets[0]?.name || "");
+        const dataset = datasets.find((entry) => {
+            return entry.name === selectedDataset;
+        });
+        const result: DialogControlUpdateResult = {
+            controlValues: {},
+            controlSelections: {}
+        };
+
+        if (datasetControl) {
+            result.controlValues[datasetControl] = datasets.map((entry) => {
+                return entry.name;
+            });
+            result.controlSelections[datasetControl] = selectedDataset ? [selectedDataset] : [];
+        }
+
+        const rememberedControls = getRememberedVariableDependents(state, datasetControl);
+        const controls = Array.from(new Set(
+            (variableControls.filter(Boolean).length > 0 ? variableControls : rememberedControls).filter(Boolean)
+        ));
+
+        controls.forEach((controlName) => {
+            const columns = dataset ? dataset.columns.slice() : [];
+            const columnNames = columns.map(readDialogVariableName);
+            const selected = getControlSnapshot(parameters)[controlName]?.selected;
+            const selectedColumns = Array.isArray(selected)
+                ? getNameList(selected).filter((entry) => {
+                    return columnNames.includes(entry);
+                })
+                : [];
+
+            result.controlValues[controlName] = columns;
+            if (!dataset) {
+                result.controlSelections[controlName] = [];
+            } else if (Array.isArray(selected)) {
+                result.controlSelections[controlName] = selectedColumns;
+            }
+        });
+
+        return result;
+    };
+
+    return {
+        state,
+        supports: function(name: string): boolean {
+            return implementedBindings.has(name);
+        },
+        call: async function(name: string, parameters: Record<string, unknown> = {}): Promise<DialogExternalCallResult> {
+            if (name === "getDatasetVariablesForDialog") {
+                const datasets = await resolveDatasets();
+                const dataset = datasets.find((entry) => {
+                    return entry.name === String(parameters.dataset || "");
+                });
+
+                return ok(
+                    name,
+                    dataset
+                        ? dataset.columns.map(readDialogVariableDescriptor)
+                        : getDatasetVariablesForDialog(datasets, String(parameters.dataset || ""))
+                );
+            }
+
+            if (name === "rememberVariableSelections") {
+                return ok(name, rememberVariableSelections(state, {
+                    source: String(parameters.source || ""),
+                    dependents: getNameList(parameters.dependents)
+                }));
+            }
+
+            if (name === "bindSelectExpressionMonaco") {
+                return ok(name, {
+                    selectExpression: bindSelectExpression(state, {
+                        input: String(parameters.input || ""),
+                        dataset: String(parameters.dataset || "")
+                    })
+                });
+            }
+
+            if (name === "refreshSelectExpressionMonaco") {
+                return ok(name, {
+                    selectExpression: refreshSelectExpression(state, {
+                        input: String(parameters.input || ""),
+                        dataset: String(parameters.dataset || "")
+                    })
+                });
+            }
+
+            if (name === "bindFrequenciesWorkspace") {
+                return ok(name, await createDatasetControlUpdate(
+                    parameters,
+                    String(parameters.datasets || ""),
+                    [String(parameters.variables || "")]
+                ));
+            }
+
+            if (name === "bindCrosstabsWorkspace") {
+                return ok(name, await createDatasetControlUpdate(
+                    parameters,
+                    String(parameters.datasets || ""),
+                    [String(parameters.rows || ""), String(parameters.cols || "")]
+                ));
+            }
+
+            if (name === "bindObjects") {
+                return ok(name, await createDatasetControlUpdate(
+                    parameters,
+                    String(parameters.datasets || ""),
+                    getObjectBindingVariableControls(parameters.variables)
+                ));
+            }
+
+            if (name === "bindSummaryWorkspaceUpdates") {
+                const controls = getObject(parameters.controls || parameters);
+
+                return ok(name, await createDatasetControlUpdate(
+                    parameters,
+                    String(controls.datasets || ""),
+                    [String(controls.variables || "")]
+                ));
+            }
+
+            if (name === "refreshDatasetEditor") {
+                return ok(name, {
+                    refreshDatasetName: String(parameters.datasetName || parameters.name || "").trim()
+                });
+            }
+
+            if (name === "setFilterState") {
+                return ok(name, setFilterState(state, {
+                    dataset: String(parameters.dataset || ""),
+                    command: String(parameters.command || "")
+                }));
+            }
+
+            if (name === "getFilterState") {
+                return ok(name, getFilterState(state, String(parameters.dataset || "")));
+            }
+
+            if (name === "clearFilterState") {
+                clearFilterState(state, String(parameters.dataset || ""));
+                return ok(name, null);
+            }
+
+            if (name === "setSplitByState") {
+                const request: {
+                    dataset: string;
+                    grouping: string[];
+                    sortdataset?: boolean;
+                } = {
+                    dataset: String(parameters.dataset || ""),
+                    grouping: getNameList(parameters.grouping)
+                };
+
+                if (Object.prototype.hasOwnProperty.call(parameters, "sortdataset")) {
+                    request.sortdataset = parameters.sortdataset === true;
+                }
+
+                return ok(name, setSplitByState(state, request));
+            }
+
+            if (name === "getSplitByState") {
+                return ok(name, getSplitByState(state, String(parameters.dataset || "")));
+            }
+
+            if (name === "clearSplitByState") {
+                clearSplitByState(state, String(parameters.dataset || ""));
+                return ok(name, null);
+            }
+
+            if (name === "setWeightByState") {
+                return ok(name, setWeightByState(state, {
+                    dataset: String(parameters.dataset || ""),
+                    weighting: String(parameters.weighting || "")
+                }));
+            }
+
+            if (name === "inheritSubsetDatasetState") {
+                return ok(name, inheritSubsetDatasetState(state, {
+                    source: String(parameters.source || ""),
+                    target: String(parameters.target || ""),
+                    variables: getNameList(parameters.variables)
+                }));
+            }
+
+            if (name === "getWeightByState") {
+                return ok(name, getWeightByState(state, String(parameters.dataset || "")));
+            }
+
+            if (name === "clearWeightByState") {
+                clearWeightByState(state, String(parameters.dataset || ""));
+                return ok(name, null);
+            }
+
+            if (name === "keepSortByVariables") {
+                return ok(name, keepSortByVariables({
+                    sorting: getNameList(parameters.sorting),
+                    variables: getNameList(parameters.variables)
+                }));
+            }
+
+            if (name === "addSortByVariables") {
+                return ok(name, addSortByVariables({
+                    sorting: getNameList(parameters.sorting),
+                    selected: getNameList(parameters.selected)
+                }));
+            }
+
+            if (name === "removeSortByVariables") {
+                return ok(name, removeSortByVariables({
+                    sorting: getNameList(parameters.sorting),
+                    selected: getNameList(parameters.selected)
+                }));
+            }
+
+            if (name === "getSortByAvailableVariables") {
+                return ok(name, getSortByAvailableVariables({
+                    variables: getNameList(parameters.variables),
+                    sorting: getNameList(parameters.sorting)
+                }));
+            }
+
+            if (name === "getSortByChoiceItems") {
+                return ok(name, getSortByChoiceItems({
+                    sorting: getNameList(parameters.sorting)
+                }));
+            }
+
+            if (name === "getSortByButtonDirection") {
+                return ok(name, getSortByButtonDirection({
+                    choiceSelected: getNameList(parameters.choiceSelected),
+                    variableSelected: getNameList(parameters.variableSelected)
+                }));
+            }
+
+            if (name === "setSortByButtonDirection") {
+                return ok(name, setDialogButtonDirection(state, "sortBy", String(parameters.direction || "")));
+            }
+
+            if (name === "setSplitByButtonDirection") {
+                return ok(name, setDialogButtonDirection(state, "splitBy", String(parameters.direction || "")));
+            }
+
+            if (name === "setWeightByButtonDirection") {
+                return ok(name, setDialogButtonDirection(state, "weightBy", String(parameters.direction || "")));
+            }
+
+            if (name === "hasSummaryStatisticSelection") {
+                return ok(name, hasSummaryStatisticSelection(parameters));
+            }
+
+            if (name === "syncSummaryStatisticSelection") {
+                return ok(name, syncSummaryStatisticSelection(parameters));
+            }
+
+            if (name === "refreshSummarySyntax") {
+                return ok(name, refreshSummarySyntax(state, parameters));
+            }
+
+            if (name === "buildSortByCommand") {
+                const datasetName = String(parameters.dataset || "");
+                const datasets = await resolveDatasets();
+                const dataset = datasets.find((entry) => {
+                    return entry.name === datasetName;
+                });
+                const variables = getNameList(parameters.variables).length > 0
+                    ? getNameList(parameters.variables)
+                    : (dataset?.columns || []).map(readDialogVariableName);
+
+                return ok(name, buildSortByCommand({
+                    dataset: datasetName,
+                    sorting: getNameList(parameters.sorting),
+                    createNew: parameters.createNew === true,
+                    datasetName: String(parameters.datasetName || ""),
+                    variables
+                }));
+            }
+
+            if (name === "getSortByTargetDataset") {
+                return ok(name, getSortByTargetDataset({
+                    dataset: String(parameters.dataset || ""),
+                    createNew: parameters.createNew === true,
+                    datasetName: String(parameters.datasetName || "")
+                }));
+            }
+
+            return unsupported(name);
+        }
+    };
+};

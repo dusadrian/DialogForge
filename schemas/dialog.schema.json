@@ -1,0 +1,140 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://dialogforge.local/schemas/dialog.schema.json",
+    "title": "DialogForge dialog definition",
+    "description": "The dialog.json file exported by DialogCreator and consumed by DialogForge product dialogs.",
+    "type": "object",
+    "required": ["properties", "elements"],
+    "additionalProperties": true,
+    "properties": {
+        "id": {
+            "type": "string",
+            "description": "Stable identifier generated for the dialog package."
+        },
+        "properties": {
+            "type": "object",
+            "description": "Dialog-level metadata shown by the host and used during rendering.",
+            "required": ["name", "title"],
+            "additionalProperties": true,
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "Stable dialog name. It should match the registry dialog id."
+                },
+                "title": {
+                    "type": "string",
+                    "description": "Human-visible title shown in the dialog window."
+                },
+                "width": {
+                    "type": ["string", "number"],
+                    "description": "Dialog width."
+                },
+                "height": {
+                    "type": ["string", "number"],
+                    "description": "Dialog height."
+                },
+                "language": {
+                    "type": "string",
+                    "description": "Base locale for the dialog."
+                },
+                "fontSize": {
+                    "type": ["string", "number"],
+                    "description": "Default dialog font size."
+                },
+                "runtimeProvider": {
+                    "type": "string",
+                    "description": "Runtime provider expected by this dialog, when declared by the authoring tool."
+                }
+            }
+        },
+        "syntax": {
+            "type": "object",
+            "description": "Command and generated syntax metadata exported by DialogCreator.",
+            "additionalProperties": true,
+            "properties": {
+                "command": {
+                    "type": "string"
+                },
+                "defaultElements": {
+                    "type": "array"
+                }
+            }
+        },
+        "i18n": {
+            "type": "object",
+            "description": "Dialog-local translations.",
+            "additionalProperties": true,
+            "properties": {
+                "baseLocale": {
+                    "type": "string"
+                },
+                "locales": {
+                    "type": "object",
+                    "description": "Locale code to translation map.",
+                    "additionalProperties": {
+                        "type": "object",
+                        "additionalProperties": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "elements": {
+            "type": "array",
+            "description": "Dialog controls and labels.",
+            "items": {
+                "type": "object",
+                "required": ["type"],
+                "anyOf": [
+                    { "required": ["id"] },
+                    { "required": ["name"] },
+                    { "required": ["nameid"] }
+                ],
+                "additionalProperties": true,
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "description": "Stable element identifier."
+                    },
+                    "name": {
+                        "type": "string",
+                        "description": "Author-facing element name."
+                    },
+                    "nameid": {
+                        "type": "string",
+                        "description": "Author-facing element name used by DialogCreator exports."
+                    },
+                    "type": {
+                        "type": "string",
+                        "description": "Element type, such as Label, Button, Checkbox, ComboBox, or Variable."
+                    },
+                    "left": {
+                        "type": ["number", "string"]
+                    },
+                    "top": {
+                        "type": ["number", "string"]
+                    },
+                    "width": {
+                        "type": ["number", "string"]
+                    },
+                    "height": {
+                        "type": ["number", "string"]
+                    },
+                    "value": {
+                        "type": ["string", "number", "boolean", "null"]
+                    },
+                    "label": {
+                        "type": "string"
+                    },
+                    "isEnabled": {
+                        "type": "boolean"
+                    },
+                    "isVisible": {
+                        "type": "boolean"
+                    }
+                }
+            }
+        }
+    }
+}

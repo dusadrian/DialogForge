@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>About Application</title>
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;">
+  <style>
+    body {
+      margin: 0;
+      font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, 'Noto Sans', 'Liberation Sans', sans-serif;
+      line-height: 1.4;
+      color: #1b1f23;
+      background: #ffffff;
+      overflow: auto;
+    }
+    .about {
+      padding: 20px 24px;
+      max-width: 560px;
+    }
+    h1 {
+      margin: 0 0 4px 0;
+      font-size: 18px;
+      font-weight: 600;
+    }
+    .version {
+      color: #586069;
+      font-size: 12px;
+      margin-bottom: 12px;
+    }
+    p {
+      margin: 8px 0;
+      font-size: 13px;
+    }
+    a {
+      color: #0366d6;
+      text-decoration: none;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+    #aboutBody:empty {
+      display: none;
+    }
+    .highlights {
+      margin: 10px 0 4px 18px;
+      padding: 0;
+      font-size: 13px;
+    }
+    .highlights[hidden] {
+      display: none;
+    }
+    .highlights li {
+      margin: 6px 0;
+    }
+    hr {
+      border: none;
+      border-top: 1px solid #e1e4e8;
+      margin: 12px 0;
+    }
+    .meta {
+      color: #6a737d;
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+  <div class="about">
+    <h1 id="aboutTitle">About Application</h1>
+    <div class="version" id="aboutVersion"></div>
+    <div id="aboutBody">
+      <p>Application information.</p>
+    </div>
+    <ul class="highlights" id="aboutHighlights" hidden></ul>
+    <hr />
+    <p><span id="authorLabel">Author:</span> <span id="authorName"></span></p>
+    <hr />
+    <p class="meta" id="aboutCopyright"></p>
+  </div>
+</body>
+</html>

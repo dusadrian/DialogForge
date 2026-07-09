@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <link rel="stylesheet" type="text/css" href="./dialogBuilder.css">
+    <link rel="stylesheet" href="./shared/dmSelect.css">
+    <link rel="stylesheet" href="./shared/appCodicon.css">
+</head>
+<body>
+    <div id="paper"></div>
+    <div id="dialogQuickActionsHotspot" aria-hidden="true"></div>
+    <div id="dialogQuickActions" aria-label="Dialog actions">
+      <button
+        type="button"
+        id="dialogSendToConsole"
+        class="dm-dialog-action"
+        data-tooltip="Copy"
+        aria-label="Copy"
+      >
+        <span class="copy-icon" aria-hidden="true"></span>
+      </button>
+      <button
+        type="button"
+        id="dialogSendToScriptEditor"
+        class="dm-dialog-action"
+        data-tooltip="Send to Script Editor"
+        aria-label="Send to Script Editor"
+      >
+        <span class="codicon codicon-insert" aria-hidden="true"></span>
+      </button>
+    </div>
+    <script>
+      (function () {
+        if (typeof require !== 'function') {
+          const importMap = document.createElement('script');
+          importMap.type = 'importmap';
+          importMap.textContent = JSON.stringify({
+            imports: {
+              sortablejs: '/vendor/sortablejs/sortable.esm.js'
+            }
+          });
+          document.head.appendChild(importMap);
+
+          const bridge = document.createElement('script');
+          bridge.type = 'module';
+          bridge.src = '/browser-esm/src/shell-web/browserPreloadBridge.js';
+          document.body.appendChild(bridge);
+
+          const script = document.createElement('script');
+          script.type = 'module';
+          script.src = '/browser-esm/src/dialog-runtime/renderer/modules/dialogBuilderInterface.js';
+          document.body.appendChild(script);
+          return;
+        }
+
+        if (window.dialogForge && typeof window.dialogForge.loadDialogBuilderPage === 'function') {
+          window.dialogForge.loadDialogBuilderPage();
+          return;
+        }
+        console.error('Dialog runtime loader failed: Electron page loader is unavailable.');
+      })();
+    </script>
+</body>
+</html>

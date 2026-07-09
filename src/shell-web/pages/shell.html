@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>DialogForge Web</title>
+    <link rel="stylesheet" href="/src/base-app/pages/shared/appCodicon.css">
+    <link rel="stylesheet" href="/src/base-app/pages/shared/dmTheme.css">
+    <link rel="stylesheet" href="/src/base-app/pages/shared/console.css">
+    <link rel="stylesheet" href="/src/base-app/pages/shared/main.css">
+    <link rel="stylesheet" href="/src/shell-web/pages/shell.css">
+    <link rel="stylesheet" href="/api/product.css">
+    <script type="importmap">
+        {
+            "imports": {
+                "preact": "/vendor/preact/preact.module.js",
+                "preact/hooks": "/vendor/preact/hooks.module.js"
+            }
+        }
+    </script>
+</head>
+<body class="command-pane-hidden console-cover-visible">
+    <div class="web-app">
+        <nav class="web-menubar" id="webMenuBar" aria-label="Application menu"></nav>
+        <main class="web-desktop" id="webDesktop">
+            <section class="web-workbench-window" id="webWorkbenchWindow" role="dialog" aria-label="Runtime console and workspace">
+                <header class="web-workbench-window__titlebar">
+                    <div class="web-workbench-window__title">WebR console</div>
+                </header>
+                <div class="web-workbench-window__body">
+                    <section class="web-console">
+                        <div id="commandPane">
+                            <div id="commandActions" aria-label="Command preview actions">
+                                <button
+                                    type="button"
+                                    id="commandPreviewToConsole"
+                                    class="dm-command-action"
+                                    data-tooltip="Copy to Console"
+                                    aria-label="Copy to Console"
+                                >
+                                    <span class="copy-icon" aria-hidden="true"></span>
+                                </button>
+                                <button
+                                    type="button"
+                                    id="commandPreviewToScriptEditor"
+                                    class="dm-command-action"
+                                    data-tooltip="Send to Script Editor"
+                                    aria-label="Send to Script Editor"
+                                >
+                                    <span class="codicon codicon-insert" aria-hidden="true"></span>
+                                </button>
+                            </div>
+                            <div id="command"></div>
+                        </div>
+                        <div
+                            class="splitter"
+                            id="mainSplitter"
+                            role="separator"
+                            aria-orientation="horizontal"
+                            tabindex="0"
+                        ></div>
+                        <div id="consoleArea">
+                            <div class="consoleToolbar dm-console-toolbar" id="consoleToolbar" aria-label="Console toolbar">
+                                <div class="consoleToolbarLeft dm-console-toolbar-left">
+                                    <button class="dm-console-cwd" id="consoleCwd" type="button" data-tooltip="Set working directory" aria-label="Set working directory">
+                                        <span class="codicon codicon-folder" aria-hidden="true"></span>
+                                        <span class="dm-console-cwd-text" id="consoleCwdText"></span>
+                                    </button>
+                                    <span class="dm-console-active-dataset" id="consoleActiveDataset" hidden>
+                                        <span class="dm-console-active-dataset-label" id="consoleActiveDatasetLabel">Active:</span>
+                                        <span class="dm-console-active-dataset-name" id="consoleActiveDatasetName"></span>
+                                    </span>
+                                    <span id="consoleProductStateChips"></span>
+                                </div>
+                                <div class="consoleToolbarRight dm-console-toolbar-right">
+                                    <button class="dm-toolbar-btn" id="consoleToolbarStart" type="button" data-tooltip="Start runtime" aria-label="Start runtime">Start</button>
+                                    <button class="dm-toolbar-btn dm-toolbar-btn-stop" id="consoleToolbarStop" type="button" data-tooltip="Interrupt" aria-label="Interrupt">
+                                        <span class="dm-stop-square" aria-hidden="true"></span>
+                                    </button>
+                                    <button class="dm-toolbar-btn" id="consoleToolbarRestart" type="button" data-tooltip="Restart Clean" aria-label="Restart Clean">
+                                        <span class="dm-toolbar-svg-icon dm-toolbar-svg-icon-restart" aria-hidden="true"></span>
+                                    </button>
+                                    <button class="dm-toolbar-btn" id="consoleToolbarRestartWorkspace" type="button" data-tooltip="Restart and Restore Workspace" aria-label="Restart and Restore Workspace">
+                                        <span class="dm-toolbar-svg-icon dm-toolbar-svg-icon-restartworkspace" aria-hidden="true"></span>
+                                    </button>
+                                    <button class="dm-toolbar-btn" id="consoleToolbarInfo" type="button" data-tooltip="Info" aria-label="Info">
+                                        <span class="codicon codicon-info" aria-hidden="true"></span>
+                                    </button>
+                                    <button class="dm-toolbar-btn" id="consoleToolbarClear" type="button" data-tooltip="Clear Console" aria-label="Clear Console">
+                                        <span class="codicon codicon-clear-all" aria-hidden="true"></span>
+                                    </button>
+                                    <button class="dm-toolbar-btn" id="workspacePaneToggle" type="button" data-tooltip="Toggle Workspace" aria-label="Toggle Workspace">
+                                        <span class="codicon codicon-chevron-left" aria-hidden="true"></span>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="consoleTerminal" id="consoleTerminal" aria-live="polite"></div>
+                            <div id="consoleCover" aria-live="polite">
+                                <div id="consoleCoverPanel">
+                                    <div id="consoleCoverMessage">Loading web runtime...</div>
+                                    <div
+                                        class="console-cover-progress"
+                                        id="consoleCoverProgress"
+                                        role="progressbar"
+                                        aria-valuemin="0"
+                                        aria-valuemax="100"
+                                        aria-valuenow="4"
+                                    ></div>
+                                </div>
+                            </div>
+                            <div
+                                class="commandInput"
+                                id="visibleCommandInput"
+                                role="textbox"
+                                aria-multiline="true"
+                                contenteditable="true"
+                                spellcheck="false"
+                            ></div>
+                        </div>
+                    </section>
+                    <aside class="web-workspace">
+                        <div class="web-workspace__content" id="workspaceSummary"></div>
+                    </aside>
+                </div>
+                <span class="web-workbench-resize-handle" data-resize-direction="right" aria-hidden="true"></span>
+                <span class="web-workbench-resize-handle" data-resize-direction="bottom" aria-hidden="true"></span>
+                <span class="web-workbench-resize-handle" data-resize-direction="corner" aria-hidden="true"></span>
+            </section>
+        </main>
+    </div>
+    <script type="module" src="/src/shell-web/pages/shell.js"></script>
+</body>
+</html>

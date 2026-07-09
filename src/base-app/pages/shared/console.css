@@ -1,0 +1,294 @@
+.consolePanel {
+    min-height: 0;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    overflow: hidden;
+}
+
+#commandPane {
+    flex: 0 0 var(--main-command-height);
+    min-height: var(--main-command-min-height);
+    position: relative;
+    box-sizing: border-box;
+}
+
+#command {
+    width: 100%;
+    height: 100%;
+    box-sizing: border-box;
+    padding: 6px 74px 6px 8px;
+    background: #f8f8f8;
+    border-bottom: 1px solid #d0d0d0;
+    overflow: auto;
+    white-space: pre-wrap;
+    font-family: "Dialog Mono", monospace;
+    font-size: 13px;
+    line-height: 20px;
+    font-variant-ligatures: none;
+    font-feature-settings: "liga" 0, "calt" 0, "clig" 0, "dlig" 0;
+}
+
+#command * {
+    font-family: inherit;
+    font-size: inherit;
+    line-height: inherit;
+    font-variant-ligatures: inherit;
+    font-feature-settings: inherit;
+}
+
+#commandActions {
+    position: absolute;
+    top: 6px;
+    right: 22px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 90ms ease-out;
+    z-index: 4;
+}
+
+#commandPane:hover #commandActions,
+#commandPane:focus-within #commandActions {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+body.command-pane-hidden #commandPane,
+body.command-pane-hidden #mainSplitter {
+    display: none;
+}
+
+.dm-command-action {
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border: 1px solid #d0d0d0;
+    border-radius: 4px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.96);
+    color: #2f2f2f;
+    cursor: pointer;
+    box-shadow: none;
+}
+
+.dm-command-action:hover {
+    background: #ececec;
+    color: #1f1f1f;
+}
+
+.dm-command-action:active {
+    background: #dfdfdf;
+}
+
+.dm-command-action:disabled {
+    opacity: 0.45;
+    cursor: default;
+}
+
+.dm-command-action .codicon {
+    font-size: 15px;
+    line-height: 1;
+}
+
+.dm-command-action::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    right: 0;
+    top: calc(100% + 6px);
+    background: #f5f5f5;
+    color: #3a3a3a;
+    border: 1px solid #c7c7c7;
+    border-radius: 10px;
+    padding: 5px 11px;
+    font-size: 12px;
+    font-family: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, "Noto Sans", "Liberation Sans", sans-serif;
+    font-weight: 400;
+    line-height: 1.2;
+    white-space: nowrap;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 70ms ease-out;
+    transition-delay: 20ms;
+    pointer-events: none;
+    z-index: 30;
+}
+
+.dm-command-action:hover::after,
+.dm-command-action:focus-visible::after {
+    opacity: 1;
+    visibility: visible;
+}
+
+.copy-icon {
+    position: relative;
+    display: inline-block;
+    width: 18px;
+    height: 18px;
+    color: currentColor;
+}
+
+.copy-icon::before,
+.copy-icon::after {
+    content: "";
+    position: absolute;
+    width: 10px;
+    height: 10px;
+    border: 1.3px solid currentColor;
+    border-radius: 2.5px;
+    background: transparent;
+    box-sizing: border-box;
+}
+
+.copy-icon::before {
+    top: 1.5px;
+    left: 5px;
+}
+
+.copy-icon::after {
+    top: 4.5px;
+    left: 1.5px;
+}
+
+.splitter {
+    flex: 0 0 var(--splitter-width);
+    height: var(--splitter-width);
+    background: var(--splitter-color);
+    cursor: row-resize;
+}
+
+#consoleArea {
+    flex: 1 1 auto;
+    min-height: var(--main-terminal-min-height);
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    position: relative;
+}
+
+.consolePanel {
+    min-height: 0;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    box-sizing: border-box;
+}
+
+.dm-console-active-dataset,
+.dm-console-state-chip {
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: 26%;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    height: 20px;
+    box-sizing: border-box;
+    padding: 0 7px;
+    border: 1px solid rgba(47, 125, 79, 0.28);
+    border-radius: 4px;
+    background: rgba(47, 125, 79, 0.08);
+    color: #245f3d;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-size: 11px;
+    line-height: 1;
+}
+
+.dm-console-state-chip {
+    border-color: rgba(64, 92, 134, 0.26);
+    background: rgba(64, 92, 134, 0.07);
+    color: #30496c;
+}
+
+#consoleProductStateChips {
+    display: contents;
+}
+
+.dm-console-active-dataset[hidden],
+.dm-console-state-chip[hidden] {
+    display: none;
+}
+
+.dm-console-active-dataset-label,
+.dm-console-state-chip-label {
+    flex: 0 0 auto;
+    font-weight: 600;
+}
+
+.dm-console-active-dataset-name,
+.dm-console-state-chip-value {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 700;
+}
+
+.dm-console-toolbar .dm-toolbar-btn.dm-toolbar-btn-stop {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+}
+
+body.console-runtime-busy .dm-console-toolbar .dm-toolbar-btn.dm-toolbar-btn-stop {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+}
+
+body.console-cover-visible #consoleCover {
+    display: flex;
+}
+
+body.console-cover-visible #consoleTerminal {
+    visibility: hidden;
+}
+
+.console-context-menu {
+    position: absolute;
+    z-index: 20;
+    min-width: 150px;
+    padding: 4px;
+    border: 1px solid #c8c8c8;
+    border-radius: 6px;
+    background: #ffffff;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.14);
+}
+
+.console-context-menu[hidden] {
+    display: none;
+}
+
+.console-context-menu-item {
+    width: 100%;
+    min-height: 26px;
+    padding: 4px 8px;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    color: #242424;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 1.25;
+    text-align: left;
+    cursor: pointer;
+}
+
+.console-context-menu-item:hover,
+.console-context-menu-item:focus-visible {
+    background: #ececec;
+    outline: none;
+}

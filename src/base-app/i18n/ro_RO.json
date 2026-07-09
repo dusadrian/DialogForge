@@ -1,0 +1,18 @@
+{
+    "Settings": "Setări",
+    "Language": "Limbă",
+    "Runtime provider": "Furnizor runtime",
+    "Console font": "Font consolă",
+    "Console cursor": "Cursor consolă",
+    "Console cursor blink": "Clipirea cursorului consolei",
+    "Console selection color": "Culoarea selecției din consolă",
+    "Start runtime quietly": "Pornește runtime-ul fără mesaje",
+    "Show full console error context": "Afișează contextul complet al erorii din consolă",
+    "Input mode": "Mod de introducere",
+    "Enable authoring features": "Activează funcțiile de authoring",
+    "Notify me when updates are available": "Anunță-mă când sunt disponibile actualizări",
+    "Pick color": "Alege culoarea",
+    "Reset": "Resetează",
+    "Save": "Salvează",
+    "Cancel": "Anulează"
+}

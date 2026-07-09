@@ -1,0 +1,91 @@
+name: Sign Windows product
+
+on:
+  workflow_dispatch:
+    inputs:
+      product_repository:
+        description: Product repository in owner/repo form.
+        required: true
+        type: string
+      product_ref:
+        description: Product branch, tag, or commit SHA.
+        required: true
+        type: string
+      release_tag:
+        description: Release tag to upload signed artifacts to.
+        required: true
+        type: string
+      release_repository:
+        description: Target repository in owner/repo form. Defaults to product_repository.
+        required: false
+        default: ""
+        type: string
+      overwrite_release_assets:
+        description: Replace release assets with matching filenames.
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  prepare-release:
+    runs-on: windows-latest
+    env:
+      RELEASE_TAG: ${{ inputs.release_tag }}
+      PRODUCT_REPOSITORY: ${{ inputs.product_repository }}
+      TARGET_REPO: ${{ inputs.release_repository != '' && inputs.release_repository || inputs.product_repository }}
+    steps:
+      - name: Confirm target release exists
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "$RELEASE_TAG" ]; then
+            echo "release_tag is required."
+            exit 1
+          fi
+
+          if [ "$TARGET_REPO" = "$GITHUB_REPOSITORY" ]; then
+            export GH_TOKEN='${{ github.token }}'
+          elif [ "$TARGET_REPO" = "$PRODUCT_REPOSITORY" ]; then
+            export GH_TOKEN='${{ secrets.PRODUCT_REPOSITORY_TOKEN }}'
+          else
+            echo "release_repository must be either $PRODUCT_REPOSITORY or $GITHUB_REPOSITORY."
+            exit 1
+          fi
+
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "A write-capable token for $TARGET_REPO is required to manage the target release."
+            exit 1
+          fi
+
+          if gh release view "$RELEASE_TAG" --repo "$TARGET_REPO" >/dev/null 2>&1; then
+            gh release edit "$RELEASE_TAG" --repo "$TARGET_REPO" --prerelease --latest=false
+          else
+            gh release create "$RELEASE_TAG" --repo "$TARGET_REPO" --prerelease --latest=false --title "$RELEASE_TAG" --notes ""
+          fi
+
+  sign:
+    needs: prepare-release
+    runs-on: windows-latest
+    environment: signing
+    steps:
+      - name: Check out DialogForge
+        uses: actions/checkout@v5
+
+      - name: Build, sign, and upload Windows artifacts
+        uses: dusadrian/DialogForge/.github/actions/package-product@main
+        with:
+          product_repository: ${{ inputs.product_repository }}
+          product_ref: ${{ inputs.product_ref }}
+          product_token: ${{ secrets.PRODUCT_REPOSITORY_TOKEN || github.token }}
+          platform: windows
+          release_tag: ${{ inputs.release_tag }}
+          release_repository: ${{ inputs.release_repository != '' && inputs.release_repository || inputs.product_repository }}
+          release_token: ${{ inputs.release_repository == github.repository && github.token || secrets.PRODUCT_REPOSITORY_TOKEN }}
+          overwrite_release_assets: ${{ inputs.overwrite_release_assets }}
+          azure_application_id: ${{ secrets.AZURE_APPLICATION_ID }}
+          azure_tenant_id: ${{ secrets.AZURE_TENANT_ID }}
+          azure_subscription_id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}

@@ -1,0 +1,18 @@
+{
+    "Settings": "Configuración",
+    "Language": "Idioma",
+    "Runtime provider": "Proveedor de ejecución",
+    "Console font": "Fuente de la consola",
+    "Console cursor": "Cursor de la consola",
+    "Console cursor blink": "Parpadeo del cursor de la consola",
+    "Console selection color": "Color de selección de la consola",
+    "Start runtime quietly": "Iniciar entorno de ejecución en silencio",
+    "Show full console error context": "Mostrar el contexto completo de errores de la consola",
+    "Input mode": "Modo de entrada",
+    "Enable authoring features": "Activar funciones de autoría",
+    "Notify me when updates are available": "Notificarme cuando haya actualizaciones disponibles",
+    "Pick color": "Elegir color",
+    "Reset": "Restablecer",
+    "Save": "Guardar",
+    "Cancel": "Cancelar"
+}

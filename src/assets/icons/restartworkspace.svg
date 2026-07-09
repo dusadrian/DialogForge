@@ -1,0 +1,51 @@
+<svg width="16" height="16" viewBox="0 0 13 13" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <path
+     d="M 10.746194,4.0837944 7.5138372,4.0661596"
+     stroke="#000000"
+     stroke-width="1.14586"
+     stroke-linecap="round"
+     stroke-linejoin="round"
+     stroke-miterlimit="5"
+     id="path6"
+     style="stroke-width:0.8125;stroke-dasharray:none" />
+  <path
+     d="m 10.746194,4.0837944 0.01764,-3.23364649"
+     stroke="#000000"
+     stroke-width="1.14586"
+     stroke-linecap="round"
+     stroke-linejoin="round"
+     stroke-miterlimit="5"
+     id="path7"
+     style="stroke-width:0.8125;stroke-dasharray:none" />
+  <ellipse
+     cx="-6.5"
+     cy="-6.4973226"
+     transform="scale(-1)"
+     stroke="#000000"
+     stroke-width="1.11759"
+     stroke-linecap="round"
+     stroke-linejoin="round"
+     stroke-miterlimit="5"
+     id="circle1"
+     style="stroke-width:0.812501;stroke-dasharray:none"
+     rx="4.8312502"
+     ry="4.8323746" />
+  <path
+     d="M 2.2538057,8.9222652 5.4861625,8.9399"
+     stroke="#000000"
+     stroke-width="1.14586"
+     stroke-linecap="round"
+     stroke-linejoin="round"
+     stroke-miterlimit="5"
+     id="path8"
+     style="stroke-width:0.8125;stroke-dasharray:none" />
+  <path
+     d="M 2.2538057,8.9222652 2.2361624,12.155912"
+     stroke="#000000"
+     stroke-width="1.14586"
+     stroke-linecap="round"
+     stroke-linejoin="round"
+     stroke-miterlimit="5"
+     id="path9"
+     style="stroke-width:0.8125;stroke-dasharray:none" />
+</svg>

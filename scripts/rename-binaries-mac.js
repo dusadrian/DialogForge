@@ -1,0 +1,88 @@
+"use strict";
+
+/**
+ * Renames macOS DMG artifacts to stable intel/silicon filenames.
+ * Generated update metadata stays in build/output for release uploads.
+ */
+const fs = require("fs");
+const path = require("path");
+const maybe = path.resolve(__dirname, "..");
+const rootIndex = process.argv.indexOf("--root");
+const cliRoot = rootIndex >= 0 ? String(process.argv[rootIndex + 1] || "").trim() : "";
+const root = cliRoot || (fs.existsSync(path.join(maybe, "package.json"))
+    ? maybe
+    : path.resolve(__dirname, "../.."));
+const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
+const versionIndex = process.argv.indexOf("--version");
+const cliVersion = versionIndex >= 0
+    ? String(process.argv[versionIndex + 1] || "").trim()
+    : "";
+const productNameIndex = process.argv.indexOf("--product-name");
+const cliProductName = productNameIndex >= 0
+    ? String(process.argv[productNameIndex + 1] || "").trim()
+    : "";
+const name = cliProductName
+    || (pkg.build && pkg.build.productName)
+    || String(pkg.name || "");
+const nameFile = name.replace(/\s+/g, "_");
+const out = path.join(root, "build", "output");
+const versionVariants = Array.from(new Set([
+    cliVersion,
+    cliVersion
+        .split(".")
+        .map((part) => /^\d+$/.test(part) ? String(Number(part)) : part)
+        .join(".")
+].filter(Boolean)));
+const arch = String(process.env.DIALOGFORGE_PACKAGING_MACOS_ARCH || "arm64").trim();
+const targetArch = arch === "x64" ? "x64" : "arm64";
+const listDmgArtifacts = function () {
+    if (!fs.existsSync(out)) {
+        return [];
+    }
+    return fs.readdirSync(out)
+        .filter((file) => /\.dmg$/i.test(file))
+        .map((file) => {
+        const fullPath = path.join(out, file);
+        const stat = fs.statSync(fullPath);
+        return {
+            name: file,
+            path: fullPath,
+            size: stat.size
+        };
+    });
+};
+const selectArtifact = function (artifacts, requestedArch) {
+    const exact = artifacts.filter((artifact) => {
+        const lower = artifact.name.toLowerCase();
+        return lower.includes("-" + requestedArch) && versionVariants.some((candidate) => lower.includes(candidate.toLowerCase()));
+    });
+    if (exact.length > 0) {
+        return exact.sort((a, b) => b.size - a.size)[0];
+    }
+    const archOnly = artifacts.filter((artifact) => artifact.name.toLowerCase().includes("-" + requestedArch));
+    if (archOnly.length > 0) {
+        return archOnly.sort((a, b) => b.size - a.size)[0];
+    }
+    const generic = artifacts.filter((artifact) => versionVariants.some((candidate) => artifact.name.toLowerCase().includes(candidate.toLowerCase())));
+    if (generic.length > 0) {
+        return generic.sort((a, b) => b.size - a.size)[0];
+    }
+    return artifacts[0] || null;
+};
+const renameArtifact = function (artifact, targetName, kind) {
+    if (!artifact) {
+        const known = listDmgArtifacts().map((entry) => entry.name).join(", ");
+        throw new Error(`${kind} artifact not found in build/output. Found: ${known || "(none)"}`);
+    }
+    const targetPath = path.join(out, targetName);
+    if (artifact.path !== targetPath) {
+        fs.renameSync(artifact.path, targetPath);
+    }
+    console.log(`Renamed ${artifact.name} -> ${targetName}`);
+};
+const main = function () {
+    const artifacts = listDmgArtifacts();
+    console.log("Discovered dmg artifacts:", artifacts.map((artifact) => artifact.name).join(", ") || "(none)");
+    renameArtifact(selectArtifact(artifacts, targetArch), `${nameFile}_${targetArch === "arm64" ? "silicon" : "intel"}.dmg`, targetArch === "arm64" ? "Silicon installer" : "Intel installer");
+};
+main();

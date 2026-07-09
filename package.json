@@ -1,0 +1,79 @@
+{
+    "name": "dialogforge",
+    "productName": "DialogForge",
+    "version": "0.0.0",
+    "main": "dist/scripts/electron-main.js",
+    "private": true,
+    "description": "A language-neutral workbench for dialog-driven desktop applications.",
+    "author": "Adrian Dusa",
+    "license": "SEE LICENSE IN LICENSE",
+    "scripts": {
+        "build": "tsc -p tsconfig.json && node scripts/copy-static.js && node scripts/generate-core-sdk.js && node dist/scripts/package-product-if-requested.js",
+        "build:web": "node scripts/build-web.js",
+        "sdk:core": "node scripts/generate-core-sdk.js",
+        "check:build-ownership": "node scripts/check-build-ownership.js",
+        "start": "npm run build && node dist/scripts/start-app.js",
+        "dev:watch": "npm run build && node scripts/watch-product.js",
+        "dev:web-server": "npm run build:web && node dist/scripts/web-product-dev-server.js --replace-port"
+    },
+    "devDependencies": {
+        "@types/sortablejs": "^1.15.9",
+        "electron": "^22.0.0",
+        "electron-builder": "^26.9.0",
+        "playwright": "^1.61.1",
+        "typescript": "^6.0.3"
+    },
+    "dependencies": {
+        "@fontsource/fira-code": "^5.2.7",
+        "@fontsource/jetbrains-mono": "^5.2.8",
+        "@fontsource/source-code-pro": "^5.2.7",
+        "@jaames/iro": "^5.5.2",
+        "electron-updater": "^6.8.9",
+        "monaco-editor": "^0.55.1",
+        "preact": "^10.29.7",
+        "sortablejs": "^1.15.7",
+        "webr": "^0.6.0"
+    },
+    "build": {
+        "directories": {
+            "output": "build/output"
+        },
+        "files": [
+            "dist/**/*",
+            "package.json",
+            "product/**/*"
+        ],
+        "asar": true,
+        "asarUnpack": [
+            "dist/src/runtime/providers/r/r-sources/**/*"
+        ],
+        "extraResources": [
+            "LICENSE"
+        ],
+        "mac": {
+            "category": "public.app-category.developer-tools",
+            "extendInfo": {
+                "NSHumanReadableCopyright": "© 2025-2026 Adrian Dusa — Academic Non-Commercial License (see LICENSE file for details)."
+            },
+            "target": [
+                {
+                    "target": "dmg",
+                    "arch": [
+                        "arm64"
+                    ]
+                }
+            ]
+        },
+        "win": {
+            "legalTrademarks": "Academic Non-Commercial License (see LICENSE file for details).",
+            "target": [
+                "nsis",
+                "portable"
+            ]
+        },
+        "linux": {
+            "target": "AppImage",
+            "category": "Development;Science"
+        }
+    }
+}

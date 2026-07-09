@@ -1,0 +1,180 @@
+name: Package product
+description: Check, package, and optionally publish one DialogForge product build.
+
+inputs:
+  product_repository:
+    required: true
+  product_ref:
+    required: false
+    default: ""
+  product_token:
+    required: true
+  platform:
+    required: true
+  release_tag:
+    required: false
+    default: ""
+  release_repository:
+    required: false
+    default: ""
+  release_token:
+    required: true
+  overwrite_release_assets:
+    required: false
+    default: "true"
+  azure_application_id:
+    required: false
+    default: ""
+  azure_tenant_id:
+    required: false
+    default: ""
+  azure_subscription_id:
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Check out product repository
+      if: ${{ inputs.product_ref == '' }}
+      uses: actions/checkout@v5
+      with:
+        repository: ${{ inputs.product_repository }}
+        path: external-product
+        token: ${{ inputs.product_token }}
+
+    - name: Check out product repository at ref
+      if: ${{ inputs.product_ref != '' }}
+      uses: actions/checkout@v5
+      with:
+        repository: ${{ inputs.product_repository }}
+        ref: ${{ inputs.product_ref }}
+        path: external-product
+        token: ${{ inputs.product_token }}
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v5
+      with:
+        node-version: 20
+        cache: npm
+
+    - name: Install DialogForge dependencies
+      shell: bash
+      run: npm ci
+
+    - name: Generate DialogForge core SDK
+      shell: bash
+      run: npm run sdk:core
+
+    - name: Stage core SDK for product check
+      shell: bash
+      run: |
+        mkdir -p external-product/node_modules/@dialogforge
+        cp -R dist/sdk/core external-product/node_modules/@dialogforge/core
+
+    - name: Read product metadata
+      shell: bash
+      run: |
+        node -e "
+        const fs = require('fs');
+        const path = require('path');
+        const packagePath = path.join('external-product', 'package.json');
+        const packageManifest = JSON.parse(fs.readFileSync(packagePath, 'utf8'));
+        const manifest = packageManifest.product || {};
+        const id = String(manifest.id || '').trim();
+        const name = String(manifest.name || id).trim();
+        if (!id) {
+            throw new Error('Missing product.id in ' + packagePath);
+        }
+        console.log('Building product ' + id + ' (' + name + ').');
+        "
+
+    - name: Check product
+      shell: bash
+      working-directory: external-product
+      run: npm run check
+
+    - name: Build product package
+      shell: bash
+      env:
+        DIALOGFORGE_RELEASE_REPOSITORY: ${{ inputs.release_repository != '' && inputs.release_repository || github.repository }}
+        DIALOGFORGE_RELEASE_TAG: ${{ inputs.release_tag }}
+      run: npm run build -- --product-path ./external-product --platform ${{ inputs.platform }} --output-dir ./external-product/build/output
+
+    - name: Azure login
+      if: ${{ inputs.platform == 'windows' }}
+      uses: azure/login@v1
+      with:
+        client-id: ${{ inputs.azure_application_id }}
+        tenant-id: ${{ inputs.azure_tenant_id }}
+        subscription-id: ${{ inputs.azure_subscription_id }}
+
+    - name: Sign Windows artifacts
+      if: ${{ inputs.platform == 'windows' }}
+      uses: azure/artifact-signing-action@v1
+      with:
+        endpoint: https://plc.codesigning.azure.net/
+        signing-account-name: dusadrian
+        certificate-profile-name: electron-profile
+        files-folder: ${{ github.workspace }}\external-product\build\output
+        files-folder-filter: exe
+        file-digest: SHA256
+        timestamp-rfc3161: http://timestamp.acs.microsoft.com
+        timestamp-digest: SHA256
+
+    - name: Upload files to GitHub release
+      if: ${{ inputs.release_tag != '' }}
+      shell: bash
+      env:
+        RELEASE_TAG: ${{ inputs.release_tag }}
+        TARGET_REPO: ${{ inputs.release_repository != '' && inputs.release_repository || github.repository }}
+        OVERWRITE_RELEASE_ASSETS: ${{ inputs.overwrite_release_assets }}
+        GH_TOKEN: ${{ inputs.release_token }}
+        BUILD_PLATFORM: ${{ inputs.platform }}
+      run: |
+        set -euo pipefail
+        shopt -s nullglob
+        files=()
+
+        case "$BUILD_PLATFORM" in
+          linux)
+            files=(
+              external-product/build/output/*.AppImage
+              external-product/build/output/*.AppImage.blockmap
+              external-product/build/output/latest-linux.yml
+            )
+            ;;
+          windows)
+            files=(
+              external-product/build/output/*.exe
+              external-product/build/output/*.exe.blockmap
+              external-product/build/output/latest.yml
+            )
+            ;;
+          macos)
+            files=(
+              external-product/build/output/*.dmg
+              external-product/build/output/*.dmg.blockmap
+              external-product/build/output/*.zip
+              external-product/build/output/*.zip.blockmap
+              external-product/build/output/latest-mac.yml
+            )
+            ;;
+          *)
+            echo "Unsupported build platform: $BUILD_PLATFORM"
+            exit 1
+            ;;
+        esac
+
+        if [ "${#files[@]}" -eq 0 ]; then
+          echo "No release files found for $BUILD_PLATFORM."
+          exit 1
+        fi
+
+        cmd=(gh release upload "$RELEASE_TAG" --repo "$TARGET_REPO")
+        if [ "$OVERWRITE_RELEASE_ASSETS" = "true" ]; then
+          cmd+=(--clobber)
+        fi
+        cmd+=("${files[@]}")
+
+        "${cmd[@]}"

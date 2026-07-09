@@ -1,0 +1,18 @@
+{
+    "Settings": "Einstellungen",
+    "Language": "Sprache",
+    "Runtime provider": "Laufzeitanbieter",
+    "Console font": "Konsolenschriftart",
+    "Console cursor": "Konsolencursor",
+    "Console cursor blink": "Blinken des Konsolencursors",
+    "Console selection color": "Auswahlfarbe der Konsole",
+    "Start runtime quietly": "Laufzeit ohne Startmeldungen starten",
+    "Show full console error context": "Vollständigen Konsolenfehlerkontext anzeigen",
+    "Input mode": "Eingabemodus",
+    "Enable authoring features": "Autorenfunktionen aktivieren",
+    "Notify me when updates are available": "Benachrichtigen, wenn Updates verfügbar sind",
+    "Pick color": "Farbe auswählen",
+    "Reset": "Zurücksetzen",
+    "Save": "Speichern",
+    "Cancel": "Abbrechen"
+}

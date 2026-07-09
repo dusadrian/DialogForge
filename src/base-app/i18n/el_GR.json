@@ -1,0 +1,18 @@
+{
+    "Settings": "Ρυθμίσεις",
+    "Language": "Γλώσσα",
+    "Runtime provider": "Πάροχος περιβάλλοντος εκτέλεσης",
+    "Console font": "Γραμματοσειρά κονσόλας",
+    "Console cursor": "Δρομέας κονσόλας",
+    "Console cursor blink": "Αναβόσβημα δρομέα κονσόλας",
+    "Console selection color": "Χρώμα επιλογής κονσόλας",
+    "Start runtime quietly": "Αθόρυβη εκκίνηση περιβάλλοντος εκτέλεσης",
+    "Show full console error context": "Εμφάνιση πλήρους περιβάλλοντος σφάλματος κονσόλας",
+    "Input mode": "Λειτουργία εισαγωγής",
+    "Enable authoring features": "Ενεργοποίηση δυνατοτήτων δημιουργίας",
+    "Notify me when updates are available": "Ειδοποίηση όταν υπάρχουν διαθέσιμες ενημερώσεις",
+    "Pick color": "Επιλογή χρώματος",
+    "Reset": "Επαναφορά",
+    "Save": "Αποθήκευση",
+    "Cancel": "Ακύρωση"
+}

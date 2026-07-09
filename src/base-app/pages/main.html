@@ -1,0 +1,506 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta
+        http-equiv="Content-Security-Policy"
+        content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' blob:; worker-src 'self' blob: data:; font-src 'self' data:; img-src 'self' data:;"
+    >
+    <title>Loading...</title>
+    <link rel="stylesheet" href="./shared/appCodicon.css">
+    <link rel="stylesheet" href="./shared/console.css">
+    <link rel="stylesheet" href="./shared/main.css">
+    <link rel="stylesheet" href="./shared/dmSelect.css">
+</head>
+<body class="workspace-pane-hidden command-pane-hidden">
+    <div class="app">
+        <div class="contextMenu" id="datasetEditorContextMenu" hidden></div>
+        <header class="topbar">
+            <div class="title" id="appTitle">Loading...</div>
+            <div class="meta">
+                <span class="pill" id="productPill">product</span>
+                <span class="pill" id="runtimePill">runtime</span>
+            </div>
+        </header>
+        <main class="main">
+            <aside class="sidebar">
+                <section class="sidebarSection">
+                    <h2>Base Menu</h2>
+                    <ul id="menuList"></ul>
+                </section>
+                <section class="workspacePane sidebarSection" id="workspacePanelDiagnostics">
+                    <h2>Workspace</h2>
+                    <div id="activeDatasetStatus"></div>
+                    <div id="workspaceStatus"></div>
+                    <div class="buttonRow workspaceActions">
+                        <button class="commandButton" id="workspaceRefresh" type="button">Refresh</button>
+                        <button class="commandButton" id="workspaceClear" type="button">Clear</button>
+                    </div>
+                    <div class="workspaceInspectStatus" id="workspaceInspectStatus"></div>
+                    <ul class="workspaceList" id="workspaceList"></ul>
+                </section>
+            </aside>
+            <section class="content">
+                <div class="stack secondary">
+                    <div class="panel" id="capabilitiesPanel">
+                        <h2>Runtime Capabilities</h2>
+                        <ul id="capabilityList"></ul>
+                    </div>
+                    <div class="panel" id="productInfoPanel">
+                        <h2>Product Info</h2>
+                        <div id="productInfo"></div>
+                    </div>
+                    <div class="panel" id="productSettingsPanel">
+                        <h2>Settings</h2>
+                        <div id="productSettings"></div>
+                        <div id="applicationSettings"></div>
+                    </div>
+                    <div class="panel">
+                        <h2>Runtime Session</h2>
+                        <div id="runtimeSession"></div>
+                        <div class="buttonRow">
+                            <button class="commandButton" id="runtimeStart" type="button">Start</button>
+                            <button class="commandButton" id="runtimeStop" type="button">Stop</button>
+                        </div>
+                    </div>
+                    <div class="panel">
+                        <h2>Runtime Events</h2>
+                        <div id="runtimeEventStatus"></div>
+                        <div class="buttonRow">
+                            <button class="commandButton" id="runtimeEventsRefresh" type="button">Refresh events</button>
+                        </div>
+                        <ul class="workspaceList" id="runtimeEventList"></ul>
+                    </div>
+                    <div class="panel">
+                        <h2>Runtime Prompts</h2>
+                        <div id="promptStatus"></div>
+                        <div class="cellWriteGrid">
+                            <label for="promptText">prompt</label>
+                            <input id="promptText" type="text" value="Enter value">
+                            <label for="promptAnswer">answer</label>
+                            <input id="promptAnswer" type="text" value="42">
+                        </div>
+                        <div class="buttonRow">
+                            <button class="commandButton" id="promptQueue" type="button">Queue</button>
+                            <button class="commandButton" id="promptAnswerButton" type="button">Answer first</button>
+                            <button class="commandButton" id="promptRefresh" type="button">Refresh</button>
+                        </div>
+                        <ul class="workspaceList" id="promptList"></ul>
+                    </div>
+                    <div class="panel">
+                        <h2>Feature Status</h2>
+                        <ul id="featureList"></ul>
+                    </div>
+                    <div class="panel">
+                        <h2>Product Capabilities</h2>
+                        <ul id="productCapabilityList"></ul>
+                    </div>
+                    <div class="panel">
+                        <h2>Startup Tasks</h2>
+                        <div id="startupTaskStatus"></div>
+                        <ul id="startupTaskList"></ul>
+                    </div>
+                    <div class="panel">
+                        <h2>Selected Command</h2>
+                        <div id="selectedCommand"></div>
+                    </div>
+                    <div class="panel">
+                        <h2>Command Log</h2>
+                        <ul id="commandLog"></ul>
+                    </div>
+                </div>
+                <div class="primary">
+                    <section class="panel consolePanel" id="visibleCommandPanel">
+                        <div id="commandPane">
+                            <div id="commandActions" aria-label="Command preview actions">
+                                <button type="button" id="commandPreviewToConsole" class="dm-command-action" data-tooltip="Copy to Console" aria-label="Copy to Console">
+                                    <span class="copy-icon" aria-hidden="true"></span>
+                                </button>
+                                <button type="button" id="commandPreviewToScriptEditor" class="dm-command-action" data-tooltip="Send to Script Editor" aria-label="Send to Script Editor">
+                                    <span class="codicon codicon-insert" aria-hidden="true"></span>
+                                </button>
+                            </div>
+                            <div id="command"></div>
+                        </div>
+                        <div class="splitter" id="mainSplitter" role="separator" aria-orientation="horizontal" tabindex="0"></div>
+                        <div id="consoleArea">
+                            <div class="consoleHeader">
+                                <h2>Console</h2>
+                                <div class="consoleStatus" id="consoleStatus">Runtime status pending.</div>
+                            </div>
+                            <div class="consoleToolbar dm-console-toolbar" id="consoleToolbar" aria-label="Console toolbar">
+                                <div class="consoleToolbarLeft dm-console-toolbar-left">
+                                <button class="dm-console-cwd" id="consoleCwd" type="button" data-tooltip="Set working directory" aria-label="Set working directory">
+                                    <span class="codicon codicon-folder" aria-hidden="true"></span>
+                                    <span class="dm-console-cwd-text" id="consoleCwdText"></span>
+                                </button>
+                                <span class="dm-console-active-dataset" id="consoleActiveDataset" hidden>
+                                    <span class="dm-console-active-dataset-label" id="consoleActiveDatasetLabel">Active:</span>
+                                    <span class="dm-console-active-dataset-name" id="consoleActiveDatasetName"></span>
+                                </span>
+                                <span id="consoleProductStateChips"></span>
+                                <label class="consoleChip" for="consoleUiCommandVisibility">
+                                    <span class="consoleChipLabel">UI commands</span>
+                                    <select id="consoleUiCommandVisibility" class="dm-standard-select">
+                                        <option value="hidden">hidden</option>
+                                        <option value="visible">visible</option>
+                                    </select>
+                                </label>
+                                </div>
+                                <div class="consoleToolbarRight dm-console-toolbar-right">
+                                <button class="toolbarButton" id="consoleToolbarStart" type="button" title="Start runtime">Start</button>
+                                <button class="dm-toolbar-btn dm-toolbar-btn-stop" id="consoleToolbarStop" type="button" data-tooltip="Interrupt" aria-label="Interrupt">
+                                    <span class="dm-stop-square" aria-hidden="true"></span>
+                                </button>
+                                <button class="dm-toolbar-btn" id="consoleToolbarRestart" type="button" data-tooltip="Restart Clean" aria-label="Restart Clean">
+                                    <span class="dm-toolbar-svg-icon dm-toolbar-svg-icon-restart" aria-hidden="true"></span>
+                                </button>
+                                <button class="dm-toolbar-btn" id="consoleToolbarRestartWorkspace" type="button" data-tooltip="Restart and Restore Workspace" aria-label="Restart and Restore Workspace">
+                                    <span class="dm-toolbar-svg-icon dm-toolbar-svg-icon-restartworkspace" aria-hidden="true"></span>
+                                </button>
+                                <button class="toolbarButton" id="consoleHistoryPrevious" type="button" title="Previous command">Prev</button>
+                                <button class="toolbarButton" id="consoleHistoryNext" type="button" title="Next command">Next</button>
+                                <button class="dm-toolbar-btn" id="consoleToolbarInfo" type="button" data-tooltip="Info" aria-label="Info">
+                                    <span class="codicon codicon-info" aria-hidden="true"></span>
+                                </button>
+                                <button class="dm-toolbar-btn" id="consoleToolbarClear" type="button" data-tooltip="Clear Console" aria-label="Clear Console">
+                                    <span class="codicon codicon-clear-all" aria-hidden="true"></span>
+                                </button>
+                                <button class="dm-toolbar-btn" id="workspacePaneToggle" type="button" data-tooltip="Show Workspace" aria-label="Show Workspace">
+                                    <span class="codicon codicon-chevron-right" aria-hidden="true"></span>
+                                </button>
+                                </div>
+                            </div>
+                            <div class="consoleTerminal" id="consoleTerminal">
+                                <ul class="transcript" id="runtimeTranscript"></ul>
+                                <div class="consoleInputRow">
+                                    <span class="consolePrompt">&gt;</span>
+                                    <div
+                                        class="commandInput"
+                                        id="visibleCommandInput"
+                                        role="textbox"
+                                        aria-multiline="true"
+                                        contenteditable="true"
+                                        spellcheck="false"
+                                    ></div>
+                                    <button class="commandButton" id="visibleCommandRun" type="button">Run</button>
+                                </div>
+                            </div>
+                            <div id="consoleCover" aria-live="polite">
+                                <div id="consoleCoverMessage"></div>
+                            </div>
+                        </div>
+                    </section>
+                    <div class="mainDiagnosticsScaffold hidden" aria-hidden="true">
+                    <section class="panel">
+                        <h2>Invisible Query</h2>
+                        <textarea class="commandInput" id="invisibleQueryInput" spellcheck="false">workspace.objects()</textarea>
+                        <div class="buttonRow">
+                            <button class="commandButton" id="invisibleQueryRun" type="button">Query</button>
+                        </div>
+                        <div id="invisibleQueryStatus"></div>
+                    </section>
+                    <br>
+                    <section class="panel">
+                        <h2>Invisible Mutation</h2>
+                        <div class="cellWriteGrid">
+                            <label for="invisibleMutationName">name</label>
+                            <input id="invisibleMutationName" type="text" value="lastSelection">
+                            <label for="invisibleMutationValue">value</label>
+                            <input id="invisibleMutationValue" type="text" value="sample_data">
+                        </div>
+                        <div class="buttonRow">
+                            <button class="commandButton" id="invisibleMutationRun" type="button">Mutate</button>
+                        </div>
+                        <div id="invisibleMutationStatus"></div>
+                    </section>
+                    <br>
+                    <section class="panel">
+                        <h2>Help Topic</h2>
+                        <div class="cellWriteGrid">
+                            <label for="helpTopic">topic</label>
+                            <input id="helpTopic" type="text" value="data.frame">
+                        </div>
+                        <div class="buttonRow">
+                            <button class="commandButton" id="helpTopicLookup" type="button">Lookup</button>
+                        </div>
+                        <div id="helpTopicStatus"></div>
+                    </section>
+                    <br>
+                    <section class="panel">
+                        <h2>Completions</h2>
+                        <div class="cellWriteGrid">
+                            <label for="completionPrefix">prefix</label>
+                            <input id="completionPrefix" type="text" value="s">
+                        </div>
+                        <div class="buttonRow">
+                            <button class="commandButton" id="completionLookup" type="button">Lookup</button>
+                        </div>
+                        <div id="completionStatus"></div>
+                    </section>
+                    <br>
+                    <section class="panel">
+                        <h2>Dependency Checks</h2>
+                        <div class="cellWriteGrid">
+                            <label for="dependencyNames">packages</label>
+                            <input id="dependencyNames" type="text" value="QCA, admisc">
+                        </div>
+                        <div class="buttonRow">
+                            <button class="commandButton" id="dependencyCheck" type="button">Check</button>
+                        </div>
+                        <div id="dependencyStatus"></div>
+                    </section>
+                    <br>
+                    <section class="panel">
+                        <h2>Import Data</h2>
+                        <div class="cellWriteGrid">
+                            <label for="importSource">source</label>
+                            <input id="importSource" type="text" value="/tmp/data.csv">
+                            <label for="importFormat">format</label>
+                            <input id="importFormat" type="text" value="csv">
+                            <label for="importTarget">target</label>
+                            <input id="importTarget" type="text" value="imported_data">
+                            <label for="importOverwrite">overwrite</label>
+                            <input id="importOverwrite" type="checkbox">
+                        </div>
+                        <div class="buttonRow">
+                            <button class="commandButton" id="selectImportFile" type="button">Browse</button>
+                            <button class="commandButton" id="planImportFile" type="button">Plan</button>
+                            <button class="commandButton" id="previewImportFile" type="button">Preview</button>
+                            <button class="commandButton" id="importData" type="button">Import</button>
+                        </div>
+                        <div id="importFileStatus"></div>
+                        <div id="importPlanStatus"></div>
+                        <div id="importPreviewStatus"></div>
+                        <div id="importStatus"></div>
+                    </section>
+                    <br>
+                    <section class="panel" id="datasetPreviewPanel">
+                        <h2>Dataset Preview</h2>
+                        <div id="datasetEditorSelection"></div>
+                        <div id="datasetEditorContextActions"></div>
+                        <div id="tabularPreviewStatus"></div>
+                        <div class="datasetLayoutGrid">
+                            <label for="dataStartRow">row start</label>
+                            <input id="dataStartRow" type="number" min="0" value="0">
+                            <label for="dataVisibleRows">rows</label>
+                            <input id="dataVisibleRows" type="number" min="1" value="50">
+                            <label for="dataStartColumn">column start</label>
+                            <input id="dataStartColumn" type="number" min="0" value="0">
+                            <label for="dataVisibleColumns">columns</label>
+                            <input id="dataVisibleColumns" type="number" min="1" value="20">
+                        </div>
+                        <div class="buttonRow">
+                            <button class="commandButton" id="datasetViewportBack" type="button">Previous rows</button>
+                            <button class="commandButton" id="datasetViewportForward" type="button">Next rows</button>
+                            <button class="commandButton" id="datasetViewportLeft" type="button">Previous columns</button>
+                            <button class="commandButton" id="datasetViewportRight" type="button">Next columns</button>
+                            <button class="commandButton" id="datasetViewportApply" type="button">Apply viewport</button>
+                        </div>
+                        <div class="cellWriteGrid">
+                            <label for="selectedColumnWidth">column width</label>
+                            <input id="selectedColumnWidth" type="number" min="24" value="96">
+                        </div>
+                        <div class="buttonRow">
+                            <button class="commandButton" id="columnNarrower" type="button">Narrower</button>
+                            <button class="commandButton" id="columnWider" type="button">Wider</button>
+                            <button class="commandButton" id="columnWidthApply" type="button">Apply width</button>
+                            <button class="commandButton" id="columnMoveLeft" type="button">Move left</button>
+                            <button class="commandButton" id="columnMoveRight" type="button">Move right</button>
+                        </div>
+                        <div id="datasetLayoutStatus"></div>
+                        <div id="tabularPreviewTable"></div>
+                        <div class="cellWriteGrid">
+                            <label for="cellRow">row</label>
+                            <input id="cellRow" type="number" min="0" value="0">
+                            <label for="cellColumn">column</label>
+                            <input id="cellColumn" type="text" value="condition">
+                            <label for="cellValue">value</label>
+                            <input id="cellValue" type="text" value="1">
+                        </div>
+                        <div class="buttonRow">
+                            <button class="commandButton" id="datasetBeginEdit" type="button">Edit selection</button>
+                            <button class="commandButton" id="datasetCommitEdit" type="button">Commit edit</button>
+                            <button class="commandButton" id="datasetCancelEdit" type="button">Cancel edit</button>
+                        </div>
+                        <div class="buttonRow">
+                            <button class="commandButton" id="cellWrite" type="button">Write cell</button>
+                        </div>
+                        <div id="cellWriteStatus"></div>
+                        <div class="cellWriteGrid">
+                            <label for="columnRenameFrom">from</label>
+                            <input id="columnRenameFrom" type="text" value="condition">
+                            <label for="columnRenameTo">to</label>
+                            <input id="columnRenameTo" type="text" value="condition2">
+                        </div>
+                        <div class="buttonRow">
+                            <button class="commandButton" id="columnRename" type="button">Rename column</button>
+                        </div>
+                        <div id="columnRenameStatus"></div>
+                        <div class="cellWriteGrid">
+                            <label for="columnInsertName">new</label>
+                            <input id="columnInsertName" type="text" value="inserted">
+                            <label for="columnInsertPosition">position</label>
+                            <select id="columnInsertPosition" class="dm-standard-select">
+                                <option value="after" selected>after</option>
+                                <option value="before">before</option>
+                            </select>
+                        </div>
+                        <div class="buttonRow">
+                            <button class="commandButton" id="columnInsert" type="button">Insert column</button>
+                            <button class="commandButton" id="columnRemove" type="button">Remove column</button>
+                        </div>
+                        <div id="columnStructureStatus"></div>
+                        <div class="cellWriteGrid">
+                            <label for="rowNameIndex">row</label>
+                            <input id="rowNameIndex" type="number" min="0" value="0">
+                            <label for="rowNameValue">name</label>
+                            <input id="rowNameValue" type="text" value="row1">
+                        </div>
+                        <div class="buttonRow">
+                            <button class="commandButton" id="rowNameUpdate" type="button">Update row name</button>
+                        </div>
+                        <div id="rowNameStatus"></div>
+                        <div class="cellWriteGrid">
+                            <label for="rowStructurePosition">position</label>
+                            <select id="rowStructurePosition" class="dm-standard-select">
+                                <option value="after" selected>after</option>
+                                <option value="before">before</option>
+                            </select>
+                        </div>
+                        <div class="buttonRow">
+                            <button class="commandButton" id="rowInsert" type="button">Insert row</button>
+                            <button class="commandButton" id="rowRemove" type="button">Remove row</button>
+                        </div>
+                        <div id="rowStructureStatus"></div>
+                        <div class="buttonRow">
+                            <button class="commandButton" id="copySelection" type="button">Build copy payload</button>
+                            <button class="commandButton" id="copyToClipboard" type="button">Copy</button>
+                        </div>
+                        <div id="copyPayloadStatus"></div>
+                        <div id="clipboardStatus"></div>
+                        <br>
+                        <h2>Paste Payload</h2>
+                        <textarea class="commandInput" id="pasteInput" spellcheck="false">A	1
+B	0</textarea>
+                        <div class="buttonRow">
+                            <button class="commandButton" id="readClipboard" type="button">Read clipboard</button>
+                            <button class="commandButton" id="parsePaste" type="button">Parse paste</button>
+                            <button class="commandButton" id="applyPaste" type="button">Apply paste</button>
+                        </div>
+                        <div id="clipboardReadStatus"></div>
+                        <div id="pastePayloadStatus"></div>
+                        <div id="pasteApplyStatus"></div>
+                        <div id="pasteApplyDetails"></div>
+                    </section>
+                    <br>
+                    <section class="panel" id="variableMetadataPanel">
+                        <h2>Variables</h2>
+                        <div id="variableMetadataStatus"></div>
+                        <div class="buttonRow">
+                            <button class="commandButton" id="variableMetadataRefresh" type="button">Refresh variables</button>
+                        </div>
+                        <div class="datasetLayoutGrid">
+                            <label for="variableStartRow">row start</label>
+                            <input id="variableStartRow" type="number" min="0" value="0">
+                            <label for="variableVisibleRows">rows</label>
+                            <input id="variableVisibleRows" type="number" min="1" value="50">
+                        </div>
+                        <div class="buttonRow">
+                            <button class="commandButton" id="variableViewportBack" type="button">Previous variables</button>
+                            <button class="commandButton" id="variableViewportForward" type="button">Next variables</button>
+                            <button class="commandButton" id="variableViewportApply" type="button">Apply variable viewport</button>
+                        </div>
+                        <div id="variableMetadataTable"></div>
+                        <div class="cellWriteGrid">
+                            <label for="variableName">variable</label>
+                            <input id="variableName" type="text" value="condition">
+                            <label for="variableMetadataKey">metadata</label>
+                            <select id="variableMetadataKey" class="dm-standard-select">
+                                <option value="label" selected>label</option>
+                                <option value="type">type</option>
+                                <option value="role">role</option>
+                                <option value="width">width</option>
+                                <option value="decimals">decimals</option>
+                                <option value="values">values</option>
+                                <option value="align">align</option>
+                                <option value="measure">measure</option>
+                            </select>
+                            <label for="variableMetadataValue">value</label>
+                            <input id="variableMetadataValue" type="text" value="Edited condition">
+                        </div>
+                        <div class="buttonRow">
+                            <button class="commandButton" id="variableMetadataWrite" type="button">Update metadata</button>
+                        </div>
+                        <div id="variableMetadataWriteStatus"></div>
+                        <br>
+                        <h2>Value Labels</h2>
+                        <div id="valueLabelsStatus"></div>
+                        <div class="buttonRow">
+                            <button class="commandButton" id="valueLabelsRefresh" type="button">Refresh labels</button>
+                        </div>
+                        <div id="valueLabelsTable"></div>
+                        <div class="cellWriteGrid">
+                            <label for="valueLabelVariable">variable</label>
+                            <input id="valueLabelVariable" type="text" value="condition">
+                            <label for="valueLabelValue">value</label>
+                            <input id="valueLabelValue" type="text" value="0">
+                            <label for="valueLabelLabel">label</label>
+                            <input id="valueLabelLabel" type="text" value="No">
+                        </div>
+                        <div class="buttonRow">
+                            <button class="commandButton" id="valueLabelsWrite" type="button">Update label value</button>
+                        </div>
+                        <div id="valueLabelsWriteStatus"></div>
+                        <br>
+                        <h2>Declared Missing</h2>
+                        <div id="declaredMissingStatus"></div>
+                        <div class="buttonRow">
+                            <button class="commandButton" id="declaredMissingRefresh" type="button">Refresh missing</button>
+                        </div>
+                        <div id="declaredMissingTable"></div>
+                        <div class="cellWriteGrid">
+                            <label for="declaredMissingVariable">variable</label>
+                            <input id="declaredMissingVariable" type="text" value="condition">
+                            <label for="declaredMissingValue">value</label>
+                            <input id="declaredMissingValue" type="text" value="-7">
+                            <label for="declaredMissingLabel">label</label>
+                            <input id="declaredMissingLabel" type="text" value="Refused">
+                        </div>
+                        <div class="buttonRow">
+                            <button class="commandButton" id="declaredMissingWrite" type="button">Update missing value</button>
+                        </div>
+                        <div id="declaredMissingWriteStatus"></div>
+                    </section>
+                    <br>
+                    <h2>Composition</h2>
+                    <pre id="compositionOutput">Loading...</pre>
+                    </div>
+                </div>
+            </section>
+            <aside id="workspacePane" aria-label="Workspace"></aside>
+        </main>
+        <div id="updateDownloadOverlay" hidden aria-live="polite">
+            <div id="updateDownloadProgress">
+                <div id="updateDownloadLabel">Downloading update...</div>
+                <div id="updateDownloadTrack" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                    <div id="updateDownloadBar"></div>
+                </div>
+                <div id="updateDownloadPercent">0%</div>
+            </div>
+        </div>
+    </div>
+    <script>
+        (function() {
+            if (window.dialogForge?.loadMainPage) {
+                window.dialogForge.loadMainPage();
+                return;
+            }
+
+            if (typeof require === "function") {
+                console.error("MAIN-RENDERER-ERR loader failed: Electron page loader is unavailable.");
+            }
+        })();
+    </script>
+</body>
+</html>

@@ -1,0 +1,18 @@
+{
+    "Settings": "Paramètres",
+    "Language": "Langue",
+    "Runtime provider": "Fournisseur d’exécution",
+    "Console font": "Police de la console",
+    "Console cursor": "Curseur de la console",
+    "Console cursor blink": "Clignotement du curseur de la console",
+    "Console selection color": "Couleur de sélection de la console",
+    "Start runtime quietly": "Démarrer l’environnement d’exécution silencieusement",
+    "Show full console error context": "Afficher le contexte complet des erreurs de la console",
+    "Input mode": "Mode de saisie",
+    "Enable authoring features": "Activer les fonctions d’édition",
+    "Notify me when updates are available": "M’avertir lorsque des mises à jour sont disponibles",
+    "Pick color": "Choisir une couleur",
+    "Reset": "Réinitialiser",
+    "Save": "Enregistrer",
+    "Cancel": "Annuler"
+}
