@@ -316,7 +316,6 @@ export const createBrowserFrameSurfaceController = function(
         };
 
         closeButton.type = "button";
-        closeButton.textContent = "x";
         closeButton.addEventListener("click", () => {
             close(id);
         });
