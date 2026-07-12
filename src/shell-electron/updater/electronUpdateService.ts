@@ -12,6 +12,9 @@ import type {
     ProgressInfo,
     UpdateInfo
 } from "electron-updater";
+import * as fs from "fs";
+import * as path from "path";
+
 
 
 export interface ElectronUpdateServiceOptions {
@@ -85,6 +88,24 @@ export const createElectronUpdateService = function(
 
     autoUpdater.autoDownload = false;
     autoUpdater.autoInstallOnAppQuit = false;
+
+    if (process.platform === "linux") {
+        const clearUpdaterCacheOnStartup = async function() {
+            try {
+                const cacheDir = (autoUpdater as any).cacheDir;
+                if (cacheDir) {
+                    const pendingDir = path.join(cacheDir, "pending");
+                    if (fs.existsSync(pendingDir)) {
+                        await fs.promises.rm(pendingDir, { recursive: true, force: true });
+                        console.log(`Cleared updater pending cache directory on startup: ${pendingDir}`);
+                    }
+                }
+            } catch (error) {
+                options.reportError(new Error(`Failed to clear updater cache on startup: ${String(error)}`));
+            }
+        };
+        void clearUpdaterCacheOnStartup();
+    }
 
     const productName = options.productName || options.app.name || "Application";
 
