@@ -40,7 +40,7 @@ interface PendingRuntimeRequest {
     parentId: string;
     collectEvents: boolean;
     resolve: (response: RRuntimeControlResponse) => void;
-    timeout: NodeJS.Timeout;
+    timeout: NodeJS.Timeout | null;
     events: unknown[];
 }
 
@@ -315,7 +315,9 @@ export const createRuntimeControlClient = function(meta: RRuntimeControlMeta, op
 
     const failPending = function(error: string): void {
         Array.from(pending.entries()).forEach(([id, item]) => {
-            clearTimeout(item.timeout);
+            if (item.timeout) {
+                clearTimeout(item.timeout);
+            }
             pending.delete(id);
             item.resolve({
                 id,
@@ -343,7 +345,9 @@ export const createRuntimeControlClient = function(meta: RRuntimeControlMeta, op
                         const item = id ? pending.get(id) : null;
 
                         if (item) {
-                            clearTimeout(item.timeout);
+                            if (item.timeout) {
+                                clearTimeout(item.timeout);
+                            }
                             pending.delete(id);
                             item.resolve({
                                 id,
@@ -411,7 +415,12 @@ export const createRuntimeControlClient = function(meta: RRuntimeControlMeta, op
 
     return {
         execute: async function(request: RRuntimeControlRequest): Promise<RRuntimeControlResponse> {
-            const timeoutMs = Math.max(250, Number(request.params?.timeoutMs) || 2500);
+            const requestedTimeoutMs = Number(request.params?.timeoutMs);
+            const timeoutMs = Number.isFinite(requestedTimeoutMs) && requestedTimeoutMs > 0
+                ? Math.max(250, requestedTimeoutMs)
+                : request.method === "execute_input"
+                    ? null
+                    : 2500;
 
             try {
                 await ensureConnected();
@@ -428,15 +437,17 @@ export const createRuntimeControlClient = function(meta: RRuntimeControlMeta, op
                 const activeSocket = socket;
 
                 return await new Promise<RRuntimeControlResponse>((resolve) => {
-                    const timeout = setTimeout(() => {
-                        pending.delete(request.id);
-                        resolve({
-                            id: request.id,
-                            method: request.method,
-                            ok: false,
-                            error: "runtime-session-timeout"
-                        });
-                    }, timeoutMs + 120);
+                    const timeout = timeoutMs === null
+                        ? null
+                        : setTimeout(() => {
+                            pending.delete(request.id);
+                            resolve({
+                                id: request.id,
+                                method: request.method,
+                                ok: false,
+                                error: "runtime-session-timeout"
+                            });
+                        }, timeoutMs + 120);
 
                     pending.set(request.id, {
                         method: request.method,
@@ -450,7 +461,9 @@ export const createRuntimeControlClient = function(meta: RRuntimeControlMeta, op
                     try {
                         activeSocket.write(`${encodeRuntimeRequest(request, String(meta.token || ""))}\n`);
                     } catch {
-                        clearTimeout(timeout);
+                        if (timeout) {
+                            clearTimeout(timeout);
+                        }
                         pending.delete(request.id);
                         resolve({
                             id: request.id,

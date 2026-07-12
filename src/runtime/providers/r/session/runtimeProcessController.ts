@@ -178,8 +178,7 @@ export const createRRuntimeProcessController = function(
                 code: request.text,
                 parentId,
                 mode: "interactive",
-                outputWidth: request.outputWidth,
-                timeoutMs: 10000
+                outputWidth: request.outputWidth
             }
         }).finally(() => {
             activeVisibleCommand = null;
@@ -195,9 +194,6 @@ export const createRRuntimeProcessController = function(
 
         return [
             createTranscriptEvent("submitted", request),
-            createTranscriptEvent("output", request, {
-                message: String(result.error || "R command execution failed.")
-            }),
             createTranscriptEvent("failed", request, {
                 message: String(result.error || "R command execution failed.")
             })
