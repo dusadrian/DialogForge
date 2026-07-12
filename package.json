@@ -1,7 +1,7 @@
 {
     "name": "dialogforge",
     "productName": "DialogForge",
-    "version": "0.0.0",
+    "version": "1.0.0",
     "main": "dist/scripts/electron-main.js",
     "private": true,
     "description": "A language-neutral workbench for dialog-driven desktop applications.",
