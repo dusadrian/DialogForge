@@ -1,6 +1,13 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "child_process";
 import * as os from "os";
-import * as path from "path";
+import {
+    findLatestInstalledRBinary
+} from "../session/rBinaryDiscovery";
+
+
+export interface RHelpServerOptions {
+    findRScriptBinary?(): Promise<string | null>;
+}
 
 
 const normalizedEnvironment = function(): Record<string, string> {
@@ -16,33 +23,28 @@ const normalizedEnvironment = function(): Record<string, string> {
 };
 
 
-const rScriptName = function(): string {
-    return process.platform === "win32" ? "Rscript.exe" : "Rscript";
-};
-
-
-const resolveRCommand = function(): string {
-    const configured = String(
-        process.env.DIALOGFORGE_R_BINARY ||
-        process.env.R_BINARY ||
-        ""
-    ).trim();
-
-    if (configured) {
-        const basename = path.basename(configured).toLowerCase();
-
-        if (basename === "rscript" || basename === "rscript.exe") {
-            return configured;
+export const resolveRHelpServerCommand = async function(
+    options: RHelpServerOptions = {}
+): Promise<string> {
+    const command = await (
+        options.findRScriptBinary
+        || function(): Promise<string | null> {
+            return findLatestInstalledRBinary("Rscript");
         }
+    )();
 
-        return path.join(path.dirname(configured), rScriptName());
+    if (!command) {
+        throw new Error(
+            "Unable to find Rscript in configured paths, R_HOME, PATH, "
+            + "or standard installation directories."
+        );
     }
 
-    return rScriptName();
+    return command;
 };
 
 
-export const createRHelpServer = function() {
+export const createRHelpServer = function(options: RHelpServerOptions = {}) {
     let processHandle: ChildProcessWithoutNullStreams | null = null;
     let port = 0;
     let startPromise: Promise<number> | null = null;
@@ -83,7 +85,8 @@ export const createRHelpServer = function() {
                 "try(flush(stdout()), silent=TRUE)",
                 "repeat Sys.sleep(3600)"
             ].join("; ");
-            const child = spawn(resolveRCommand(), [
+            const command = await resolveRHelpServerCommand(options);
+            const child = spawn(command, [
                 "-e",
                 script
             ], {

@@ -199,9 +199,15 @@
         const isLocalHelpUrl = (value) => {
           try {
             const parsed = new URL(String(value || ''));
+            const isHttp = parsed.protocol === 'http:' || parsed.protocol === 'https:';
+            const isSameOrigin = parsed.origin === window.location.origin;
             return (
-              (parsed.protocol === 'http:' || parsed.protocol === 'https:') &&
-              (parsed.hostname === '127.0.0.1' || parsed.hostname === 'localhost')
+              isHttp &&
+              (
+                isSameOrigin ||
+                parsed.hostname === '127.0.0.1' ||
+                parsed.hostname === 'localhost'
+              )
             );
           } catch {
             return false;

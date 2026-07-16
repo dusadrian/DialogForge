@@ -5,6 +5,12 @@ export interface ElectronSmokeRunnerOptions {
     product: string;
     runtime: string;
     target: string;
+    getHelpWindow?(): BrowserWindow | null;
+    openHelpTopic?(input: {
+        topic: string;
+        source: string;
+    }): Promise<unknown>;
+    startRuntimeSession?(): Promise<unknown>;
 }
 
 interface ElectronSmokeContext {
@@ -212,6 +218,81 @@ const runConsoleHistorySmoke = async function(
 };
 
 
+const runHelpSmoke = async function(
+    win: BrowserWindow,
+    messages: string[],
+    context: ElectronSmokeContext,
+    getHelpWindow: () => BrowserWindow | null,
+    openHelpTopic: (input: {
+        topic: string;
+        source: string;
+    }) => Promise<unknown>,
+    startRuntimeSession: () => Promise<unknown>
+): Promise<void> {
+    await startRuntimeSession();
+    await openHelpTopic({
+        topic: "print",
+        source: "electron-smoke.console-help"
+    });
+
+    const started = Date.now();
+    let result: unknown = null;
+    let diagnostic: unknown = {
+        helpWindow: "not-created"
+    };
+
+    while (Date.now() - started < 20000) {
+        const helpWindow = getHelpWindow();
+
+        if (helpWindow && !helpWindow.isDestroyed() && !helpWindow.webContents.isLoading()) {
+            diagnostic = await helpWindow.webContents.executeJavaScript(
+                `(() => {
+                    const frame = document.getElementById("helpFrame");
+                    const text = frame?.contentDocument?.body?.innerText || "";
+                    return {
+                        ok: text.includes("Print Values"),
+                        title: document.title,
+                        url: window.location.href,
+                        outerText: document.body?.innerText?.slice(0, 240) || "",
+                        frameText: text.slice(0, 240),
+                        frameSrc: frame?.src || ""
+                    };
+                })()`,
+                true
+            );
+
+            result = diagnostic && (diagnostic as { ok?: boolean }).ok
+                ? diagnostic
+                : null;
+
+            if (result) {
+                break;
+            }
+        }
+
+        await new Promise((resolve) => {
+            setTimeout(resolve, 100);
+        });
+    }
+
+    if (!result) {
+        throw new Error(
+            "Electron help smoke did not render the print help page: "
+            + JSON.stringify({ diagnostic, messages }, null, 4)
+        );
+    }
+
+    console.log(JSON.stringify({
+        ok: true,
+        smoke: "electron-help",
+        product: context.product,
+        runtime: context.runtime,
+        result,
+        messages
+    }, null, 4));
+};
+
+
 export const runElectronSmoke = async function(options: ElectronSmokeRunnerOptions): Promise<void> {
     const { win, product, runtime } = options;
     const electronSmokeTarget = String(options.target || "console").trim();
@@ -254,6 +335,24 @@ export const runElectronSmoke = async function(options: ElectronSmokeRunnerOptio
             product,
             runtime
         });
+        return;
+    }
+
+    if (electronSmokeTarget === "help") {
+        if (
+            !options.getHelpWindow
+            || !options.openHelpTopic
+            || !options.startRuntimeSession
+        ) {
+            throw new Error(
+                "Electron help smoke requires runtime, topic, and window readers."
+            );
+        }
+
+        await runHelpSmoke(win, messages, {
+            product,
+            runtime
+        }, options.getHelpWindow, options.openHelpTopic, options.startRuntimeSession);
         return;
     }
 

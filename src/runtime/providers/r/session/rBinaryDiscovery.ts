@@ -120,10 +120,23 @@ const directCandidates = function(
     const platformPath = pathApi(platform);
     const names = executableNames(kind, platform);
     const fileNames = [names.primary, ...names.alternatives];
+    const siblingKind = kind === "Rscript" ? "R" : "Rscript";
+    const siblingNames = executableNames(siblingKind, platform);
+    const siblingFileNames = [
+        siblingNames.primary,
+        ...siblingNames.alternatives
+    ];
     const baseName = platformPath.basename(candidate).toLowerCase();
 
     if (fileNames.some((name) => name.toLowerCase() === baseName)) {
         return [candidate];
+    }
+
+    if (siblingFileNames.some((name) => name.toLowerCase() === baseName)) {
+        return [platformPath.join(
+            platformPath.dirname(candidate),
+            names.primary
+        )];
     }
 
     if (platform === "win32") {
@@ -442,7 +455,13 @@ export const findLatestInstalledRBinary = async function(
             env.RSCRIPT_BINARY,
             env.RSCRIPT_BIN,
             env.RSCRIPT_PATH,
-            env.R_SCRIPT
+            env.R_SCRIPT,
+            env.DIALOGFORGE_R_BINARY,
+            env.R_BINARY,
+            env.R_BIN,
+            env.R_PATH,
+            env.R_EXECUTABLE,
+            env.R
         ];
     const direct = await bestCandidate(
         directEnvironmentPaths.flatMap((candidate) => {

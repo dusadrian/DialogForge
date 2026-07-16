@@ -745,7 +745,31 @@ electronApplicationLifecycle.bindElectronApplicationLifecycle({
             win,
             product,
             runtime,
-            target: electronSmokeTarget
+            target: electronSmokeTarget,
+            getHelpWindow: externalWindowComposition.getHelpWindow,
+            openHelpTopic: externalWindowComposition.openHelpTopic,
+            startRuntimeSession: async function () {
+                if (runtimeSessionManager.getSnapshot().status !== "ready") {
+                    await runtimeSessionManager.start();
+                }
+
+                for (let attempt = 0; attempt < 100; attempt += 1) {
+                    const snapshot = runtimeSessionManager.getSnapshot();
+
+                    if (snapshot.status === "ready") {
+                        return snapshot;
+                    }
+                    if (snapshot.status === "error") {
+                        throw new Error(snapshot.message || "R runtime failed to start.");
+                    }
+
+                    await new Promise((resolve) => {
+                        setTimeout(resolve, 100);
+                    });
+                }
+
+                throw new Error("R runtime did not become ready for help smoke.");
+            }
         });
     },
     stopRuntime: async function () {

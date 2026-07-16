@@ -225,6 +225,7 @@ export const createExternalWindowComposition = function(
     return {
         plotViewerController,
         openHelpTopic,
+        getHelpWindow: helpWindowController.getWindow,
         createDevDiagnosticsWindow: devDiagnosticsWindowController.open
     };
 };
