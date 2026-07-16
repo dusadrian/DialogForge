@@ -19,7 +19,7 @@
     "devDependencies": {
         "@types/sortablejs": "^1.15.9",
         "electron": "^22.0.0",
-        "electron-builder": "^26.9.0",
+        "electron-builder": "26.9.0",
         "playwright": "^1.61.1",
         "typescript": "^6.0.3"
     },
