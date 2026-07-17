@@ -49,7 +49,10 @@ const readStringArray = function(value: unknown): string[] {
 
 
 export const installWebRPackageInstallShim = async function(runtime: WebR): Promise<void> {
-    await runtime.evalRVoid("webr::shim_install()");
+    await runtime.evalRVoid([
+        "webr::shim_install()",
+        "webr::pager_install()"
+    ].join("\n"));
 };
 
 

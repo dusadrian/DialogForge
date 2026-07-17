@@ -49,6 +49,7 @@ export interface MainConsoleCoordinatorBindings {
         topic: string;
         package?: string;
         allowSearch?: boolean;
+        kind?: "topic" | "home";
         source: string;
     }): void;
     readClipboardText?(): Promise<string> | string;
@@ -200,6 +201,7 @@ export const createMainConsoleCoordinator = function(
                     topic: request.topic,
                     package: request.package,
                     allowSearch: request.allowSearch,
+                    kind: request.kind,
                     source: "base-app.console-help"
                 });
             },

@@ -63,6 +63,22 @@ export const parseRConsoleHelpCommand = function(
 ): ConsoleHelpTopicRequest | null {
     const raw = String(value ?? "").trim();
 
+    if (/^(?:utils\s*:::{0,1}\s*)?help\.start\s*\(\s*\)$/.test(raw)) {
+        return {
+            query: raw,
+            topic: "",
+            kind: "home"
+        };
+    }
+
+    if (/^(?:utils\s*:::{0,1}\s*)?help\s*\(\s*\)$/.test(raw)) {
+        return {
+            query: raw,
+            topic: "help",
+            kind: "topic"
+        };
+    }
+
     if (!raw || raw.includes("\n") || !raw.startsWith("?")) {
         return null;
     }
@@ -79,7 +95,8 @@ export const parseRConsoleHelpCommand = function(
         query: raw,
         topic: parsed.topic,
         package: parsed.package,
-        allowSearch: search
+        allowSearch: search,
+        kind: "topic"
     };
 };
 

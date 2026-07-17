@@ -10,6 +10,7 @@ export const createHelpTopicRequest = function(input: Partial<HelpTopicRequest>)
         topic: String(input && input.topic ? input.topic : "").trim(),
         package: String(input && input.package ? input.package : "").trim(),
         allowSearch: input.allowSearch === true,
+        kind: input.kind === "home" ? "home" : "topic",
         source: String(input && input.source ? input.source : "base-app.help").trim()
     };
 };

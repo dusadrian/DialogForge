@@ -11,6 +11,10 @@ import {
 import {
     flushWebROutputQueue
 } from "./webRInstallProgressAdapter";
+import {
+    readWebRMessageText,
+    type WebROutputMessage
+} from "./webROutputMessages";
 import type {
     RuntimeSessionSnapshot
 } from "../../provider-contract/runtimeProvider";
@@ -25,6 +29,8 @@ export interface BrowserWebRStartupOptions {
     importWebRModule(): Promise<BrowserWebRModule>;
     setStatus(message: string): void;
     mountPackageLibrary(runtime: WebR): Promise<unknown>;
+    startQuiet?: boolean;
+    writeStartupOutput?(text: string): void;
 }
 
 
@@ -32,6 +38,24 @@ export interface BrowserWebRStoppableRuntime {
     close?: () => Promise<unknown> | unknown;
     destroy?: () => Promise<unknown> | unknown;
 }
+
+
+const readWebRStartupOutput = async function(runtime: WebR): Promise<string> {
+    try {
+        const messages = await runtime.flush() as WebROutputMessage[];
+        const output = messages
+            .map(readWebRMessageText)
+            .join("\n")
+            .trim();
+
+        return output
+            .replace(/(?:^|\n)>\s*$/, "")
+            .trimEnd();
+    }
+    catch {
+        return "";
+    }
+};
 
 
 export const createBrowserWebRSessionSnapshot = function(
@@ -55,12 +79,24 @@ export const startBrowserWebRRuntime = async function(
     const runtime = await createBrowserWebRRuntime({
         baseUrl: options.baseUrl,
         homedir: options.homeDirectoryPath || options.workingDirectoryPath,
+        rArgs: options.startQuiet === true ? ["--quiet"] : [],
         importWebRModule: options.importWebRModule
     }) as WebR;
 
     options.setStatus("Initializing WebR...");
     await runtime.init();
-    await flushWebROutputQueue(runtime);
+
+    if (options.startQuiet === true) {
+        await flushWebROutputQueue(runtime);
+    }
+    else {
+        const startupOutput = await readWebRStartupOutput(runtime);
+
+        if (startupOutput) {
+            options.writeStartupOutput?.(`${startupOutput}\n\n`);
+        }
+    }
+
     await options.mountPackageLibrary(runtime);
     options.setStatus("Preparing WebR workspace...");
     await setWebRWorkingDirectory(runtime, options.workingDirectoryPath);

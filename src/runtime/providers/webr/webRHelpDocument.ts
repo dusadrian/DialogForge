@@ -114,6 +114,26 @@ export const fetchWebRHelpHttpdPath = async function(
 };
 
 
+export const fetchWebRHelpHomeDocument = async function(
+    origin: string,
+    captureHiddenText: CaptureWebRHiddenText
+): Promise<WebRHelpDocument> {
+    const pathname = "/doc/html/index.html";
+    const html = await fetchWebRHelpHttpdPath(pathname, captureHiddenText);
+
+    return {
+        html: prepareWebRHelpDocumentHtml(html).trim()
+            || createRHelpFallbackHtml(
+                "R Help",
+                "The R help home page is unavailable."
+            ),
+        topic: "R Help",
+        packageName: "",
+        baseUrl: `${origin}${pathname}`
+    };
+};
+
+
 export const fetchWebRHelpTopicDocument = async function(
     topic: unknown,
     packageName: string,

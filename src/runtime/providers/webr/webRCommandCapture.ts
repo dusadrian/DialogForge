@@ -20,7 +20,11 @@ export interface WebRHiddenCaptureRuntime {
         purge?(): Promise<void> | void;
     }>;
     evalRVoid(command: string): Promise<void>;
-    flush?(): Promise<unknown[]>;
+    flush?(): Promise<WebROutputMessage[]>;
+    FS?: {
+        readFile(path: string): Promise<Uint8Array>;
+        unlink?(path: string): Promise<void>;
+    };
 }
 
 export interface WebRGraphicsPrewarmOptions {
@@ -44,6 +48,70 @@ interface WebRCapturedOutput {
     type?: unknown;
     data?: unknown;
 }
+
+interface WebRPagerMessageData {
+    path?: unknown;
+    header?: unknown;
+    deleteFile?: unknown;
+}
+
+interface WebROutputMessage extends WebRCapturedOutput {}
+
+
+const readWebRPagerOutput = async function(
+    runtime: WebRHiddenCaptureRuntime,
+    messages: WebROutputMessage[]
+): Promise<WebRCapturedStream[]> {
+    const streams: WebRCapturedStream[] = [];
+
+    for (const message of messages) {
+        if (String(message?.type || "").toLowerCase() !== "pager") {
+            continue;
+        }
+
+        const data = message.data as WebRPagerMessageData | null;
+        const path = String(data?.path || "");
+
+        if (!path || !runtime.FS?.readFile) {
+            continue;
+        }
+
+        try {
+            const file = await runtime.FS.readFile(path);
+            const content = new TextDecoder().decode(file).trimEnd();
+            const header = String(data?.header || "").trimEnd();
+            const text = [header, content].filter(Boolean).join("\n");
+
+            if (text) {
+                streams.push({
+                    name: "stdout",
+                    text
+                });
+            }
+        }
+        finally {
+            if (data?.deleteFile === true) {
+                try {
+                    await runtime.FS.unlink?.(path);
+                }
+                catch {}
+            }
+        }
+    }
+
+    return streams;
+};
+
+
+const flushWebRPagerOutput = async function(
+    runtime: WebRHiddenCaptureRuntime
+): Promise<WebRCapturedStream[]> {
+    if (!runtime.flush) {
+        return [];
+    }
+
+    return readWebRPagerOutput(runtime, await runtime.flush());
+};
 
 const readCapturedOutputText = function(output: WebRCapturedOutput): string {
     const data = output?.data;
@@ -177,9 +245,14 @@ export const captureWebRVisibleCommand = async function(
                 }
                 : {}
         );
+        const streams = collectWebRCapturedStreams(captured.output || []);
+        const pagerStreams = await flushWebRPagerOutput(runtime);
 
         return {
-            streams: collectWebRCapturedStreams(captured.output || []),
+            streams: [
+                ...streams,
+                ...pagerStreams
+            ],
             images: Array.isArray(captured.images) ? captured.images : []
         };
     }

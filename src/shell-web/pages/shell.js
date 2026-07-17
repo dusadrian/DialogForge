@@ -123,6 +123,7 @@ import {
 } from "/browser-esm/src/runtime/providers/webr/webRBrowserStartup.js";
 import {
     fetchWebRHelpPageByUrl,
+    fetchWebRHelpHomeDocument,
     fetchWebRHelpTopicDocument,
     runWebRHelpExample
 } from "/browser-esm/src/runtime/providers/webr/webRHelpDocument.js";
@@ -466,10 +467,18 @@ const webSettingsCursorOptions = ["bar", "block", "underline"];
 const readTerminalSettings = function () {
     const settings = browserApplicationStorageAdapter.readSettings();
     const terminalSettings = settings.terminalSettings;
+    const productSettings = state.composition?.productSettings;
+    const productTerminalSettings = productSettings
+        && typeof productSettings === "object"
+        && productSettings.terminalSettings
+        && typeof productSettings.terminalSettings === "object"
+        ? productSettings.terminalSettings
+        : {};
 
     return Object.assign(
         {},
         webTerminalDefaults,
+        productTerminalSettings,
         terminalSettings && typeof terminalSettings === "object"
             ? terminalSettings
             : {}
@@ -3230,6 +3239,8 @@ const ensureRuntime = async function () {
     setRuntimeStatus("Starting WebR...");
 
     state.runtimeStartPromise = (async function () {
+        const startQuiet = readTerminalSettings().startQuiet === true;
+
         state.loadedRuntimePackages.clear();
 
         const runtime = await startBrowserWebRRuntime({
@@ -3242,7 +3253,9 @@ const ensureRuntime = async function () {
             },
             mountPackageLibrary: function (runtime) {
                 return mountProductPackageLibrary(runtime);
-            }
+            },
+            startQuiet,
+            writeStartupOutput: appendTranscript
         });
 
         state.runtime = runtime;
@@ -3325,6 +3338,22 @@ const openHelpTopicModal = async function (topic, packageName = "") {
     }
 
     const document = await fetchHelpTopicDocument(cleanTopic, packageName);
+
+    updateHelpViewer(
+        document.topic,
+        document.html,
+        document
+    );
+};
+
+const openHelpHomeModal = async function () {
+    const runtime = await ensureRuntime();
+    const document = await fetchWebRHelpHomeDocument(
+        window.location.origin,
+        function (command) {
+            return captureWebRHiddenText(runtime, command);
+        }
+    );
 
     updateHelpViewer(
         document.topic,
@@ -3588,8 +3617,11 @@ const initializeSharedConsole = async function () {
         openHelpTopic: function (input) {
             const topic = String(input.topic || "").trim();
             const packageName = String(input.package || "").trim();
+            const operation = input.kind === "home"
+                ? openHelpHomeModal()
+                : openHelpTopicModal(topic, packageName);
 
-            openHelpTopicModal(topic, packageName).catch((error) => {
+            operation.catch((error) => {
                 appendTranscript(error instanceof Error ? error.message : String(error), "web-transcript__line--stderr");
             });
         },

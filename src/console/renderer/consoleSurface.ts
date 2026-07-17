@@ -3,6 +3,7 @@ import type {
 } from "../terminal/completionTypes";
 import type {
     BuildContextualHelpRequest,
+    ConsoleHelpTopicRequest,
     ParseConsoleHelpCommand
 } from "../terminal/contextualHelp";
 import type {
@@ -51,12 +52,7 @@ export interface ConsoleSurfaceOptions {
     buildContextualHelpRequest?: BuildContextualHelpRequest;
     parseHelpCommand?: ParseConsoleHelpCommand;
     readClipboardText?: () => Promise<string> | string;
-    showHelpTopic: (request: {
-        query: string;
-        topic: string;
-        package?: string;
-        allowSearch?: boolean;
-    }) => void;
+    showHelpTopic: (request: ConsoleHelpTopicRequest) => void;
     writeClipboardText: (text: string) => Promise<void> | void;
 }
 

@@ -68,9 +68,41 @@ ensure_dialog_app_search_position <- function() {
 }
 
 
+runtime_console_pager <- function(
+    files,
+    header = rep("", length(files)),
+    title = "R Information",
+    delete.file = FALSE
+) {
+    files <- path.expand(as.character(files))
+    headers <- rep_len(as.character(header), length(files))
+
+    if (isTRUE(delete.file)) {
+        on.exit(unlink(files), add = TRUE)
+    }
+
+    for (index in seq_along(files)) {
+        if (index > 1L) {
+            writeLines("")
+        }
+
+        if (nzchar(headers[[index]])) {
+            writeLines(headers[[index]])
+        }
+
+        if (file.exists(files[[index]])) {
+            writeLines(readLines(files[[index]], warn = FALSE))
+        }
+    }
+
+    invisible(title)
+}
+
+
 install_runtime_console_bindings <- function() {
     ensure_dialog_app_search_position()
     app_env$plot <- graphics::plot
+    options(pager = runtime_console_pager)
 
     invisible(TRUE)
 }

@@ -14,7 +14,8 @@ import type {
     VisibleCommandRequest
 } from "../../runtime/provider-contract/runtimeProvider";
 import {
-    createHelpTopicRequest
+    createHelpTopicRequest,
+    createHelpTopicResult
 } from "../../runtime/help/helpProtocol";
 import {
     buildHelpChooserDocument
@@ -115,7 +116,14 @@ export const createExternalWindowComposition = function(
         input: Partial<HelpTopicRequest>
     ): Promise<HelpTopicResult> {
         const request = createHelpTopicRequest(input || {});
-        const result = await options.runtimeSessionManager.readHelpTopic(request);
+        const result = request.kind === "home"
+            ? createHelpTopicResult({
+                status: "ready",
+                kind: "home",
+                title: "R Help",
+                path: "/doc/html/index.html"
+            })
+            : await options.runtimeSessionManager.readHelpTopic(request);
         const title = result.title || result.topic || "R Help";
         const hasBody = result.status === "ready" && result.body;
         const hasChooser = result.status === "ready"

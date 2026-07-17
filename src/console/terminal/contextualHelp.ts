@@ -3,6 +3,7 @@ export type ConsoleHelpTopicRequest = {
     topic: string;
     package?: string;
     allowSearch?: boolean;
+    kind?: "topic" | "home";
 };
 
 

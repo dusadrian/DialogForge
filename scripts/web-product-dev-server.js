@@ -748,6 +748,7 @@ const serializeComposition = function(rootDir, productPath, options = {}) {
         runtime: composition.runtime,
         runtimeProviderSelection: composition.runtimeProviderSelection,
         runtimeSession: composition.runtimeSession,
+        productSettings: composition.productSettings,
         sharedDialogs: composition.sharedDialogs,
         productDialogs: composition.productDialogs,
         menu: composition.menu,

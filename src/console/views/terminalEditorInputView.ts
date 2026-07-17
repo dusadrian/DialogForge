@@ -1,6 +1,7 @@
 import type { CompletionModel } from '../terminal/completionTypes';
 import type {
   BuildContextualHelpRequest,
+  ConsoleHelpTopicRequest,
   ParseConsoleHelpCommand
 } from '../terminal/contextualHelp';
 import { clearConsoleCompletionProvider } from '../terminal/consoleCompletionProvider';
@@ -41,7 +42,7 @@ export const createTerminalConsoleEditorInputView = (deps: {
   readClipboardText?: () => Promise<string> | string;
   buildContextualHelpRequest?: BuildContextualHelpRequest;
   parseHelpCommand?: ParseConsoleHelpCommand;
-  showHelpTopic?: (request: { query: string; topic: string; package?: string; allowSearch?: boolean }) => void;
+  showHelpTopic?: (request: ConsoleHelpTopicRequest) => void;
   scrollToPrompt?: () => void;
   recordBlankInput?: (code: string) => void;
   recordHelpCommand?: (code: string) => void;

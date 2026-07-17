@@ -615,6 +615,7 @@ export interface HelpTopicRequest {
     topic: string;
     package?: string;
     allowSearch?: boolean;
+    kind?: "topic" | "home";
     source: string;
 }
 

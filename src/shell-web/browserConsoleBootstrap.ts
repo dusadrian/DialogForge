@@ -54,6 +54,7 @@ export interface BrowserConsoleBootstrapOptions {
         topic: string;
         package?: string;
         allowSearch?: boolean;
+        kind?: "topic" | "home";
         source: string;
     }): void;
     writeClipboardText(text: string): Promise<void> | void;

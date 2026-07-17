@@ -14,7 +14,7 @@ export interface ConsoleStreamMessage {
 const warningStreamPattern =
     /(^|\n)\s*(?:Warning(?:\s+messages?)?:|Warning in\b)/i;
 const errorStreamPattern =
-    /(^|\n)\s*(?:!+\s*)?(?:ERROR:|Error(?:\s+in)?\b|Execution halted\b)/i;
+    /(^|\n)\s*(?:!+\s*)?(?:ERROR:|Error(?:\s+in\b|:)|Execution halted\b)/i;
 const benignInstallProgressPattern =
     /(^|\n)\s*(?:trying URL |Content type |downloaded \d|The downloaded binary packages are in|Installing package into |[=]{8,}\s*$)/im;
 const progressBarOnlyPattern = /^\s*[=]+\s*$/;

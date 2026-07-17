@@ -9,6 +9,7 @@ export interface BrowserWebRRuntimeOptions {
     importWebRModule(): Promise<BrowserWebRModule>;
     baseUrl?: string;
     homedir?: string;
+    rArgs?: string[];
 }
 
 
@@ -22,6 +23,10 @@ export const createBrowserWebRRuntime = async function(
 
     if (homedir) {
         runtimeOptions.homedir = homedir;
+    }
+
+    if (options.rArgs?.length) {
+        runtimeOptions.RArgs = options.rArgs.slice();
     }
 
     if (typeof module.ChannelType?.PostMessage === "number") {

@@ -140,12 +140,18 @@ export interface ProductRuntimeStartupPolicy {
 }
 
 
+export interface ProductTerminalSettingsDefinition {
+    startQuiet?: boolean;
+}
+
+
 export interface ProductSettingsDefinition {
     dependencies: string[];
     dialogRuntimeRequirements: Record<string, ProductDialogRuntimeRequirement>;
     uiActionCommandVisibility?: "hidden" | "visible";
     packageSources?: ProductPackageSourcePolicy;
     runtimeStartup?: ProductRuntimeStartupPolicy;
+    terminalSettings?: ProductTerminalSettingsDefinition;
 }
 
 
