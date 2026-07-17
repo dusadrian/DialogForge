@@ -1,12 +1,15 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "child_process";
 import * as os from "os";
 import {
+    findConfiguredRBinary,
     findLatestInstalledRBinary
 } from "../session/rBinaryDiscovery";
 
 
 export interface RHelpServerOptions {
     findRScriptBinary?(): Promise<string | null>;
+    readRuntimeLocation?(): string;
+    readRuntimeDetectionAtStartup?(): boolean;
 }
 
 
@@ -29,6 +32,22 @@ export const resolveRHelpServerCommand = async function(
     const command = await (
         options.findRScriptBinary
         || function(): Promise<string | null> {
+            const configuredLocation = String(
+                options.readRuntimeLocation?.() || ""
+            ).trim();
+            const automatic = options.readRuntimeDetectionAtStartup?.() !== false;
+
+            if (!automatic && configuredLocation) {
+                return findConfiguredRBinary(
+                    "Rscript",
+                    configuredLocation
+                );
+            }
+
+            if (!automatic) {
+                return Promise.resolve(null);
+            }
+
             return findLatestInstalledRBinary("Rscript");
         }
     )();

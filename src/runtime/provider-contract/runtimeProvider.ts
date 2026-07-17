@@ -864,6 +864,7 @@ export interface RuntimeExtensionMethodResult {
 export interface RuntimeProvider {
     manifest: RuntimeProviderManifest;
     createSession: () => RuntimeSessionSnapshot;
+    locationController?: RuntimeLocationController;
     lifecycleController?: RuntimeLifecycleController;
     commandController?: RuntimeCommandController;
     workspaceController?: RuntimeWorkspaceController;
@@ -882,6 +883,10 @@ export interface RuntimeProviderOptions {
     rootDir?: string;
     productId?: string;
     processLifecycle?: boolean;
+    runtimeLocation?: string;
+    readRuntimeLocation?: () => string;
+    runtimeDetectionAtStartup?: boolean;
+    readRuntimeDetectionAtStartup?: () => boolean;
     transportEndpoint?: string;
     transportAuthPolicy?: RuntimeTransportAuthPolicy;
     transportCredential?: RuntimeTransportCredential;
@@ -893,6 +898,21 @@ export interface RuntimeProviderOptions {
         signal: NodeJS.Signals | null;
         output: string;
     }) => void;
+}
+
+
+export interface RuntimeLocationSnapshot {
+    providerId: string;
+    configurable: boolean;
+    configuredPath: string;
+    resolvedPath: string;
+    source: "configured" | "discovered" | "invalid" | "unavailable";
+    message: string;
+}
+
+
+export interface RuntimeLocationController {
+    resolve: () => Promise<RuntimeLocationSnapshot>;
 }
 
 

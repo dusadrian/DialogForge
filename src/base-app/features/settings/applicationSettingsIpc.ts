@@ -11,6 +11,15 @@ import {
 
 export type ApplicationSettings = Record<string, unknown>;
 
+export interface RuntimeLocationResult {
+    providerId: string;
+    configurable: boolean;
+    configuredPath: string;
+    resolvedPath: string;
+    source: "configured" | "discovered" | "invalid" | "unavailable";
+    message: string;
+}
+
 
 export const applicationSettingsIpcChannels = {
     read: "base-app:readSettings",
@@ -18,6 +27,8 @@ export const applicationSettingsIpcChannels = {
     openSettings: "base-app:openSettingsWindow",
     openMenuCustomization: "base-app:openMenuCustomizationWindow",
     openDialogRuntimeRequirements: "base-app:openDialogRuntimeRequirementsWindow",
+    chooseRuntimeLocation: "base-app:chooseRuntimeLocation",
+    discoverRuntimeLocation: "base-app:discoverRuntimeLocation",
     openAbout: "base-app:openAboutWindow"
 } as const;
 
@@ -65,6 +76,14 @@ interface ApplicationSettingsIpcRoutes {
     "base-app:openSettingsWindow": { input: []; result: { status: string } };
     "base-app:openMenuCustomizationWindow": { input: []; result: { status: string } };
     "base-app:openDialogRuntimeRequirementsWindow": { input: []; result: { status: string } };
+    "base-app:chooseRuntimeLocation": {
+        input: [{ providerId?: string; currentPath?: string }];
+        result: { path: string } | null;
+    };
+    "base-app:discoverRuntimeLocation": {
+        input: [{ providerId?: string }];
+        result: RuntimeLocationResult;
+    };
     "base-app:openAboutWindow": { input: []; result: { status: string } };
 }
 

@@ -51,6 +51,36 @@
       font-weight: 600;
     }
 
+    .settings-section-title {
+      margin: 0 0 9px 0;
+      color: #222;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .settings-general {
+      width: var(--settings-content-width);
+      margin-bottom: 18px;
+    }
+
+    .settings-general-grid {
+      display: flex;
+      gap: var(--settings-column-gap);
+      width: var(--settings-content-width);
+    }
+
+    .settings-general-options {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      width: var(--settings-control-width);
+      padding-top: 1px;
+    }
+
+    .settings-general-language {
+      width: var(--settings-control-width);
+    }
+
     .settings-grid {
       display: flex;
       gap: var(--settings-column-gap);
@@ -96,6 +126,71 @@
       align-items: center;
       gap: 6px;
       width: var(--settings-control-width);
+    }
+
+    .runtime-location-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      width: var(--settings-control-width);
+    }
+
+    .runtime-location-row input {
+      box-sizing: border-box;
+      flex: 1 1 auto;
+      min-width: 0;
+      height: 24px;
+      padding: 1px 6px;
+      border: 1px solid #8c8c8c;
+      border-radius: 4px;
+    }
+
+    .runtime-location-row .dm-action-button {
+      flex: 0 0 auto;
+      height: 24px;
+      padding: 0 8px;
+    }
+
+    .runtime-location-status {
+      min-height: 15px;
+      color: #666;
+      font-size: 11px;
+      line-height: 15px;
+    }
+
+    .runtime-location-actions {
+      display: flex;
+      justify-content: flex-end;
+      width: var(--settings-control-width);
+    }
+
+    .runtime-location-auto {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 0;
+      color: #2469a0;
+      background: transparent;
+      border: 0;
+      font-size: 11px;
+      cursor: pointer;
+      transform: translateY(-11px);
+    }
+
+    .runtime-location-auto-icon {
+      flex: 0 0 auto;
+      width: 24px;
+      height: 24px;
+      object-fit: contain;
+    }
+
+    .runtime-location-auto:disabled {
+      color: #999;
+      cursor: default;
+    }
+
+    .runtime-location-auto:disabled .runtime-location-auto-icon {
+      opacity: 0.45;
     }
 
     .color-input-row input[type="text"] {
@@ -158,13 +253,17 @@
     }
 
     .actions {
+      position: sticky;
+      z-index: 100;
+      bottom: 0;
       width: var(--settings-content-width);
       margin-top: 16px;
       display: flex;
       justify-content: flex-end;
       gap: 10px;
+      background: #fff;
       border-top: 1px solid #e2e2e2;
-      padding-top: 12px;
+      padding: 12px 0 8px 0;
     }
 
     .reset-button {
@@ -182,6 +281,21 @@
         gap: 16px;
       }
 
+      .settings-general,
+      .settings-general-grid {
+        width: 100%;
+      }
+
+      .settings-general-grid {
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      .settings-general-options {
+        width: 100%;
+        max-width: var(--settings-control-width);
+      }
+
       .settings-column {
         width: 100%;
         max-width: var(--settings-control-width);
@@ -189,6 +303,11 @@
 
       select, dm-select,
       .color-input-row {
+        width: min(var(--settings-control-width), 100%);
+      }
+
+      .runtime-location-row,
+      .runtime-location-actions {
         width: min(var(--settings-control-width), 100%);
       }
     }
@@ -199,23 +318,38 @@
     <div class="settings-root">
       <h1 id="settingsTitle">Settings</h1>
 
-      <div class="settings-grid">
-        <div class="settings-column">
-          <div class="field">
+      <section class="settings-general" aria-labelledby="settingsGeneralTitle">
+        <h2 id="settingsGeneralTitle" class="settings-section-title">General</h2>
+        <div class="settings-general-grid">
+          <div class="field settings-general-language">
             <label id="labelLanguage" for="defaultLanguage">Language</label>
             <dm-select id="defaultLanguage"></dm-select>
           </div>
 
-          <div class="field">
-            <label id="labelTerminalFont" for="terminalFont">Console font</label>
-            <dm-select id="terminalFont"></dm-select>
-          </div>
-
-          <div class="field checkbox-field">
-            <div class="field-inline">
-              <dm-checkbox id="terminalCursorBlink"></dm-checkbox>
-              <label id="labelTerminalCursorBlink" for="terminalCursorBlink">Console cursor blink</label>
+          <div class="settings-general-options">
+            <div class="field checkbox-field">
+              <div class="field-inline">
+                <dm-checkbox id="enableAuthoringFeatures"></dm-checkbox>
+                <label id="labelAuthoringFeatures" for="enableAuthoringFeatures">Enable authoring features</label>
+              </div>
             </div>
+
+            <div class="field checkbox-field">
+              <div class="field-inline">
+                <dm-checkbox id="notifyUpdates"></dm-checkbox>
+                <label id="labelNotifyUpdates" for="notifyUpdates">Notify me when updates are available</label>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div class="settings-grid">
+        <section class="settings-column" aria-labelledby="settingsRuntimeTitle">
+          <h2 id="settingsRuntimeTitle" class="settings-section-title">Runtime</h2>
+          <div class="field">
+            <label id="labelRuntimeProvider" for="runtimeProvider">Runtime provider</label>
+            <dm-select id="runtimeProvider"></dm-select>
           </div>
 
           <div class="field checkbox-field">
@@ -227,35 +361,52 @@
 
           <div class="field checkbox-field">
             <div class="field-inline">
-              <dm-checkbox id="terminalErrorContext"></dm-checkbox>
-              <label id="labelTerminalErrorContext" for="terminalErrorContext">Show full console error context</label>
+              <dm-checkbox id="detectRuntimeAtStartup"></dm-checkbox>
+              <label id="labelDetectRuntimeAtStartup" for="detectRuntimeAtStartup">Detect runtime at startup</label>
             </div>
           </div>
 
-          <div class="field checkbox-field">
-            <div class="field-inline">
-              <dm-checkbox id="enableAuthoringFeatures"></dm-checkbox>
-              <label id="labelAuthoringFeatures" for="enableAuthoringFeatures">Enable authoring features</label>
-            </div>
-          </div>
-
-          <div class="field checkbox-field">
-            <div class="field-inline">
-              <dm-checkbox id="notifyUpdates"></dm-checkbox>
-              <label id="labelNotifyUpdates" for="notifyUpdates">Notify me when updates are available</label>
-            </div>
-          </div>
-        </div>
-
-        <div class="settings-column">
           <div class="field">
-            <label id="labelRuntimeProvider" for="runtimeProvider">Runtime provider</label>
-            <dm-select id="runtimeProvider"></dm-select>
+            <label id="labelRuntimeLocation" for="runtimeLocation">Runtime location</label>
+            <div class="runtime-location-row">
+              <input id="runtimeLocation" type="text" spellcheck="false" />
+              <button id="browseRuntimeLocation" class="dm-action-button" type="button">Browse</button>
+            </div>
+            <div id="runtimeLocationStatus" class="runtime-location-status"></div>
+            <div class="runtime-location-actions">
+              <button id="autoDetectRuntimeLocation" class="runtime-location-auto" type="button">
+                <img class="runtime-location-auto-icon"
+                     src="../../assets/icons/hddsearch.svg"
+                     alt=""
+                     aria-hidden="true" />
+                <span id="autoDetectRuntimeLocationLabel">Rediscover</span>
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <section class="settings-column" aria-labelledby="settingsConsoleTitle">
+          <h2 id="settingsConsoleTitle" class="settings-section-title">Console</h2>
+          <div class="field">
+            <label id="labelTerminalFont" for="terminalFont">Console font</label>
+            <dm-select id="terminalFont"></dm-select>
+          </div>
+
+          <div class="field">
+            <label id="labelTerminalInputMode" for="terminalInputMode">Input mode</label>
+            <dm-select id="terminalInputMode"></dm-select>
           </div>
 
           <div class="field">
             <label id="labelTerminalCursor" for="terminalCursorStyle">Console cursor</label>
             <dm-select id="terminalCursorStyle"></dm-select>
+          </div>
+
+          <div class="field checkbox-field">
+            <div class="field-inline">
+              <dm-checkbox id="terminalCursorBlink"></dm-checkbox>
+              <label id="labelTerminalCursorBlink" for="terminalCursorBlink">Console cursor blink</label>
+            </div>
           </div>
 
           <div class="field">
@@ -266,11 +417,13 @@
             </div>
           </div>
 
-          <div class="field">
-            <label id="labelTerminalInputMode" for="terminalInputMode">Input mode</label>
-            <dm-select id="terminalInputMode"></dm-select>
+          <div class="field checkbox-field">
+            <div class="field-inline">
+              <dm-checkbox id="terminalErrorContext"></dm-checkbox>
+              <label id="labelTerminalErrorContext" for="terminalErrorContext">Show full console error context</label>
+            </div>
           </div>
-        </div>
+        </section>
       </div>
 
       <div class="actions">

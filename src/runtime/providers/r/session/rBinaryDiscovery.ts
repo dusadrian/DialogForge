@@ -155,6 +155,28 @@ const directCandidates = function(
     return [platformPath.join(candidate, names.primary)];
 };
 
+
+export const findConfiguredRBinary = async function(
+    kind: RBinaryKind,
+    configuredLocation: string,
+    platform: NodeJS.Platform = process.platform
+): Promise<string | null> {
+    const location = String(configuredLocation || "").trim();
+
+    if (!location) {
+        return null;
+    }
+
+    return bestCandidate(
+        [
+            ...directCandidates(location, kind, platform),
+            ...rHomeCandidates(location, kind, platform)
+        ],
+        kind,
+        platform
+    );
+};
+
 const rHomeCandidates = function(
     rHome: string,
     kind: RBinaryKind,

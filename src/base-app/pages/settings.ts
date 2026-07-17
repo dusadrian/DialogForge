@@ -3,8 +3,18 @@ type SettingsPayload = {
     factorySettings?: Record<string, unknown>;
     locales?: Array<{ code: string; label: string }>;
     runtimeProviders?: Array<{ id: string; label?: string }>;
+    runtimeLocationStates?: Record<string, RuntimeLocationState>;
     selectedRuntimeProvider?: string;
     strings?: Record<string, string>;
+};
+
+type RuntimeLocationState = {
+    providerId?: string;
+    configurable?: boolean;
+    configuredPath?: string;
+    resolvedPath?: string;
+    source?: "configured" | "discovered" | "invalid" | "unavailable";
+    message?: string;
 };
 
 type IroColor = {
@@ -337,8 +347,15 @@ const translate = function(strings: Record<string, string>, key: string): string
 
 const applyText = function(strings: Record<string, string>): void {
     byId<HTMLHeadingElement>("settingsTitle").textContent = translate(strings, "Settings");
+    byId<HTMLHeadingElement>("settingsGeneralTitle").textContent = translate(strings, "General");
+    byId<HTMLHeadingElement>("settingsRuntimeTitle").textContent = translate(strings, "Runtime");
+    byId<HTMLHeadingElement>("settingsConsoleTitle").textContent = translate(strings, "Console");
     byId<HTMLLabelElement>("labelLanguage").textContent = translate(strings, "Language");
     byId<HTMLLabelElement>("labelRuntimeProvider").textContent = translate(strings, "Runtime provider");
+    byId<HTMLLabelElement>("labelDetectRuntimeAtStartup").textContent = translate(strings, "Detect runtime at startup");
+    byId<HTMLLabelElement>("labelRuntimeLocation").textContent = translate(strings, "Runtime location");
+    byId<HTMLButtonElement>("browseRuntimeLocation").textContent = translate(strings, "Browse");
+    byId<HTMLSpanElement>("autoDetectRuntimeLocationLabel").textContent = translate(strings, "Rediscover");
     byId<HTMLLabelElement>("labelTerminalFont").textContent = translate(strings, "Console font");
     byId<HTMLLabelElement>("labelTerminalCursor").textContent = translate(strings, "Console cursor");
     byId<HTMLLabelElement>("labelTerminalCursorBlink").textContent = translate(strings, "Console cursor blink");
@@ -388,6 +405,24 @@ const renderSettings = function(payload: SettingsPayload): void {
     const runtimeStartup = isRecord(settings.runtimeStartup)
         ? settings.runtimeStartup
         : {};
+    const savedRuntimeLocations = isRecord(settings.runtimeLocations)
+        ? settings.runtimeLocations
+        : {};
+    const savedRuntimeDetection = isRecord(settings.runtimeDetectionAtStartup)
+        ? settings.runtimeDetectionAtStartup
+        : {};
+    const draftRuntimeLocations: Record<string, string> = {};
+    const draftRuntimeDetection: Record<string, boolean> = {};
+
+    Object.entries(savedRuntimeLocations).forEach(([providerId, value]) => {
+        draftRuntimeLocations[providerId] = String(value || "").trim();
+    });
+    Object.entries(savedRuntimeDetection).forEach(([providerId, value]) => {
+        draftRuntimeDetection[providerId] = value !== false;
+    });
+    const runtimeLocationStates = isRecord(payload.runtimeLocationStates)
+        ? payload.runtimeLocationStates as Record<string, RuntimeLocationState>
+        : {};
     const visibleRuntimeProviders = readRuntimeProviderOptions(
         payload,
         runtimeStartup
@@ -403,6 +438,11 @@ const renderSettings = function(payload: SettingsPayload): void {
 
     const language = byId<HTMLElement>("defaultLanguage");
     const runtimeProvider = byId<HTMLElement>("runtimeProvider");
+    const detectRuntimeAtStartup = byId<HTMLElement>("detectRuntimeAtStartup");
+    const runtimeLocation = byId<HTMLInputElement>("runtimeLocation");
+    const runtimeLocationStatus = byId<HTMLElement>("runtimeLocationStatus");
+    const browseRuntimeLocation = byId<HTMLButtonElement>("browseRuntimeLocation");
+    const autoDetectRuntimeLocation = byId<HTMLButtonElement>("autoDetectRuntimeLocation");
     const terminalFont = byId<HTMLElement>("terminalFont");
     const cursorStyle = byId<HTMLElement>("terminalCursorStyle");
     const cursorBlink = byId<HTMLElement>("terminalCursorBlink");
@@ -429,6 +469,52 @@ const renderSettings = function(payload: SettingsPayload): void {
             label: provider.label || provider.id
         };
     }));
+
+    const detectsRuntimeAtStartup = function(providerId: string): boolean {
+        if (Object.prototype.hasOwnProperty.call(
+            draftRuntimeDetection,
+            providerId
+        )) {
+            return draftRuntimeDetection[providerId] !== false;
+        }
+
+        return !String(draftRuntimeLocations[providerId] || "").trim();
+    };
+    const renderRuntimeLocation = function(): void {
+        const providerId = readValue(runtimeProvider) || selectedRuntimeProvider;
+        const state = runtimeLocationStates[providerId] || {};
+        const configuredPath = String(
+            draftRuntimeLocations[providerId] || ""
+        ).trim();
+        const resolvedPath = String(state.resolvedPath || "").trim();
+        const configurable = state.configurable === true;
+        const automatic = detectsRuntimeAtStartup(providerId);
+
+        writeChecked(detectRuntimeAtStartup, automatic);
+        runtimeLocation.value = automatic
+            ? resolvedPath
+            : configuredPath || resolvedPath;
+        runtimeLocation.title = runtimeLocation.value;
+        runtimeLocation.disabled = !configurable || automatic;
+        browseRuntimeLocation.disabled = !configurable || automatic;
+        autoDetectRuntimeLocation.disabled = !configurable || !automatic;
+        byId<HTMLSpanElement>("autoDetectRuntimeLocationLabel").textContent = translate(
+            payload.strings || {},
+            "Rediscover"
+        );
+        runtimeLocationStatus.textContent = automatic
+            ? resolvedPath
+                ? translate(payload.strings || {}, "Detected automatically")
+                : String(
+                    state.message
+                    || translate(payload.strings || {}, "No runtime was found")
+                )
+            : configuredPath
+                ? state.source === "invalid"
+                ? translate(payload.strings || {}, "Configured location is not usable")
+                : translate(payload.strings || {}, "Custom location")
+                : translate(payload.strings || {}, "Choose a custom runtime location");
+    };
     setOptions(terminalFont, fontOptions);
     setOptions(cursorStyle, cursorOptions);
     setOptions(inputMode, ["console", "terminal"]);
@@ -448,6 +534,11 @@ const renderSettings = function(payload: SettingsPayload): void {
             runtimeStartup: Object.assign({}, runtimeStartup, {
                 providerId: readValue(runtimeProvider) || selectedRuntimeProvider
             }),
+            runtimeLocations: Object.assign({}, draftRuntimeLocations),
+            runtimeDetectionAtStartup: Object.assign(
+                {},
+                draftRuntimeDetection
+            ),
             enableAuthoringFeatures: readChecked(authoring),
             notifyUpdates: readChecked(notifyUpdates)
         };
@@ -461,10 +552,30 @@ const renderSettings = function(payload: SettingsPayload): void {
         const sourceRuntime = isRecord(source.runtimeStartup)
             ? source.runtimeStartup
             : {};
+        const sourceRuntimeLocations = isRecord(source.runtimeLocations)
+            ? source.runtimeLocations
+            : {};
+        const sourceRuntimeDetection = isRecord(source.runtimeDetectionAtStartup)
+            ? source.runtimeDetectionAtStartup
+            : {};
+
+        Object.keys(draftRuntimeLocations).forEach((providerId) => {
+            delete draftRuntimeLocations[providerId];
+        });
+        Object.entries(sourceRuntimeLocations).forEach(([providerId, value]) => {
+            draftRuntimeLocations[providerId] = String(value || "").trim();
+        });
+        Object.keys(draftRuntimeDetection).forEach((providerId) => {
+            delete draftRuntimeDetection[providerId];
+        });
+        Object.entries(sourceRuntimeDetection).forEach(([providerId, value]) => {
+            draftRuntimeDetection[providerId] = value !== false;
+        });
 
         [
             language,
             runtimeProvider,
+            detectRuntimeAtStartup,
             terminalFont,
             cursorStyle,
             cursorBlink,
@@ -484,6 +595,7 @@ const renderSettings = function(payload: SettingsPayload): void {
             runtimeProvider,
             sourceRuntime.providerId || selectedRuntimeProvider
         );
+        renderRuntimeLocation();
         writeValue(terminalFont, normalizeFontChoice(sourceTerminal.fontFamily));
         writeValue(cursorStyle, sourceTerminal.cursorStyle);
         writeChecked(cursorBlink, Boolean(sourceTerminal.cursorBlink));
@@ -510,8 +622,143 @@ const renderSettings = function(payload: SettingsPayload): void {
     const connectPreview = function(control: HTMLElement): void {
         control.onchange = previewDraft;
     };
+    const discoverRuntime = async function(providerId: string): Promise<boolean> {
+        const previousState = runtimeLocationStates[providerId] || {};
+        const previousResolvedPath = String(
+            previousState.resolvedPath || ""
+        ).trim();
+        let result: RuntimeLocationState | null = null;
+
+        autoDetectRuntimeLocation.disabled = true;
+        runtimeLocationStatus.textContent = translate(
+            payload.strings || {},
+            "Searching for runtime..."
+        );
+
+        try {
+            result = await window.dialogForge.settings
+                .discoverRuntimeLocation({ providerId });
+        }
+        catch {
+            result = null;
+        }
+
+        if (String(result?.resolvedPath || "").trim()) {
+            runtimeLocationStates[providerId] = result as RuntimeLocationState;
+            return true;
+        }
+
+        runtimeLocationStates[providerId] = previousState;
+        renderRuntimeLocation();
+        runtimeLocationStatus.textContent = translate(
+            payload.strings || {},
+            previousResolvedPath
+                ? "No replacement runtime was found; current location retained"
+                : "No runtime was found"
+        );
+
+        return false;
+    };
+    const applyRuntimeDetectionMode = async function(): Promise<void> {
+        const providerId = readValue(runtimeProvider) || selectedRuntimeProvider;
+        const automatic = readChecked(detectRuntimeAtStartup);
+
+        if (automatic) {
+            const discovered = await discoverRuntime(providerId);
+
+            if (!discovered) {
+                draftRuntimeDetection[providerId] = false;
+                writeChecked(detectRuntimeAtStartup, false);
+                renderRuntimeLocation();
+                return;
+            }
+
+            draftRuntimeDetection[providerId] = true;
+        }
+        else {
+            draftRuntimeDetection[providerId] = false;
+            if (!String(draftRuntimeLocations[providerId] || "").trim()) {
+                draftRuntimeLocations[providerId] = String(
+                    runtimeLocationStates[providerId]?.resolvedPath || ""
+                ).trim();
+            }
+        }
+
+        renderRuntimeLocation();
+        previewDraft();
+    };
+    const connectRuntimeDetectionControls = function(): void {
+        detectRuntimeAtStartup.onchange = function(): void {
+            void applyRuntimeDetectionMode();
+        };
+        byId<HTMLLabelElement>("labelDetectRuntimeAtStartup").onclick = function(): void {
+            writeChecked(
+                detectRuntimeAtStartup,
+                !readChecked(detectRuntimeAtStartup)
+            );
+            void applyRuntimeDetectionMode();
+        };
+    };
+
+    runtimeProvider.onchange = function(): void {
+        renderRuntimeLocation();
+        previewDraft();
+    };
+    runtimeLocation.oninput = function(): void {
+        const providerId = readValue(runtimeProvider) || selectedRuntimeProvider;
+
+        draftRuntimeLocations[providerId] = runtimeLocation.value.trim();
+        runtimeLocation.title = runtimeLocation.value;
+        autoDetectRuntimeLocation.disabled = !detectsRuntimeAtStartup(providerId);
+        byId<HTMLSpanElement>("autoDetectRuntimeLocationLabel").textContent = translate(
+            payload.strings || {},
+            "Rediscover"
+        );
+        runtimeLocationStatus.textContent = translate(
+            payload.strings || {},
+            draftRuntimeLocations[providerId]
+                ? "Custom location"
+                : "Choose a custom runtime location"
+        );
+    };
+    runtimeLocation.onchange = function(): void {
+        const providerId = readValue(runtimeProvider) || selectedRuntimeProvider;
+
+        if (!draftRuntimeLocations[providerId]) {
+            renderRuntimeLocation();
+        }
+        previewDraft();
+    };
+    browseRuntimeLocation.onclick = async function(): Promise<void> {
+        const providerId = readValue(runtimeProvider) || selectedRuntimeProvider;
+        const result = await window.dialogForge.settings.chooseRuntimeLocation({
+            providerId,
+            currentPath: runtimeLocation.value
+        });
+
+        if (!result?.path) {
+            return;
+        }
+
+        draftRuntimeLocations[providerId] = result.path;
+        renderRuntimeLocation();
+        previewDraft();
+    };
+    autoDetectRuntimeLocation.onclick = async function(): Promise<void> {
+        const providerId = readValue(runtimeProvider) || selectedRuntimeProvider;
+
+        if (await discoverRuntime(providerId)) {
+            renderRuntimeLocation();
+            previewDraft();
+        }
+    };
 
     writeDraft(settings);
+    connectRuntimeDetectionControls();
+    runtimeProvider.onchange = function(): void {
+        renderRuntimeLocation();
+        previewDraft();
+    };
     connectCheckboxLabel("labelTerminalCursorBlink", cursorBlink);
     connectCheckboxLabel("labelTerminalQuiet", terminalQuiet);
     connectCheckboxLabel("labelTerminalErrorContext", errorContext);
@@ -519,7 +766,6 @@ const renderSettings = function(payload: SettingsPayload): void {
     connectCheckboxLabel("labelNotifyUpdates", notifyUpdates);
     [
         language,
-        runtimeProvider,
         terminalFont,
         cursorStyle,
         cursorBlink,
@@ -537,9 +783,13 @@ const renderSettings = function(payload: SettingsPayload): void {
 
     resetButton.onclick = function(): void {
         writeDraft(factorySettings);
+        connectRuntimeDetectionControls();
+        runtimeProvider.onchange = function(): void {
+            renderRuntimeLocation();
+            previewDraft();
+        };
         [
             language,
-            runtimeProvider,
             terminalFont,
             cursorStyle,
             cursorBlink,

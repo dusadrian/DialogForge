@@ -7,7 +7,7 @@ import {
 export interface SettingsWindowControllerOptions {
     createWindow(): BrowserWindow;
     pagePath: string;
-    readPayload(): unknown;
+    readPayload(): unknown | Promise<unknown>;
     onClosed?(): void;
 }
 
@@ -24,6 +24,24 @@ export const createSettingsWindowController = function(
     options: SettingsWindowControllerOptions
 ): SettingsWindowController {
     let win: BrowserWindow | null = null;
+    const sendPayload = async function(
+        target: BrowserWindow,
+        showAfterSend: boolean
+    ): Promise<void> {
+        const payload = await options.readPayload();
+
+        if (win !== target || target.isDestroyed()) {
+            return;
+        }
+
+        target.webContents.send(
+            applicationSettingsEventChannels.settingsLoaded,
+            payload
+        );
+        if (showAfterSend) {
+            target.show();
+        }
+    };
 
     const open = function(): BrowserWindow {
         if (win && !win.isDestroyed()) {
@@ -41,15 +59,7 @@ export const createSettingsWindowController = function(
             options.onClosed?.();
         });
         nextWindow.webContents.once("did-finish-load", () => {
-            if (win !== nextWindow || nextWindow.isDestroyed()) {
-                return;
-            }
-
-            nextWindow.webContents.send(
-                applicationSettingsEventChannels.settingsLoaded,
-                options.readPayload()
-            );
-            nextWindow.show();
+            void sendPayload(nextWindow, true);
         });
         void nextWindow.loadFile(options.pagePath);
 
@@ -66,10 +76,7 @@ export const createSettingsWindowController = function(
                 return;
             }
 
-            win.webContents.send(
-                applicationSettingsEventChannels.settingsLoaded,
-                options.readPayload()
-            );
+            void sendPayload(win, false);
         },
         notifySaved: function(): void {
             if (!win || win.isDestroyed()) {

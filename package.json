@@ -14,7 +14,10 @@
         "check:build-ownership": "node scripts/check-build-ownership.js",
         "start": "npm run build && node dist/scripts/start-app.js",
         "dev:watch": "npm run build && node scripts/watch-product.js",
-        "dev:web-server": "npm run build:web && node dist/scripts/web-product-dev-server.js --replace-port"
+        "dev:web-server": "npm run build:web && node dist/scripts/web-product-dev-server.js --replace-port",
+        "verify:production": "node scripts/verify-production.js",
+        "verify:production:electron": "node scripts/verify-production-electron.js",
+        "verify:production:web": "node scripts/verify-production-web.js"
     },
     "devDependencies": {
         "@types/sortablejs": "^1.15.9",

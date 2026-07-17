@@ -264,6 +264,20 @@ declare global {
         settings: {
             onLoaded(callback: (payload: unknown) => void): void;
             onSaved(callback: () => void): void;
+            chooseRuntimeLocation(input: {
+                providerId?: string;
+                currentPath?: string;
+            }): Promise<{ path: string } | null>;
+            discoverRuntimeLocation(input: {
+                providerId?: string;
+            }): Promise<{
+                providerId: string;
+                configurable: boolean;
+                configuredPath: string;
+                resolvedPath: string;
+                source: "configured" | "discovered" | "invalid" | "unavailable";
+                message: string;
+            }>;
             preview(input: unknown): void;
             cancelPreview(): void;
             save(input: unknown): void;

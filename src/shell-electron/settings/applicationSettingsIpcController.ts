@@ -1,4 +1,5 @@
 import * as fs from "fs";
+import * as path from "path";
 import type {
     Dialog,
     IpcMain,
@@ -31,7 +32,8 @@ import type {
 import {
     applicationSettingsEventChannels,
     applicationSettingsIpcChannels,
-    type ApplicationSettings
+    type ApplicationSettings,
+    type RuntimeLocationResult
 } from "../../base-app/features/settings/applicationSettingsIpc";
 import {
     applicationEventChannels
@@ -74,6 +76,7 @@ export interface ApplicationSettingsIpcControllerOptions {
     productLocation: ResolvedProductLocation;
     defaultRuntimeProvider: string;
     visibleRuntimeProviderIds: string[];
+    discoverRuntimeLocation(providerId: string): Promise<RuntimeLocationResult>;
     translate(text: string): string;
 }
 
@@ -244,6 +247,63 @@ export const createApplicationSettingsIpcController = function(
             options.openDialogRuntimeRequirementsWindow();
 
             return openWindowResult();
+        }
+    );
+
+    options.ipcMain.handle(
+        applicationSettingsIpcChannels.chooseRuntimeLocation,
+        async (_event: IpcMainInvokeEvent, input: {
+            providerId?: string;
+            currentPath?: string;
+        }) => {
+            const currentPath = String(input?.currentPath || "").trim();
+            const defaultPath = currentPath
+                ? fs.existsSync(currentPath) && fs.statSync(currentPath).isDirectory()
+                    ? currentPath
+                    : path.dirname(currentPath)
+                : undefined;
+            const dialogOptions = {
+                title: options.translate("Choose runtime executable"),
+                defaultPath,
+                properties: ["openFile"] as Array<"openFile">
+            };
+            const parentWindow = options.settingsWindowController.getWindow();
+            const result = parentWindow
+                ? await options.dialog.showOpenDialog(
+                    parentWindow,
+                    dialogOptions
+                )
+                : await options.dialog.showOpenDialog(dialogOptions);
+
+            if (result.canceled || !result.filePaths[0]) {
+                return null;
+            }
+
+            return {
+                path: result.filePaths[0]
+            };
+        }
+    );
+
+    options.ipcMain.handle(
+        applicationSettingsIpcChannels.discoverRuntimeLocation,
+        async (_event: IpcMainInvokeEvent, input: {
+            providerId?: string;
+        }) => {
+            const providerId = String(input?.providerId || "").trim();
+
+            if (!options.visibleRuntimeProviderIds.includes(providerId)) {
+                return {
+                    providerId,
+                    configurable: false,
+                    configuredPath: "",
+                    resolvedPath: "",
+                    source: "unavailable",
+                    message: "Runtime provider is not available."
+                };
+            }
+
+            return options.discoverRuntimeLocation(providerId);
         }
     );
 

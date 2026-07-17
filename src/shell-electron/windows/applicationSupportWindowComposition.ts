@@ -195,25 +195,88 @@ export const createApplicationSupportWindowComposition = function(
             productId: options.productId
         }).manifest.label || providerId;
     };
+    const readConfiguredRuntimeLocation = function(providerId: string): string {
+        const settings = readVisibleSettings();
+        const locations = settings.runtimeLocations
+            && typeof settings.runtimeLocations === "object"
+            && !Array.isArray(settings.runtimeLocations)
+            ? settings.runtimeLocations as Record<string, unknown>
+            : {};
+
+        return String(locations[providerId] || "").trim();
+    };
+    const detectsRuntimeAtStartup = function(providerId: string): boolean {
+        const settings = readVisibleSettings();
+        const detection = settings.runtimeDetectionAtStartup
+            && typeof settings.runtimeDetectionAtStartup === "object"
+            && !Array.isArray(settings.runtimeDetectionAtStartup)
+            ? settings.runtimeDetectionAtStartup as Record<string, unknown>
+            : {};
+
+        if (Object.prototype.hasOwnProperty.call(detection, providerId)) {
+            return detection[providerId] !== false;
+        }
+
+        return !readConfiguredRuntimeLocation(providerId);
+    };
+    const visibleRuntimeProviders = function() {
+        return options.composition.runtimeProviderSelection.choices.filter((choice) => {
+            return choice.visible;
+        });
+    };
+    const resolveRuntimeLocationState = async function(
+        providerId: string,
+        runtimeLocation: string,
+        runtimeDetectionAtStartup: boolean
+    ) {
+        const provider = getRuntimeProvider(providerId, {
+            rootDir: options.composition.rootDir,
+            productId: options.productId,
+            runtimeLocation,
+            runtimeDetectionAtStartup
+        });
+
+        return provider.locationController
+            ? provider.locationController.resolve()
+            : Promise.resolve({
+                providerId,
+                configurable: false,
+                configuredPath: "",
+                resolvedPath: "",
+                source: "unavailable" as const,
+                message: "This runtime provider has no local executable."
+            });
+    };
+    const readRuntimeLocationStates = async function() {
+        const entries = await Promise.all(visibleRuntimeProviders().map(async (choice) => {
+            const location = await resolveRuntimeLocationState(
+                choice.id,
+                readConfiguredRuntimeLocation(choice.id),
+                detectsRuntimeAtStartup(choice.id)
+            );
+
+            return [choice.id, location] as const;
+        }));
+
+        return Object.fromEntries(entries);
+    };
     const settingsWindowController = createSettingsWindowController({
         pagePath: path.join(
             options.composition.rootDir,
             "src/base-app/pages/settings.html"
         ),
-        readPayload: function(): unknown {
+        readPayload: async function(): Promise<unknown> {
             return {
                 settings: readVisibleSettings(),
                 factorySettings,
                 locales: options.composition.availableLocales || [],
-                runtimeProviders:
-                    options.composition.runtimeProviderSelection.choices.filter((choice) => {
-                        return choice.visible;
-                    }).map((choice) => {
-                        return {
-                            id: choice.id,
-                            label: runtimeProviderLabel(choice.id)
-                        };
-                    }),
+                runtimeProviders: visibleRuntimeProviders().map((choice) => {
+                    return {
+                        id: choice.id,
+                        label: runtimeProviderLabel(choice.id)
+                    };
+                }),
+                runtimeLocationStates: await readRuntimeLocationStates(),
                 selectedRuntimeProvider:
                     options.composition.runtimeProviderSelection.selectedProviderId,
                 strings: options.composition.i18n
@@ -497,6 +560,9 @@ export const createApplicationSupportWindowComposition = function(
         defaultRuntimeProvider,
         visibleRuntimeProviderIds:
             options.composition.runtimeProviderSelection.visibleProviderIds,
+        discoverRuntimeLocation: function(providerId) {
+            return resolveRuntimeLocationState(providerId, "", true);
+        },
         translate: options.translate
     });
     cancelSettingsPreview = settingsIpcController.cancelSettingsPreview;

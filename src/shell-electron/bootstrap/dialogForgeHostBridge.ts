@@ -15,7 +15,10 @@ import {
 } from "../../script-editor/scriptEditorIpc";
 import {
     applicationSettingsEventChannels,
-    sendApplicationSettingsCommand
+    applicationSettingsIpcChannels,
+    invokeApplicationSettingsRoute,
+    sendApplicationSettingsCommand,
+    type RuntimeLocationResult
 } from "../../base-app/features/settings/applicationSettingsIpc";
 import {
     datasetEditorEventChannels,
@@ -35,6 +38,13 @@ export interface DialogForgeHostBridge {
     settings: {
         onLoaded(callback: (payload: unknown) => void): void;
         onSaved(callback: () => void): void;
+        chooseRuntimeLocation(input: {
+            providerId?: string;
+            currentPath?: string;
+        }): Promise<{ path: string } | null>;
+        discoverRuntimeLocation(input: {
+            providerId?: string;
+        }): Promise<RuntimeLocationResult>;
         preview(input: unknown): void;
         cancelPreview(): void;
         save(input: unknown): void;
@@ -160,6 +170,20 @@ export const createDialogForgeHostBridge = function(
                 ipcRenderer.on(applicationSettingsEventChannels.settingsSaved, () => {
                     callback();
                 });
+            },
+            chooseRuntimeLocation: function(input) {
+                return invokeApplicationSettingsRoute(
+                    ipcRenderer,
+                    applicationSettingsIpcChannels.chooseRuntimeLocation,
+                    input
+                );
+            },
+            discoverRuntimeLocation: function(input) {
+                return invokeApplicationSettingsRoute(
+                    ipcRenderer,
+                    applicationSettingsIpcChannels.discoverRuntimeLocation,
+                    input
+                );
             },
             preview: function(input: unknown) {
                 sendApplicationSettingsCommand(

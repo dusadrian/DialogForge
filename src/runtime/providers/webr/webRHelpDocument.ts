@@ -96,6 +96,14 @@ const buildWebRHelpTopicPathCommand = function(topic: unknown, packageName = "")
 };
 
 
+export const prepareWebRHelpDocumentHtml = function(html: unknown): string {
+    return String(html || "")
+        .replace(/<link\b[^>]*>/gi, "")
+        .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "")
+        .replace(/<img\b[^>]*class=["'][^"']*\btoplogo\b[^"']*["'][^>]*>/gi, "");
+};
+
+
 export const fetchWebRHelpHttpdPath = async function(
     pathname: unknown,
     captureHiddenText: CaptureWebRHiddenText
@@ -129,7 +137,7 @@ export const fetchWebRHelpTopicDocument = async function(
         : "";
 
     return {
-        html: String(html || "").trim()
+        html: prepareWebRHelpDocumentHtml(html).trim()
             || createRHelpFallbackHtml(
                 topic,
                 `No help page was found for ${packageName ? `${packageName}::` : ""}${topic}.`
@@ -159,13 +167,16 @@ export const fetchWebRHelpPageByUrl = async function(
 
     try {
         const text = await fetchWebRHelpHttpdPath(httpdPath, captureHiddenText);
+        const contentType = readRHelpHttpdContentType(httpdPath);
 
         return {
             ok: true,
             status: 200,
             url: `${origin}${httpdPath}`,
-            text,
-            contentType: readRHelpHttpdContentType(httpdPath)
+            text: contentType.startsWith("text/html")
+                ? prepareWebRHelpDocumentHtml(text)
+                : text,
+            contentType
         };
     }
     catch (error) {

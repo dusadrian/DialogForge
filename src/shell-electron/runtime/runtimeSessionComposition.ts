@@ -37,6 +37,8 @@ export interface RuntimeSessionCompositionOptions {
     composition: ApplicationComposition;
     runtimeId: string;
     productId: string;
+    readRuntimeLocation(): string;
+    readRuntimeDetectionAtStartup(): boolean;
     forwardTranscriptEvents(events: TranscriptEvent[]): void;
     handleUnexpectedExit(details: {
         code: number | null;
@@ -86,6 +88,9 @@ export const createRuntimeSessionComposition = function(
             processLifecycle:
                 options.composition.productSettings.runtimeStartup
                     ?.processLifecycle === true,
+            readRuntimeLocation: options.readRuntimeLocation,
+            readRuntimeDetectionAtStartup:
+                options.readRuntimeDetectionAtStartup,
             onTranscriptEvents: options.forwardTranscriptEvents,
             onUnexpectedExit: options.handleUnexpectedExit
         }),

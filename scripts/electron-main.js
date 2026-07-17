@@ -113,6 +113,29 @@ const enforceProductStartupSettings = function () {
 enforceProductStartupSettings();
 
 const initialSettings = settingsStorage.readEffectiveSettings(settingsStoragePaths());
+const readRuntimeSettings = function (providerId) {
+    const settings = settingsStorage.readEffectiveSettings(settingsStoragePaths());
+    const locations = settings.runtimeLocations
+        && typeof settings.runtimeLocations === "object"
+        ? settings.runtimeLocations
+        : {};
+    const detection = settings.runtimeDetectionAtStartup
+        && typeof settings.runtimeDetectionAtStartup === "object"
+        ? settings.runtimeDetectionAtStartup
+        : {};
+    const location = String(locations[providerId] || "").trim();
+    const automatic = Object.prototype.hasOwnProperty.call(
+        detection,
+        providerId
+    )
+        ? detection[providerId] !== false
+        : !location;
+
+    return {
+        automatic,
+        location
+    };
+};
 let locale = requestedLocale
     || String(initialSettings.defaultLanguage
         || initialSettings.languageNS
@@ -162,7 +185,14 @@ const applyLocale = function (nextLocale) {
 };
 process.env.DIALOGFORGE_PRODUCT = product;
 process.env.DIALOGFORGE_ROOT = composition.rootDir;
-const rHelpServer = rHelpServerModule.createRHelpServer();
+const rHelpServer = rHelpServerModule.createRHelpServer({
+    readRuntimeLocation: function () {
+        return readRuntimeSettings("r").location;
+    },
+    readRuntimeDetectionAtStartup: function () {
+        return readRuntimeSettings("r").automatic;
+    }
+});
 const resourceClient = nodeResourceClientModule.createNodeResourceClient();
 const rHelpPageProxy = rHelpPageProxyModule.createRHelpPageProxy({
     rewriteUrl: rHelpServer.rewriteUrl,
@@ -247,6 +277,12 @@ const runtimeSessionBootstrap = runtimeSessionCompositionModule.createRuntimeSes
     composition,
     runtimeId: runtime,
     productId: product,
+    readRuntimeLocation: function () {
+        return readRuntimeSettings(composition.runtime.id).location;
+    },
+    readRuntimeDetectionAtStartup: function () {
+        return readRuntimeSettings(composition.runtime.id).automatic;
+    },
     forwardTranscriptEvents: function (events) {
         sendTranscriptEvents(events);
     },

@@ -10,7 +10,11 @@ import {
     listMissingRuntimeSourceFiles,
     resolveProductRuntimeControlPath
 } from "./session/runtimeLaunchPlan";
-import { findLatestInstalledRBinary } from "./session/rBinaryDiscovery";
+import {
+    findConfiguredRBinary,
+    findLatestInstalledRBinary,
+    type RBinaryKind
+} from "./session/rBinaryDiscovery";
 import { createRRuntimeProcessController } from "./session/runtimeProcessController";
 import {
     createColumn,
@@ -64,6 +68,70 @@ const createRuntimeSession = function(): RuntimeSessionSnapshot {
         status: "not-started",
         connection: "registered",
         message: "R runtime provider is registered, but no R process is started yet."
+    };
+};
+
+
+const readConfiguredRuntimeLocation = function(
+    options: RuntimeProviderOptions
+): string {
+    if (options.readRuntimeLocation) {
+        return String(options.readRuntimeLocation() || "").trim();
+    }
+
+    return String(options.runtimeLocation || "").trim();
+};
+
+
+const detectsRuntimeAtStartup = function(
+    options: RuntimeProviderOptions
+): boolean {
+    if (options.readRuntimeDetectionAtStartup) {
+        return options.readRuntimeDetectionAtStartup() !== false;
+    }
+
+    return options.runtimeDetectionAtStartup !== false;
+};
+
+
+const resolveRBinary = async function(
+    kind: RBinaryKind,
+    options: RuntimeProviderOptions
+): Promise<{
+    configuredPath: string;
+    resolvedPath: string;
+    source: "configured" | "discovered" | "invalid" | "unavailable";
+}> {
+    const configuredPath = readConfiguredRuntimeLocation(options);
+    const automatic = detectsRuntimeAtStartup(options);
+
+    if (!automatic && configuredPath) {
+        const resolvedPath = await findConfiguredRBinary(
+            kind,
+            configuredPath
+        );
+
+        return {
+            configuredPath,
+            resolvedPath: resolvedPath || "",
+            source: resolvedPath ? "configured" : "invalid"
+        };
+    }
+
+    if (!automatic) {
+        return {
+            configuredPath: "",
+            resolvedPath: "",
+            source: "invalid"
+        };
+    }
+
+    const resolvedPath = await findLatestInstalledRBinary(kind);
+
+    return {
+        configuredPath: "",
+        resolvedPath: resolvedPath || "",
+        source: resolvedPath ? "discovered" : "unavailable"
     };
 };
 
@@ -217,15 +285,44 @@ export const createRuntimeProvider = function(options: RuntimeProviderOptions = 
     const provider: RuntimeProvider = {
         manifest,
         createSession: createRuntimeSession,
+        locationController: {
+            resolve: async function() {
+                const location = await resolveRBinary("R", options);
+                const message = location.source === "configured"
+                    ? "Using the configured R location."
+                    : location.source === "discovered"
+                        ? "Detected automatically."
+                        : location.source === "invalid"
+                            ? "The configured location does not contain a usable R executable."
+                            : "No R installation was found.";
+
+                return {
+                    providerId: manifest.id,
+                    configurable: true,
+                    configuredPath: location.configuredPath,
+                    resolvedPath: location.resolvedPath,
+                    source: location.source,
+                    message
+                };
+            }
+        },
         readOnlyAdapter
     };
 
     if (shouldUseProcessLifecycle(options)) {
         const runtimeController = createRRuntimeProcessController({
             createLaunchPlan: async function() {
-                const command = await findLatestInstalledRBinary("R");
+                const location = await resolveRBinary("R", options);
+                const command = location.resolvedPath;
 
                 if (!command) {
+                    if (location.source === "invalid") {
+                        throw new Error(
+                            `The configured R location "${location.configuredPath}" `
+                            + "does not contain a usable R executable."
+                        );
+                    }
+
                     const locations = process.platform === "linux"
                         ? "configured paths, R_HOME, PATH, /opt/R, or "
                             + "standard installation directories"
