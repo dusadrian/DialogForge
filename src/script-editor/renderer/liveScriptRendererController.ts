@@ -262,11 +262,13 @@ export const createLiveScriptRendererController = function(
                 }
                 : undefined;
 
-            void sessions.publishHostCursor(
-                sessionId,
-                event.position,
-                selectedRange
-            ).catch(() => {});
+            hosted.publishing = hosted.publishing.then(() => {
+                return sessions.publishHostCursor(
+                    sessionId,
+                    event.position,
+                    selectedRange
+                );
+            }).catch(() => {});
         });
         hosted.disposeCursor = () => cursorDisposable?.dispose();
         hostedByDocument.set(document.id, hosted);

@@ -360,6 +360,34 @@ const run = async function() {
         "participant did not apply rapidly queued edits"
     );
 
+    const framesBeforeCursorEdit = participantBridge.getReceivedFrames().length;
+    hostDocument.model.applyUserChanges([{
+        rangeOffset: hostDocument.model.getValue().length,
+        rangeLength: 0,
+        text: "!"
+    }]);
+    for (const listener of host.editor.cursorListeners) {
+        listener({
+            position: positionAt(
+                hostDocument.model.getValue(),
+                hostDocument.model.getValue().length
+            )
+        });
+    }
+    await waitFor(
+        () => participantBridge.getReceivedFrames().slice(framesBeforeCursorEdit)
+            .some((frame) => frame.type === "cursor"),
+        "participant did not receive the instructor cursor"
+    );
+    const cursorEditFrames = participantBridge.getReceivedFrames()
+        .slice(framesBeforeCursorEdit)
+        .filter((frame) => frame.type === "edit" || frame.type === "cursor");
+    assert.deepEqual(
+        cursorEditFrames.map((frame) => frame.type),
+        ["edit", "cursor"],
+        "cursor publication must wait for the preceding text edit"
+    );
+
     assert.equal(participantDocument.dirty, false);
     assert.equal(participantDocument.model.setValueCount, 1);
     assert.equal(participant.editor.restoredViewState, participant.editor.savedViewState);
