@@ -228,6 +228,8 @@ export const createLiveScriptPanelController = function(
         const followLabel = createElement("label", "dm-live-panel__follow");
         const follow = document.createElement("input");
         follow.type = "checkbox";
+        follow.checked = true;
+        options.followInstructorCursor(true);
         follow.addEventListener("change", () => {
             options.followInstructorCursor(follow.checked);
         });

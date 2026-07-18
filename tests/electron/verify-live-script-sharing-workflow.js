@@ -393,6 +393,14 @@ const run = async function() {
         await participantEditor.waitForFunction(() => {
             return Boolean(document.querySelector(".dm-script-tab--live"));
         }, undefined, { timeout: 30000 });
+        const followInstructor = participantEditor.locator(
+            ".dm-live-panel__follow input[type=\"checkbox\"]"
+        );
+
+        if (!await followInstructor.isChecked()) {
+            throw new Error("Follow instructor cursor was not enabled by default.");
+        }
+
         process.stdout.write("live-script UI: participant joined\n");
         await Promise.all([
             hostEditor.screenshot({
