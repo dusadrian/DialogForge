@@ -9,6 +9,7 @@
     },
     "include": [
         "src/base-app/bootstrap/dialogForgeGlobals.d.ts",
+        "src/types/diceware-wordlist-en-eff.d.ts",
         "src/console/**/*.ts",
         "src/runtime/providers/webr/webRCompletionAdapter.ts",
         "src/runtime/providers/webr/webRConsoleCompletionAdapter.ts",

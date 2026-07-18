@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "packageVersion": "0.1.0",
+  "wireProtocol": {
+    "name": "dialogforge/live-script",
+    "version": 1,
+    "alpn": "dialogforge/live-script/1"
+  },
+  "compatibility": {
+    "rustToolchain": "1.91.0",
+    "iroh": "0.35.0",
+    "wasmBindgen": "0.2.100",
+    "nativeDialogForgeBinding": "@number0/iroh@0.35.0"
+  },
+  "sourceRevision": "87e901bdc546a4dc880daaff72258ef6d6f3da53",
+  "artifacts": {
+    "dialogforge_iroh.d.ts": {
+      "bytes": 5845,
+      "sha256": "4d127f5576f6d73341d3d3b7502464ba8fc1838f17e6c879f8a882495b6e19a4"
+    },
+    "dialogforge_iroh.js": {
+      "bytes": 41470,
+      "sha256": "eab7dd9aa8781451da2ea8d8f8cc6e902b0ad481731f226131f66c13e4b7ff1c"
+    },
+    "dialogforge_iroh_bg.wasm": {
+      "bytes": 4683143,
+      "sha256": "4faf2a32b8b92f5eda78a40f45df3f7d7d81f5fedd1cb6ddacd720e21c31aec7"
+    },
+    "dialogforge_iroh_bg.wasm.d.ts": {
+      "bytes": 3417,
+      "sha256": "cf09533d88da9545265df8ef0603644f6f391787d5744bbc9e842666ecbac381"
+    },
+    "index.d.ts": {
+      "bytes": 461,
+      "sha256": "4ec8b310274f0ca8a3df7366f8506747abf16efdea6dee234e806c55862cc694"
+    },
+    "index.mjs": {
+      "bytes": 656,
+      "sha256": "ad6288fc1f91397eb645359cefb3abdc746d519d6c4524b8d89817cfd9682b88"
+    },
+    "licenses.json": {
+      "bytes": 79113,
+      "sha256": "3e39c3774cbc58a8b2f3786ce24dc1e168ed489b8b9fd5aef2de10b7bf8580eb"
+    },
+    "liveScriptTransport.d.ts": {
+      "bytes": 2115,
+      "sha256": "499db1c9774f18fa0c12eebe89c06d967cc0f40e53445d9c553611324b646db7"
+    },
+    "liveScriptTransport.mjs": {
+      "bytes": 4900,
+      "sha256": "6b48749a193ce93f78207d97bcbd91ed2cc30c7b8e4912cbe94c28c558ce4c4e"
+    },
+    "package.json": {
+      "bytes": 358,
+      "sha256": "fc4a999d18838b3fe3400971c6c82b97f8ec828eaceedfd9f0f5382078d39519"
+    }
+  }
+}

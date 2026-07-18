@@ -1,0 +1,22 @@
+{
+  "name": "dialogforge-iroh",
+  "version": "0.1.0",
+  "private": true,
+  "license": "UNLICENSED",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "import": "./index.mjs"
+    }
+  },
+  "files": [
+    "*.d.ts",
+    "*.js",
+    "*.mjs",
+    "*.wasm",
+    "artifact-manifest.json",
+    "SHA256SUMS",
+    "licenses.json"
+  ]
+}

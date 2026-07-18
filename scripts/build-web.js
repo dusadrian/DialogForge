@@ -66,6 +66,7 @@ const main = function() {
         "--include-web-runtime"
     ], env);
     run(process.execPath, ["scripts/build-shell-web-modules.js"], env);
+    run(process.execPath, ["scripts/stage-live-script-browser-artifact.js"], env);
 
     if (options.productArgs.length > 0 || process.env.DIALOGFORGE_WEB_PRODUCT_PATH) {
         run(process.execPath, [
