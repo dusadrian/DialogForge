@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>DialogForge iroh phase 0</title>
+</head>
+<body>
+    <output id="result">waiting</output>
+    <script type="module">
+        import init, { exchange_frame } from "./pkg/dialogforge_iroh_phase0_wasm.js";
+
+        const output = document.querySelector("#result");
+        const query = new URLSearchParams(window.location.search);
+        const encoder = new TextEncoder();
+        const decoder = new TextDecoder();
+
+        try {
+            await init();
+            const response = await exchange_frame(
+                query.get("nodeId") || "",
+                query.get("relayUrl") || "",
+                encoder.encode(query.get("frame") || "")
+            );
+            output.textContent = decoder.decode(response);
+            output.dataset.status = "passed";
+        } catch (error) {
+            output.textContent = error instanceof Error ? error.message : String(error);
+            output.dataset.status = "failed";
+        }
+    </script>
+</body>
+</html>
