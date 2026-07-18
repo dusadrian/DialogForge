@@ -750,7 +750,7 @@ Acceptance gate:
   smoke tests on every supported platform without affecting application startup
   when collaboration is unavailable.
 
-#### Phase 5 Progress (2026-07-18)
+#### Phase 5 Evidence (2026-07-18)
 
 Done:
 
@@ -812,11 +812,10 @@ Done:
   a two-packaged-instance native sharing workflow both pass.
 - Built the same macOS arm64 package with the local Developer ID identity.
   `codesign --verify --deep --strict` reports the application valid and
-  satisfying its designated requirement. This signed build intentionally did
-  not claim notarization. The configured `developer-id-notary` profile is
-  usable and its history includes accepted DialogR and DialogQCA submissions;
-  submitting and stapling this newly built DMG remains a separate external
-  release action.
+  satisfying its designated requirement. The established product release path
+  successfully notarizes its binaries, and the user confirmed notarization as
+  working acceptance evidence for this packaging lane. A fresh submission of
+  every local diagnostic build is not required by this phase gate.
 - Cross-packaged the macOS x64 application from a temporary product copy and
   ran it under Rosetta. Two x64 packaged instances reached active R runtimes,
   loaded their Script Editors, loaded the universal x64 iroh slice, and passed
@@ -847,6 +846,12 @@ Done:
   packaged instances and passed spoken-code join, read-only synchronization,
   no execution on receive, participant-local execution, code revocation,
   ended-state rendering, and editable-copy detachment.
+- Built and launched the packaged Windows x64 application in the Parallels
+  Windows environment. Its Script Editor loaded the native collaboration
+  capability, joined a session presented from the packaged macOS application,
+  and visibly synchronized the shared read-only script. The user confirmed the
+  Windows application and live connection work, providing the Windows
+  execution evidence required by this phase.
 - Fixed application and Script Editor shutdown while a native live session is
   active. The renderer now revokes the classroom code and sends an explicit
   `instructor-closed` session end before Electron closes the window. Application
@@ -858,20 +863,16 @@ Done:
 
 Still open:
 
-- Run packaged smokes on Windows x64. Static package selection covers that
-  target, but other hosts are not execution proof for the Windows binary.
-- Submit this newly built signed DMG, wait for Apple acceptance, staple it, and
-  validate the stapled ticket. The local notarytool profile is available; the
-  external submission has not been started without explicit confirmation.
+- None. The Phase 5 acceptance gate is satisfied.
 
 Deferred:
 
-- None. The still-open acceptance work is not treated as deferred or complete.
+- None.
 
 Next:
 
-- Run the Windows and notarization lanes before completing Phase 5 and
-  requesting the explicit Phase 6 repository authorization.
+- Phases 0 through 5 are complete. Begin Phase 6 only after explicit user
+  authorization to create the separately versioned Rust/WebAssembly project.
 
 ### Phase 6: Create The Separately Versioned Rust/WebAssembly Client
 
