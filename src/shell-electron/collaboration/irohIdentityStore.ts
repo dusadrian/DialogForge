@@ -45,7 +45,7 @@ const encodeIdentity = function(
 const decodeIdentity = function(
     payload: Buffer,
     protection?: IrohIdentityProtection
-): Uint8Array {
+): { protected: boolean; secret: Uint8Array } {
     if (payload.length < IDENTITY_FILE_MAGIC.length + 1
         || !payload.subarray(0, IDENTITY_FILE_MAGIC.length).equals(IDENTITY_FILE_MAGIC)) {
         throw new Error("Stored iroh identity has an invalid format.");
@@ -63,10 +63,6 @@ const decodeIdentity = function(
         secret = protection.unprotect(encodedSecret);
     }
     else if (mode === 0) {
-        if (protection) {
-            throw new Error("Stored iroh identity is not protected by secure storage.");
-        }
-
         secret = encodedSecret;
     }
     else {
@@ -77,7 +73,10 @@ const decodeIdentity = function(
         throw new Error("Stored iroh identity has an invalid key length.");
     }
 
-    return new Uint8Array(secret);
+    return {
+        protected: mode === 1,
+        secret: new Uint8Array(secret)
+    };
 };
 
 
@@ -86,6 +85,26 @@ export const createIrohIdentityStore = function(
 ): IrohIdentityStore {
     const identityDirectory = path.join(options.userDataPath, "collaboration");
     const identityPath = path.join(identityDirectory, IDENTITY_FILE_NAME);
+    const protectStoredIdentity = function(secret: Uint8Array): void {
+        if (!options.protection) {
+            return;
+        }
+
+        const suffix = crypto.randomBytes(6).toString("hex");
+        const temporaryPath = `${identityPath}.${process.pid}.${suffix}.migrating`;
+        const protectedIdentity = encodeIdentity(secret, options.protection);
+
+        try {
+            fs.writeFileSync(temporaryPath, protectedIdentity, {
+                flag: "wx",
+                mode: 0o600
+            });
+            fs.renameSync(temporaryPath, identityPath);
+        }
+        finally {
+            fs.rmSync(temporaryPath, { force: true });
+        }
+    };
 
     const read = function(): Uint8Array {
         const stat = fs.lstatSync(identityPath);
@@ -98,10 +117,16 @@ export const createIrohIdentityStore = function(
             fs.chmodSync(identityPath, 0o600);
         }
 
-        return decodeIdentity(
+        const decoded = decodeIdentity(
             fs.readFileSync(identityPath),
             options.protection
         );
+
+        if (options.protection && !decoded.protected) {
+            protectStoredIdentity(decoded.secret);
+        }
+
+        return decoded.secret;
     };
 
     const readOrCreate = function(): Uint8Array {
@@ -109,6 +134,9 @@ export const createIrohIdentityStore = function(
             recursive: true,
             mode: 0o700
         });
+        if (process.platform !== "win32") {
+            fs.chmodSync(identityDirectory, 0o700);
+        }
 
         if (fs.existsSync(identityPath)) {
             return read();

@@ -555,8 +555,11 @@ under `src/shell-electron/collaboration` provides:
 
 - lazy native-addon loading and fail-closed capability detection;
 - a persistent application identity stored under Electron `userData`, with a
-  versioned owner-only key file and Electron safe-storage encryption in the
-  installed application;
+  versioned owner-only key file and Electron safe-storage encryption when the
+  host provides a genuine OS secret store. Linux sessions without a usable
+  keyring use the same explicit `0700` directory and `0600` key file rather
+  than Electron's `basic_text` obfuscation; the file is upgraded to encrypted
+  storage if a keyring later becomes available;
 - ALPN `dialogforge/live-script/1`;
 - one long-lived bidirectional stream per peer with bounded length-prefixed
   frames, serialized writes, authenticated sender checks, host/join/send/state/
@@ -819,13 +822,16 @@ Done:
   the portable R 4.6.0 `bin/R` wrapper, saving Settings restarted only the
   runtime, preserved a ready workspace when possible, and visibly returned the
   console to an active prompt. The old unavailable-runtime case falls back to
-  a clean start because there is no workspace to preserve.
+  a clean start because there is no workspace to preserve. The first packaged
+  sharing attempt exposed that this XFCE session had no usable OS secret store;
+  the owner-only Linux identity fallback restored capability without changing
+  safe-storage behavior on hosts where it is available. The rerun launched two
+  packaged instances and passed spoken-code join, read-only synchronization,
+  no execution on receive, participant-local execution, code revocation,
+  ended-state rendering, and editable-copy detachment.
 
 Still open:
 
-- Run the two-instance packaged live-sharing smoke on Linux x64. Packaged
-  startup, missing-runtime behavior, portable-runtime selection, and runtime
-  restart have passed, but they are not a substitute for the sharing workflow.
 - Run packaged smokes on Windows x64. Static package selection covers that
   target, but other hosts are not execution proof for the Windows binary.
 - Submit this newly built signed DMG, wait for Apple acceptance, staple it, and
@@ -838,9 +844,8 @@ Deferred:
 
 Next:
 
-- Run the Linux two-instance packaged sharing workflow, then the Windows and
-  notarization lanes, before completing Phase 5 and requesting the explicit
-  Phase 6 repository authorization.
+- Run the Windows and notarization lanes before completing Phase 5 and
+  requesting the explicit Phase 6 repository authorization.
 
 ### Phase 6: Create The Separately Versioned Rust/WebAssembly Client
 
