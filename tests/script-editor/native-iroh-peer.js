@@ -102,6 +102,14 @@ const runHost = async function() {
                 await transport.shutdown();
                 return;
             }
+
+            if (message?.type === "metrics") {
+                report({
+                    type: "metrics",
+                    role,
+                    memory: process.memoryUsage()
+                });
+            }
         })().catch((error) => {
             report({ type: "failure", message: error.message });
         });
@@ -124,8 +132,13 @@ const runParticipant = async function() {
     });
     let lastReportedRevision = -1;
     let endedReported = false;
+    let reconnectPending = false;
+    let snapshotCount = 0;
 
     transport.onFrame((event) => {
+        if (event.frame.type === "snapshot") {
+            snapshotCount += 1;
+        }
         const responses = participant.receive(event.frame, event.remoteEndpointId);
         void sendOutbound(transport, responses).then(() => {
             const state = participant.state();
@@ -138,6 +151,18 @@ const runParticipant = async function() {
                     status: state.status,
                     revision: state.revision,
                     content: state.content
+                });
+            }
+
+            if (reconnectPending
+                && event.frame.type === "snapshot"
+                && state.status === "active") {
+                reconnectPending = false;
+                report({
+                    type: "participant-reconnected",
+                    revision: state.revision,
+                    content: state.content,
+                    snapshotCount
                 });
             }
 
@@ -154,6 +179,27 @@ const runParticipant = async function() {
     await sendOutbound(transport, [participant.join()]);
 
     process.on("message", (message) => {
+        if (message?.type === "reconnect") {
+            void (async () => {
+                reconnectPending = true;
+                await transport.closeSession(ticket.sessionId);
+                await transport.join(ticket);
+                await sendOutbound(transport, [participant.reconnect()]);
+            })().catch((error) => {
+                report({ type: "failure", message: error.message });
+            });
+            return;
+        }
+
+        if (message?.type === "metrics") {
+            report({
+                type: "metrics",
+                role,
+                memory: process.memoryUsage()
+            });
+            return;
+        }
+
         if (message?.type !== "shutdown") {
             return;
         }

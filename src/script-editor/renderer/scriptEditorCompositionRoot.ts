@@ -111,8 +111,13 @@ import type {
 import {
   createLiveScriptJoinLink,
   parseLiveScriptJoinText,
-  sanitizeLiveScriptDisplayName
+  sanitizeLiveScriptDisplayName,
+  type LiveScriptSessionTicket
 } from '../collaboration';
+import type {
+  LiveScriptRendezvousProvider,
+  LiveScriptRendezvousPublication
+} from '../collaboration/liveScriptRendezvous';
 import {
   scriptEditorEventChannels,
   scriptEditorIpcChannels
@@ -258,7 +263,10 @@ const surfaceState = createScriptEditorSurfaceStateController({
 let liveAvailable = false;
 let livePanelController: LiveScriptPanelController | null = null;
 let livePanelDocumentId = '';
+let liveRendezvous: LiveScriptRendezvousProvider | null = null;
 const hostedLinks = new Map<string, string>();
+const hostedTickets = new Map<string, LiveScriptSessionTicket>();
+const hostedPublications = new Map<string, LiveScriptRendezvousPublication>();
 
 const updateLiveToolbarState = function(): void {
   const active = tabController.getActiveTab();
@@ -342,6 +350,8 @@ const getLivePanelLabels = (): LiveScriptPanelLabels => ({
   sessionLink: t('Session link'),
   shortCode: t('Short code'),
   shortCodeUnavailable: t('Unavailable for this session'),
+  shortCodeCreating: t('Creating classroom code…'),
+  regenerateCode: t('Regenerate code'),
   participants: t('Participants'),
   connection: t('Connection'),
   enterLink: t('Paste a live-script link or ticket')
@@ -385,6 +395,31 @@ const scriptDocumentLifecycle =
   });
 const createTab = scriptDocumentLifecycle.create;
 
+const revokeHostedCode = async function(documentId: string): Promise<void> {
+  const publication = hostedPublications.get(documentId);
+  hostedPublications.delete(documentId);
+
+  if (publication && liveRendezvous) {
+    await liveRendezvous.revoke(publication).catch(() => {});
+  }
+};
+
+const publishHostedCode = async function(documentId: string): Promise<void> {
+  const ticket = hostedTickets.get(documentId);
+
+  if (!ticket || !liveRendezvous) {
+    return;
+  }
+
+  await revokeHostedCode(documentId);
+  const publication = await liveRendezvous.publish(ticket);
+  hostedPublications.set(documentId, publication);
+
+  if (livePanelDocumentId === documentId) {
+    livePanelController?.updateShortCode(publication.code);
+  }
+};
+
 const liveScriptController = createLiveScriptRendererController({
   transport: scriptEditorBridge.live,
   getMonaco: () => monacoRuntime.current,
@@ -395,7 +430,18 @@ const liveScriptController = createLiveScriptRendererController({
     scriptEditorReactions.tabStateChanged();
     updateLiveToolbarState();
   },
-  hostStateChanged: (_sessionId, state) => {
+  hostStateChanged: (sessionId, state) => {
+    if (state.status === 'ended') {
+      for (const [documentId, ticket] of hostedTickets) {
+        if (ticket.sessionId === sessionId) {
+          hostedLinks.delete(documentId);
+          hostedTickets.delete(documentId);
+          hostedPublications.delete(documentId);
+          break;
+        }
+      }
+    }
+
     livePanelController?.updateHost(state);
     updateLiveToolbarState();
   },
@@ -421,8 +467,10 @@ const scriptFileController: ScriptEditorFileController =
 tabController.setCloseHandler((tabId) => {
   void (async () => {
     if (liveScriptController.getHostedSessionId(tabId)) {
+      await revokeHostedCode(tabId);
       await liveScriptController.stopHosting(tabId, 'instructor-closed');
       hostedLinks.delete(tabId);
+      hostedTickets.delete(tabId);
     }
 
     if (liveScriptController.getParticipantSessionId(tabId)) {
@@ -545,9 +593,14 @@ const showShareLive = async function(): Promise<void> {
   const existingLink = hostedLinks.get(active.id);
 
   if (existingLink) {
+    const publication = hostedPublications.get(active.id);
     await livePanelController.showHost(
       existingLink,
-      sanitizeLiveScriptDisplayName(active.filePath || active.displayName)
+      sanitizeLiveScriptDisplayName(active.filePath || active.displayName),
+      publication?.code || (liveRendezvous
+        ? getLivePanelLabels().shortCodeCreating
+        : getLivePanelLabels().shortCodeUnavailable),
+      Boolean(liveRendezvous)
     );
     const state = liveScriptController.getHostedState(active.id);
 
@@ -565,9 +618,27 @@ const showShareLive = async function(): Promise<void> {
   );
   const link = createLiveScriptJoinLink(result.ticket);
   hostedLinks.set(active.id, link);
+  hostedTickets.set(active.id, result.ticket);
   updateLiveToolbarState();
-  await livePanelController.showHost(link, result.state.displayName);
+  await livePanelController.showHost(
+    link,
+    result.state.displayName,
+    liveRendezvous
+      ? getLivePanelLabels().shortCodeCreating
+      : getLivePanelLabels().shortCodeUnavailable,
+    Boolean(liveRendezvous)
+  );
   livePanelController.updateHost(result.state);
+
+  if (liveRendezvous) {
+    void publishHostedCode(active.id).catch(() => {
+      if (livePanelDocumentId === active.id) {
+        livePanelController?.updateShortCode(
+          getLivePanelLabels().shortCodeUnavailable
+        );
+      }
+    });
+  }
 };
 
 const showJoinLive = function(): void {
@@ -586,12 +657,15 @@ const initializeLiveScriptUi = async function(): Promise<void> {
     getLabels: getLivePanelLabels,
     join: async (value) => {
       const parsed = parseLiveScriptJoinText(value);
+      const ticket = parsed.ok
+        ? parsed.ticket
+        : await liveRendezvous?.resolve(value);
 
-      if (!parsed.ok) {
-        throw new Error(parsed.message);
+      if (!ticket) {
+        throw new Error(parsed.ok ? 'Live session is not available.' : parsed.message);
       }
 
-      const joinedDocument = await liveScriptController.join(parsed.ticket);
+      const joinedDocument = await liveScriptController.join(ticket);
       livePanelDocumentId = joinedDocument.id;
       livePanelController?.showParticipant(
         joinedDocument.displayName,
@@ -604,8 +678,10 @@ const initializeLiveScriptUi = async function(): Promise<void> {
         return;
       }
 
+      await revokeHostedCode(livePanelDocumentId);
       await liveScriptController.stopHosting(livePanelDocumentId);
       hostedLinks.delete(livePanelDocumentId);
+      hostedTickets.delete(livePanelDocumentId);
       livePanelController?.close();
       updateLiveToolbarState();
     },
@@ -618,6 +694,13 @@ const initializeLiveScriptUi = async function(): Promise<void> {
       await liveScriptController.detachParticipant(livePanelDocumentId);
       updateLiveToolbarState();
     },
+    regenerateShortCode: async () => {
+      if (!livePanelDocumentId || !liveRendezvous) {
+        return;
+      }
+
+      await publishHostedCode(livePanelDocumentId);
+    },
     followInstructorCursor: (follow) => {
       liveScriptController.setFollowInstructorCursor(
         livePanelDocumentId,
@@ -628,6 +711,20 @@ const initializeLiveScriptUi = async function(): Promise<void> {
 
   const capability = await scriptEditorBridge.live.capability();
   liveAvailable = capability.available;
+
+  if (capability.rendezvousUrl) {
+    try {
+      const rendezvous = await import(
+        '../collaboration/liveScriptRendezvous'
+      );
+      liveRendezvous = rendezvous.createHttpLiveScriptRendezvous({
+        baseUrl: capability.rendezvousUrl
+      });
+    }
+    catch {
+      liveRendezvous = null;
+    }
+  }
   updateLiveToolbarState();
 };
 

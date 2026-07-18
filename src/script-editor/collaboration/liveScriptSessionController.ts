@@ -16,6 +16,10 @@ import type {
     LiveScriptTextEdit
 } from "./liveScriptProtocol";
 import {
+    LIVE_SCRIPT_DEFAULT_SESSION_DURATION_MS,
+    LIVE_SCRIPT_MAX_SESSION_DURATION_MS
+} from "./liveScriptProtocol";
+import {
     LIVE_SCRIPT_TICKET_FORMAT_VERSION,
     sanitizeLiveScriptDisplayName,
     type LiveScriptSessionTicket
@@ -59,6 +63,8 @@ export interface LiveScriptSessionControllerOptions {
         state: LiveScriptHostState
     ): void;
     transportStateChanged(event: LiveScriptTransportStateEvent): void;
+    reconnectDelaysMs?: number[];
+    participantDisconnectGraceMs?: number;
 }
 
 
@@ -87,6 +93,13 @@ export const createLiveScriptSessionController = function(
 ): LiveScriptSessionController {
     const hosts = new Map<string, LiveScriptHostSession>();
     const participants = new Map<string, LiveScriptParticipantSession>();
+    const participantTickets = new Map<string, LiveScriptSessionTicket>();
+    const reconnectGeneration = new Map<string, number>();
+    const reconnecting = new Set<string>();
+    const expiryTimers = new Map<string, ReturnType<typeof setTimeout>>();
+    const participantDisconnectTimers = new Map<string, ReturnType<typeof setTimeout>>();
+    const reconnectDelaysMs = options.reconnectDelaysMs || [0, 250, 500, 1000, 2000, 4000];
+    const participantDisconnectGraceMs = options.participantDisconnectGraceMs ?? 30_000;
     let outboundQueue = Promise.resolve();
 
     const sendOutboundNow = async function(
@@ -121,6 +134,14 @@ export const createLiveScriptSessionController = function(
         const host = hosts.get(frame.sessionId);
 
         if (host) {
+            const disconnectKey = `${frame.sessionId}:${remoteEndpointId}`;
+            const disconnectTimer = participantDisconnectTimers.get(disconnectKey);
+
+            if (disconnectTimer) {
+                clearTimeout(disconnectTimer);
+                participantDisconnectTimers.delete(disconnectKey);
+            }
+
             await sendOutbound(host.receive(frame, remoteEndpointId));
             options.hostStateChanged(frame.sessionId, host.state());
             return;
@@ -135,14 +156,110 @@ export const createLiveScriptSessionController = function(
         const responses = participant.receive(frame, remoteEndpointId);
         const state = participant.state();
         options.participantFrameApplied(frame.sessionId, frame, state);
+        options.participantStateChanged(frame.sessionId, state);
         await sendOutbound(responses);
-        options.participantStateChanged(frame.sessionId, participant.state());
+    };
+
+    const wait = function(delayMs: number): Promise<void> {
+        return new Promise((resolve) => setTimeout(resolve, delayMs));
+    };
+
+    const reconnectParticipant = async function(sessionId: string): Promise<void> {
+        const participant = participants.get(sessionId);
+        const ticket = participantTickets.get(sessionId);
+
+        if (!participant || !ticket || reconnecting.has(sessionId)) {
+            return;
+        }
+
+        reconnecting.add(sessionId);
+        const generation = (reconnectGeneration.get(sessionId) || 0) + 1;
+        reconnectGeneration.set(sessionId, generation);
+
+        try {
+            for (const delayMs of reconnectDelaysMs) {
+                if (reconnectGeneration.get(sessionId) !== generation) {
+                    return;
+                }
+
+                if (ticket.expiresAt !== undefined && ticket.expiresAt <= Date.now()) {
+                    break;
+                }
+
+                const joinFrame = participant.reconnect();
+                options.participantStateChanged(sessionId, participant.state());
+                options.transportStateChanged({
+                    sessionId,
+                    state: "reconnecting",
+                    message: "Reconnecting to the live script."
+                });
+                await wait(Math.max(0, delayMs));
+
+                try {
+                    const operation = await options.transport.join(ticket);
+
+                    if (!operation.ok) {
+                        continue;
+                    }
+
+                    await sendOutbound([joinFrame]);
+                    options.participantStateChanged(sessionId, participant.state());
+                    return;
+                }
+                catch {
+                    // The next bounded attempt uses the same complete ticket.
+                }
+            }
+
+            participant.fail("Live-script connection could not be restored.");
+            options.participantStateChanged(sessionId, participant.state());
+        }
+        finally {
+            reconnecting.delete(sessionId);
+        }
     };
 
     options.transport.onFrame((event) => {
         void routeFrame(event.frame, event.remoteEndpointId).catch(() => {});
     });
-    options.transport.onState(options.transportStateChanged);
+    options.transport.onState((event) => {
+        options.transportStateChanged(event);
+
+        if (event.sessionId
+            && event.state === "disconnected"
+            && participants.has(event.sessionId)) {
+            const participant = participants.get(event.sessionId);
+
+            if (participant
+                && participant.state().status !== "ended"
+                && participant.state().status !== "failed") {
+                void reconnectParticipant(event.sessionId);
+            }
+        }
+
+        if (event.sessionId
+            && event.remoteEndpointId
+            && event.state === "disconnected") {
+            const host = hosts.get(event.sessionId);
+
+            if (host) {
+                host.participantDisconnected(event.remoteEndpointId);
+                options.hostStateChanged(event.sessionId, host.state());
+                const disconnectKey = `${event.sessionId}:${event.remoteEndpointId}`;
+                const previous = participantDisconnectTimers.get(disconnectKey);
+
+                if (previous) {
+                    clearTimeout(previous);
+                }
+
+                participantDisconnectTimers.set(disconnectKey, setTimeout(() => {
+                    host.removeParticipant(event.remoteEndpointId as string);
+                    participantDisconnectTimers.delete(disconnectKey);
+                    options.hostStateChanged(event.sessionId as string, host.state());
+                }, participantDisconnectGraceMs));
+            }
+        }
+    });
 
     const host = async function(
         input: LiveScriptHostedSessionInput
@@ -157,6 +274,17 @@ export const createLiveScriptSessionController = function(
             throw new Error(capability.message || "Live-script sharing is unavailable.");
         }
 
+        const now = Date.now();
+        const expiresAt = input.expiresAt === undefined
+            ? now + LIVE_SCRIPT_DEFAULT_SESSION_DURATION_MS
+            : input.expiresAt;
+
+        if (!Number.isSafeInteger(expiresAt)
+            || expiresAt <= now
+            || expiresAt > now + LIVE_SCRIPT_MAX_SESSION_DURATION_MS) {
+            throw new Error("Live-script session expiry is invalid.");
+        }
+
         const operation = await options.transport.host(input.sessionId);
 
         if (!operation.ok || !operation.transportAddress) {
@@ -169,7 +297,8 @@ export const createLiveScriptSessionController = function(
             capability: input.capability,
             endpointId: capability.endpointId,
             displayName,
-            content: input.content
+            content: input.content,
+            expiresAt
         });
 
         hosts.set(input.sessionId, session);
@@ -181,8 +310,15 @@ export const createLiveScriptSessionController = function(
             capability: input.capability,
             protocolVersions: { minimum: 1, maximum: 1 },
             displayName,
-            ...(input.expiresAt === undefined ? {} : { expiresAt: input.expiresAt })
+            expiresAt
         };
+
+        const expiryTimer = setTimeout(() => {
+            if (hosts.has(input.sessionId)) {
+                void endHost(input.sessionId, "expired").catch(() => {});
+            }
+        }, expiresAt - now);
+        expiryTimers.set(input.sessionId, expiryTimer);
 
         options.hostStateChanged(input.sessionId, session.state());
         return { ticket, state: session.state() };
@@ -214,7 +350,16 @@ export const createLiveScriptSessionController = function(
             throw new Error(operation.message);
         }
 
-        await sendOutbound([session.join()]);
+        participantTickets.set(ticket.sessionId, ticket);
+        reconnectGeneration.set(ticket.sessionId, 0);
+        try {
+            await sendOutbound([session.join()]);
+        }
+        catch (error) {
+            participants.delete(ticket.sessionId);
+            participantTickets.delete(ticket.sessionId);
+            throw error;
+        }
         options.participantStateChanged(ticket.sessionId, session.state());
         return session.state();
     };
@@ -261,6 +406,12 @@ export const createLiveScriptSessionController = function(
     ): Promise<void> {
         const session = requireHost(sessionId);
         const frames = session.end(reason);
+        const expiryTimer = expiryTimers.get(sessionId);
+
+        if (expiryTimer) {
+            clearTimeout(expiryTimer);
+            expiryTimers.delete(sessionId);
+        }
 
         try {
             await sendOutbound(frames);
@@ -278,11 +429,20 @@ export const createLiveScriptSessionController = function(
 
         options.hostStateChanged(sessionId, session.state());
         hosts.delete(sessionId);
+
+        for (const [key, timer] of participantDisconnectTimers) {
+            if (key.startsWith(`${sessionId}:`)) {
+                clearTimeout(timer);
+                participantDisconnectTimers.delete(key);
+            }
+        }
         await options.transport.close(sessionId);
     };
 
     const closeParticipant = async function(sessionId: string): Promise<void> {
+        reconnectGeneration.set(sessionId, (reconnectGeneration.get(sessionId) || 0) + 1);
         participants.delete(sessionId);
+        participantTickets.delete(sessionId);
         await options.transport.close(sessionId);
     };
 

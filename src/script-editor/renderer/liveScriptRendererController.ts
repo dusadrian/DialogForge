@@ -155,7 +155,22 @@ export const createLiveScriptRendererController = function(
 
             options.participantStateChanged(sessionId, state);
         },
-        hostStateChanged: options.hostStateChanged,
+        hostStateChanged: (sessionId, state) => {
+            if (state.status === "ended") {
+                for (const [documentId, hosted] of hostedByDocument) {
+                    if (hosted.sessionId === sessionId) {
+                        hosted.disposeChange();
+                        hosted.disposeCursor();
+                        hostedByDocument.delete(documentId);
+                        break;
+                    }
+                }
+
+                options.refreshTabs();
+            }
+
+            options.hostStateChanged(sessionId, state);
+        },
         transportStateChanged: (event) => {
             const document = event.sessionId
                 ? participantBySession.get(event.sessionId)

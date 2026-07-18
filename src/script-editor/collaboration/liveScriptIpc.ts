@@ -29,6 +29,7 @@ export interface LiveScriptCapabilityResult {
     available: boolean;
     endpointId: string;
     message: string;
+    rendezvousUrl?: string;
 }
 
 

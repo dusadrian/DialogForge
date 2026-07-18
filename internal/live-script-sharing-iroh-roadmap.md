@@ -748,6 +748,87 @@ Acceptance gate:
   smoke tests on every supported platform without affecting application startup
   when collaboration is unavailable.
 
+#### Phase 5 Progress (2026-07-18)
+
+Done:
+
+- Added bounded participant reconnect attempts using the complete ticket, with
+  one authoritative snapshot after a successful rejoin and a terminal failed
+  state after the retry budget is exhausted. Disconnect events are scoped to a
+  session, replacement connections do not emit a stale disconnect, and an
+  ended participant does not attempt to reconnect. The native two-process test
+  closes the participant's real iroh connection, rejoins with the complete
+  ticket, verifies the unchanged revision and content, and counts exactly one
+  additional authoritative snapshot.
+- Added the two-hour default and 24-hour maximum session expiry, automatic
+  expiry termination, participant limits, bounded failed capability attempts,
+  participant disappearance cleanup, and a 4 MiB per-peer pending-write bound.
+  Cursor frames are dropped under pressure while document-state frames fail
+  closed.
+- Added provider-neutral HTTPS publish, resolve, and revoke operations. Full
+  tickets remain independently usable. The installed UI now creates, displays,
+  regenerates, normalizes, resolves, and revokes spoken three-word codes only
+  when a rendezvous URL is configured.
+- Pinned the EFF English Diceware vocabulary and applied a checked-in English
+  classroom-safety and common-homophone exclusion review. Three independent,
+  non-repeated words are selected with rejection-sampled cryptographic random
+  indices. The resulting filtered vocabulary remains above the 33-bit target.
+- Added the Cloudflare Worker implementation with one SQLite-backed Durable
+  Object per normalized code, atomic collision handling, AES-GCM ticket
+  encryption, hashed constant-time revocation checks, lookup throttling,
+  expiry alarms, and complete record deletion. The service rejects unknown
+  ticket fields and transport-address payloads that could smuggle script
+  content. Added the provider-neutral OpenAPI contract for a replaceable
+  self-hosted implementation.
+- Rendered the configured two-instance DialogR workflow. Both R runtimes reached
+  active prompts; both Script Editors loaded; an uppercase, space-separated
+  spoken code joined the session; remote edits remained read-only and did not
+  auto-execute; participant execution stayed local; stopping sharing revoked
+  the code and rendered `Live · read-only · ended`; an editable copy detached.
+- Built an unsigned macOS arm64 DialogR package and fixed its staged dependency
+  closure after the first ASAR inspection found `qrcode` and `@irojs/iro-core`
+  missing. The rebuilt ASAR contains QR, vocabulary, and iroh packages, with the
+  arm64 and universal native modules unpacked. The packaged R-console smoke and
+  a two-packaged-instance native sharing workflow both pass.
+- Built the same macOS arm64 package with the local Developer ID identity.
+  `codesign --verify --deep --strict` reports the application valid and
+  satisfying its designated requirement. This signed build intentionally did
+  not claim notarization. The configured `developer-id-notary` profile is
+  usable and its history includes accepted DialogR and DialogQCA submissions;
+  submitting and stapling this newly built DMG remains a separate external
+  release action.
+- Cross-packaged the macOS x64 application from a temporary product copy and
+  ran it under Rosetta. Two x64 packaged instances reached active R runtimes,
+  loaded their Script Editors, loaded the universal x64 iroh slice, and passed
+  the same spoken-code sharing, synchronization, local execution, stop, and
+  detach workflow. The older generic console smoke's injected `1 + 1` timed
+  out despite reporting `r - ready - runtime-control`; that diagnostic is not
+  counted as a pass, while the stronger live-sharing workflow independently
+  executed named probes in both runtimes and verified their workspaces.
+- Measured two local native iroh edit round trips at 1.22 ms and 0.43 ms, with
+  peer RSS of 72.4 MiB and 73.2 MiB. A host-neutral 25-participant run with a
+  262,160-byte script and 50 edits measured 0.32 ms p50, 0.55 ms p95, and a
+  7.8 MiB heap increase. These are local diagnostic measurements, not network
+  service-level guarantees.
+
+Still open:
+
+- Run packaged smokes on Windows x64 and Linux x64. Static package selection
+  covers those targets, but a macOS host is not execution proof for those
+  platform binaries.
+- Submit this newly built signed DMG, wait for Apple acceptance, staple it, and
+  validate the stapled ticket. The local notarytool profile is available; the
+  external submission has not been started without explicit confirmation.
+
+Deferred:
+
+- None. The still-open acceptance work is not treated as deferred or complete.
+
+Next:
+
+- Run the remaining platform and notarization lanes before committing Phase 5
+  and requesting the explicit Phase 6 repository authorization.
+
 ### Phase 6: Create The Separately Versioned Rust/WebAssembly Client
 
 Why now: the native contract is stable enough to implement once in a browser

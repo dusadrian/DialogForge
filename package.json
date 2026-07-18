@@ -33,6 +33,7 @@
         "@fontsource/source-code-pro": "^5.2.7",
         "@jaames/iro": "^5.5.2",
         "@number0/iroh": "0.35.0",
+        "diceware-wordlist-en-eff": "1.0.1",
         "electron-updater": "^6.8.9",
         "monaco-editor": "^0.55.1",
         "preact": "^10.29.7",

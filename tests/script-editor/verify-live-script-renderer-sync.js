@@ -190,7 +190,12 @@ const createEditor = function() {
 const createBridge = function(endpoint) {
     const frameListeners = [];
     const stateListeners = [];
-    endpoint.onFrame((event) => frameListeners.forEach((listener) => listener(event)));
+    const receivedFrames = [];
+    let joinCount = 0;
+    endpoint.onFrame((event) => {
+        receivedFrames.push(event.frame);
+        frameListeners.forEach((listener) => listener(event));
+    });
     endpoint.onState((event) => stateListeners.forEach((listener) => listener(event)));
 
     return {
@@ -206,6 +211,7 @@ const createBridge = function(endpoint) {
             transportAddress: await endpoint.host(sessionId)
         }),
         join: async (ticket) => {
+            joinCount += 1;
             await endpoint.join(ticket);
             return { ok: true, message: "", endpointId: endpoint.endpointId };
         },
@@ -218,7 +224,10 @@ const createBridge = function(endpoint) {
             return { ok: true, message: "" };
         },
         onFrame: (listener) => frameListeners.push(listener),
-        onState: (listener) => stateListeners.push(listener)
+        onState: (listener) => stateListeners.push(listener),
+        emitState: (event) => stateListeners.forEach((listener) => listener(event)),
+        getJoinCount: () => joinCount,
+        getReceivedFrames: () => receivedFrames.slice()
     };
 };
 
@@ -226,6 +235,8 @@ const createBridge = function(endpoint) {
 const createHarness = function(transport, monaco) {
     const editor = createEditor();
     const tabs = [];
+    const participantStates = [];
+    const transportStates = [];
     let nextId = 1;
     const controller = createLiveScriptRendererController({
         transport,
@@ -252,11 +263,15 @@ const createHarness = function(transport, monaco) {
         },
         refreshTabs() {},
         hostStateChanged() {},
-        participantStateChanged() {},
-        transportStateChanged() {}
+        participantStateChanged(_sessionId, state) {
+            participantStates.push(state);
+        },
+        transportStateChanged(event) {
+            transportStates.push(event);
+        }
     });
 
-    return { controller, editor, tabs };
+    return { controller, editor, tabs, participantStates, transportStates };
 };
 
 
@@ -278,10 +293,10 @@ const run = async function() {
         createBridge(network.createEndpoint("host-endpoint")),
         monaco
     );
-    const participant = createHarness(
-        createBridge(network.createEndpoint("participant-endpoint")),
-        monaco
+    const participantBridge = createBridge(
+        network.createEndpoint("participant-endpoint")
     );
+    const participant = createHarness(participantBridge, monaco);
     const hostDocument = host.controller.makeEditableCopy("missing") || {
         id: "host-tab",
         model: new TestModel("value <- 1\n"),
@@ -348,6 +363,32 @@ const run = async function() {
     assert.equal(participantDocument.dirty, false);
     assert.equal(participantDocument.model.setValueCount, 1);
     assert.equal(participant.editor.restoredViewState, participant.editor.savedViewState);
+
+    participantDocument.model.content = "stale local view\n";
+    const snapshotsBeforeReconnect = participantBridge.getReceivedFrames()
+        .filter((frame) => frame.type === "snapshot").length;
+    participantBridge.emitState({
+        sessionId: hosted.ticket.sessionId,
+        state: "disconnected",
+        message: "test connection change"
+    });
+    await waitFor(
+        () => participantBridge.getJoinCount() === 2
+            && participantDocument.model.getValue() === hostDocument.model.getValue()
+            && participantDocument.liveStatus === "active",
+        "participant did not reconnect through one authoritative snapshot"
+    );
+    assert.ok(
+        participant.transportStates.some((event) => event.state === "reconnecting"),
+        "participant did not expose reconnecting state"
+    );
+    const snapshotsAfterReconnect = participantBridge.getReceivedFrames()
+        .filter((frame) => frame.type === "snapshot").length;
+    assert.equal(
+        snapshotsAfterReconnect - snapshotsBeforeReconnect,
+        1,
+        "reconnect must receive exactly one authoritative snapshot"
+    );
 
     const runtimeCalls = [];
     participant.editor.selection = {

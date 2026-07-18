@@ -19,6 +19,7 @@ export interface LiveScriptParticipantState {
     status:
         | "idle"
         | "joining"
+        | "reconnecting"
         | "awaiting-snapshot"
         | "active"
         | "ended"
@@ -34,6 +35,8 @@ export interface LiveScriptParticipantState {
 export interface LiveScriptParticipantSession {
     state(): LiveScriptParticipantState;
     join(): LiveScriptOutboundFrame;
+    reconnect(): LiveScriptOutboundFrame;
+    fail(message: string): void;
     receive(frame: LiveScriptFrame, remoteEndpointId: string): LiveScriptOutboundFrame[];
 }
 
@@ -106,8 +109,7 @@ export const createLiveScriptParticipantSession = function(
         return [outbound(frame)];
     };
 
-    const join = function(): LiveScriptOutboundFrame {
-        status = "joining";
+    const joinFrame = function(): LiveScriptOutboundFrame {
         const frame: LiveScriptJoinFrame = {
             ...frameBase("join"),
             payload: {
@@ -117,6 +119,17 @@ export const createLiveScriptParticipantSession = function(
         };
 
         return outbound(frame);
+    };
+
+    const join = function(): LiveScriptOutboundFrame {
+        status = "joining";
+        return joinFrame();
+    };
+
+    const reconnect = function(): LiveScriptOutboundFrame {
+        status = "reconnecting";
+        resyncPending = true;
+        return joinFrame();
     };
 
     const receive = function(
@@ -217,6 +230,12 @@ export const createLiveScriptParticipantSession = function(
             };
         },
         join,
+        reconnect,
+        fail: function(message) {
+            status = "failed";
+            resyncPending = false;
+            errorMessage = String(message || "Live-script connection was lost.");
+        },
         receive
     };
 };

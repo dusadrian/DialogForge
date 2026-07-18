@@ -683,6 +683,7 @@ scriptEditorComposition = scriptEditorCompositionModule.createScriptEditorCompos
     productId: product,
     settingsPath: location.settingsPath,
     userDataPath: electron.app.getPath("userData"),
+    liveScriptRendezvousUrl: process.env.DIALOGFORGE_LIVE_SCRIPT_RENDEZVOUS_URL || undefined,
     collaborationIdentityProtection: {
         protect: function (secret) {
             if (!electron.safeStorage.isEncryptionAvailable()) {

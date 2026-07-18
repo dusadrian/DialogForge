@@ -18,6 +18,8 @@ export interface LiveScriptPanelLabels {
     sessionLink: string;
     shortCode: string;
     shortCodeUnavailable: string;
+    shortCodeCreating: string;
+    regenerateCode: string;
     participants: string;
     connection: string;
     enterLink: string;
@@ -31,16 +33,23 @@ export interface LiveScriptPanelControllerOptions {
     stopSharing(): Promise<void>;
     detach(): Promise<void>;
     makeEditableCopy(): Promise<void>;
+    regenerateShortCode(): Promise<void>;
     followInstructorCursor(follow: boolean): void;
 }
 
 
 export interface LiveScriptPanelController {
     showJoin(): void;
-    showHost(link: string, displayName: string): Promise<void>;
+    showHost(
+        link: string,
+        displayName: string,
+        shortCodeState?: string,
+        canRegenerate?: boolean
+    ): Promise<void>;
     showParticipant(displayName: string, status?: string): void;
     showError(message: string): void;
     updateHost(state: LiveScriptHostState): void;
+    updateShortCode(code: string): void;
     updateParticipant(state: LiveScriptParticipantState): void;
     updateTransport(event: LiveScriptTransportStateEvent): void;
     close(): void;
@@ -80,6 +89,7 @@ export const createLiveScriptPanelController = function(
     let mode: "join" | "host" | "participant" = "join";
     let participantCount: HTMLElement | null = null;
     let connectionState: HTMLElement | null = null;
+    let shortCodeValue: HTMLElement | null = null;
 
     const action = function(
         label: string,
@@ -109,6 +119,7 @@ export const createLiveScriptPanelController = function(
         message.textContent = "";
         participantCount = null;
         connectionState = null;
+        shortCodeValue = null;
         overlay.hidden = false;
     };
 
@@ -145,7 +156,9 @@ export const createLiveScriptPanelController = function(
 
     const showHost = async function(
         link: string,
-        displayName: string
+        displayName: string,
+        shortCodeState?: string,
+        canRegenerate = false
     ): Promise<void> {
         const labels = options.getLabels();
         clear("host", `${labels.shareLive}: ${displayName}`);
@@ -166,12 +179,32 @@ export const createLiveScriptPanelController = function(
                 message.textContent = labels.copyLink;
             });
         });
-        const shortCodeRow = row(labels.shortCode, labels.shortCodeUnavailable);
+        const shortCodeRow = row(
+            labels.shortCode,
+            shortCodeState || labels.shortCodeUnavailable
+        );
+        shortCodeValue = shortCodeRow.lastElementChild as HTMLElement;
         const participantRow = row(labels.participants, "0");
         const connectionRow = row(labels.connection, "hosting");
         participantCount = participantRow.lastElementChild as HTMLElement;
         connectionState = connectionRow.lastElementChild as HTMLElement;
-        body.append(qrImage, ticket, copy, shortCodeRow, participantRow, connectionRow);
+        body.append(qrImage, ticket, copy, shortCodeRow);
+
+        if (canRegenerate) {
+            body.appendChild(action(labels.regenerateCode, false, () => {
+                if (shortCodeValue) {
+                    shortCodeValue.textContent = labels.shortCodeCreating;
+                }
+
+                void options.regenerateShortCode().catch((error) => {
+                    message.textContent = error instanceof Error
+                        ? error.message
+                        : String(error);
+                });
+            }));
+        }
+
+        body.append(participantRow, connectionRow);
         footer.append(
             action(labels.close, false, close),
             action(labels.stopSharing, true, () => {
@@ -238,6 +271,11 @@ export const createLiveScriptPanelController = function(
 
             if (connectionState) {
                 connectionState.textContent = state.status;
+            }
+        },
+        updateShortCode: function(code) {
+            if (mode === "host" && shortCodeValue) {
+                shortCodeValue.textContent = code;
             }
         },
         updateParticipant: function(state) {

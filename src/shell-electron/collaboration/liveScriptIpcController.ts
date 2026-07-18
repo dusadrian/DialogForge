@@ -22,6 +22,7 @@ import type {
 export interface LiveScriptIpcControllerOptions {
     ipcMain: IpcMain;
     transport: NativeIrohLiveScriptTransport;
+    rendezvousUrl?: string;
     publish(channel: string, payload: unknown): void;
 }
 
@@ -47,7 +48,11 @@ export const createLiveScriptIpcController = function(
     });
 
     options.ipcMain.handle(liveScriptIpcChannels.capability, async () => {
-        return options.transport.capability();
+        const capability = await options.transport.capability();
+        return {
+            ...capability,
+            ...(options.rendezvousUrl ? { rendezvousUrl: options.rendezvousUrl } : {})
+        };
     });
 
     options.ipcMain.handle(liveScriptIpcChannels.host, async (

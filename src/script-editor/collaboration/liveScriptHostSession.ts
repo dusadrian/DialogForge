@@ -4,6 +4,8 @@ import {
 import {
     LIVE_SCRIPT_PROTOCOL,
     LIVE_SCRIPT_PROTOCOL_VERSION,
+    LIVE_SCRIPT_MAX_JOIN_ATTEMPTS_PER_ENDPOINT,
+    LIVE_SCRIPT_MAX_PARTICIPANTS,
     type LiveScriptEditFrame,
     type LiveScriptCursorFrame,
     type LiveScriptErrorFrame,
@@ -23,6 +25,7 @@ export interface LiveScriptHostParticipantState {
     endpointId: string;
     acknowledgedRevision: number;
     lastMessageNumber: number;
+    connectionState: "joined" | "reconnecting";
 }
 
 
@@ -39,6 +42,8 @@ export interface LiveScriptHostState {
 export interface LiveScriptHostSession {
     state(): LiveScriptHostState;
     receive(frame: LiveScriptFrame, remoteEndpointId: string): LiveScriptOutboundFrame[];
+    participantDisconnected(endpointId: string): void;
+    removeParticipant(endpointId: string): void;
     publishEdits(edits: LiveScriptTextEdit[]): LiveScriptOutboundFrame[];
     publishCursor(
         position: LiveScriptCursorFrame["payload"]["position"],
@@ -55,6 +60,8 @@ export interface LiveScriptHostSessionOptions {
     endpointId: string;
     displayName: string;
     content: string;
+    expiresAt?: number;
+    maxParticipants?: number;
 }
 
 
@@ -77,6 +84,11 @@ export const createLiveScriptHostSession = function(
     const capability = options.capability;
     const displayName = sanitizeLiveScriptDisplayName(options.displayName);
     const participants = new Map<string, LiveScriptHostParticipantState>();
+    const failedJoinAttempts = new Map<string, number>();
+    const maxParticipants = Math.max(
+        1,
+        Math.min(options.maxParticipants || LIVE_SCRIPT_MAX_PARTICIPANTS, LIVE_SCRIPT_MAX_PARTICIPANTS)
+    );
 
     const frameBase = function<Type extends LiveScriptFrame["type"]>(type: Type) {
         return {
@@ -119,7 +131,33 @@ export const createLiveScriptHostSession = function(
             return [errorFor(remoteEndpointId, "session-ended", "Live session has ended.")];
         }
 
+        if (options.expiresAt !== undefined && Date.now() >= options.expiresAt) {
+            status = "ended";
+            return [errorFor(remoteEndpointId, "session-ended", "Live session has ended.")];
+        }
+
+        const existing = participants.get(remoteEndpointId);
+
+        if (!existing && participants.size >= maxParticipants) {
+            return [errorFor(
+                remoteEndpointId,
+                "participant-limit",
+                "Live session is not available."
+            )];
+        }
+
+        if ((failedJoinAttempts.get(remoteEndpointId) || 0)
+            >= LIVE_SCRIPT_MAX_JOIN_ATTEMPTS_PER_ENDPOINT) {
+            return [errorFor(
+                remoteEndpointId,
+                "authorization-failed",
+                "Live session is not available."
+            )];
+        }
+
         if (frame.payload.capability !== capability) {
+            const attempts = (failedJoinAttempts.get(remoteEndpointId) || 0) + 1;
+            failedJoinAttempts.set(remoteEndpointId, attempts);
             return [errorFor(
                 remoteEndpointId,
                 "authorization-failed",
@@ -135,16 +173,17 @@ export const createLiveScriptHostSession = function(
             )];
         }
 
-        const existing = participants.get(remoteEndpointId);
-
         if (existing && frame.messageNumber <= existing.lastMessageNumber) {
             return [];
         }
 
+        failedJoinAttempts.delete(remoteEndpointId);
+
         participants.set(remoteEndpointId, {
             endpointId: remoteEndpointId,
             acknowledgedRevision: 0,
-            lastMessageNumber: frame.messageNumber
+            lastMessageNumber: frame.messageNumber,
+            connectionState: "joined"
         });
 
         const welcome: LiveScriptWelcomeFrame = {
@@ -219,6 +258,12 @@ export const createLiveScriptHostSession = function(
 
             if (frame.payload.state === "left") {
                 participants.delete(remoteEndpointId);
+            }
+            else if (frame.payload.state === "reconnecting") {
+                participant.connectionState = "reconnecting";
+            }
+            else {
+                participant.connectionState = "joined";
             }
 
             return [];
@@ -344,6 +389,16 @@ export const createLiveScriptHostSession = function(
             };
         },
         receive,
+        participantDisconnected: function(participantEndpointId) {
+            const participant = participants.get(participantEndpointId);
+
+            if (participant) {
+                participant.connectionState = "reconnecting";
+            }
+        },
+        removeParticipant: function(participantEndpointId) {
+            participants.delete(participantEndpointId);
+        },
         publishEdits,
         publishCursor,
         replaceContent,

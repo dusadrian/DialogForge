@@ -10,6 +10,7 @@ export type LiveScriptConnectionState =
     | "idle"
     | "hosting"
     | "connecting"
+    | "reconnecting"
     | "connected"
     | "disconnected"
     | "closed"
@@ -24,6 +25,7 @@ export interface LiveScriptTransportFrameEvent {
 
 export interface LiveScriptTransportStateEvent {
     sessionId?: string;
+    remoteEndpointId?: string;
     state: LiveScriptConnectionState;
     message?: string;
 }

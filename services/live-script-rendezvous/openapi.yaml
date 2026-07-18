@@ -1,0 +1,35 @@
+openapi: 3.1.0
+info:
+  title: DialogForge live-script rendezvous
+  version: 1.0.0
+  description: Provider-neutral short-code mapping. Live document content is never sent here.
+paths:
+  /v1/sessions/{code}:
+    parameters:
+      - name: code
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^[a-z]{3,8}(?:-[a-z]{3,8}){2}$'
+    put:
+      summary: Atomically publish a short-lived session ticket
+      responses:
+        '201': { description: Published }
+        '409': { description: Code collision; generate another code }
+    get:
+      summary: Resolve a normalized classroom code
+      responses:
+        '200': { description: Active session ticket }
+        '404': { description: Identical response for missing, expired, revoked, or throttled code }
+    delete:
+      summary: Revoke a published code using its bearer revocation token
+      security:
+        - bearerAuth: []
+      responses:
+        '204': { description: Indistinguishable success response }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer

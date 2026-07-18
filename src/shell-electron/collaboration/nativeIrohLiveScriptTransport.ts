@@ -15,6 +15,7 @@ import {
 } from "../../script-editor/collaboration/liveScriptFrameCodec";
 import {
     LIVE_SCRIPT_MAX_FRAME_BYTES,
+    LIVE_SCRIPT_MAX_PENDING_OUTBOUND_BYTES,
     type LiveScriptFrame
 } from "../../script-editor/collaboration/liveScriptProtocol";
 import type {
@@ -49,6 +50,7 @@ interface NativeConnectionState {
     send: SendStream;
     sessions: Set<string>;
     writeQueue: Promise<void>;
+    pendingBytes: number;
     closed: boolean;
 }
 
@@ -165,7 +167,9 @@ export const createNativeIrohLiveScriptTransport = function(
         }
 
         state.closed = true;
-        connectionsByEndpoint.delete(state.remoteEndpointId);
+        if (connectionsByEndpoint.get(state.remoteEndpointId) === state) {
+            connectionsByEndpoint.delete(state.remoteEndpointId);
+        }
 
         try {
             state.connection.close(0n, new TextEncoder().encode("closed"));
@@ -208,13 +212,20 @@ export const createNativeIrohLiveScriptTransport = function(
             }
         }
         catch (error) {
+            const affectedSessions = Array.from(state.sessions);
             closeConnection(state);
 
-            if (!shuttingDown) {
-                publishState({
-                    state: "disconnected",
-                    message: errorMessage(error)
-                });
+            const replacement = connectionsByEndpoint.get(state.remoteEndpointId);
+
+            if (!shuttingDown && (!replacement || replacement.closed)) {
+                for (const sessionId of affectedSessions) {
+                    publishState({
+                        sessionId,
+                        remoteEndpointId: state.remoteEndpointId,
+                        state: "disconnected",
+                        message: errorMessage(error)
+                    });
+                }
             }
         }
     };
@@ -244,6 +255,7 @@ export const createNativeIrohLiveScriptTransport = function(
             send: opened.send,
             sessions: new Set(),
             writeQueue: Promise.resolve(),
+            pendingBytes: 0,
             closed: false
         };
 
@@ -398,9 +410,25 @@ export const createNativeIrohLiveScriptTransport = function(
         }
 
         const encoded = encodeLiveScriptFrame(frame);
+
+        if (state.pendingBytes + encoded.byteLength
+            > LIVE_SCRIPT_MAX_PENDING_OUTBOUND_BYTES) {
+            if (frame.type === "cursor") {
+                return;
+            }
+
+            throw new Error("Live-script recipient is not keeping up.");
+        }
+
         state.sessions.add(frame.sessionId);
+        state.pendingBytes += encoded.byteLength;
         state.writeQueue = state.writeQueue.then(async () => {
-            await state.send.writeAll(encoded);
+            try {
+                await state.send.writeAll(encoded);
+            }
+            finally {
+                state.pendingBytes = Math.max(0, state.pendingBytes - encoded.byteLength);
+            }
         });
         await state.writeQueue;
     };

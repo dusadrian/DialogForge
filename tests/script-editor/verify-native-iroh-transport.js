@@ -137,19 +137,58 @@ const run = async function() {
         assert.strictEqual(initial.content, "x <- 1\n");
         assert.notStrictEqual(initial.endpointId, ready.endpointId);
 
+        const editLatenciesMs = [];
+        const firstEditStarted = process.hrtime.bigint();
         hostPeer.child.send({ type: "edit", text: "# first frame\n" });
         const firstEdit = await participantPeer.waitFor((message) => {
             return message?.type === "participant-state" && message.revision === 1;
         });
+        editLatenciesMs.push(
+            Number(process.hrtime.bigint() - firstEditStarted) / 1_000_000
+        );
         assert.strictEqual(firstEdit.content, "x <- 1\n# first frame\n");
 
+        const secondEditStarted = process.hrtime.bigint();
         hostPeer.child.send({ type: "edit", text: "# second frame\n" });
         const secondEdit = await participantPeer.waitFor((message) => {
             return message?.type === "participant-state" && message.revision === 2;
         });
+        editLatenciesMs.push(
+            Number(process.hrtime.bigint() - secondEditStarted) / 1_000_000
+        );
         assert.strictEqual(
             secondEdit.content,
             "x <- 1\n# first frame\n# second frame\n"
+        );
+
+        participantPeer.child.send({ type: "reconnect" });
+        const reconnected = await participantPeer.waitFor((message) => {
+            return message?.type === "participant-reconnected";
+        });
+        assert.strictEqual(reconnected.revision, 2);
+        assert.strictEqual(reconnected.content, secondEdit.content);
+        assert.strictEqual(
+            reconnected.snapshotCount,
+            2,
+            "native reconnect must add exactly one authoritative snapshot"
+        );
+
+        hostPeer.child.send({ type: "metrics" });
+        participantPeer.child.send({ type: "metrics" });
+        const hostMetrics = await hostPeer.waitFor((message) => {
+            return message?.type === "metrics" && message.role === "host";
+        });
+        const participantMetrics = await participantPeer.waitFor((message) => {
+            return message?.type === "metrics" && message.role === "participant";
+        });
+        process.stdout.write(
+            `native iroh local edit latency ms: ${editLatenciesMs
+                .map((value) => value.toFixed(2)).join(", ")}\n`
+        );
+        process.stdout.write(
+            `native iroh peer RSS MiB: host=${(hostMetrics.memory.rss / 1048576)
+                .toFixed(1)}, participant=${(participantMetrics.memory.rss / 1048576)
+                .toFixed(1)}\n`
         );
 
         hostPeer.child.send({ type: "end" });

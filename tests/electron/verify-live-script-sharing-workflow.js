@@ -3,6 +3,7 @@
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
+const http = require("node:http");
 const { execFileSync } = require("node:child_process");
 const { _electron } = require("playwright");
 const {
@@ -81,17 +82,121 @@ const stopAppProcesses = function(app) {
 };
 
 
-const launchInstance = function(userDataPath) {
+const stopRuntimeSafely = async function(page) {
+    if (!page || page.isClosed()) {
+        return;
+    }
+
+    await Promise.race([
+        page.evaluate(() => window.dialogForge.stopRuntime()).catch(() => null),
+        new Promise((resolve) => setTimeout(resolve, 3000))
+    ]);
+};
+
+
+const launchInstance = function(userDataPath, rendezvousUrl) {
+    const packagedExecutable = String(
+        process.env.DIALOGFORGE_PACKAGED_ELECTRON_EXECUTABLE || ""
+    ).trim();
+
     return _electron.launch({
-        executablePath: require("electron"),
-        args: productLaunchArgs(mainEntry),
+        executablePath: packagedExecutable || require("electron"),
+        args: packagedExecutable ? [] : productLaunchArgs(mainEntry),
         cwd: projectRoot,
         env: {
             ...process.env,
             DIALOGFORGE_ELECTRON_SCRIPT_EDITOR_TEST: "1",
-            DIALOGFORGE_TEST_USER_DATA_PATH: userDataPath
+            DIALOGFORGE_TEST_USER_DATA_PATH: userDataPath,
+            DIALOGFORGE_LIVE_SCRIPT_RENDEZVOUS_URL: rendezvousUrl
         }
     });
+};
+
+
+const observePageErrors = function(app, label) {
+    const observe = function(page) {
+        page.on("pageerror", (error) => {
+            process.stderr.write(`${label} page error: ${error.message}\n`);
+        });
+        page.on("console", (message) => {
+            if (message.type() === "error") {
+                process.stderr.write(`${label} console error: ${message.text()}\n`);
+            }
+        });
+    };
+
+    app.windows().forEach(observe);
+    app.on("window", observe);
+};
+
+
+const startRendezvous = async function() {
+    const records = new Map();
+    const server = http.createServer((request, response) => {
+        const code = decodeURIComponent(
+            new URL(request.url, "http://localhost").pathname.split("/").at(-1)
+        );
+        const record = records.get(code);
+
+        response.setHeader("content-type", "application/json");
+
+        if (request.method === "GET") {
+            response.statusCode = record ? 200 : 404;
+            response.end(JSON.stringify(record
+                ? { ok: true, ticket: record.ticket }
+                : { ok: false, message: "Live session is not available." }));
+            return;
+        }
+
+        if (request.method === "DELETE") {
+            const token = String(request.headers.authorization || "")
+                .replace(/^Bearer\s+/, "");
+
+            if (record?.revocationToken === token) {
+                records.delete(code);
+            }
+
+            response.statusCode = 204;
+            response.end();
+            return;
+        }
+
+        if (request.method !== "PUT") {
+            response.statusCode = 404;
+            response.end();
+            return;
+        }
+
+        let body = "";
+        request.on("data", (chunk) => {
+            body += chunk;
+        });
+        request.on("end", () => {
+            if (records.has(code)) {
+                response.statusCode = 409;
+                response.end(JSON.stringify({ ok: false }));
+                return;
+            }
+
+            const input = JSON.parse(body);
+            records.set(code, input);
+            response.statusCode = 201;
+            response.end(JSON.stringify({ ok: true }));
+        });
+    });
+
+    await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+
+    if (!address || typeof address === "string") {
+        throw new Error("Could not start the local rendezvous fixture.");
+    }
+
+    return {
+        records,
+        server,
+        url: `http://localhost:${address.port}`
+    };
 };
 
 
@@ -191,19 +296,28 @@ const run = async function() {
     const sharedCode = `${objectName} <- 42\n`;
     fs.writeFileSync(hostScript, "starting_value <- 1\n", "utf8");
     fs.writeFileSync(participantScript, "", "utf8");
+    const rendezvous = await startRendezvous();
 
-    const hostApp = await launchInstance(path.join(tempDirectory, "host-data"));
+    const hostApp = await launchInstance(
+        path.join(tempDirectory, "host-data"),
+        rendezvous.url
+    );
+    observePageErrors(hostApp, "instructor");
     let participantApp = null;
+    let hostMain = null;
+    let participantMain = null;
 
     try {
-        const hostMain = await waitForMainWindow(hostApp);
+        hostMain = await waitForMainWindow(hostApp);
         await verifyRuntime(hostMain, `host_runtime_probe_${Date.now()}`);
         process.stdout.write("live-script UI: instructor main ready\n");
         const hostEditor = await openScriptEditor(hostApp, hostMain, hostScript);
         participantApp = await launchInstance(
-            path.join(tempDirectory, "participant-data")
+            path.join(tempDirectory, "participant-data"),
+            rendezvous.url
         );
-        const participantMain = await waitForMainWindow(participantApp);
+        observePageErrors(participantApp, "participant");
+        participantMain = await waitForMainWindow(participantApp);
         await verifyRuntime(
             participantMain,
             `participant_runtime_probe_${Date.now()}`
@@ -251,16 +365,26 @@ const run = async function() {
             throw new Error("Share panel did not expose a live-script join link.");
         }
 
-        const hostPanelText = await hostEditor.locator(
-            ".dm-live-panel__dialog"
-        ).innerText();
-
-        if (!hostPanelText.includes("Unavailable for this session")) {
-            throw new Error("Share panel did not show short-code availability.");
-        }
+        await hostEditor.waitForFunction(() => {
+            const rows = Array.from(document.querySelectorAll(".dm-live-panel__row"));
+            const codeRow = rows.find((row) => {
+                return row.firstElementChild?.textContent === "Short code";
+            });
+            const code = codeRow?.lastElementChild?.textContent || "";
+            return /^[a-z]{3,8}(?:-[a-z]{3,8}){2}$/.test(code);
+        }, undefined, { timeout: 30000 });
+        const classroomCode = await hostEditor.evaluate(() => {
+            const rows = Array.from(document.querySelectorAll(".dm-live-panel__row"));
+            const codeRow = rows.find((row) => {
+                return row.firstElementChild?.textContent === "Short code";
+            });
+            return codeRow?.lastElementChild?.textContent || "";
+        });
 
         await participantEditor.locator(".dm-script-btn-join-live").click();
-        await participantEditor.locator(".dm-live-panel__ticket").fill(joinLink);
+        await participantEditor.locator(".dm-live-panel__ticket").fill(
+            classroomCode.toUpperCase().replace(/-/g, " ")
+        );
         await participantEditor.getByRole("dialog").getByRole("button", {
             name: "Join live script",
             exact: true
@@ -345,6 +469,9 @@ const run = async function() {
             name: "Stop sharing",
             exact: true
         }).click();
+        if (rendezvous.records.size !== 0) {
+            throw new Error("Stopping sharing did not revoke the classroom code.");
+        }
         try {
             await hostEditor.waitForFunction(() => {
                 const panel = document.querySelector(".dm-live-panel");
@@ -393,9 +520,12 @@ const run = async function() {
         );
     }
     finally {
+        await stopRuntimeSafely(participantMain);
+        await stopRuntimeSafely(hostMain);
         stopAppProcesses(hostApp);
         stopAppProcesses(participantApp);
         await new Promise((resolve) => setTimeout(resolve, 250));
+        await new Promise((resolve) => rendezvous.server.close(resolve));
         fs.rmSync(tempDirectory, { recursive: true, force: true });
     }
 };

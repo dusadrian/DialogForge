@@ -60,6 +60,7 @@ export interface ScriptEditorCompositionOptions {
     settingsPath: string;
     userDataPath: string;
     collaborationIdentityProtection?: IrohIdentityProtection;
+    liveScriptRendezvousUrl?: string;
     title: string;
     nativeWindowIconPath?: string;
     pagePath: string;
@@ -344,6 +345,7 @@ export const createScriptEditorComposition = function(
     createLiveScriptIpcController({
         ipcMain: options.ipcMain,
         transport: collaborationTransport,
+        rendezvousUrl: options.liveScriptRendezvousUrl,
         publish: function(channel, payload): void {
             windowController.send(channel, payload);
         }
