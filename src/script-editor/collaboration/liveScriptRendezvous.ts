@@ -11,6 +11,10 @@ import {
 const MAX_PUBLICATION_ATTEMPTS = 8;
 
 
+export const defaultLiveScriptRendezvousUrl =
+    "https://dialogforge-live-script-rendezvous.dusa-adrian.workers.dev";
+
+
 export interface LiveScriptRendezvousPublication {
     code: string;
     expiresAt: number;

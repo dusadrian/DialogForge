@@ -18,6 +18,7 @@ const datasetEditorCompositionModule = require("../src/shell-electron/dataset-ed
 const datasetEditorSettingsModule = require("../src/shell-electron/dataset-editor/datasetEditorSettings");
 const datasetViewerReadIpcController = require("../src/shell-electron/dataset-editor/datasetViewerReadIpcController");
 const scriptEditorCompositionModule = require("../src/shell-electron/script-editor/scriptEditorComposition");
+const liveScriptRendezvousModule = require("../src/script-editor/collaboration/liveScriptRendezvous");
 const shellFileDialogControllerModule = require("../src/shell-electron/filesystem/shellFileDialogController");
 const shellFileDialogIpcController = require("../src/shell-electron/filesystem/shellFileDialogIpcController");
 const plotDownloadControllerModule = require("../src/shell-electron/external/plotDownloadController");
@@ -686,7 +687,10 @@ scriptEditorComposition = scriptEditorCompositionModule.createScriptEditorCompos
     productId: product,
     settingsPath: location.settingsPath,
     userDataPath: electron.app.getPath("userData"),
-    liveScriptRendezvousUrl: process.env.DIALOGFORGE_LIVE_SCRIPT_RENDEZVOUS_URL || undefined,
+    liveScriptRendezvousUrl: String(
+        process.env.DIALOGFORGE_LIVE_SCRIPT_RENDEZVOUS_URL
+            || liveScriptRendezvousModule.defaultLiveScriptRendezvousUrl
+    ).trim(),
     title: translateCompositionText("Script editor"),
     nativeWindowIconPath: composition.nativeWindowIconPath || undefined,
     pagePath: path.join(composition.rootDir, "src/base-app/pages/scriptEditor.html"),

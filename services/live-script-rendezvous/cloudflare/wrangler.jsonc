@@ -3,6 +3,11 @@
     "name": "dialogforge-live-script-rendezvous",
     "main": "src/worker.mjs",
     "compatibility_date": "2026-07-18",
+    "secrets": {
+        "required": [
+            "TICKET_ENCRYPTION_KEY"
+        ]
+    },
     "durable_objects": {
         "bindings": [
             {

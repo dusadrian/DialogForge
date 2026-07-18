@@ -782,6 +782,15 @@ Done:
   ticket fields and transport-address payloads that could smuggle script
   content. Added the provider-neutral OpenAPI contract for a replaceable
   self-hosted implementation.
+- Deployed the invite-code Worker independently at
+  `https://dialogforge-live-script-rendezvous.dusa-adrian.workers.dev` and made
+  that public origin the shared desktop default. The environment override
+  remains available for compatible staging or self-hosted deployments. The
+  health check verified its secret and bindings; a production publish,
+  resolve, revoke, and rejected-after-revoke round trip passed. A rendered
+  two-instance DialogR run with no rendezvous override received this origin in
+  both capabilities, joined by spoken code, synchronized the script, revoked
+  the code during application quit, and exited without a native crash.
 - Rendered the configured two-instance DialogR workflow. Both R runtimes reached
   active prompts; both Script Editors loaded; an uppercase, space-separated
   spoken code joined the session; remote edits remained read-only and did not

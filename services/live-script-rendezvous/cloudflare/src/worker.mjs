@@ -30,6 +30,29 @@ const unavailableResponse = function() {
 };
 
 
+const healthResponse = async function(env) {
+    try {
+        await encryptionKey(env.TICKET_ENCRYPTION_KEY);
+
+        if (!env.LIVE_SCRIPT_SESSIONS || !env.RENDEZVOUS_RATE_LIMITER) {
+            throw new Error("Invite-code service bindings are unavailable.");
+        }
+
+        return jsonResponse({
+            ok: true,
+            service: "dialogforge-live-script-invite-codes",
+            version: 1
+        });
+    }
+    catch {
+        return jsonResponse({
+            ok: false,
+            message: "Invite-code service is unavailable."
+        }, 503);
+    }
+};
+
+
 const base64UrlToBytes = function(value) {
     const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
     const padded = normalized + "=".repeat((4 - normalized.length % 4) % 4);
@@ -361,7 +384,13 @@ export default {
             });
         }
 
-        const code = normalizedCode(new URL(request.url).pathname);
+        const url = new URL(request.url);
+
+        if (request.method === "GET" && url.pathname === "/healthz") {
+            return healthResponse(env);
+        }
+
+        const code = normalizedCode(url.pathname);
 
         if (!code) {
             return unavailableResponse();

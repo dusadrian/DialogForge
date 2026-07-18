@@ -15,6 +15,11 @@ const {
 const projectRoot = process.cwd();
 const mainEntry = path.join(projectRoot, "dist/scripts/electron-main.js");
 const verifyInstructorQuit = process.env.DIALOGFORGE_LIVE_SCRIPT_QUIT_TEST === "1";
+const useDefaultRendezvous =
+    process.env.DIALOGFORGE_LIVE_SCRIPT_USE_DEFAULT_RENDEZVOUS === "1";
+const {
+    defaultLiveScriptRendezvousUrl
+} = require("../../dist/src/script-editor/collaboration/liveScriptRendezvous");
 const screenshotDirectory = path.join(
     os.homedir(),
     ".codex/visualizations/2026/07/18/019f7512-fe13-7743-852a-dde15ff9327a/live-script-phase4"
@@ -108,16 +113,24 @@ const launchInstance = function(userDataPath, rendezvousUrl) {
         process.env.DIALOGFORGE_PACKAGED_ELECTRON_EXECUTABLE || ""
     ).trim();
 
+    const environment = {
+        ...process.env,
+        DIALOGFORGE_ELECTRON_SCRIPT_EDITOR_TEST: "1",
+        DIALOGFORGE_TEST_USER_DATA_PATH: userDataPath
+    };
+
+    if (rendezvousUrl) {
+        environment.DIALOGFORGE_LIVE_SCRIPT_RENDEZVOUS_URL = rendezvousUrl;
+    }
+    else {
+        delete environment.DIALOGFORGE_LIVE_SCRIPT_RENDEZVOUS_URL;
+    }
+
     return _electron.launch({
         executablePath: packagedExecutable || require("electron"),
         args: packagedExecutable ? [] : productLaunchArgs(mainEntry),
         cwd: projectRoot,
-        env: {
-            ...process.env,
-            DIALOGFORGE_ELECTRON_SCRIPT_EDITOR_TEST: "1",
-            DIALOGFORGE_TEST_USER_DATA_PATH: userDataPath,
-            DIALOGFORGE_LIVE_SCRIPT_RENDEZVOUS_URL: rendezvousUrl
-        }
+        env: environment
     });
 };
 
@@ -295,6 +308,18 @@ const editorText = function(page) {
 };
 
 
+const classroomCodeWasRevoked = async function(rendezvous, code) {
+    if (rendezvous.records) {
+        return !rendezvous.records.has(code);
+    }
+
+    const response = await fetch(
+        `${defaultLiveScriptRendezvousUrl}/v1/sessions/${encodeURIComponent(code)}`
+    );
+    return !response.ok;
+};
+
+
 const run = async function() {
     const tempDirectory = fs.mkdtempSync(
         path.join(os.tmpdir(), "dialogforge-live-script-ui-")
@@ -305,7 +330,13 @@ const run = async function() {
     const sharedCode = `${objectName} <- 42\n`;
     fs.writeFileSync(hostScript, "starting_value <- 1\n", "utf8");
     fs.writeFileSync(participantScript, "", "utf8");
-    const rendezvous = await startRendezvous();
+    const rendezvous = useDefaultRendezvous
+        ? {
+            records: null,
+            server: null,
+            url: ""
+        }
+        : await startRendezvous();
 
     const hostApp = await launchInstance(
         path.join(tempDirectory, "host-data"),
@@ -478,7 +509,7 @@ const run = async function() {
                     && !join.disabled;
             }, undefined, { timeout: 30000 });
 
-            if (rendezvous.records.size !== 0) {
+            if (!await classroomCodeWasRevoked(rendezvous, classroomCode)) {
                 throw new Error("Cmd+Q did not revoke the classroom code.");
             }
 
@@ -533,7 +564,7 @@ const run = async function() {
             name: "Stop sharing",
             exact: true
         }).click();
-        if (rendezvous.records.size !== 0) {
+        if (!await classroomCodeWasRevoked(rendezvous, classroomCode)) {
             throw new Error("Stopping sharing did not revoke the classroom code.");
         }
         try {
@@ -606,7 +637,9 @@ const run = async function() {
         stopAppProcesses(hostApp);
         stopAppProcesses(participantApp);
         await new Promise((resolve) => setTimeout(resolve, 250));
-        await new Promise((resolve) => rendezvous.server.close(resolve));
+        if (rendezvous.server) {
+            await new Promise((resolve) => rendezvous.server.close(resolve));
+        }
         fs.rmSync(tempDirectory, { recursive: true, force: true });
     }
 };

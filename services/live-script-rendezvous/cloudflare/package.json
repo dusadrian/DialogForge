@@ -1,0 +1,17 @@
+{
+    "name": "dialogforge-live-script-rendezvous-worker",
+    "version": "1.0.0",
+    "private": true,
+    "type": "module",
+    "engines": {
+        "node": ">=22.0.0"
+    },
+    "scripts": {
+        "dev": "wrangler dev",
+        "deploy": "wrangler deploy",
+        "deploy:check": "wrangler deploy --dry-run"
+    },
+    "devDependencies": {
+        "wrangler": "4.112.0"
+    }
+}
