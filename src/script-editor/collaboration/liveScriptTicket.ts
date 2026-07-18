@@ -87,7 +87,7 @@ export const parseLiveScriptSessionTicket = function(
     }
 
     if (!isOpaqueIdentifier(value.instructorEndpointId, 16)) {
-        return { ok: false, message: "Instructor endpoint ID is invalid." };
+        return { ok: false, message: "Presenter endpoint ID is invalid." };
     }
 
     if (typeof value.transportAddress !== "string"

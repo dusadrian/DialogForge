@@ -151,7 +151,7 @@
     "Stop sharing": "Stop sharing",
     "Make editable copy": "Make editable copy",
     "Detach": "Detach",
-    "Follow instructor cursor": "Follow instructor cursor",
+    "Follow presenter cursor": "Follow presenter cursor",
     "Session link": "Session link",
     "Short code": "Short code",
     "Unavailable for this session": "Unavailable for this session",
@@ -163,6 +163,6 @@
     "Live · read-only": "Live · read-only",
     "Session ended · read-only": "Session ended · read-only",
     "Connection lost · read-only": "Connection lost · read-only",
-    "The instructor ended this shared script. You can join another session or make an editable copy.": "The instructor ended this shared script. You can join another session or make an editable copy.",
+    "The presenter ended this shared script. You can join another session or make an editable copy.": "The presenter ended this shared script. You can join another session or make an editable copy.",
     "The connection to this shared script was lost. You can join another session or make an editable copy.": "The connection to this shared script was lost. You can join another session or make an editable copy."
 }

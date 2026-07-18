@@ -90,7 +90,7 @@ const readTransportAddress = function(
     const address = value as Record<string, unknown>;
 
     if (String(address.nodeId || "") !== ticket.instructorEndpointId) {
-        throw new Error("Live-script instructor identity does not match the ticket.");
+        throw new Error("Live-script presenter identity does not match the ticket.");
     }
 
     const nodeAddress: NodeAddr = {

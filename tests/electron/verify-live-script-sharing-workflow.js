@@ -407,7 +407,7 @@ const run = async function() {
         );
 
         if (!await followInstructor.isChecked()) {
-            throw new Error("Follow instructor cursor was not enabled by default.");
+            throw new Error("Follow presenter cursor was not enabled by default.");
         }
 
         process.stdout.write("live-script UI: participant joined\n");
@@ -473,7 +473,7 @@ const run = async function() {
                 return badge?.textContent === "Session ended · read-only"
                     && notice instanceof HTMLElement
                     && !notice.hidden
-                    && notice.textContent?.includes("instructor ended")
+                    && notice.textContent?.includes("presenter ended")
                     && join instanceof HTMLButtonElement
                     && !join.disabled;
             }, undefined, { timeout: 30000 });
@@ -557,7 +557,7 @@ const run = async function() {
             return badge?.textContent === "Session ended · read-only"
                 && notice instanceof HTMLElement
                 && !notice.hidden
-                && notice.textContent?.includes("instructor ended")
+                && notice.textContent?.includes("presenter ended")
                 && join instanceof HTMLButtonElement
                 && !join.disabled;
         }, undefined, { timeout: 30000 });

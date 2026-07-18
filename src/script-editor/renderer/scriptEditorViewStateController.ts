@@ -96,7 +96,7 @@ export const createScriptEditorViewStateController = function(
                 )
                 : terminalStatus === "ended"
                     ? options.translate(
-                        "The instructor ended this shared script. You can join another session or make an editable copy."
+                        "The presenter ended this shared script. You can join another session or make an editable copy."
                     )
                     : "";
         }

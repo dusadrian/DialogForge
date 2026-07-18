@@ -353,7 +353,7 @@ const getLivePanelLabels = (): LiveScriptPanelLabels => ({
   stopSharing: t('Stop sharing'),
   makeEditableCopy: t('Make editable copy'),
   detach: t('Detach'),
-  followInstructorCursor: t('Follow instructor cursor'),
+  followInstructorCursor: t('Follow presenter cursor'),
   sessionLink: t('Session link'),
   shortCode: t('Short code'),
   shortCodeUnavailable: t('Unavailable for this session'),
