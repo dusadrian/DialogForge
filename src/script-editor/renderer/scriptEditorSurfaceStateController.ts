@@ -21,6 +21,7 @@ export interface ScriptEditorSurfaceStateController {
     readonly toolbarView: ScriptToolbarView | null;
     readonly outlineButton: HTMLButtonElement | null;
     readonly breadcrumbView: ScriptBreadcrumbView | null;
+    readonly liveNotice: HTMLDivElement | null;
     applyShell(shell: ScriptEditorShellControllerResult): void;
     setEditor(
         editor: Monaco.editor.IStandaloneCodeEditor
@@ -37,6 +38,7 @@ export const createScriptEditorSurfaceStateController = function(
     let toolbarView: ScriptToolbarView | null = null;
     let outlineButton: HTMLButtonElement | null = null;
     let breadcrumbView: ScriptBreadcrumbView | null = null;
+    let liveNotice: HTMLDivElement | null = null;
 
     return {
         get editor() {
@@ -51,10 +53,14 @@ export const createScriptEditorSurfaceStateController = function(
         get breadcrumbView() {
             return breadcrumbView;
         },
+        get liveNotice() {
+            return liveNotice;
+        },
         applyShell(shell) {
             toolbarView = shell.toolbarView;
             outlineButton = shell.outlineButton;
             breadcrumbView = shell.breadcrumbView;
+            liveNotice = shell.shellView.liveNotice;
             options.setTabsHost(shell.shellView.tabsBar);
         },
         setEditor(nextEditor) {

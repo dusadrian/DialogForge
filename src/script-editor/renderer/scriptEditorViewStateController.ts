@@ -26,6 +26,7 @@ export const createScriptEditorViewStateController = function(
         outline: ScriptOutlineController;
         getToolbarView(): ScriptToolbarView | null;
         getBreadcrumbView(): ScriptBreadcrumbView | null;
+        getLiveNotice(): HTMLDivElement | null;
         getToolbarLabels(): ScriptToolbarLabels;
         translate(key: string): string;
         publishDirtyState(state: {
@@ -74,12 +75,32 @@ export const createScriptEditorViewStateController = function(
     const updateToolbarState = function(): void {
         const active = options.tabs.getActiveTab();
         const symbols = active ? options.outline.getActiveSymbols() : [];
+        const liveNotice = options.getLiveNotice();
 
         options.getToolbarView()?.updateDocumentState(
             !!active,
             symbols.length,
             active?.kind !== "live-participant"
         );
+
+        if (liveNotice) {
+            const terminalStatus = active?.kind === "live-participant"
+                && (active.liveStatus === "ended" || active.liveStatus === "failed")
+                ? active.liveStatus
+                : "";
+            liveNotice.hidden = !terminalStatus;
+            liveNotice.dataset.status = terminalStatus;
+            liveNotice.textContent = terminalStatus === "failed"
+                ? options.translate(
+                    "The connection to this shared script was lost. You can join another session or make an editable copy."
+                )
+                : terminalStatus === "ended"
+                    ? options.translate(
+                        "The instructor ended this shared script. You can join another session or make an editable copy."
+                    )
+                    : "";
+        }
+
         updateOutlineState();
         reportDirtyState();
     };

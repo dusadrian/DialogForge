@@ -494,12 +494,24 @@ const run = async function() {
                 cause: error
             });
         }
-        await participantEditor.waitForTimeout(750);
+        await participantEditor.waitForFunction(() => {
+            const badge = document.querySelector(".dm-script-tab-live");
+            const notice = document.querySelector(".dm-script-live-notice");
+            const join = document.querySelector(".dm-script-btn-join-live");
+            return badge?.textContent === "Session ended · read-only"
+                && notice instanceof HTMLElement
+                && !notice.hidden
+                && notice.textContent?.includes("instructor ended")
+                && join instanceof HTMLButtonElement
+                && !join.disabled;
+        }, undefined, { timeout: 30000 });
         const stoppedState = await participantEditor.evaluate(() => ({
             badges: Array.from(document.querySelectorAll(".dm-script-tab-live"))
                 .map((badge) => badge.textContent || ""),
             tabs: Array.from(document.querySelectorAll(".dm-script-tab"))
-                .map((tab) => tab.textContent || "")
+                .map((tab) => tab.textContent || ""),
+            notice: document.querySelector(".dm-script-live-notice")?.textContent || "",
+            joinDisabled: document.querySelector(".dm-script-btn-join-live")?.disabled
         }));
         process.stdout.write(
             `live-script UI stopped state: ${JSON.stringify(stoppedState)}\n`
@@ -507,10 +519,15 @@ const run = async function() {
         await participantEditor.screenshot({
             path: path.join(screenshotDirectory, "participant-after-stop.png")
         });
-        await participantEditor.waitForFunction(() => {
-            return Array.from(document.querySelectorAll(".dm-script-tab-live"))
-                .some((badge) => badge.textContent?.includes("ended"));
-        }, undefined, { timeout: 30000 });
+        await participantEditor.locator(".dm-script-btn-join-live").click();
+        await participantEditor.locator(".dm-live-panel__ticket").waitFor({
+            state: "visible",
+            timeout: 10000
+        });
+        await participantEditor.getByRole("dialog").getByRole("button", {
+            name: "Close",
+            exact: true
+        }).click();
 
         await participantEditor.locator(".dm-script-btn-share-live").click();
         await participantEditor.getByRole("button", {

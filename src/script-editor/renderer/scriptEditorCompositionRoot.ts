@@ -273,7 +273,9 @@ const updateLiveToolbarState = function(): void {
 
   surfaceState.toolbarView?.updateLiveState({
     available: liveAvailable,
-    isParticipant: active?.kind === 'live-participant',
+    isParticipant: active?.kind === 'live-participant'
+      && active.liveStatus !== 'ended'
+      && active.liveStatus !== 'failed',
     isHosting: Boolean(
       active && liveScriptController.getHostedSessionId(active.id)
     )
@@ -284,7 +286,9 @@ const tabController: ScriptEditorTabController = createScriptEditorTabController
   getLabels: () => ({
     untitled: t('Untitled'),
     closeTab: t('Close Tab'),
-    liveReadOnly: t('Live · read-only')
+    liveReadOnly: t('Live · read-only'),
+    sessionEndedReadOnly: t('Session ended · read-only'),
+    connectionLostReadOnly: t('Connection lost · read-only')
   }),
   activeTabChanged: () => {
     scriptEditorReactions.activeTabChanged();
@@ -317,6 +321,7 @@ const scriptEditorViewState = createScriptEditorViewStateController({
   outline: outlineController,
   getToolbarView: () => surfaceState.toolbarView,
   getBreadcrumbView: () => surfaceState.breadcrumbView,
+  getLiveNotice: () => surfaceState.liveNotice,
   getToolbarLabels: () => getToolbarLabels(),
   translate: (key) => t(key),
   publishDirtyState: (state) => {

@@ -12,6 +12,8 @@ export interface ScriptTabStripLabels {
     untitled: string;
     closeTab: string;
     liveReadOnly: string;
+    sessionEndedReadOnly: string;
+    connectionLostReadOnly: string;
 }
 
 
@@ -54,13 +56,23 @@ export const renderScriptTabStrip = function(
 
         if (tab.liveReadOnly) {
             button.classList.add("dm-script-tab--live");
-            label.title = `${baseName} — ${labels.liveReadOnly}`;
             const liveBadge = document.createElement("span");
             liveBadge.className = "dm-script-tab-live";
-            liveBadge.textContent = tab.liveStatus
+            const terminalLabel = tab.liveStatus === "ended"
+                ? labels.sessionEndedReadOnly
+                : tab.liveStatus === "failed"
+                    ? labels.connectionLostReadOnly
+                    : "";
+
+            if (terminalLabel) {
+                button.classList.add("dm-script-tab--ended");
+            }
+
+            label.title = `${baseName} — ${terminalLabel || labels.liveReadOnly}`;
+            liveBadge.textContent = terminalLabel || (tab.liveStatus
                 && tab.liveStatus !== "active"
                 ? `${labels.liveReadOnly} · ${tab.liveStatus}`
-                : labels.liveReadOnly;
+                : labels.liveReadOnly);
             button.appendChild(liveBadge);
         }
 

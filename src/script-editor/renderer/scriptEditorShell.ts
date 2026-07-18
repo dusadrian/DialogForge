@@ -1,6 +1,7 @@
 export interface ScriptEditorShell {
     shell: HTMLDivElement;
     tabsBar: HTMLDivElement;
+    liveNotice: HTMLDivElement;
     pathText: HTMLSpanElement;
     breadcrumbs: HTMLSpanElement;
     editorHost: HTMLDivElement;
@@ -20,6 +21,11 @@ export const createScriptEditorShell = function(
     const tabsBar = document.createElement("div");
     tabsBar.className = "dm-script-tabs";
 
+    const liveNotice = document.createElement("div");
+    liveNotice.className = "dm-script-live-notice";
+    liveNotice.hidden = true;
+    liveNotice.setAttribute("role", "alert");
+
     const pathBar = document.createElement("div");
     pathBar.className = "dm-script-pathbar";
 
@@ -38,12 +44,14 @@ export const createScriptEditorShell = function(
 
     shell.appendChild(toolbar);
     shell.appendChild(tabsBar);
+    shell.appendChild(liveNotice);
     shell.appendChild(pathBar);
     shell.appendChild(editorHost);
 
     return {
         shell,
         tabsBar,
+        liveNotice,
         pathText,
         breadcrumbs,
         editorHost

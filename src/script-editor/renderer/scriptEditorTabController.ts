@@ -14,6 +14,8 @@ export interface ScriptEditorTabLabels {
     untitled: string;
     closeTab: string;
     liveReadOnly: string;
+    sessionEndedReadOnly: string;
+    connectionLostReadOnly: string;
 }
 
 

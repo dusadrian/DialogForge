@@ -160,5 +160,9 @@
     "Participants": "Participants",
     "Connection": "Connection",
     "Paste a live-script link or ticket": "Paste a live-script link or ticket",
-    "Live · read-only": "Live · read-only"
+    "Live · read-only": "Live · read-only",
+    "Session ended · read-only": "Session ended · read-only",
+    "Connection lost · read-only": "Connection lost · read-only",
+    "The instructor ended this shared script. You can join another session or make an editable copy.": "The instructor ended this shared script. You can join another session or make an editable copy.",
+    "The connection to this shared script was lost. You can join another session or make an editable copy.": "The connection to this shared script was lost. You can join another session or make an editable copy."
 }

@@ -787,7 +787,14 @@ Done:
   active prompts; both Script Editors loaded; an uppercase, space-separated
   spoken code joined the session; remote edits remained read-only and did not
   auto-execute; participant execution stayed local; stopping sharing revoked
-  the code and rendered `Live · read-only · ended`; an editable copy detached.
+  the code and retained a read-only snapshot; an editable copy detached.
+- Cursor following is enabled by default, and instructor cursor frames now wait
+  for preceding edits so participants do not see a one-character lag. Terminal
+  participant tabs no longer claim to be live: they render a red
+  `Session ended · read-only` state and a persistent explanation above the
+  editor. `Join live script` becomes available immediately, and the packaged
+  interaction check opens a fresh join dialog while retaining the ended
+  snapshot.
 - Built an unsigned macOS arm64 DialogR package and fixed its staged dependency
   closure after the first ASAR inspection found `qrcode` and `@irojs/iro-core`
   missing. The rebuilt ASAR contains QR, vocabulary, and iroh packages, with the
