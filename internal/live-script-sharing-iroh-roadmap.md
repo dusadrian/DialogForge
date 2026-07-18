@@ -62,8 +62,8 @@ These rules apply to every phase:
 - Remote changes must not mark a participant's local files dirty.
 - A shared document must not reveal the instructor's local filesystem path,
   workspace contents, runtime state, settings, environment, or credentials.
-- Ending a session must revoke its session capability without replacing the
-  application's long-lived iroh identity.
+- Ending a session must revoke its session capability. The installed endpoint
+  identity is ephemeral and is replaced when the application exits.
 - The feature must be unavailable or visibly disabled when the host cannot
   provide collaboration. It must not affect ordinary Script Editor behavior.
 - Browser adaptations belong in `src/shell-web`; Electron-specific behavior
@@ -240,7 +240,7 @@ rendezvous and managed, public, or self-hosted iroh relays.
 | --- | --- |
 | `src/script-editor/collaboration` | Protocol types, session state machine, revisions, edit validation, permissions, resynchronization, participant state, host-neutral controller |
 | `src/script-editor/renderer` | Monaco observation/application, shared-tab lifecycle, read-only behavior, cursor/selection preservation, local execution integration |
-| `src/shell-electron/collaboration` | Native iroh lifecycle, secure identity storage, Electron IPC, native connection/ticket adapter, application shutdown |
+| `src/shell-electron/collaboration` | Native in-memory iroh lifecycle, Electron IPC, native connection/ticket adapter, application shutdown |
 | `src/shell-web` | Lazy WebAssembly loading, browser transport adapter, browser session links, browser lifecycle and error presentation |
 | Separate Rust/WebAssembly project | Pinned Rust iroh implementation, WebAssembly bindings, relay-compatible endpoint, transport events, distributable browser artifact |
 | Product contribution | Optional default enablement, product wording, translations, or deployment-specific rendezvous/relay configuration |
@@ -364,7 +364,7 @@ lookup:
 
 Security invariants:
 
-- Never include the persistent iroh secret key in a ticket.
+- Never include the ephemeral iroh secret key in a ticket.
 - Never log the full session capability or URL.
 - Reject `edit`, `snapshot`, or `session-ended` messages from participant
   endpoints.
@@ -525,8 +525,9 @@ Work:
    `src/shell-electron/collaboration/`.
 3. Register a DialogForge-specific ALPN such as
    `dialogforge/live-script/1`.
-4. Persist the application iroh identity under Electron `userData`, separate
-   from product repositories and document sessions.
+4. Keep the application iroh identity in memory for the app lifetime. Live
+   classrooms do not survive application shutdown, so they must not require an
+   OS keychain, keyring, credential store, or persisted endpoint secret.
 5. Implement bounded framed messages on a long-lived connection. Do not use a
    new bidirectional stream for every keystroke.
 6. Implement host, join, send, connection-state, and close methods behind the
@@ -554,12 +555,11 @@ DialogForge now pins `@number0/iroh` 0.35.0. The Electron-owned implementation
 under `src/shell-electron/collaboration` provides:
 
 - lazy native-addon loading and fail-closed capability detection;
-- a persistent application identity stored under Electron `userData`, with a
-  versioned owner-only key file and Electron safe-storage encryption when the
-  host provides a genuine OS secret store. Linux sessions without a usable
-  keyring use the same explicit `0700` directory and `0600` key file rather
-  than Electron's `basic_text` obfuscation; the file is upgraded to encrypted
-  storage if a keyring later becomes available;
+- an in-memory endpoint identity scoped to the application lifetime. The
+  original persistent identity and Electron safe-storage integration were
+  removed after packaged acceptance showed unnecessary macOS Keychain and
+  Linux keyring prompts. This matches the live-session lifecycle and leaves
+  older identity files untouched but unused;
 - ALPN `dialogforge/live-script/1`;
 - one long-lived bidirectional stream per peer with bounded length-prefixed
   frames, serialized writes, authenticated sender checks, host/join/send/state/
@@ -642,11 +642,10 @@ Stop condition:
   and two-process native Phase 2 transport test passed. The rendered Electron
   Script Editor workflow was exercised with the DialogR contribution and
   verified ordinary dirty state, save, and clean close.
-- Unplanned but done: the rendered check exposed that the Phase 2 Electron
-  entrypoint passed `userDataPath` and identity protection to the main-window
-  composition rather than the Script Editor composition. The options now go
-  to their actual owner; the corrected app launch and native transport test
-  both pass.
+- Unplanned but superseded: an earlier rendered check corrected safe-storage
+  wiring into the Script Editor composition. Packaged cross-platform use later
+  showed that persistence itself was unnecessary, so the identity-protection
+  option and store were removed entirely.
 
 ### Phase 4: Add And Verify Installed-App Sharing UI
 
@@ -833,8 +832,9 @@ Done:
   console to an active prompt. The old unavailable-runtime case falls back to
   a clean start because there is no workspace to preserve. The first packaged
   sharing attempt exposed that this XFCE session had no usable OS secret store;
-  the owner-only Linux identity fallback restored capability without changing
-  safe-storage behavior on hosts where it is available. The rerun launched two
+  an owner-only fallback initially restored capability. The transport now uses
+  a per-launch in-memory endpoint instead, eliminating keyring requirements on
+  every platform. The rerun launched two
   packaged instances and passed spoken-code join, read-only synchronization,
   no execution on receive, participant-local execution, code revocation,
   ended-state rendering, and editable-copy detachment.

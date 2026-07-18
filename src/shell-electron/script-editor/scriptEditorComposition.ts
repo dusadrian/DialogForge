@@ -47,10 +47,6 @@ import {
 import {
     createLiveScriptIpcController
 } from "../collaboration/liveScriptIpcController";
-import {
-    createIrohIdentityStore,
-    type IrohIdentityProtection
-} from "../collaboration/irohIdentityStore";
 
 
 export interface ScriptEditorCompositionOptions {
@@ -59,7 +55,6 @@ export interface ScriptEditorCompositionOptions {
     productId: string;
     settingsPath: string;
     userDataPath: string;
-    collaborationIdentityProtection?: IrohIdentityProtection;
     liveScriptRendezvousUrl?: string;
     title: string;
     nativeWindowIconPath?: string;
@@ -335,13 +330,7 @@ export const createScriptEditorComposition = function(
         executeVisibleCommand: options.executeVisibleCommand
     });
 
-    const collaborationTransport = createNativeIrohLiveScriptTransport({
-        userDataPath: options.userDataPath,
-        identityStore: createIrohIdentityStore({
-            userDataPath: options.userDataPath,
-            protection: options.collaborationIdentityProtection
-        })
-    });
+    const collaborationTransport = createNativeIrohLiveScriptTransport({});
     createLiveScriptIpcController({
         ipcMain: options.ipcMain,
         transport: collaborationTransport,

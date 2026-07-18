@@ -90,12 +90,12 @@ const runHost = async function() {
                 return;
             }
 
-            if (message?.type === "verify-persistence") {
+            if (message?.type === "verify-ephemeral-identity") {
                 await transport.shutdown();
                 transport = createNativeIrohLiveScriptTransport({ userDataPath });
                 const restarted = await transport.capability();
                 report({
-                    type: "persisted",
+                    type: "restarted",
                     endpointId: restarted.endpointId,
                     available: restarted.available
                 });

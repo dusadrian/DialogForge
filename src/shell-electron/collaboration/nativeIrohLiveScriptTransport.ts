@@ -1,6 +1,3 @@
-import * as fs from "fs";
-import * as path from "path";
-
 import type {
     Connection,
     Iroh,
@@ -27,14 +24,7 @@ import type {
     LiveScriptTransportStateEvent,
     LiveScriptTransportSubscription
 } from "../../script-editor/collaboration/liveScriptTransport";
-import {
-    createIrohIdentityStore,
-    type IrohIdentityStore
-} from "./irohIdentityStore";
-
-
 const LIVE_SCRIPT_ALPN = "dialogforge/live-script/1";
-const IROH_IDENTITY_DIRECTORY = "iroh-identity-v1";
 
 
 interface NativeIrohModule {
@@ -68,9 +58,7 @@ export interface NativeIrohLiveScriptTransport extends LiveScriptTransport {
 
 
 export interface NativeIrohLiveScriptTransportOptions {
-    userDataPath: string;
     loadModule?(): Promise<NativeIrohModule>;
-    identityStore?: IrohIdentityStore;
 }
 
 
@@ -145,10 +133,6 @@ export const createNativeIrohLiveScriptTransport = function(
     const connectionsByEndpoint = new Map<string, NativeConnectionState>();
     const frameListeners = new Set<(event: LiveScriptTransportFrameEvent) => void>();
     const stateListeners = new Set<(event: LiveScriptTransportStateEvent) => void>();
-    const identityStore = options.identityStore || createIrohIdentityStore({
-        userDataPath: options.userDataPath
-    });
-
     const publishState = function(event: LiveScriptTransportStateEvent): void {
         for (const listener of stateListeners) {
             listener(event);
@@ -308,18 +292,9 @@ export const createNativeIrohLiveScriptTransport = function(
                     };
                 };
 
-                const identityPath = path.join(
-                    options.userDataPath,
-                    "collaboration",
-                    IROH_IDENTITY_DIRECTORY
-                );
-
-                fs.mkdirSync(identityPath, { recursive: true });
-                const secretKey = identityStore.readOrCreate();
                 irohModule = module;
-                iroh = await module.Iroh.persistent(identityPath, {
-                    protocols: protocols as never,
-                    secretKey: Array.from(secretKey)
+                iroh = await module.Iroh.memory({
+                    protocols: protocols as never
                 });
                 localEndpointId = await iroh.net.nodeId();
             })().catch((error) => {

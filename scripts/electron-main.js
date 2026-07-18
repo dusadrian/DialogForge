@@ -677,33 +677,6 @@ externalWindowComposition = externalWindowCompositionModule.createExternalWindow
     }
 });
 const createDevDiagnosticsWindow = externalWindowComposition.createDevDiagnosticsWindow;
-const createCollaborationIdentityProtection = function () {
-    if (!electron.safeStorage.isEncryptionAvailable()) {
-        return undefined;
-    }
-
-    const selectedBackend = process.platform === "linux"
-        && typeof electron.safeStorage.getSelectedStorageBackend === "function"
-        ? electron.safeStorage.getSelectedStorageBackend()
-        : "";
-    if (selectedBackend === "basic_text") {
-        return undefined;
-    }
-
-    return {
-        protect: function (secret) {
-            return electron.safeStorage.encryptString(
-                Buffer.from(secret).toString("hex")
-            );
-        },
-        unprotect: function (payload) {
-            return Buffer.from(
-                electron.safeStorage.decryptString(payload),
-                "hex"
-            );
-        }
-    };
-};
 scriptEditorComposition = scriptEditorCompositionModule.createScriptEditorComposition({
     ipcMain: electron.ipcMain,
     rootDir: composition.rootDir,
@@ -711,7 +684,6 @@ scriptEditorComposition = scriptEditorCompositionModule.createScriptEditorCompos
     settingsPath: location.settingsPath,
     userDataPath: electron.app.getPath("userData"),
     liveScriptRendezvousUrl: process.env.DIALOGFORGE_LIVE_SCRIPT_RENDEZVOUS_URL || undefined,
-    collaborationIdentityProtection: createCollaborationIdentityProtection(),
     title: translateCompositionText("Script editor"),
     nativeWindowIconPath: composition.nativeWindowIconPath || undefined,
     pagePath: path.join(composition.rootDir, "src/base-app/pages/scriptEditor.html"),

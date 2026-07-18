@@ -194,10 +194,12 @@ const run = async function() {
         hostPeer.child.send({ type: "end" });
         await participantPeer.waitFor((message) => message?.type === "participant-ended");
 
-        hostPeer.child.send({ type: "verify-persistence" });
-        const persisted = await hostPeer.waitFor((message) => message?.type === "persisted");
-        assert.strictEqual(persisted.available, true);
-        assert.strictEqual(persisted.endpointId, ready.endpointId);
+        hostPeer.child.send({ type: "verify-ephemeral-identity" });
+        const restarted = await hostPeer.waitFor((message) => {
+            return message?.type === "restarted";
+        });
+        assert.strictEqual(restarted.available, true);
+        assert.notStrictEqual(restarted.endpointId, ready.endpointId);
 
         participantPeer.child.send({ type: "shutdown" });
         await participantPeer.waitFor((message) => message?.type === "shutdown");
