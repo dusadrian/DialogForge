@@ -396,7 +396,11 @@ const readRuntimeProviderOptions = function(
 };
 
 
+let restartRuntimeAfterSave = false;
+
+
 const renderSettings = function(payload: SettingsPayload): void {
+    restartRuntimeAfterSave = false;
     const settings = payload.settings || {};
     const factorySettings = payload.factorySettings || {};
     const locales = Array.isArray(payload.locales) && payload.locales.length > 0
@@ -496,7 +500,7 @@ const renderSettings = function(payload: SettingsPayload): void {
             : configuredPath || resolvedPath;
         runtimeLocation.title = runtimeLocation.value;
         runtimeLocation.disabled = !configurable || automatic;
-        browseRuntimeLocation.disabled = !configurable || automatic;
+        browseRuntimeLocation.disabled = !configurable;
         autoDetectRuntimeLocation.disabled = !configurable || !automatic;
         byId<HTMLSpanElement>("autoDetectRuntimeLocationLabel").textContent = translate(
             payload.strings || {},
@@ -663,6 +667,7 @@ const renderSettings = function(payload: SettingsPayload): void {
         const providerId = readValue(runtimeProvider) || selectedRuntimeProvider;
         const automatic = readChecked(detectRuntimeAtStartup);
 
+        restartRuntimeAfterSave = true;
         if (automatic) {
             const discovered = await discoverRuntime(providerId);
 
@@ -707,6 +712,7 @@ const renderSettings = function(payload: SettingsPayload): void {
     runtimeLocation.oninput = function(): void {
         const providerId = readValue(runtimeProvider) || selectedRuntimeProvider;
 
+        restartRuntimeAfterSave = true;
         draftRuntimeLocations[providerId] = runtimeLocation.value.trim();
         runtimeLocation.title = runtimeLocation.value;
         autoDetectRuntimeLocation.disabled = !detectsRuntimeAtStartup(providerId);
@@ -740,7 +746,10 @@ const renderSettings = function(payload: SettingsPayload): void {
             return;
         }
 
+        restartRuntimeAfterSave = true;
+        draftRuntimeDetection[providerId] = false;
         draftRuntimeLocations[providerId] = result.path;
+        writeChecked(detectRuntimeAtStartup, false);
         renderRuntimeLocation();
         previewDraft();
     };
@@ -828,6 +837,14 @@ window.dialogForge.settings.onLoaded(function(payload: unknown): void {
 });
 
 window.dialogForge.settings.onSaved(function(): void {
+    const shouldRestartRuntime = restartRuntimeAfterSave;
+
+    restartRuntimeAfterSave = false;
     previewRollbackRequired = false;
+    if (shouldRestartRuntime) {
+        void window.dialogForge.restartRuntime("restore").catch((error) => {
+            console.error("SETTINGS-ERR runtime restart failed:", error);
+        });
+    }
     window.close();
 });

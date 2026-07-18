@@ -44,7 +44,8 @@ export const createRuntimeRestartController = function(
         action: "clean" | "restore",
         source: string
     ): Promise<RuntimeSessionSnapshot> {
-        const restore = action === "restore";
+        const restore = action === "restore"
+            && options.runtimeSessionManager.getSnapshot().status === "ready";
         const workspacePath = options.createWorkspacePath();
 
         if (restore) {

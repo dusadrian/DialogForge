@@ -810,12 +810,24 @@ Done:
   262,160-byte script and 50 edits measured 0.32 ms p50, 0.55 ms p95, and a
   7.8 MiB heap increase. These are local diagnostic measurements, not network
   service-level guarantees.
+- Built the Linux x64 AppImage in the local x86 Docker builder and launched it
+  on Ubuntu 24.04 through the active NoMachine session. The ASAR contains the
+  GNU and musl x64 iroh modules. The AppImage now embeds Electron's
+  `chrome-sandbox` as `root:root 4755`; Ubuntu's FUSE 2 and AppArmor user
+  namespace requirements remain host prerequisites. Missing R rendered the
+  unavailable-runtime state without breaking the application. After selecting
+  the portable R 4.6.0 `bin/R` wrapper, saving Settings restarted only the
+  runtime, preserved a ready workspace when possible, and visibly returned the
+  console to an active prompt. The old unavailable-runtime case falls back to
+  a clean start because there is no workspace to preserve.
 
 Still open:
 
-- Run packaged smokes on Windows x64 and Linux x64. Static package selection
-  covers those targets, but a macOS host is not execution proof for those
-  platform binaries.
+- Run the two-instance packaged live-sharing smoke on Linux x64. Packaged
+  startup, missing-runtime behavior, portable-runtime selection, and runtime
+  restart have passed, but they are not a substitute for the sharing workflow.
+- Run packaged smokes on Windows x64. Static package selection covers that
+  target, but other hosts are not execution proof for the Windows binary.
 - Submit this newly built signed DMG, wait for Apple acceptance, staple it, and
   validate the stapled ticket. The local notarytool profile is available; the
   external submission has not been started without explicit confirmation.
@@ -826,8 +838,9 @@ Deferred:
 
 Next:
 
-- Run the remaining platform and notarization lanes before committing Phase 5
-  and requesting the explicit Phase 6 repository authorization.
+- Run the Linux two-instance packaged sharing workflow, then the Windows and
+  notarization lanes, before completing Phase 5 and requesting the explicit
+  Phase 6 repository authorization.
 
 ### Phase 6: Create The Separately Versioned Rust/WebAssembly Client
 

@@ -149,6 +149,11 @@ const createBuildConfigPath = function (productBuildConfig, stagedProductPath, p
         : [];
     const mergedBuild = mergeBuildConfig(baseBuild, productBuild);
 
+    mergedBuild.afterPack = path.join(
+        sourceRoot,
+        "scripts",
+        "prepare-linux-electron-sandbox.js"
+    );
     mergedBuild.extraResources = [
         ...baseExtraResources,
         ...productExtraResources
