@@ -54,6 +54,7 @@ export interface NativeIrohCapability {
 
 export interface NativeIrohLiveScriptTransport extends LiveScriptTransport {
     capability(): Promise<NativeIrohCapability>;
+    closeAllSessions(): Promise<void>;
 }
 
 
@@ -429,6 +430,20 @@ export const createNativeIrohLiveScriptTransport = function(
         publishState({ sessionId, state: "closed" });
     };
 
+    const closeAllSessions = async function(): Promise<void> {
+        const sessionIds = new Set<string>(hostedSessions.keys());
+
+        for (const state of connectionsByEndpoint.values()) {
+            for (const sessionId of state.sessions) {
+                sessionIds.add(sessionId);
+            }
+        }
+
+        await Promise.all(Array.from(sessionIds).map((sessionId) => {
+            return closeSession(sessionId);
+        }));
+    };
+
     const shutdown = async function(): Promise<void> {
         if (shuttingDown) {
             return;
@@ -461,6 +476,7 @@ export const createNativeIrohLiveScriptTransport = function(
         join,
         send,
         closeSession,
+        closeAllSessions,
         shutdown,
         onFrame: function(listener) {
             frameListeners.add(listener);

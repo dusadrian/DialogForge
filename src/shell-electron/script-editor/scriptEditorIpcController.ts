@@ -59,6 +59,7 @@ export interface ScriptEditorIpcControllerOptions {
     windowController: ScriptEditorWindowController;
     fileSystemController: ScriptFileSystemController;
     closeSaveCoordinator: ScriptEditorCloseSaveCoordinator;
+    liveSessionShutdownCoordinator: ScriptEditorCloseSaveCoordinator;
     getDocumentState(): ScriptEditorDocumentState;
     setDocumentState(state: ScriptEditorDocumentState): void;
     setDirtyState(state: ScriptEditorDirtyState): void;
@@ -325,6 +326,16 @@ export const createScriptEditorIpcController = function(
         input: { requestId?: string; ok?: boolean }
     ) => {
         options.closeSaveCoordinator.resolve(
+            input?.requestId,
+            input?.ok === true
+        );
+    });
+
+    options.ipcMain.on(scriptEditorEventChannels.liveSessionShutdownResult, (
+        _event: IpcMainEvent,
+        input: { requestId?: string; ok?: boolean }
+    ) => {
+        options.liveSessionShutdownCoordinator.resolve(
             input?.requestId,
             input?.ok === true
         );

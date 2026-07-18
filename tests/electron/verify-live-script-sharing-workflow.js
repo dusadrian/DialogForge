@@ -14,6 +14,7 @@ const {
 
 const projectRoot = process.cwd();
 const mainEntry = path.join(projectRoot, "dist/scripts/electron-main.js");
+const verifyInstructorQuit = process.env.DIALOGFORGE_LIVE_SCRIPT_QUIT_TEST === "1";
 const screenshotDirectory = path.join(
     os.homedir(),
     ".codex/visualizations/2026/07/18/019f7512-fe13-7743-852a-dde15ff9327a/live-script-phase4"
@@ -63,7 +64,15 @@ const stopAppProcesses = function(app) {
         return;
     }
 
-    const mainPid = app.process().pid;
+    let mainPid = 0;
+
+    try {
+        mainPid = app.process().pid;
+    }
+    catch {
+        return;
+    }
+
     const descendants = mainPid ? descendantProcessIds(mainPid) : [];
 
     descendants.reverse().forEach((pid) => {
@@ -440,6 +449,50 @@ const run = async function() {
                 path: path.join(screenshotDirectory, "participant-after-edit.png")
             })
         ]);
+
+        if (verifyInstructorQuit) {
+            await hostEditor.keyboard.press("Meta+S");
+            await hostEditor.waitForFunction(() => {
+                const label = document.querySelector(
+                    ".dm-script-tab.active .dm-script-tab-label"
+                );
+                return !label?.textContent?.endsWith(" •");
+            }, undefined, { timeout: 10000 });
+
+            const hostClosed = hostApp.waitForEvent("close", {
+                timeout: 30000
+            });
+            await hostApp.evaluate(({ app }) => {
+                app.quit();
+            });
+            await hostClosed;
+            await participantEditor.waitForFunction(() => {
+                const badge = document.querySelector(".dm-script-tab-live");
+                const notice = document.querySelector(".dm-script-live-notice");
+                const join = document.querySelector(".dm-script-btn-join-live");
+                return badge?.textContent === "Session ended · read-only"
+                    && notice instanceof HTMLElement
+                    && !notice.hidden
+                    && notice.textContent?.includes("instructor ended")
+                    && join instanceof HTMLButtonElement
+                    && !join.disabled;
+            }, undefined, { timeout: 30000 });
+
+            if (rendezvous.records.size !== 0) {
+                throw new Error("Cmd+Q did not revoke the classroom code.");
+            }
+
+            await participantEditor.screenshot({
+                path: path.join(
+                    screenshotDirectory,
+                    "participant-after-instructor-quit.png"
+                )
+            });
+            process.stdout.write(
+                "live-script application quit ended the session and closed without a native crash: ok\n"
+            );
+            return;
+        }
 
         if (await workspaceHas(hostMain, objectName)
             || await workspaceHas(participantMain, objectName)) {

@@ -565,6 +565,9 @@ runtimeLifecycleComposition = runtimeLifecycleCompositionModule.createRuntimeLif
     },
     chooseWorkspaceQuitAction: workspaceQuitDialogController.chooseWorkspaceQuitAction,
     showWorkspaceSaveFailure: workspaceQuitDialogController.showWorkspaceSaveFailure,
+    stopCollaboration: function () {
+        return scriptEditorComposition.shutdownCollaboration();
+    },
     beforeResumeQuit: function () {
         mainWindowCloseApprovedForQuit = true;
     },

@@ -306,12 +306,17 @@ declare global {
             onLanguageChanged(callback: (payload: ScriptEditorLanguagePayload) => void): void;
             onTerminalSettingsUpdated(callback: (settings: Record<string, unknown>) => void): void;
             onRequestSaveForClose(callback: (requestId: string) => void): void;
+            onRequestLiveSessionShutdown(callback: (requestId: string) => void): void;
             onInsertCode(callback: (code: unknown) => void): void;
             onOpenFile(callback: (payload: ScriptEditorOpenFilePayload) => void): void;
             onRuntimeExecuted(callback: () => void): void;
             onCommandBoundary(callback: () => void): void;
             onSessionState(callback: (phase: string) => void): void;
             publishDirtyState(state: { dirty: boolean; filePath: string; content: string }): void;
+            publishLiveSessionShutdownResult(input: {
+                requestId: string;
+                ok: boolean;
+            }): void;
             chooseScriptFile(): Promise<{ filePath: string; content: string } | null>;
             publishReady(): void;
             live: LiveScriptRendererBridge;

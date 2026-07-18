@@ -838,6 +838,14 @@ Done:
   packaged instances and passed spoken-code join, read-only synchronization,
   no execution on receive, participant-local execution, code revocation,
   ended-state rendering, and editable-copy detachment.
+- Fixed application and Script Editor shutdown while a native live session is
+  active. The renderer now revokes the classroom code and sends an explicit
+  `instructor-closed` session end before Electron closes the window. Application
+  quit then waits for every native session and the in-memory iroh endpoint to
+  shut down before resuming Electron termination. A two-instance rendered
+  DialogR run observed the participant's persistent ended state, an immediately
+  reusable Join action, code revocation, and a clean instructor process exit;
+  macOS produced no new Electron crash report.
 
 Still open:
 

@@ -11,6 +11,7 @@ export const createScriptEditorIpcController = function(
         changeLanguage(payload: ScriptEditorLanguagePayload): void;
         updateTerminalSettings(settings: Record<string, unknown>): void;
         requestSaveForClose(requestId: string): Promise<unknown> | unknown;
+        requestLiveSessionShutdown(requestId: string): Promise<unknown> | unknown;
         insertCode(code: unknown): void;
         openFile(payload: ScriptEditorOpenFilePayload): void;
         runtimeChanged(): void;
@@ -24,6 +25,9 @@ export const createScriptEditorIpcController = function(
         updateTerminalSettings: options.updateTerminalSettings,
         requestSaveForClose: (requestId: string): void => {
             void options.requestSaveForClose(requestId);
+        },
+        requestLiveSessionShutdown: (requestId: string): void => {
+            void options.requestLiveSessionShutdown(requestId);
         },
         insertCode: options.insertCode,
         openFile: options.openFile,

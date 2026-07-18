@@ -282,12 +282,14 @@ const scriptEditor = {
     onLanguageChanged: (callback: Listener): void => addListener(applicationEventChannels.languageChanged, callback),
     onTerminalSettingsUpdated: (callback: Listener): void => addListener(applicationEventChannels.terminalSettingsUpdated, callback),
     onRequestSaveForClose: (callback: Listener): void => addListener(scriptEditorEventChannels.requestSaveForClose, callback),
+    onRequestLiveSessionShutdown: (callback: Listener): void => addListener(scriptEditorEventChannels.requestLiveSessionShutdown, callback),
     onInsertCode: (callback: Listener): void => addListener(scriptEditorEventChannels.publishInsertCode, callback),
     onOpenFile: (callback: Listener): void => addListener(scriptEditorEventChannels.publishOpenFile, callback),
     onRuntimeExecuted: (callback: Listener): void => addListener(scriptEditorEventChannels.runtimeExecuted, callback),
     onCommandBoundary: (callback: Listener): void => addListener(scriptEditorEventChannels.commandBoundary, callback),
     onSessionState: (callback: Listener): void => addListener(scriptEditorEventChannels.sessionState, callback),
     publishDirtyState: (state: unknown): void => sendHost(scriptEditorEventChannels.updateDirtyState, state),
+    publishLiveSessionShutdownResult: (input: unknown): void => sendHost(scriptEditorEventChannels.liveSessionShutdownResult, input),
     chooseScriptFile: (): Promise<unknown> => invokeHost(scriptEditorIpcChannels.openFile),
     publishReady: (): void => sendHost(scriptEditorEventChannels.browserReady)
 };

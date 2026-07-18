@@ -60,6 +60,7 @@ export interface RuntimeLifecycleCompositionOptions {
         title: string,
         message: string
     ): Promise<void>;
+    stopCollaboration(): Promise<unknown>;
     beforeResumeQuit?(): void;
     quitApp(): void;
 }
@@ -248,6 +249,7 @@ export const createRuntimeLifecycleComposition = function(
         stopRuntime: async function(): Promise<void> {
             await options.runtimeSessionManager.stop();
         },
+        stopCollaboration: options.stopCollaboration,
         beforeResumeQuit: options.beforeResumeQuit,
         quitApp: options.quitApp
     });

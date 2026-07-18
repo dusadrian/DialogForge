@@ -24,6 +24,7 @@ export interface ScriptEditorIpcBindings {
     changeLanguage(payload: ScriptEditorLanguagePayload): void;
     updateTerminalSettings(settings: Record<string, unknown>): void;
     requestSaveForClose(requestId: string): void;
+    requestLiveSessionShutdown(requestId: string): void;
     insertCode(code: unknown): void;
     openFile(payload: ScriptEditorOpenFilePayload): void;
     runtimeChanged(): void;
@@ -35,11 +36,16 @@ export interface ScriptEditorIpcBridge {
     onLanguageChanged(callback: (payload: ScriptEditorLanguagePayload) => void): void;
     onTerminalSettingsUpdated(callback: (settings: Record<string, unknown>) => void): void;
     onRequestSaveForClose(callback: (requestId: string) => void): void;
+    onRequestLiveSessionShutdown(callback: (requestId: string) => void): void;
     onInsertCode(callback: (code: unknown) => void): void;
     onOpenFile(callback: (payload: ScriptEditorOpenFilePayload) => void): void;
     onRuntimeExecuted(callback: () => void): void;
     onCommandBoundary(callback: () => void): void;
     onSessionState(callback: (phase: string) => void): void;
+    publishLiveSessionShutdownResult(input: {
+        requestId: string;
+        ok: boolean;
+    }): void;
 }
 
 
@@ -69,6 +75,12 @@ export const bindScriptEditorIpc = function(
     bridge.onRequestSaveForClose((requestId) => {
         if (requestId) {
             bindings.requestSaveForClose(requestId);
+        }
+    });
+
+    bridge.onRequestLiveSessionShutdown((requestId) => {
+        if (requestId) {
+            bindings.requestLiveSessionShutdown(requestId);
         }
     });
 

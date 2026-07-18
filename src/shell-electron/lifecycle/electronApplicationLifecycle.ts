@@ -92,14 +92,12 @@ export const bindElectronApplicationLifecycle = function(
     options.app.on("before-quit", (event) => {
         options.appendBootLog("app before-quit");
         options.requestApplicationQuit();
-        void options.stopCollaboration().catch(options.reportError);
         options.runtimeQuitController.handleBeforeQuit(event);
     });
 
     options.app.on("will-quit", () => {
         options.appendBootLog("app will-quit");
         options.stopHelpServer();
-        void options.stopCollaboration().catch(options.reportError);
         options.runtimeQuitController.handleWillQuit();
     });
 

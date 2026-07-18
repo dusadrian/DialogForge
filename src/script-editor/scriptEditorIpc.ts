@@ -36,10 +36,12 @@ export const scriptEditorEventChannels = {
     updateDirtyState: "base-app:updateScriptEditorDirtyState",
     rendererReady: "base-app:script-editor-ready",
     closeSaveResult: "base-app:script-editor-close-save-result",
+    liveSessionShutdownResult: "base-app:script-editor-live-session-shutdown-result",
     initialize: "base-app:script-editor-init",
     publishInsertCode: "base-app:script-editor-insert-code",
     publishOpenFile: "base-app:script-editor-open-file",
     requestSaveForClose: "base-app:script-editor-request-save-for-close",
+    requestLiveSessionShutdown: "base-app:script-editor-request-live-session-shutdown",
     sessionState: "base-app:script-editor-session-state",
     runtimeExecuted: "base-app:script-editor-runtime-executed",
     commandBoundary: "base-app:script-editor-command-boundary"
@@ -54,6 +56,10 @@ export interface ScriptEditorCommands {
     }];
     "base-app:script-editor-ready": [];
     "base-app:script-editor-close-save-result": [{
+        requestId?: string;
+        ok?: boolean;
+    }];
+    "base-app:script-editor-live-session-shutdown-result": [{
         requestId?: string;
         ok?: boolean;
     }];

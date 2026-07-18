@@ -78,12 +78,14 @@ export interface DialogForgeHostBridge {
         onLanguageChanged(callback: (payload: ScriptEditorLanguagePayload) => void): void;
         onTerminalSettingsUpdated(callback: (settings: Record<string, unknown>) => void): void;
         onRequestSaveForClose(callback: (requestId: string) => void): void;
+        onRequestLiveSessionShutdown(callback: (requestId: string) => void): void;
         onInsertCode(callback: (code: unknown) => void): void;
         onOpenFile(callback: (payload: ScriptEditorOpenFilePayload) => void): void;
         onRuntimeExecuted(callback: () => void): void;
         onCommandBoundary(callback: () => void): void;
         onSessionState(callback: (phase: string) => void): void;
         publishDirtyState(state: { dirty: boolean; filePath: string; content: string }): void;
+        publishLiveSessionShutdownResult(input: { requestId: string; ok: boolean }): void;
         chooseScriptFile(): Promise<{ filePath: string; content: string } | null>;
         publishReady(): void;
         live: LiveScriptRendererBridge;
@@ -324,6 +326,18 @@ export const createDialogForgeHostBridge = function(
                     }
                 );
             },
+            onRequestLiveSessionShutdown: function(callback: (requestId: string) => void) {
+                ipcRenderer.on(
+                    scriptEditorEventChannels.requestLiveSessionShutdown,
+                    (_event, value) => {
+                        const requestId = String(asRecord(value).requestId || "");
+
+                        if (requestId) {
+                            callback(requestId);
+                        }
+                    }
+                );
+            },
             onInsertCode: function(callback: (code: unknown) => void) {
                 ipcRenderer.on(scriptEditorEventChannels.publishInsertCode, (_event, value) => {
                     const source = value && typeof value === "object"
@@ -370,6 +384,13 @@ export const createDialogForgeHostBridge = function(
                 sendScriptEditorCommand(
                     ipcRenderer,
                     scriptEditorEventChannels.updateDirtyState,
+                    input
+                );
+            },
+            publishLiveSessionShutdownResult: function(input) {
+                sendScriptEditorCommand(
+                    ipcRenderer,
+                    scriptEditorEventChannels.liveSessionShutdownResult,
                     input
                 );
             },

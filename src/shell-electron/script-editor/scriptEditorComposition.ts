@@ -106,8 +106,16 @@ export const createScriptEditorComposition = function(
     };
     let closeBypass = false;
     let closeConfirming = false;
+    let endLiveSessions = async function(): Promise<void> {};
     const pendingWork = createScriptEditorPendingWorkQueue();
     const closeSaveCoordinator = createScriptEditorCloseSaveCoordinator();
+    const liveSessionShutdownCoordinator = createScriptEditorCloseSaveCoordinator({
+        timeoutMs: 5000,
+        createRequestId: function(): string {
+            return "script-live-shutdown-" + Date.now() + "-" +
+                Math.random().toString(16).slice(2, 8);
+        }
+    });
     const fileSystemController = createScriptFileSystemController();
     const createWindow = createScriptEditorWindowFactory({
         rootDir: options.rootDir,
@@ -198,6 +206,7 @@ export const createScriptEditorComposition = function(
                 return;
             }
 
+            await endLiveSessions();
             closeBypass = true;
             win.close();
         }
@@ -222,7 +231,9 @@ export const createScriptEditorComposition = function(
             };
         },
         shouldPreventClose: function(): boolean {
-            return !closeBypass && dirtyState.dirty;
+            return !closeBypass && (
+                dirtyState.dirty || pendingWork.isRendererReady()
+            );
         },
         confirmClose: function(win): void {
             void confirmClose(win);
@@ -305,6 +316,7 @@ export const createScriptEditorComposition = function(
         windowController,
         fileSystemController,
         closeSaveCoordinator,
+        liveSessionShutdownCoordinator,
         getDocumentState: function() {
             return documentState;
         },
@@ -340,6 +352,38 @@ export const createScriptEditorComposition = function(
         }
     });
 
+    endLiveSessions = async function(): Promise<void> {
+        const win = windowController.getWindow();
+        let rendererEndedSessions = false;
+
+        if (win && !win.isDestroyed() && pendingWork.isRendererReady()) {
+            rendererEndedSessions = await liveSessionShutdownCoordinator.request(
+                (requestId) => {
+                    win.webContents.send(
+                        scriptEditorEventChannels.requestLiveSessionShutdown,
+                        { requestId }
+                    );
+                }
+            );
+        }
+
+        if (!rendererEndedSessions) {
+            await collaborationTransport.closeAllSessions();
+        }
+    };
+
+    let collaborationShutdown: Promise<void> | null = null;
+    const shutdownCollaboration = function(): Promise<void> {
+        if (!collaborationShutdown) {
+            collaborationShutdown = (async () => {
+                await endLiveSessions();
+                await collaborationTransport.shutdown();
+            })();
+        }
+
+        return collaborationShutdown;
+    };
+
     return {
         windowController,
         openWindow,
@@ -354,6 +398,6 @@ export const createScriptEditorComposition = function(
         allowClose: function(): void {
             closeBypass = true;
         },
-        shutdownCollaboration: collaborationTransport.shutdown
+        shutdownCollaboration
     };
 };

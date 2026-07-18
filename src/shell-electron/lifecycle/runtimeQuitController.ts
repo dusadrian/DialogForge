@@ -6,6 +6,7 @@ export interface RuntimeQuitEvent {
 export interface RuntimeQuitControllerOptions {
     prepareQuit?: () => Promise<boolean>;
     stopRuntime(): Promise<unknown>;
+    stopCollaboration(): Promise<unknown>;
     beforeResumeQuit?(): void;
     quitApp(): void;
 }
@@ -21,6 +22,7 @@ export const createRuntimeQuitController = function(
     options: RuntimeQuitControllerOptions
 ): RuntimeQuitController {
     let stopStarted = false;
+    let collaborationStopStarted = false;
     let resumedQuit = false;
     let shutdownStarted = false;
 
@@ -52,6 +54,28 @@ export const createRuntimeQuitController = function(
         }
     };
 
+    const stopCollaboration = async function(): Promise<void> {
+        if (collaborationStopStarted) {
+            return;
+        }
+
+        collaborationStopStarted = true;
+
+        try {
+            await options.stopCollaboration();
+        }
+        catch {
+            // Collaboration cleanup is best-effort during application shutdown.
+        }
+    };
+
+    const stopApplicationServices = async function(): Promise<void> {
+        await Promise.all([
+            stopRuntime(),
+            stopCollaboration()
+        ]);
+    };
+
     const resumeQuit = function(): void {
         if (resumedQuit) {
             return;
@@ -76,7 +100,7 @@ export const createRuntimeQuitController = function(
         shutdownStarted = true;
 
         if (!options.prepareQuit) {
-            void stopRuntime().then(() => {
+            void stopApplicationServices().then(() => {
                 resumeQuit();
             });
             return;
@@ -88,14 +112,14 @@ export const createRuntimeQuitController = function(
                 return;
             }
 
-            void stopRuntime().then(() => {
+            void stopApplicationServices().then(() => {
                 resumeQuit();
             });
         });
     };
 
     const handleWillQuit = function(): void {
-        void stopRuntime();
+        void stopApplicationServices();
     };
 
     return {

@@ -59,6 +59,9 @@ export interface LiveScriptRendererController {
         reason?: "stopped" | "expired" | "instructor-closed"
     ): Promise<void>;
     detachParticipant(documentId: string): Promise<void>;
+    shutdown(
+        reason?: "stopped" | "expired" | "instructor-closed"
+    ): Promise<void>;
     makeEditableCopy(documentId: string): ScriptDocument | null;
     getHostedSessionId(documentId: string): string;
     getHostedState(documentId: string): LiveScriptHostState | null;
@@ -428,11 +431,26 @@ export const createLiveScriptRendererController = function(
         });
     };
 
+    const shutdown = async function(
+        reason: "stopped" | "expired" | "instructor-closed" = "instructor-closed"
+    ): Promise<void> {
+        const hostedDocumentIds = Array.from(hostedByDocument.keys());
+        const participantDocumentIds = Array.from(participantByDocument.keys());
+
+        await Promise.all(hostedDocumentIds.map((documentId) => {
+            return stopHosting(documentId, reason);
+        }));
+        await Promise.all(participantDocumentIds.map((documentId) => {
+            return detachParticipant(documentId);
+        }));
+    };
+
     return {
         hostDocument,
         join,
         stopHosting,
         detachParticipant,
+        shutdown,
         makeEditableCopy,
         getHostedSessionId: function(documentId) {
             return hostedByDocument.get(documentId)?.sessionId || "";

@@ -141,12 +141,14 @@ const createNoopScriptEditorBridge = function(): ScriptEditorBridge {
     onLanguageChanged: () => {},
     onTerminalSettingsUpdated: () => {},
     onRequestSaveForClose: () => {},
+    onRequestLiveSessionShutdown: () => {},
     onInsertCode: () => {},
     onOpenFile: () => {},
     onRuntimeExecuted: () => {},
     onCommandBoundary: () => {},
     onSessionState: () => {},
     publishDirtyState: () => {},
+    publishLiveSessionShutdownResult: () => {},
     chooseScriptFile: async () => {
       return null;
     },
@@ -458,6 +460,21 @@ const liveScriptController = createLiveScriptRendererController({
     livePanelController?.updateTransport(event);
   }
 });
+
+const shutdownLiveSessions = async function(): Promise<void> {
+  const hostedDocumentIds = Array.from(hostedTickets.keys());
+
+  await Promise.all(hostedDocumentIds.map((documentId) => {
+    return revokeHostedCode(documentId);
+  }));
+  await liveScriptController.shutdown('instructor-closed');
+  hostedLinks.clear();
+  hostedTickets.clear();
+  hostedPublications.clear();
+  livePanelDocumentId = '';
+  livePanelController?.close();
+  updateLiveToolbarState();
+};
 
 const scriptFileController: ScriptEditorFileController =
   createScriptEditorFileController({
@@ -827,6 +844,20 @@ const scriptEditorIpcController = createScriptEditorIpcController({
   },
   requestSaveForClose: (requestId) => {
     return closeCoordinator.resolveForWindowClose(requestId);
+  },
+  requestLiveSessionShutdown: async (requestId) => {
+    try {
+      await shutdownLiveSessions();
+      scriptEditorBridge.publishLiveSessionShutdownResult({
+        requestId,
+        ok: true
+      });
+    } catch {
+      scriptEditorBridge.publishLiveSessionShutdownResult({
+        requestId,
+        ok: false
+      });
+    }
   },
   insertCode: insertCodeAtCursor,
   openFile: ({ filePath, content }) => {
