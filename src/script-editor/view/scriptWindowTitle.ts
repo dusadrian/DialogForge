@@ -1,5 +1,6 @@
 export interface ScriptWindowTitleDocument {
     filePath: string;
+    displayName?: string;
     dirty: boolean;
 }
 
@@ -19,9 +20,8 @@ export const formatScriptWindowTitle = function(
     document: ScriptWindowTitleDocument | null | undefined,
     labels: ScriptWindowTitleLabels
 ): string {
-    const fileLabel = document?.filePath
-        ? basename(document.filePath)
-        : labels.untitled;
+    const fileLabel = document?.displayName
+        || (document?.filePath ? basename(document.filePath) : labels.untitled);
     const dirtyMarker = document?.dirty ? " •" : "";
 
     return `${fileLabel}${dirtyMarker} - ${labels.scriptEditor}`;

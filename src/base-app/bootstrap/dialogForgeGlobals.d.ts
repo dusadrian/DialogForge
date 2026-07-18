@@ -9,6 +9,7 @@ import type {
 } from "../features/files/openFileResult";
 import type { ScriptEditorInitPayload, ScriptEditorLanguagePayload, ScriptEditorOpenFilePayload } from "../../script-editor/renderer/scriptEditorIpcBindings";
 import type { ScriptFileResult } from "../../script-editor/files/scriptFileResult";
+import type { LiveScriptRendererBridge } from "../../script-editor/collaboration/liveScriptIpc";
 import type { ExternalUrlOpenRequest } from "../features/external-url/externalUrl";
 import type {
     PlotCopyResult,
@@ -313,6 +314,7 @@ declare global {
             publishDirtyState(state: { dirty: boolean; filePath: string; content: string }): void;
             chooseScriptFile(): Promise<{ filePath: string; content: string } | null>;
             publishReady(): void;
+            live: LiveScriptRendererBridge;
         };
         datasetEditor: {
             onInit(callback: (payload: DatasetEditorInitMessage) => void): void;

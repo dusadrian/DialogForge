@@ -5,5 +5,6 @@ export * from "./liveScriptHostSession";
 export * from "./liveScriptIpc";
 export * from "./liveScriptParticipantSession";
 export * from "./liveScriptProtocol";
+export * from "./liveScriptSessionController";
 export * from "./liveScriptTicket";
 export * from "./liveScriptTransport";

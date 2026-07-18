@@ -2,7 +2,7 @@
 
 ## Status And Purpose
 
-Status: implementation in progress. Phases 0 through 2 completed on 2026-07-18.
+Status: implementation in progress. Phases 0 through 3 completed on 2026-07-18.
 
 This document is the execution plan for adding live Script Editor tab sharing
 to DialogForge. It is written for an AI agent working in a dedicated task. The
@@ -33,7 +33,7 @@ marked `done` only when its acceptance gate is satisfied.
 | 0 | Confirm baseline and freeze decisions | done |
 | 1 | Define the host-neutral live-script contract | done |
 | 2 | Prove native iroh transport in DialogForge | done |
-| 3 | Implement shared single-writer synchronization | not started |
+| 3 | Implement shared single-writer synchronization | done |
 | 4 | Add and verify installed-app sharing UI | not started |
 | 5 | Harden native sessions and packaging | not started |
 | 6 | Create the separately versioned Rust/WebAssembly client | not started |
@@ -611,6 +611,39 @@ Stop condition:
 
 - Do not call `model.setValue()` for every edit. Do not reuse ordinary dirty
   file state as collaboration state.
+
+#### Phase 3 Evidence (2026-07-18)
+
+- Added the host-neutral session coordinator and the renderer/Monaco adapter
+  under `src/script-editor/collaboration` and `src/script-editor/renderer`.
+  Instructor Monaco change batches are sent as ordered protocol edits. Normal
+  edits use `model.applyEdits()` on participants; full model replacement is
+  reserved for initial and authoritative snapshots.
+- Reused the existing `ScriptDocument`, tab controller, Monaco editor,
+  execution controller, toolbar, file lifecycle, and tab strip. A participant
+  document is explicitly `live-participant`, read-only, pathless, never dirty,
+  and omitted from ordinary file-session restore. Save, custom insertion, and
+  custom paste entry points reject it while selection, copy, and the existing
+  local Ctrl/Cmd+Enter execution path remain available.
+- Added `Make editable copy` at the renderer-controller boundary. It creates a
+  normal untitled local tab from the current participant content without
+  changing the live tab.
+- `tests/script-editor/verify-live-script-renderer-sync.js` exercised initial
+  snapshot, insertion, deletion, paste-shaped edits, undo/redo-shaped edits,
+  full replacement, preserved view state, no participant dirty state, no
+  instructor path disclosure, editable copy, and explicit selected-code local
+  execution over the in-memory transport. The participant model used one
+  `setValue()` for its initial snapshot and `applyEdits()` for subsequent
+  changes. Incoming changes made zero runtime calls.
+- Targeted build plus the Phase 1 collaboration test, Phase 3 renderer test,
+  and two-process native Phase 2 transport test passed. The rendered Electron
+  Script Editor workflow was exercised with the DialogR contribution and
+  verified ordinary dirty state, save, and clean close.
+- Unplanned but done: the rendered check exposed that the Phase 2 Electron
+  entrypoint passed `userDataPath` and identity protection to the main-window
+  composition rather than the Script Editor composition. The options now go
+  to their actual owner; the corrected app launch and native transport test
+  both pass.
 
 ### Phase 4: Add And Verify Installed-App Sharing UI
 

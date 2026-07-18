@@ -76,6 +76,21 @@ const applyEditorScrollTop = function(
 };
 
 
+const applyDocumentToEditor = function(
+    editor: Monaco.editor.IStandaloneCodeEditor | null,
+    document: ScriptDocument
+): void {
+    if (!editor) {
+        return;
+    }
+
+    editor.setModel(document.model);
+    editor.updateOptions({
+        readOnly: document.kind === "live-participant"
+    });
+};
+
+
 export const createScriptEditorTabController = function(
     options: ScriptEditorTabControllerOptions
 ): ScriptEditorTabController {
@@ -107,7 +122,7 @@ export const createScriptEditorTabController = function(
             captureActiveScroll();
 
             const session = createScriptEditorSessionState(
-                tabs.map((tab) => ({
+                tabs.filter((tab) => tab.kind === "local").map((tab) => ({
                     filePath: tab.filePath,
                     scrollTop: tab.scrollTop
                 })),
@@ -196,7 +211,7 @@ export const createScriptEditorTabController = function(
         },
 
         hasDirtyTabs() {
-            return tabs.some((tab) => tab.dirty);
+            return tabs.some((tab) => tab.kind === "local" && tab.dirty);
         },
 
         findTab(tabId) {
@@ -216,7 +231,7 @@ export const createScriptEditorTabController = function(
 
             if (activate || !activeTabId) {
                 activeTabId = tab.id;
-                options.getEditor()?.setModel(tab.model);
+                applyDocumentToEditor(options.getEditor(), tab);
             }
 
             controller.refresh();
@@ -233,7 +248,7 @@ export const createScriptEditorTabController = function(
 
             captureActiveScroll();
             activeTabId = nextTab.id;
-            editor.setModel(nextTab.model);
+            applyDocumentToEditor(editor, nextTab);
             applyEditorScrollTop(editor, nextTab.scrollTop);
 
             try {
@@ -269,6 +284,7 @@ export const createScriptEditorTabController = function(
                     tabs.map((tab) => ({
                         id: tab.id,
                         filePath: tab.filePath,
+                        displayName: tab.displayName,
                         dirty: tab.dirty
                     })),
                     activeTabId,

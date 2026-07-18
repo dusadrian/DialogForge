@@ -1,6 +1,7 @@
 export interface ScriptTabStripItem {
     id: string;
     filePath: string;
+    displayName?: string;
     dirty: boolean;
 }
 
@@ -43,11 +44,10 @@ export const renderScriptTabStrip = function(
 
         const label = document.createElement("span");
         label.className = "dm-script-tab-label";
-        const baseName = tab.filePath
-            ? basename(tab.filePath)
-            : labels.untitled;
+        const baseName = tab.displayName
+            || (tab.filePath ? basename(tab.filePath) : labels.untitled);
         label.textContent = tab.dirty ? `${baseName} •` : baseName;
-        label.title = tab.filePath || labels.untitled;
+        label.title = tab.filePath || tab.displayName || labels.untitled;
 
         const closeButton = document.createElement("button");
         closeButton.type = "button";

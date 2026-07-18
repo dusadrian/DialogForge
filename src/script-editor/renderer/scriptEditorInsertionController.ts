@@ -64,6 +64,10 @@ export const createScriptEditorInsertionController = function(
             active = options.createDocument();
         }
 
+        if (active.kind === "live-participant") {
+            return;
+        }
+
         options.activateDocument(active.id);
 
         const selection = editor.getSelection();

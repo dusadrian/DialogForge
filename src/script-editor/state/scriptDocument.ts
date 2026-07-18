@@ -4,6 +4,8 @@ import type * as Monaco from "monaco-editor";
 export interface ScriptDocument {
     id: string;
     model: Monaco.editor.ITextModel;
+    kind: "local" | "live-participant";
+    displayName: string;
     filePath: string;
     dirty: boolean;
     scrollTop: number;
@@ -13,6 +15,8 @@ export interface ScriptDocument {
 
 
 export interface ScriptDocumentOptions {
+    kind?: ScriptDocument["kind"];
+    displayName?: string;
     filePath?: string;
     content?: string;
     contentChanged(document: ScriptDocument): void;
@@ -30,8 +34,12 @@ export const setScriptDocumentContent = function(
     dirty = false
 ): void {
     document.muteChanges = true;
-    document.model.setValue(String(content || ""));
-    document.muteChanges = false;
+    try {
+        document.model.setValue(String(content || ""));
+    }
+    finally {
+        document.muteChanges = false;
+    }
     document.dirty = dirty;
 };
 
@@ -44,6 +52,8 @@ export const createScriptDocument = function(
     const document: ScriptDocument = {
         id: createDocumentId(),
         model,
+        kind: options.kind || "local",
+        displayName: String(options.displayName || ""),
         filePath: String(options.filePath || ""),
         dirty: false,
         scrollTop: 0,
@@ -52,6 +62,11 @@ export const createScriptDocument = function(
     };
     const changeDisposable = model.onDidChangeContent(() => {
         if (document.muteChanges) {
+            return;
+        }
+
+        if (document.kind === "live-participant") {
+            document.dirty = false;
             return;
         }
 

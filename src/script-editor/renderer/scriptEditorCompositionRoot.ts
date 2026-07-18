@@ -98,6 +98,12 @@ import type {
   ScriptEditorTransportBridge
 } from './scriptEditorRendererTransport';
 import {
+  createLiveScriptRendererController
+} from './liveScriptRendererController';
+import type {
+  LiveScriptRendererBridge
+} from '../collaboration';
+import {
   scriptEditorEventChannels,
   scriptEditorIpcChannels
 } from '../scriptEditorIpc';
@@ -110,7 +116,9 @@ const defaultRendererAppPath = function(): string {
 };
 
 type ScriptEditorBridge =
-  ScriptEditorTransportBridge & ScriptEditorIpcBridge;
+  ScriptEditorTransportBridge & ScriptEditorIpcBridge & {
+    live: LiveScriptRendererBridge;
+  };
 
 const createNoopScriptEditorBridge = function(): ScriptEditorBridge {
   return {
@@ -127,7 +135,32 @@ const createNoopScriptEditorBridge = function(): ScriptEditorBridge {
     chooseScriptFile: async () => {
       return null;
     },
-    publishReady: () => {}
+    publishReady: () => {},
+    live: {
+      capability: async () => ({
+        available: false,
+        endpointId: '',
+        message: 'Live-script sharing is unavailable in this host.'
+      }),
+      host: async () => ({
+        ok: false,
+        message: 'Live-script sharing is unavailable in this host.'
+      }),
+      join: async () => ({
+        ok: false,
+        message: 'Live-script sharing is unavailable in this host.'
+      }),
+      send: async () => ({
+        ok: false,
+        message: 'Live-script sharing is unavailable in this host.'
+      }),
+      close: async () => ({
+        ok: true,
+        message: ''
+      }),
+      onFrame: () => {},
+      onState: () => {}
+    }
   };
 };
 
@@ -237,7 +270,8 @@ const outlineController = createScriptOutlineController({
   documentStateChanged: (hasDocument, symbolCount) => {
     surfaceState.toolbarView?.updateDocumentState(
       hasDocument,
-      symbolCount
+      symbolCount,
+      getActiveTab()?.kind !== 'live-participant'
     );
   }
 });
@@ -307,6 +341,19 @@ const scriptDocumentLifecycle =
   });
 const createTab = scriptDocumentLifecycle.create;
 
+const liveScriptController = createLiveScriptRendererController({
+  transport: scriptEditorBridge.live,
+  getMonaco: () => monacoRuntime.current,
+  getEditor: () => surfaceState.editor,
+  createTab,
+  refreshTabs: () => {
+    scriptEditorReactions.tabStateChanged();
+  },
+  hostStateChanged: () => {},
+  participantStateChanged: () => {},
+  transportStateChanged: () => {}
+});
+
 const scriptFileController: ScriptEditorFileController =
   createScriptEditorFileController({
     transport: scriptEditorHostTransport,
@@ -318,7 +365,17 @@ const scriptFileController: ScriptEditorFileController =
     documentStateChanged: scriptEditorReactions.tabStateChanged
   });
 tabController.setCloseHandler((tabId) => {
-  void scriptFileController.closeTab(tabId);
+  void (async () => {
+    if (liveScriptController.getHostedSessionId(tabId)) {
+      await liveScriptController.stopHosting(tabId);
+    }
+
+    if (liveScriptController.getParticipantSessionId(tabId)) {
+      await liveScriptController.detachParticipant(tabId);
+    }
+
+    await scriptFileController.closeTab(tabId);
+  })();
 });
 const saveTab = scriptFileController.saveTab;
 const saveCurrent = () => scriptFileController.saveCurrent(false);

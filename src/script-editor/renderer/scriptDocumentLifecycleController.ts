@@ -9,8 +9,11 @@ import type {
 
 
 export interface ScriptDocumentCreationOptions {
+    kind?: ScriptDocument["kind"];
+    displayName?: string;
     filePath?: string;
     content?: string;
+    dirty?: boolean;
     activate?: boolean;
 }
 
@@ -69,12 +72,17 @@ export const createScriptDocumentLifecycleController = function(
         }
 
         const document = createScriptDocument(monaco, {
+            kind: creationOptions.kind,
+            displayName: String(creationOptions.displayName || ""),
             filePath: String(creationOptions.filePath || ""),
             content: String(creationOptions.content || ""),
             contentChanged: documentChanged
         });
 
         options.clearDiagnostics(document);
+        document.dirty = creationOptions.kind === "live-participant"
+            ? false
+            : creationOptions.dirty === true;
         options.tabs.addTab(
             document,
             creationOptions.activate !== false

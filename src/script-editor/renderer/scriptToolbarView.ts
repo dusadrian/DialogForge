@@ -47,7 +47,11 @@ export interface ScriptToolbarView {
     readonly element: HTMLDivElement;
     readonly outlineButton: HTMLButtonElement;
     updateLabels(labels: ScriptToolbarLabels): void;
-    updateDocumentState(hasDocument: boolean, functionCount: number): void;
+    updateDocumentState(
+        hasDocument: boolean,
+        functionCount: number,
+        canSave?: boolean
+    ): void;
 }
 
 
@@ -223,11 +227,12 @@ export const createScriptToolbarView = function(
 
     const updateDocumentState = function(
         hasDocument: boolean,
-        functionCount: number
+        functionCount: number,
+        canSave = true
     ): void {
         runButton.disabled = !hasDocument;
-        saveButton.disabled = !hasDocument;
-        saveAsButton.disabled = !hasDocument;
+        saveButton.disabled = !hasDocument || !canSave;
+        saveAsButton.disabled = !hasDocument || !canSave;
 
         const hasFunctions = functionCount > 0;
         const outlineText = hasFunctions

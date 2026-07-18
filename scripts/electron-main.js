@@ -463,23 +463,6 @@ const mainWindowComposition = mainWindowCompositionModule.createMainWindowCompos
     rootDir: composition.rootDir,
     productId: product,
     settingsPath: location.settingsPath,
-    userDataPath: electron.app.getPath("userData"),
-    collaborationIdentityProtection: {
-        protect: function (secret) {
-            if (!electron.safeStorage.isEncryptionAvailable()) {
-                throw new Error("Secure storage is unavailable for the iroh identity.");
-            }
-
-            return electron.safeStorage.encryptString(Buffer.from(secret).toString("hex"));
-        },
-        unprotect: function (payload) {
-            if (!electron.safeStorage.isEncryptionAvailable()) {
-                throw new Error("Secure storage is unavailable for the iroh identity.");
-            }
-
-            return Buffer.from(electron.safeStorage.decryptString(payload), "hex");
-        }
-    },
     title: composition.windowTitle,
     nativeWindowIconPath: composition.nativeWindowIconPath || undefined,
     minimumWidth: mainWindowMinWidth,
@@ -699,6 +682,23 @@ scriptEditorComposition = scriptEditorCompositionModule.createScriptEditorCompos
     rootDir: composition.rootDir,
     productId: product,
     settingsPath: location.settingsPath,
+    userDataPath: electron.app.getPath("userData"),
+    collaborationIdentityProtection: {
+        protect: function (secret) {
+            if (!electron.safeStorage.isEncryptionAvailable()) {
+                throw new Error("Secure storage is unavailable for the iroh identity.");
+            }
+
+            return electron.safeStorage.encryptString(Buffer.from(secret).toString("hex"));
+        },
+        unprotect: function (payload) {
+            if (!electron.safeStorage.isEncryptionAvailable()) {
+                throw new Error("Secure storage is unavailable for the iroh identity.");
+            }
+
+            return Buffer.from(electron.safeStorage.decryptString(payload), "hex");
+        }
+    },
     title: translateCompositionText("Script editor"),
     nativeWindowIconPath: composition.nativeWindowIconPath || undefined,
     pagePath: path.join(composition.rootDir, "src/base-app/pages/scriptEditor.html"),

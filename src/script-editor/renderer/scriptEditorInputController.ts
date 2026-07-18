@@ -49,10 +49,20 @@ export const createScriptEditorInputController = function(
                     void options.showHelpAtCursor();
                 },
                 paste: () => {
+                    if (options.getActiveTab()?.kind === "live-participant") {
+                        return;
+                    }
+
                     void options.readClipboardText()
                         .then(options.insertCodeAtCursor);
                 },
-                pasteText: options.insertCodeAtCursor,
+                pasteText: (text) => {
+                    if (options.getActiveTab()?.kind === "live-participant") {
+                        return;
+                    }
+
+                    options.insertCodeAtCursor(text);
+                },
                 scrollChanged: () => {
                     const active = options.getActiveTab();
 

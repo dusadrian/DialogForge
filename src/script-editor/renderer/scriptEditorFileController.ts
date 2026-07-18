@@ -26,8 +26,11 @@ export interface ScriptEditorFileControllerOptions {
     persistence: ScriptFilePersistence;
     tabs: ScriptEditorTabController;
     createTab(options: {
+        kind?: ScriptDocument["kind"];
+        displayName?: string;
         filePath?: string;
         content?: string;
+        dirty?: boolean;
         activate?: boolean;
     }): ScriptDocument;
     scheduleValidation(): void;
@@ -72,6 +75,10 @@ export const createScriptEditorFileController = function(
         tab: ScriptDocument,
         saveAs = false
     ): Promise<boolean> {
+        if (tab.kind === "live-participant") {
+            return false;
+        }
+
         const saved = await options.persistence.save(
             {
                 filePath: tab.filePath,
@@ -140,6 +147,15 @@ export const createScriptEditorFileController = function(
             const active = options.tabs.findTab(plan.tabId);
 
             if (!active) {
+                return;
+            }
+
+            if (active.kind === "live-participant") {
+                options.createTab({
+                    filePath,
+                    content,
+                    activate: true
+                });
                 return;
             }
 

@@ -75,7 +75,11 @@ export const createScriptEditorViewStateController = function(
         const active = options.tabs.getActiveTab();
         const symbols = active ? options.outline.getActiveSymbols() : [];
 
-        options.getToolbarView()?.updateDocumentState(!!active, symbols.length);
+        options.getToolbarView()?.updateDocumentState(
+            !!active,
+            symbols.length,
+            active?.kind !== "live-participant"
+        );
         updateOutlineState();
         reportDirtyState();
     };
