@@ -2,7 +2,7 @@
 
 ## Status And Purpose
 
-Status: implementation in progress. Phase 0 completed on 2026-07-18.
+Status: implementation in progress. Phases 0 and 1 completed on 2026-07-18.
 
 This document is the execution plan for adding live Script Editor tab sharing
 to DialogForge. It is written for an AI agent working in a dedicated task. The
@@ -31,7 +31,7 @@ marked `done` only when its acceptance gate is satisfied.
 | Phase | Scope | Status |
 | --- | --- | --- |
 | 0 | Confirm baseline and freeze decisions | done |
-| 1 | Define the host-neutral live-script contract | not started |
+| 1 | Define the host-neutral live-script contract | done |
 | 2 | Prove native iroh transport in DialogForge | not started |
 | 3 | Implement shared single-writer synchronization | not started |
 | 4 | Add and verify installed-app sharing UI | not started |
@@ -485,6 +485,33 @@ Acceptance gate:
 Stop condition:
 
 - Do not add iroh imports to `src/script-editor/collaboration`.
+
+#### Phase 1 Evidence (2026-07-18)
+
+The host-neutral implementation now lives under
+`src/script-editor/collaboration` and has no iroh, Electron, browser, Monaco,
+product, or runtime-provider imports. It defines:
+
+- all required version 1 frame types, strict payload parsers, bounded UTF-8 JSON
+  encoding, and four-byte big-endian length framing;
+- sanitized session-ticket metadata and an opaque transport-address boundary;
+- ordered, non-overlapping Monaco-compatible text edits with deterministic
+  host-neutral application;
+- instructor and participant state machines covering capability authorization,
+  monotonic message numbers, revisions, batching, acknowledgements, one-shot
+  resync, authoritative replacement, duplicate suppression, and session end;
+- a host-neutral `LiveScriptTransport` interface and paired in-memory transport;
+- language-neutral fixtures for every version 1 message type plus malformed
+  fixtures under `protocol/live-script/v1`.
+
+`npm run build` succeeds. The targeted acceptance run
+`node tests/script-editor/verify-live-script-collaboration.js` proves host/join,
+welcome and snapshot, ordered edits, acknowledgement, a deliberately missed
+revision followed by one resync and authoritative snapshot, duplicate-frame
+suppression, full replacement, unauthorized participant-edit rejection, and
+session termination. It also exercises malformed JSON, oversized frames,
+length mismatches, unknown fields, incompatible versions, invalid revisions,
+and forbidden edit permission.
 
 ### Phase 2: Prove Native iroh Transport In DialogForge
 

@@ -1,0 +1,74 @@
+[
+    {
+        "name": "unknown top-level field",
+        "frame": {
+            "protocol": "dialogforge/live-script",
+            "version": 1,
+            "sessionId": "session_1234567890abcdef",
+            "type": "ack",
+            "senderEndpointId": "participant_1234567890abcdef",
+            "messageNumber": 2,
+            "payload": { "revision": 1 },
+            "filePath": "/Users/instructor/private.R"
+        }
+    },
+    {
+        "name": "unsupported protocol version",
+        "frame": {
+            "protocol": "dialogforge/live-script",
+            "version": 2,
+            "sessionId": "session_1234567890abcdef",
+            "type": "ack",
+            "senderEndpointId": "participant_1234567890abcdef",
+            "messageNumber": 2,
+            "payload": { "revision": 1 }
+        }
+    },
+    {
+        "name": "edit skips a revision",
+        "frame": {
+            "protocol": "dialogforge/live-script",
+            "version": 1,
+            "sessionId": "session_1234567890abcdef",
+            "type": "edit",
+            "senderEndpointId": "instructor_1234567890abcdef",
+            "messageNumber": 3,
+            "payload": {
+                "baseRevision": 0,
+                "revision": 2,
+                "edits": [
+                    {
+                        "range": {
+                            "startLineNumber": 1,
+                            "startColumn": 1,
+                            "endLineNumber": 1,
+                            "endColumn": 1
+                        },
+                        "rangeOffset": 0,
+                        "rangeLength": 0,
+                        "text": "x"
+                    }
+                ]
+            }
+        }
+    },
+    {
+        "name": "participant grants edit permission",
+        "frame": {
+            "protocol": "dialogforge/live-script",
+            "version": 1,
+            "sessionId": "session_1234567890abcdef",
+            "type": "welcome",
+            "senderEndpointId": "instructor_1234567890abcdef",
+            "messageNumber": 1,
+            "payload": {
+                "revision": 0,
+                "displayName": "analysis.R",
+                "permissions": {
+                    "canEdit": true,
+                    "canExecuteLocally": true
+                }
+            }
+        }
+    }
+]

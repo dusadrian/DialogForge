@@ -1,0 +1,172 @@
+[
+    {
+        "protocol": "dialogforge/live-script",
+        "version": 1,
+        "sessionId": "session_1234567890abcdef",
+        "type": "join",
+        "senderEndpointId": "participant_1234567890abcdef",
+        "messageNumber": 1,
+        "payload": {
+            "capability": "capability_1234567890abcdefghijklmnop",
+            "supportedVersions": [1]
+        }
+    },
+    {
+        "protocol": "dialogforge/live-script",
+        "version": 1,
+        "sessionId": "session_1234567890abcdef",
+        "type": "welcome",
+        "senderEndpointId": "instructor_1234567890abcdef",
+        "messageNumber": 1,
+        "payload": {
+            "revision": 0,
+            "displayName": "analysis.R",
+            "permissions": {
+                "canEdit": false,
+                "canExecuteLocally": true
+            }
+        }
+    },
+    {
+        "protocol": "dialogforge/live-script",
+        "version": 1,
+        "sessionId": "session_1234567890abcdef",
+        "type": "snapshot",
+        "senderEndpointId": "instructor_1234567890abcdef",
+        "messageNumber": 2,
+        "payload": {
+            "revision": 0,
+            "content": "x <- 1\n"
+        }
+    },
+    {
+        "protocol": "dialogforge/live-script",
+        "version": 1,
+        "sessionId": "session_1234567890abcdef",
+        "type": "edit",
+        "senderEndpointId": "instructor_1234567890abcdef",
+        "messageNumber": 3,
+        "payload": {
+            "baseRevision": 0,
+            "revision": 1,
+            "edits": [
+                {
+                    "range": {
+                        "startLineNumber": 1,
+                        "startColumn": 6,
+                        "endLineNumber": 1,
+                        "endColumn": 7
+                    },
+                    "rangeOffset": 5,
+                    "rangeLength": 1,
+                    "text": "2"
+                }
+            ]
+        }
+    },
+    {
+        "protocol": "dialogforge/live-script",
+        "version": 1,
+        "sessionId": "session_1234567890abcdef",
+        "type": "ack",
+        "senderEndpointId": "participant_1234567890abcdef",
+        "messageNumber": 2,
+        "payload": {
+            "revision": 1
+        }
+    },
+    {
+        "protocol": "dialogforge/live-script",
+        "version": 1,
+        "sessionId": "session_1234567890abcdef",
+        "type": "resync-request",
+        "senderEndpointId": "participant_1234567890abcdef",
+        "messageNumber": 3,
+        "payload": {
+            "currentRevision": 1,
+            "expectedBaseRevision": 2,
+            "reason": "missing-revision"
+        }
+    },
+    {
+        "protocol": "dialogforge/live-script",
+        "version": 1,
+        "sessionId": "session_1234567890abcdef",
+        "type": "cursor",
+        "senderEndpointId": "instructor_1234567890abcdef",
+        "messageNumber": 4,
+        "timestamp": 1784383200000,
+        "payload": {
+            "position": {
+                "lineNumber": 1,
+                "column": 7
+            },
+            "selection": {
+                "startLineNumber": 1,
+                "startColumn": 1,
+                "endLineNumber": 1,
+                "endColumn": 7
+            }
+        }
+    },
+    {
+        "protocol": "dialogforge/live-script",
+        "version": 1,
+        "sessionId": "session_1234567890abcdef",
+        "type": "participant-state",
+        "senderEndpointId": "instructor_1234567890abcdef",
+        "messageNumber": 5,
+        "timestamp": 1784383200000,
+        "payload": {
+            "endpointId": "participant_1234567890abcdef",
+            "state": "healthy"
+        }
+    },
+    {
+        "protocol": "dialogforge/live-script",
+        "version": 1,
+        "sessionId": "session_1234567890abcdef",
+        "type": "session-ended",
+        "senderEndpointId": "instructor_1234567890abcdef",
+        "messageNumber": 6,
+        "payload": {
+            "reason": "stopped"
+        }
+    },
+    {
+        "protocol": "dialogforge/live-script",
+        "version": 1,
+        "sessionId": "session_1234567890abcdef",
+        "type": "error",
+        "senderEndpointId": "instructor_1234567890abcdef",
+        "messageNumber": 7,
+        "payload": {
+            "code": "invalid-frame",
+            "message": "Frame was rejected."
+        }
+    },
+    {
+        "protocol": "dialogforge/live-script",
+        "version": 1,
+        "sessionId": "session_1234567890abcdef",
+        "type": "ping",
+        "senderEndpointId": "participant_1234567890abcdef",
+        "messageNumber": 4,
+        "timestamp": 1784383200000,
+        "payload": {
+            "nonce": "health-1"
+        }
+    },
+    {
+        "protocol": "dialogforge/live-script",
+        "version": 1,
+        "sessionId": "session_1234567890abcdef",
+        "type": "pong",
+        "senderEndpointId": "instructor_1234567890abcdef",
+        "messageNumber": 8,
+        "timestamp": 1784383200001,
+        "payload": {
+            "nonce": "health-1"
+        }
+    }
+]

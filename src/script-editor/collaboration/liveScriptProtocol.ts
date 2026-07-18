@@ -1,0 +1,178 @@
+export const LIVE_SCRIPT_PROTOCOL = "dialogforge/live-script" as const;
+export const LIVE_SCRIPT_PROTOCOL_VERSION = 1 as const;
+export const LIVE_SCRIPT_MAX_FRAME_BYTES = 1024 * 1024;
+export const LIVE_SCRIPT_MAX_SNAPSHOT_BYTES = 768 * 1024;
+export const LIVE_SCRIPT_MAX_EDIT_TEXT_BYTES = 256 * 1024;
+export const LIVE_SCRIPT_MAX_EDITS_PER_FRAME = 256;
+
+
+export type LiveScriptMessageType =
+    | "join"
+    | "welcome"
+    | "snapshot"
+    | "edit"
+    | "ack"
+    | "resync-request"
+    | "cursor"
+    | "participant-state"
+    | "session-ended"
+    | "error"
+    | "ping"
+    | "pong";
+
+
+export interface LiveScriptFrameBase<Type extends LiveScriptMessageType> {
+    protocol: typeof LIVE_SCRIPT_PROTOCOL;
+    version: typeof LIVE_SCRIPT_PROTOCOL_VERSION;
+    sessionId: string;
+    type: Type;
+    senderEndpointId: string;
+    messageNumber: number;
+}
+
+
+export interface LiveScriptJoinFrame extends LiveScriptFrameBase<"join"> {
+    payload: {
+        capability: string;
+        supportedVersions: number[];
+    };
+}
+
+
+export interface LiveScriptWelcomeFrame extends LiveScriptFrameBase<"welcome"> {
+    payload: {
+        revision: number;
+        displayName: string;
+        permissions: {
+            canEdit: false;
+            canExecuteLocally: true;
+        };
+    };
+}
+
+
+export interface LiveScriptSnapshotFrame extends LiveScriptFrameBase<"snapshot"> {
+    payload: {
+        revision: number;
+        content: string;
+    };
+}
+
+
+export interface LiveScriptEditRange {
+    startLineNumber: number;
+    startColumn: number;
+    endLineNumber: number;
+    endColumn: number;
+}
+
+
+export interface LiveScriptTextEdit {
+    range: LiveScriptEditRange;
+    rangeOffset: number;
+    rangeLength: number;
+    text: string;
+}
+
+
+export interface LiveScriptEditFrame extends LiveScriptFrameBase<"edit"> {
+    payload: {
+        baseRevision: number;
+        revision: number;
+        edits: LiveScriptTextEdit[];
+    };
+}
+
+
+export interface LiveScriptAckFrame extends LiveScriptFrameBase<"ack"> {
+    payload: {
+        revision: number;
+    };
+}
+
+
+export interface LiveScriptResyncRequestFrame extends LiveScriptFrameBase<"resync-request"> {
+    payload: {
+        currentRevision: number;
+        expectedBaseRevision: number;
+        reason: "missing-revision" | "invalid-edit" | "initial-snapshot";
+    };
+}
+
+
+export interface LiveScriptCursorFrame extends LiveScriptFrameBase<"cursor"> {
+    timestamp: number;
+    payload: {
+        position: {
+            lineNumber: number;
+            column: number;
+        };
+        selection?: LiveScriptEditRange;
+    };
+}
+
+
+export interface LiveScriptParticipantStateFrame extends LiveScriptFrameBase<"participant-state"> {
+    timestamp: number;
+    payload: {
+        endpointId: string;
+        state: "joined" | "left" | "healthy" | "reconnecting";
+    };
+}
+
+
+export interface LiveScriptSessionEndedFrame extends LiveScriptFrameBase<"session-ended"> {
+    payload: {
+        reason: "stopped" | "expired" | "instructor-closed";
+    };
+}
+
+
+export interface LiveScriptErrorFrame extends LiveScriptFrameBase<"error"> {
+    payload: {
+        code:
+            | "authorization-failed"
+            | "incompatible-version"
+            | "invalid-frame"
+            | "session-ended"
+            | "participant-limit";
+        message: string;
+    };
+}
+
+
+export interface LiveScriptPingFrame extends LiveScriptFrameBase<"ping"> {
+    timestamp: number;
+    payload: {
+        nonce: string;
+    };
+}
+
+
+export interface LiveScriptPongFrame extends LiveScriptFrameBase<"pong"> {
+    timestamp: number;
+    payload: {
+        nonce: string;
+    };
+}
+
+
+export type LiveScriptFrame =
+    | LiveScriptJoinFrame
+    | LiveScriptWelcomeFrame
+    | LiveScriptSnapshotFrame
+    | LiveScriptEditFrame
+    | LiveScriptAckFrame
+    | LiveScriptResyncRequestFrame
+    | LiveScriptCursorFrame
+    | LiveScriptParticipantStateFrame
+    | LiveScriptSessionEndedFrame
+    | LiveScriptErrorFrame
+    | LiveScriptPingFrame
+    | LiveScriptPongFrame;
+
+
+export interface LiveScriptOutboundFrame {
+    frame: LiveScriptFrame;
+    recipientEndpointId: string;
+}
