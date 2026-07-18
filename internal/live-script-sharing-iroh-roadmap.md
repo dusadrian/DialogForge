@@ -2,7 +2,7 @@
 
 ## Status And Purpose
 
-Status: implementation in progress. Phases 0 and 1 completed on 2026-07-18.
+Status: implementation in progress. Phases 0 through 2 completed on 2026-07-18.
 
 This document is the execution plan for adding live Script Editor tab sharing
 to DialogForge. It is written for an AI agent working in a dedicated task. The
@@ -32,7 +32,7 @@ marked `done` only when its acceptance gate is satisfied.
 | --- | --- | --- |
 | 0 | Confirm baseline and freeze decisions | done |
 | 1 | Define the host-neutral live-script contract | done |
-| 2 | Prove native iroh transport in DialogForge | not started |
+| 2 | Prove native iroh transport in DialogForge | done |
 | 3 | Implement shared single-writer synchronization | not started |
 | 4 | Add and verify installed-app sharing UI | not started |
 | 5 | Harden native sessions and packaging | not started |
@@ -547,6 +547,36 @@ Stop condition:
 - If the native addon breaks packaging or startup, make collaboration
   capability detection fail closed. Do not make the base app depend on a
   successfully loaded native addon.
+
+#### Phase 2 Evidence (2026-07-18)
+
+DialogForge now pins `@number0/iroh` 0.35.0. The Electron-owned implementation
+under `src/shell-electron/collaboration` provides:
+
+- lazy native-addon loading and fail-closed capability detection;
+- a persistent application identity stored under Electron `userData`, with a
+  versioned owner-only key file and Electron safe-storage encryption in the
+  installed application;
+- ALPN `dialogforge/live-script/1`;
+- one long-lived bidirectional stream per peer with bounded length-prefixed
+  frames, serialized writes, authenticated sender checks, host/join/send/state/
+  close operations, and shutdown cleanup;
+- owner-local typed IPC and preload bindings for the existing Script Editor;
+- staged platform-native packages and explicit ASAR unpacking for `.node`
+  binaries without making ordinary startup load the addon.
+
+`npm run build` succeeds and the Phase 1 acceptance path still passes. The
+targeted run `node tests/script-editor/verify-native-iroh-transport.js` launches
+two separate Electron 22 processes with separate `userData` directories. They
+exchange the shared welcome/snapshot, acknowledgements, two ordered edit
+frames, and session end without Monaco. The run also proves that the two
+instances have different endpoint IDs, the instructor ID survives a shutdown
+and restart, construction does not load the addon, and a forced addon-load
+failure returns an unavailable capability while host startup fails closed.
+
+The generated desktop package manifest contains the exact native dependency
+and unpacks `node_modules/@number0/**/*.node`. Signed and cross-platform package
+smokes remain in Phase 5 as required by the roadmap.
 
 ### Phase 3: Implement Shared Single-Writer Synchronization
 

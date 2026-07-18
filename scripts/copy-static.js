@@ -140,7 +140,8 @@ const copyPackageJson = function () {
                 "package.json"
             ],
             asarUnpack: [
-                "src/runtime/providers/r/r-sources/**/*"
+                "src/runtime/providers/r/r-sources/**/*",
+                "node_modules/@number0/**/*.node"
             ]
         }
     };

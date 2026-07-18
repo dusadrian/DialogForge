@@ -23,6 +23,7 @@ export interface ElectronApplicationLifecycleOptions {
     checkForUpdates(): void;
     runSmoke(win: BrowserWindow): Promise<void>;
     stopRuntime(): Promise<void>;
+    stopCollaboration(): Promise<void>;
     preloadDatasetEditor(): Promise<unknown>;
     appendBootLog(message: string): void;
     requestApplicationQuit(): void;
@@ -65,10 +66,12 @@ export const bindElectronApplicationLifecycle = function(
                 await options.autoStartRuntime();
                 await options.runSmoke(win);
                 await options.stopRuntime();
+                await options.stopCollaboration();
                 options.app.exit(0);
             } catch (error) {
                 options.reportError(error);
                 await options.stopRuntime();
+                await options.stopCollaboration();
                 options.app.exit(1);
             }
 
@@ -89,12 +92,14 @@ export const bindElectronApplicationLifecycle = function(
     options.app.on("before-quit", (event) => {
         options.appendBootLog("app before-quit");
         options.requestApplicationQuit();
+        void options.stopCollaboration().catch(options.reportError);
         options.runtimeQuitController.handleBeforeQuit(event);
     });
 
     options.app.on("will-quit", () => {
         options.appendBootLog("app will-quit");
         options.stopHelpServer();
+        void options.stopCollaboration().catch(options.reportError);
         options.runtimeQuitController.handleWillQuit();
     });
 

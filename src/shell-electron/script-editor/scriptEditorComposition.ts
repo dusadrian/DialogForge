@@ -41,6 +41,16 @@ import {
 import {
     rScriptFilePolicy
 } from "../../runtime/providers/r/script/rScriptFilePolicy";
+import {
+    createNativeIrohLiveScriptTransport
+} from "../collaboration/nativeIrohLiveScriptTransport";
+import {
+    createLiveScriptIpcController
+} from "../collaboration/liveScriptIpcController";
+import {
+    createIrohIdentityStore,
+    type IrohIdentityProtection
+} from "../collaboration/irohIdentityStore";
 
 
 export interface ScriptEditorCompositionOptions {
@@ -48,6 +58,8 @@ export interface ScriptEditorCompositionOptions {
     rootDir: string;
     productId: string;
     settingsPath: string;
+    userDataPath: string;
+    collaborationIdentityProtection?: IrohIdentityProtection;
     title: string;
     nativeWindowIconPath?: string;
     pagePath: string;
@@ -79,6 +91,7 @@ export interface ScriptEditorComposition {
     requestSaveForClose(win: BrowserWindow): Promise<boolean>;
     saveDirtyContent(win: BrowserWindow): Promise<boolean>;
     allowClose(): void;
+    shutdownCollaboration(): Promise<void>;
 }
 
 
@@ -321,6 +334,21 @@ export const createScriptEditorComposition = function(
         executeVisibleCommand: options.executeVisibleCommand
     });
 
+    const collaborationTransport = createNativeIrohLiveScriptTransport({
+        userDataPath: options.userDataPath,
+        identityStore: createIrohIdentityStore({
+            userDataPath: options.userDataPath,
+            protection: options.collaborationIdentityProtection
+        })
+    });
+    createLiveScriptIpcController({
+        ipcMain: options.ipcMain,
+        transport: collaborationTransport,
+        publish: function(channel, payload): void {
+            windowController.send(channel, payload);
+        }
+    });
+
     return {
         windowController,
         openWindow,
@@ -334,6 +362,7 @@ export const createScriptEditorComposition = function(
         saveDirtyContent,
         allowClose: function(): void {
             closeBypass = true;
-        }
+        },
+        shutdownCollaboration: collaborationTransport.shutdown
     };
 };

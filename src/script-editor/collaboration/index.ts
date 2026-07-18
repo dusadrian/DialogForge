@@ -2,6 +2,7 @@ export * from "./inMemoryLiveScriptTransport";
 export * from "./liveScriptEdits";
 export * from "./liveScriptFrameCodec";
 export * from "./liveScriptHostSession";
+export * from "./liveScriptIpc";
 export * from "./liveScriptParticipantSession";
 export * from "./liveScriptProtocol";
 export * from "./liveScriptTicket";

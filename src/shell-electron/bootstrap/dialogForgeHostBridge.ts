@@ -14,6 +14,12 @@ import {
     scriptEditorIpcChannels
 } from "../../script-editor/scriptEditorIpc";
 import {
+    invokeLiveScriptRoute,
+    liveScriptEventChannels,
+    liveScriptIpcChannels,
+    type LiveScriptRendererBridge
+} from "../../script-editor/collaboration/liveScriptIpc";
+import {
     applicationSettingsEventChannels,
     applicationSettingsIpcChannels,
     invokeApplicationSettingsRoute,
@@ -80,6 +86,7 @@ export interface DialogForgeHostBridge {
         publishDirtyState(state: { dirty: boolean; filePath: string; content: string }): void;
         chooseScriptFile(): Promise<{ filePath: string; content: string } | null>;
         publishReady(): void;
+        live: LiveScriptRendererBridge;
     };
     datasetEditor: {
         onInit(callback: (payload: DatasetEditorInitMessage) => void): void;
@@ -386,6 +393,55 @@ export const createDialogForgeHostBridge = function(
                     ipcRenderer,
                     scriptEditorEventChannels.rendererReady
                 );
+            },
+            live: {
+                capability: function() {
+                    return invokeLiveScriptRoute(
+                        ipcRenderer,
+                        liveScriptIpcChannels.capability
+                    );
+                },
+                host: function(sessionId) {
+                    return invokeLiveScriptRoute(
+                        ipcRenderer,
+                        liveScriptIpcChannels.host,
+                        { sessionId }
+                    );
+                },
+                join: function(ticket) {
+                    return invokeLiveScriptRoute(
+                        ipcRenderer,
+                        liveScriptIpcChannels.join,
+                        { ticket }
+                    );
+                },
+                send: function(frame, recipientEndpointId) {
+                    return invokeLiveScriptRoute(
+                        ipcRenderer,
+                        liveScriptIpcChannels.send,
+                        {
+                            frame,
+                            ...(recipientEndpointId ? { recipientEndpointId } : {})
+                        }
+                    );
+                },
+                close: function(sessionId) {
+                    return invokeLiveScriptRoute(
+                        ipcRenderer,
+                        liveScriptIpcChannels.close,
+                        { sessionId }
+                    );
+                },
+                onFrame: function(callback) {
+                    ipcRenderer.on(liveScriptEventChannels.frame, (_event, payload) => {
+                        callback(payload as Parameters<typeof callback>[0]);
+                    });
+                },
+                onState: function(callback) {
+                    ipcRenderer.on(liveScriptEventChannels.state, (_event, payload) => {
+                        callback(payload as Parameters<typeof callback>[0]);
+                    });
+                }
             }
         },
         datasetEditor: {
