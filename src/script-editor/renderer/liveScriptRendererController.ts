@@ -7,7 +7,7 @@ import {
     type LiveScriptRendererBridge,
     type LiveScriptSessionTicket,
     type LiveScriptTransportStateEvent
-} from "../collaboration";
+} from "../collaboration/index.js";
 import type { ScriptDocument } from "../state/scriptDocument";
 import {
     applyLiveScriptEditsToDocument,

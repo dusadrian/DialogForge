@@ -3,6 +3,7 @@ export interface ScriptEditorInitPayload {
     i18n?: unknown;
     languageNS?: unknown;
     terminalSettings?: Record<string, unknown>;
+    liveScriptJoinText?: unknown;
 }
 
 

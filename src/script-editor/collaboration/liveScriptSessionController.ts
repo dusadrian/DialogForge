@@ -186,7 +186,6 @@ export const createLiveScriptSessionController = function(
                     break;
                 }
 
-                const joinFrame = participant.reconnect();
                 options.participantStateChanged(sessionId, participant.state());
                 options.transportStateChanged({
                     sessionId,
@@ -202,6 +201,7 @@ export const createLiveScriptSessionController = function(
                         continue;
                     }
 
+                    const joinFrame = participant.reconnect(operation.endpointId);
                     await sendOutbound([joinFrame]);
                     options.participantStateChanged(sessionId, participant.state());
                     return;
@@ -333,22 +333,21 @@ export const createLiveScriptSessionController = function(
 
         const capability = await options.transport.capability();
 
-        if (!capability.available || !capability.endpointId) {
+        if (!capability.available || capability.canJoin === false) {
             throw new Error(capability.message || "Live-script sharing is unavailable.");
+        }
+        const operation = await options.transport.join(ticket);
+
+        if (!operation.ok || !operation.endpointId) {
+            throw new Error(operation.message);
         }
 
         const session = createLiveScriptParticipantSession({
-            endpointId: capability.endpointId,
+            endpointId: operation.endpointId,
             ticket
         });
 
         participants.set(ticket.sessionId, session);
-        const operation = await options.transport.join(ticket);
-
-        if (!operation.ok) {
-            participants.delete(ticket.sessionId);
-            throw new Error(operation.message);
-        }
 
         participantTickets.set(ticket.sessionId, ticket);
         reconnectGeneration.set(ticket.sessionId, 0);

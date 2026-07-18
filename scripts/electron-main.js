@@ -691,6 +691,9 @@ scriptEditorComposition = scriptEditorCompositionModule.createScriptEditorCompos
         process.env.DIALOGFORGE_LIVE_SCRIPT_RENDEZVOUS_URL
             || liveScriptRendezvousModule.defaultLiveScriptRendezvousUrl
     ).trim(),
+    liveScriptBrowserJoinUrl: String(
+        process.env.DIALOGFORGE_LIVE_SCRIPT_BROWSER_URL || ""
+    ).trim(),
     title: translateCompositionText("Script editor"),
     nativeWindowIconPath: composition.nativeWindowIconPath || undefined,
     pagePath: path.join(composition.rootDir, "src/base-app/pages/scriptEditor.html"),

@@ -28,6 +28,7 @@ export type LiveScriptTicketParseResult =
 
 
 const LIVE_SCRIPT_LINK_PREFIX = "dialogforge://live-script/join#ticket=";
+const LIVE_SCRIPT_BROWSER_QUERY = "live-script";
 
 
 const isRecord = function(value: unknown): value is Record<string, unknown> {
@@ -175,10 +176,41 @@ const base64UrlToBytes = function(value: string): Uint8Array {
 
 
 export const createLiveScriptJoinLink = function(
-    ticket: LiveScriptSessionTicket
+    ticket: LiveScriptSessionTicket,
+    browserJoinUrl?: string
 ): string {
     const encoded = new TextEncoder().encode(JSON.stringify(ticket));
-    return LIVE_SCRIPT_LINK_PREFIX + bytesToBase64Url(encoded);
+    const encodedTicket = bytesToBase64Url(encoded);
+
+    if (browserJoinUrl) {
+        const url = new URL(browserJoinUrl);
+        url.searchParams.set(LIVE_SCRIPT_BROWSER_QUERY, encodedTicket);
+        return url.toString();
+    }
+
+    return LIVE_SCRIPT_LINK_PREFIX + encodedTicket;
+};
+
+
+export const readLiveScriptJoinTextFromUrl = function(value: unknown): string {
+    try {
+        const url = new URL(String(value || ""));
+        const encodedTicket = url.searchParams.get(LIVE_SCRIPT_BROWSER_QUERY) || "";
+
+        if (!encodedTicket) {
+            return "";
+        }
+
+        const ticketText = new TextDecoder().decode(
+            base64UrlToBytes(encodedTicket)
+        );
+        const parsed = parseLiveScriptSessionTicket(JSON.parse(ticketText));
+
+        return parsed.ok ? ticketText : "";
+    }
+    catch {
+        return "";
+    }
 };
 
 
@@ -192,11 +224,14 @@ export const parseLiveScriptJoinText = function(
     }
 
     try {
+        const browserTicket = /^https?:\/\//i.test(text)
+            ? readLiveScriptJoinTextFromUrl(text)
+            : "";
         const ticketText = text.startsWith(LIVE_SCRIPT_LINK_PREFIX)
             ? new TextDecoder().decode(base64UrlToBytes(
                 text.slice(LIVE_SCRIPT_LINK_PREFIX.length)
             ))
-            : text;
+            : browserTicket || text;
 
         return parseLiveScriptSessionTicket(JSON.parse(ticketText));
     }

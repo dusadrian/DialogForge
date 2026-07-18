@@ -6,13 +6,15 @@ import {
     parseLiveScriptSessionTicket,
     type LiveScriptSessionTicket
 } from "./liveScriptTicket";
+export {
+    defaultLiveScriptRendezvousUrl
+} from "./liveScriptInfrastructure";
+import {
+    defaultLiveScriptRendezvousUrl
+} from "./liveScriptInfrastructure";
 
 
 const MAX_PUBLICATION_ATTEMPTS = 8;
-
-
-export const defaultLiveScriptRendezvousUrl =
-    "https://dialogforge-live-script-rendezvous.dusa-adrian.workers.dev";
 
 
 export interface LiveScriptRendezvousPublication {

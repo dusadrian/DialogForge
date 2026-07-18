@@ -60,6 +60,8 @@ export interface ScriptToolbarView {
     ): void;
     updateLiveState(input: {
         available: boolean;
+        canHost?: boolean;
+        canJoin?: boolean;
         isParticipant: boolean;
         isHosting: boolean;
     }): void;
@@ -293,11 +295,15 @@ export const createScriptToolbarView = function(
 
     const updateLiveState = function(input: {
         available: boolean;
+        canHost?: boolean;
+        canJoin?: boolean;
         isParticipant: boolean;
         isHosting: boolean;
     }): void {
-        shareLiveButton.disabled = !input.available;
-        joinLiveButton.disabled = !input.available || input.isParticipant;
+        shareLiveButton.disabled = !input.available || input.canHost === false;
+        joinLiveButton.disabled = !input.available
+            || input.canJoin === false
+            || input.isParticipant;
         shareLiveButton.dataset.state = input.isParticipant
             ? "participant"
             : input.isHosting

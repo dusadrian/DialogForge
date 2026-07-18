@@ -19,6 +19,10 @@ import {
     scriptEditorEventChannels,
     scriptEditorIpcChannels
 } from "../script-editor/scriptEditorIpc";
+import {
+    liveScriptEventChannels,
+    liveScriptIpcChannels
+} from "../script-editor/collaboration/liveScriptIpc";
 
 type Listener = (...args: unknown[]) => void;
 
@@ -291,7 +295,37 @@ const scriptEditor = {
     publishDirtyState: (state: unknown): void => sendHost(scriptEditorEventChannels.updateDirtyState, state),
     publishLiveSessionShutdownResult: (input: unknown): void => sendHost(scriptEditorEventChannels.liveSessionShutdownResult, input),
     chooseScriptFile: (): Promise<unknown> => invokeHost(scriptEditorIpcChannels.openFile),
-    publishReady: (): void => sendHost(scriptEditorEventChannels.browserReady)
+    publishReady: (): void => sendHost(scriptEditorEventChannels.browserReady),
+    live: {
+        capability: (): Promise<unknown> => invokeHost(liveScriptIpcChannels.capability),
+        host: (sessionId: string): Promise<unknown> => invokeHost(
+            liveScriptIpcChannels.host,
+            { sessionId }
+        ),
+        join: (ticket: unknown): Promise<unknown> => invokeHost(
+            liveScriptIpcChannels.join,
+            { ticket }
+        ),
+        send: (frame: unknown, recipientEndpointId?: string): Promise<unknown> => invokeHost(
+            liveScriptIpcChannels.send,
+            {
+                frame,
+                ...(recipientEndpointId ? { recipientEndpointId } : {})
+            }
+        ),
+        close: (sessionId: string): Promise<unknown> => invokeHost(
+            liveScriptIpcChannels.close,
+            { sessionId }
+        ),
+        onFrame: (callback: Listener): void => addListener(
+            liveScriptEventChannels.frame,
+            callback
+        ),
+        onState: (callback: Listener): void => addListener(
+            liveScriptEventChannels.state,
+            callback
+        )
+    }
 };
 
 const dialogRuntime = {

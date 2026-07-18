@@ -56,6 +56,7 @@ export interface ScriptEditorCompositionOptions {
     settingsPath: string;
     userDataPath: string;
     liveScriptRendezvousUrl?: string;
+    liveScriptBrowserJoinUrl?: string;
     title: string;
     nativeWindowIconPath?: string;
     pagePath: string;
@@ -347,6 +348,7 @@ export const createScriptEditorComposition = function(
         ipcMain: options.ipcMain,
         transport: collaborationTransport,
         rendezvousUrl: options.liveScriptRendezvousUrl,
+        browserJoinUrl: options.liveScriptBrowserJoinUrl,
         publish: function(channel, payload): void {
             windowController.send(channel, payload);
         }

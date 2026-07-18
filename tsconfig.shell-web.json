@@ -33,6 +33,8 @@
         "src/runtime/help/rHelpDocument.ts",
         "src/shell-web/browserHostAdapter.ts",
         "src/shell-web/browserImportAdapter.ts",
+        "src/shell-web/browserLiveScriptTransport.ts",
+        "src/script-editor/collaboration/liveScriptParticipantRendezvous.ts",
         "src/shell-web/browserMoodleLaunchAdapter.ts",
         "src/shell-web/browserMenuAdapter.ts",
         "src/shell-web/browserConsoleBootstrap.ts",

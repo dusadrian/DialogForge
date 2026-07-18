@@ -813,13 +813,21 @@ const createBuildManifest = function(rootDir, productPath) {
 
 
 const send = function(response, status, headers, body) {
-    response.writeHead(status, Object.assign({
+    const responseHeaders = Object.assign({
         "Cache-Control": "no-store, max-age=0",
         "Cross-Origin-Opener-Policy": "same-origin",
         "Cross-Origin-Embedder-Policy": "require-corp",
         "Cross-Origin-Resource-Policy": "same-origin",
         "Pragma": "no-cache"
-    }, headers));
+    }, headers);
+
+    for (const [name, value] of Object.entries(responseHeaders)) {
+        if (value === null || value === undefined) {
+            delete responseHeaders[name];
+        }
+    }
+
+    response.writeHead(status, responseHeaders);
     response.end(body);
 };
 
@@ -1010,7 +1018,7 @@ const resolveSafeFile = function(root, requestPath) {
 };
 
 
-const serveFile = function(response, filePath) {
+const serveFile = function(response, filePath, headers = {}) {
     if (!filePath || !fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
         send(response, 404, {
             "Content-Type": "text/plain; charset=utf-8"
@@ -1018,10 +1026,10 @@ const serveFile = function(response, filePath) {
         return;
     }
 
-    send(response, 200, {
+    send(response, 200, Object.assign({
         "Content-Type": contentTypes[path.extname(filePath)] || "application/octet-stream",
         "Cross-Origin-Resource-Policy": "same-origin"
-    }, fs.readFileSync(filePath));
+    }, headers), fs.readFileSync(filePath));
 };
 
 
@@ -1210,6 +1218,18 @@ const createWebProductDevServer = function(options) {
                     monacoRoot,
                     pathname.replace(/^\/monaco\//, "")
                 ));
+                return;
+            }
+
+            if (pathname.startsWith("/vendor/dialogforge-iroh/0.1.0/")) {
+                serveFile(
+                    response,
+                    resolveSafeFile(rootDir, pathname),
+                    {
+                        "Cache-Control": "public, max-age=31536000, immutable",
+                        "Pragma": null
+                    }
+                );
                 return;
             }
 

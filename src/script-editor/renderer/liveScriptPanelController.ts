@@ -1,9 +1,8 @@
-import QRCode from "qrcode";
 import type {
     LiveScriptHostState,
     LiveScriptParticipantState,
     LiveScriptTransportStateEvent
-} from "../collaboration";
+} from "../collaboration/index.js";
 
 
 export interface LiveScriptPanelLabels {
@@ -39,7 +38,7 @@ export interface LiveScriptPanelControllerOptions {
 
 
 export interface LiveScriptPanelController {
-    showJoin(): void;
+    showJoin(value?: string): void;
     showHost(
         link: string,
         displayName: string,
@@ -132,13 +131,14 @@ export const createLiveScriptPanelController = function(
         return element;
     };
 
-    const showJoin = function(): void {
+    const showJoin = function(value = ""): void {
         const labels = options.getLabels();
         clear("join", labels.joinLive);
         const input = createElement("textarea", "dm-live-panel__ticket");
         input.rows = 5;
         input.placeholder = labels.enterLink;
         input.setAttribute("aria-label", labels.enterLink);
+        input.value = value;
         body.appendChild(input);
         footer.append(
             action(labels.close, false, close),
@@ -162,9 +162,10 @@ export const createLiveScriptPanelController = function(
     ): Promise<void> {
         const labels = options.getLabels();
         clear("host", `${labels.shareLive}: ${displayName}`);
+        const qrcode = await import("qrcode");
         const qrImage = createElement("img", "dm-live-panel__qr");
         qrImage.alt = labels.sessionLink;
-        qrImage.src = await QRCode.toDataURL(link, {
+        qrImage.src = await qrcode.default.toDataURL(link, {
             errorCorrectionLevel: "M",
             margin: 1,
             width: 196

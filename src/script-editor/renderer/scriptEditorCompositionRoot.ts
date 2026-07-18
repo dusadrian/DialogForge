@@ -107,13 +107,13 @@ import {
 } from './liveScriptPanelController';
 import type {
   LiveScriptRendererBridge
-} from '../collaboration';
+} from '../collaboration/index.js';
 import {
   createLiveScriptJoinLink,
   parseLiveScriptJoinText,
   sanitizeLiveScriptDisplayName,
   type LiveScriptSessionTicket
-} from '../collaboration';
+} from '../collaboration/index.js';
 import type {
   LiveScriptRendezvousProvider,
   LiveScriptRendezvousPublication
@@ -263,6 +263,10 @@ const surfaceState = createScriptEditorSurfaceStateController({
   }
 });
 let liveAvailable = false;
+let liveCanHost = false;
+let liveCanJoin = false;
+let pendingLiveScriptJoinText = '';
+let liveBrowserJoinUrl = '';
 let livePanelController: LiveScriptPanelController | null = null;
 let livePanelDocumentId = '';
 let liveRendezvous: LiveScriptRendezvousProvider | null = null;
@@ -275,6 +279,8 @@ const updateLiveToolbarState = function(): void {
 
   surfaceState.toolbarView?.updateLiveState({
     available: liveAvailable,
+    canHost: liveCanHost,
+    canJoin: liveCanJoin,
     isParticipant: active?.kind === 'live-participant'
       && active.liveStatus !== 'ended'
       && active.liveStatus !== 'failed',
@@ -638,7 +644,7 @@ const showShareLive = async function(): Promise<void> {
     randomOpaqueId(32),
     sanitizeLiveScriptDisplayName(active.filePath || active.displayName)
   );
-  const link = createLiveScriptJoinLink(result.ticket);
+  const link = createLiveScriptJoinLink(result.ticket, liveBrowserJoinUrl);
   hostedLinks.set(active.id, link);
   hostedTickets.set(active.id, result.ticket);
   updateLiveToolbarState();
@@ -733,21 +739,38 @@ const initializeLiveScriptUi = async function(): Promise<void> {
 
   const capability = await scriptEditorBridge.live.capability();
   liveAvailable = capability.available;
+  liveCanHost = capability.available && capability.canHost !== false;
+  liveCanJoin = capability.available && capability.canJoin !== false;
+  liveBrowserJoinUrl = String(capability.browserJoinUrl || '');
 
   if (capability.rendezvousUrl) {
     try {
-      const rendezvous = await import(
-        '../collaboration/liveScriptRendezvous'
-      );
-      liveRendezvous = rendezvous.createHttpLiveScriptRendezvous({
-        baseUrl: capability.rendezvousUrl
-      });
+      if (liveCanHost) {
+        const rendezvous = await import(
+          '../collaboration/liveScriptRendezvous'
+        );
+        liveRendezvous = rendezvous.createHttpLiveScriptRendezvous({
+          baseUrl: capability.rendezvousUrl
+        });
+      } else {
+        const rendezvous = await import(
+          '../collaboration/liveScriptParticipantRendezvous'
+        );
+        liveRendezvous = rendezvous.createHttpLiveScriptParticipantRendezvous({
+          baseUrl: capability.rendezvousUrl
+        });
+      }
     }
     catch {
       liveRendezvous = null;
     }
   }
   updateLiveToolbarState();
+
+  if (pendingLiveScriptJoinText && liveCanJoin) {
+    livePanelController.showJoin(pendingLiveScriptJoinText);
+    pendingLiveScriptJoinText = '';
+  }
 };
 
 const scriptEditorInputController = createScriptEditorInputController({
@@ -785,7 +808,10 @@ const scriptEditorLifecycle = createScriptEditorLifecycleController({
 });
 
 const scriptEditorBootstrapFlow = createScriptEditorBootstrapFlowController({
-  prepare: scriptEditorBootstrap.prepare,
+  prepare: (initPayload) => {
+    pendingLiveScriptJoinText = String(initPayload.liveScriptJoinText || '');
+    return scriptEditorBootstrap.prepare(initPayload);
+  },
   transport: scriptEditorHostTransport,
   theme: CONSOLE_THEME_NAME,
   getToolbarLabels,

@@ -27,9 +27,12 @@ export const liveScriptEventChannels = {
 
 export interface LiveScriptCapabilityResult {
     available: boolean;
+    canHost?: boolean;
+    canJoin?: boolean;
     endpointId: string;
     message: string;
     rendezvousUrl?: string;
+    browserJoinUrl?: string;
 }
 
 

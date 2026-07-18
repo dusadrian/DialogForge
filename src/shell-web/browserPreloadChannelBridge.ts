@@ -18,6 +18,9 @@ import {
     scriptEditorEventChannels,
     scriptEditorIpcChannels
 } from "../script-editor/scriptEditorIpc";
+import {
+    liveScriptIpcChannels
+} from "../script-editor/collaboration/liveScriptIpc";
 
 
 interface BrowserPreloadWorkspaceChannels {
@@ -66,6 +69,15 @@ interface BrowserPreloadScriptChannels {
 }
 
 
+interface BrowserPreloadLiveScriptChannels {
+    capability(): Promise<unknown>;
+    host(sessionId: string): Promise<unknown>;
+    join(ticket: unknown): Promise<unknown>;
+    send(input: Record<string, unknown>): Promise<unknown>;
+    close(sessionId: string): Promise<unknown>;
+}
+
+
 interface BrowserPreloadDialogChannels {
     getWorkingDirectory(): unknown;
     readVariableValues(input: unknown): Promise<unknown>;
@@ -80,6 +92,7 @@ export interface BrowserPreloadChannelBridgeOptions {
     datasetChannels(): BrowserPreloadDatasetChannels;
     generalChannels(): BrowserPreloadGeneralChannels;
     scriptChannels(): BrowserPreloadScriptChannels;
+    liveScriptChannels(): BrowserPreloadLiveScriptChannels;
     dialogChannels(): BrowserPreloadDialogChannels;
     readActiveDatasetEditorState(): unknown;
     readGoToContext(): unknown;
@@ -257,6 +270,21 @@ export const createBrowserPreloadChannelBridge = function(
             }
             if (channel === scriptEditorIpcChannels.confirmSave) {
                 return options.scriptChannels().confirmSave();
+            }
+            if (channel === liveScriptIpcChannels.capability) {
+                return options.liveScriptChannels().capability();
+            }
+            if (channel === liveScriptIpcChannels.host) {
+                return options.liveScriptChannels().host(String(input.sessionId || ""));
+            }
+            if (channel === liveScriptIpcChannels.join) {
+                return options.liveScriptChannels().join(input.ticket);
+            }
+            if (channel === liveScriptIpcChannels.send) {
+                return options.liveScriptChannels().send(input);
+            }
+            if (channel === liveScriptIpcChannels.close) {
+                return options.liveScriptChannels().close(String(input.sessionId || ""));
             }
             if (channel === dialogRuntimeIpcChannels.getWorkingDirectory) {
                 return options.dialogChannels().getWorkingDirectory();

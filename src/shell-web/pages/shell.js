@@ -69,6 +69,12 @@ import {
     createBrowserHostAdapter
 } from "/browser-esm/src/shell-web/browserHostAdapter.js";
 import {
+    createBrowserLiveScriptTransport
+} from "/browser-esm/src/shell-web/browserLiveScriptTransport.js";
+import {
+    readLiveScriptJoinTextFromUrl
+} from "/browser-esm/src/script-editor/collaboration/liveScriptTicket.js";
+import {
     createBrowserMenuAdapter
 } from "/browser-esm/src/shell-web/browserMenuAdapter.js";
 import {
@@ -276,6 +282,7 @@ const state = {
     workspaceControllerRuntime: null,
     scriptChannelAdapter: null,
     browserScriptEditorSurface: null,
+    browserLiveScriptTransport: null,
     workspaceChannelAdapter: null,
     browserFrameSurfaces: null,
     browserDataEditorSurface: null,
@@ -1126,6 +1133,9 @@ const browserPreloadChannelBridge = createBrowserPreloadChannelBridge({
     scriptChannels() {
         return browserScriptChannels();
     },
+    liveScriptChannels() {
+        return browserLiveScriptChannels();
+    },
     dialogChannels() {
         return browserDialogChannels();
     },
@@ -1865,6 +1875,22 @@ const browserScriptChannels = function () {
     return state.scriptChannelAdapter;
 };
 
+const browserLiveScriptChannels = function () {
+    if (!state.browserLiveScriptTransport) {
+        state.browserLiveScriptTransport = createBrowserLiveScriptTransport({
+            publish(channel, event) {
+                postBrowserPreloadEvent(
+                    state.scriptEditor.frame?.contentWindow,
+                    channel,
+                    event
+                );
+            }
+        });
+    }
+
+    return state.browserLiveScriptTransport;
+};
+
 const browserScriptEditorSurface = function () {
     if (!state.browserScriptEditorSurface) {
         state.browserScriptEditorSurface = createBrowserScriptEditorSurface({
@@ -1884,6 +1910,9 @@ const browserScriptEditorSurface = function () {
             getLocale: readSelectedLocale,
             formatTitle: function () {
                 return translateCompositionText("Script editor", "Script editor");
+            },
+            readLiveScriptJoinText: function () {
+                return readLiveScriptJoinTextFromUrl(window.location.href);
             },
             onStateChanged: function (surfaceState) {
                 state.scriptEditor.layer = surfaceState.layer;

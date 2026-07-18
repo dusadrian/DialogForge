@@ -35,7 +35,7 @@ export interface LiveScriptParticipantState {
 export interface LiveScriptParticipantSession {
     state(): LiveScriptParticipantState;
     join(): LiveScriptOutboundFrame;
-    reconnect(): LiveScriptOutboundFrame;
+    reconnect(endpointId?: string): LiveScriptOutboundFrame;
     fail(message: string): void;
     receive(frame: LiveScriptFrame, remoteEndpointId: string): LiveScriptOutboundFrame[];
 }
@@ -58,7 +58,7 @@ export const createLiveScriptParticipantSession = function(
     let errorMessage = "";
     let nextMessageNumber = 1;
     let lastInstructorMessageNumber = 0;
-    const endpointId = options.endpointId;
+    let endpointId = options.endpointId;
     const ticket = options.ticket;
 
     const frameBase = function<Type extends LiveScriptFrame["type"]>(type: Type) {
@@ -126,7 +126,10 @@ export const createLiveScriptParticipantSession = function(
         return joinFrame();
     };
 
-    const reconnect = function(): LiveScriptOutboundFrame {
+    const reconnect = function(nextEndpointId?: string): LiveScriptOutboundFrame {
+        if (nextEndpointId) {
+            endpointId = nextEndpointId;
+        }
         status = "reconnecting";
         resyncPending = true;
         return joinFrame();

@@ -23,6 +23,7 @@ export interface LiveScriptIpcControllerOptions {
     ipcMain: IpcMain;
     transport: NativeIrohLiveScriptTransport;
     rendezvousUrl?: string;
+    browserJoinUrl?: string;
     publish(channel: string, payload: unknown): void;
 }
 
@@ -51,7 +52,8 @@ export const createLiveScriptIpcController = function(
         const capability = await options.transport.capability();
         return {
             ...capability,
-            ...(options.rendezvousUrl ? { rendezvousUrl: options.rendezvousUrl } : {})
+            ...(options.rendezvousUrl ? { rendezvousUrl: options.rendezvousUrl } : {}),
+            ...(options.browserJoinUrl ? { browserJoinUrl: options.browserJoinUrl } : {})
         };
     });
 

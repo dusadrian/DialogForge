@@ -32,6 +32,7 @@ export interface BrowserScriptEditorSurfaceOptions {
     getI18n(): Record<string, string>;
     getLocale(): string;
     formatTitle(): string;
+    readLiveScriptJoinText?(): string;
     onStateChanged?(state: BrowserScriptEditorSurfaceState): void;
     onError?(error: unknown): void;
 }
@@ -88,7 +89,8 @@ export const createBrowserScriptEditorSurface = function(
             languageNS: options.getLocale(),
             filePath: document.filePath || "Untitled.R",
             content: String(document.content || ""),
-            terminalSettings: {}
+            terminalSettings: {},
+            liveScriptJoinText: options.readLiveScriptJoinText?.() || ""
         };
     };
 
