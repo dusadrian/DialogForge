@@ -1,6 +1,7 @@
 import type * as Monaco from "monaco-editor";
 import {
     createLiveScriptSessionController,
+    type LiveScriptCursorFrame,
     type LiveScriptHostState,
     type LiveScriptParticipantState,
     type LiveScriptRendererBridge,
@@ -83,6 +84,64 @@ export const createLiveScriptRendererController = function(
     const participantBySession = new Map<string, ScriptDocument>();
     const pendingParticipantStates = new Map<string, LiveScriptParticipantState>();
     const followedParticipantSessions = new Set<string>();
+    const instructorDecorationsBySession = new Map<string, string[]>();
+
+    const clearInstructorDecorations = function(sessionId: string): void {
+        const document = participantBySession.get(sessionId);
+        const decorationIds = instructorDecorationsBySession.get(sessionId) || [];
+
+        if (document && decorationIds.length > 0) {
+            document.model.deltaDecorations(decorationIds, []);
+        }
+
+        instructorDecorationsBySession.delete(sessionId);
+    };
+
+    const showInstructorCursor = function(
+        sessionId: string,
+        document: ScriptDocument,
+        monaco: typeof Monaco,
+        frame: LiveScriptCursorFrame
+    ): void {
+        const previousDecorations = instructorDecorationsBySession.get(sessionId)
+            || [];
+        const position = frame.payload.position;
+        const selection = frame.payload.selection;
+        const decorations: Monaco.editor.IModelDeltaDecoration[] = [{
+            range: new monaco.Range(
+                position.lineNumber,
+                position.column,
+                position.lineNumber,
+                position.column
+            ),
+            options: {
+                beforeContentClassName: "dm-live-instructor-caret",
+                stickiness:
+                    monaco.editor.TrackedRangeStickiness.NeverGrowsWhenTypingAtEdges
+            }
+        }];
+
+        if (selection) {
+            decorations.push({
+                range: new monaco.Range(
+                    selection.startLineNumber,
+                    selection.startColumn,
+                    selection.endLineNumber,
+                    selection.endColumn
+                ),
+                options: {
+                    className: "dm-live-instructor-selection",
+                    stickiness:
+                        monaco.editor.TrackedRangeStickiness.NeverGrowsWhenTypingAtEdges
+                }
+            });
+        }
+
+        instructorDecorationsBySession.set(
+            sessionId,
+            document.model.deltaDecorations(previousDecorations, decorations)
+        );
+    };
 
     const sessions = createLiveScriptSessionController({
         transport: options.transport,
@@ -117,6 +176,8 @@ export const createLiveScriptRendererController = function(
                     editor?.setPosition(frame.payload.position);
                 }
 
+                showInstructorCursor(sessionId, document, monaco, frame);
+
                 editor?.revealPositionInCenterIfOutsideViewport(
                     frame.payload.position
                 );
@@ -147,6 +208,11 @@ export const createLiveScriptRendererController = function(
 
             if (document) {
                 document.liveStatus = state.status;
+
+                if (state.status === "ended" || state.status === "failed") {
+                    clearInstructorDecorations(sessionId);
+                }
+
                 options.refreshTabs();
             }
             else {
@@ -336,6 +402,7 @@ export const createLiveScriptRendererController = function(
         }
 
         participantByDocument.delete(documentId);
+        clearInstructorDecorations(sessionId);
         participantBySession.delete(sessionId);
         pendingParticipantStates.delete(sessionId);
         followedParticipantSessions.delete(sessionId);
@@ -389,6 +456,7 @@ export const createLiveScriptRendererController = function(
             }
             else {
                 followedParticipantSessions.delete(sessionId);
+                clearInstructorDecorations(sessionId);
             }
         }
     };

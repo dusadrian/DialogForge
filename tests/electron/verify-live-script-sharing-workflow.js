@@ -428,6 +428,9 @@ const run = async function() {
         await participantEditor.waitForFunction((expected) => {
             return document.querySelector(".view-lines")?.textContent?.includes(expected);
         }, objectName, { timeout: 30000 });
+        await participantEditor.waitForFunction(() => {
+            return Boolean(document.querySelector(".dm-live-instructor-caret"));
+        }, undefined, { timeout: 10000 });
         process.stdout.write("live-script UI: remote edit visible\n");
         await Promise.all([
             hostEditor.screenshot({

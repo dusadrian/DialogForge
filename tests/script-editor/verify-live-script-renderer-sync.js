@@ -49,6 +49,8 @@ class TestModel {
         this.content = content;
         this.listeners = new Set();
         this.setValueCount = 0;
+        this.decorations = [];
+        this.nextDecorationId = 1;
     }
 
     getValue() {
@@ -144,6 +146,11 @@ class TestModel {
         const start = offsetAt(this.content, range.startLineNumber, range.startColumn);
         const end = offsetAt(this.content, range.endLineNumber, range.endColumn);
         return this.content.slice(start, end);
+    }
+
+    deltaDecorations(_oldDecorations, newDecorations) {
+        this.decorations = newDecorations.slice();
+        return newDecorations.map(() => `decoration-${this.nextDecorationId++}`);
     }
 }
 
@@ -287,7 +294,14 @@ const waitFor = async function(predicate, message) {
 
 
 const run = async function() {
-    const monaco = { Range: TestRange };
+    const monaco = {
+        Range: TestRange,
+        editor: {
+            TrackedRangeStickiness: {
+                NeverGrowsWhenTypingAtEdges: 1
+            }
+        }
+    };
     const network = createInMemoryLiveScriptNetwork();
     const host = createHarness(
         createBridge(network.createEndpoint("host-endpoint")),
@@ -318,6 +332,10 @@ const run = async function() {
         "Shared demo.R"
     );
     const participantDocument = await participant.controller.join(hosted.ticket);
+    participant.controller.setFollowInstructorCursor(
+        participantDocument.id,
+        true
+    );
 
     await waitFor(
         () => participantDocument.model.getValue() === "value <- 1\n",
@@ -386,6 +404,13 @@ const run = async function() {
         cursorEditFrames.map((frame) => frame.type),
         ["edit", "cursor"],
         "cursor publication must wait for the preceding text edit"
+    );
+    assert.ok(
+        participantDocument.model.decorations.some((decoration) => {
+            return decoration.options.beforeContentClassName
+                === "dm-live-instructor-caret";
+        }),
+        "participant did not render the instructor caret decoration"
     );
 
     assert.equal(participantDocument.dirty, false);

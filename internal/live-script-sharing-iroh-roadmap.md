@@ -789,7 +789,9 @@ Done:
   auto-execute; participant execution stayed local; stopping sharing revoked
   the code and retained a read-only snapshot; an editable copy detached.
 - Cursor following is enabled by default, and instructor cursor frames now wait
-  for preceding edits so participants do not see a one-character lag. Terminal
+  for preceding edits so participants do not see a one-character lag. A
+  dedicated instructor-caret decoration stays visible in an unfocused,
+  read-only participant editor without stealing keyboard focus. Terminal
   participant tabs no longer claim to be live: they render a red
   `Session ended · read-only` state and a persistent explanation above the
   editor. `Join live script` becomes available immediately, and the packaged
