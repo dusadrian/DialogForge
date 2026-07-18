@@ -2,7 +2,7 @@
 
 ## Status And Purpose
 
-Status: implementation in progress. Phases 0 through 4 completed on 2026-07-18.
+Status: implementation in progress. Phases 0 through 6 completed by 2026-07-19.
 
 This document is the execution plan for adding live Script Editor tab sharing
 to DialogForge. It is written for an AI agent working in a dedicated task. The
@@ -35,8 +35,8 @@ marked `done` only when its acceptance gate is satisfied.
 | 2 | Prove native iroh transport in DialogForge | done |
 | 3 | Implement shared single-writer synchronization | done |
 | 4 | Add and verify installed-app sharing UI | done |
-| 5 | Harden native sessions and packaging | not started |
-| 6 | Create the separately versioned Rust/WebAssembly client | not started |
+| 5 | Harden native sessions and packaging | done |
+| 6 | Create the separately versioned Rust/WebAssembly client | done |
 | 7 | Integrate browser participants | not started |
 | 8 | Verify mixed-host classrooms and decide fan-out transport | not started |
 | 9 | Release, document, and enable the capability | not started |
@@ -918,6 +918,63 @@ Stop conditions:
   crate version. Carry the explicit wire protocol version.
 - Do not assume the latest Rust iroh release interoperates with the selected
   N-API binding; retain the Phase 0 compatibility proof in automated coverage.
+
+Done:
+
+- Created the explicitly authorized separate repository at
+  `/Users/dusadrian/Documents/GitHub/DialogForgeIroh`. It pins Rust 1.91.0,
+  `iroh` 0.35.0, `wasm-bindgen` 0.2.100, and the explicit live-script wire
+  protocol version 1 in a committed lockfile and artifact manifest.
+- Added a generated protocol export with source revision and SHA-256 provenance.
+  `npm run protocol:check` rejects drift from DialogForge's versioned fixtures;
+  the JSON examples are not maintained independently.
+- Implemented ticket import and canonical export, endpoint lifecycle,
+  authenticated presenter connection, bounded length-prefixed sends and
+  receives, sender/session checks, connection state, and graceful shutdown in
+  the Rust/WASM crate. Script Editor and runtime semantics remain outside it.
+- Added a small JavaScript adapter matching DialogForge's `LiveScriptTransport`
+  boundary. Version 1 intentionally supports browser participants and rejects
+  browser hosting until the installed-presenter path is integrated and stable.
+- Added a reproducible artifact build containing the WASM binary, generated JS
+  glue, stable entry point, TypeScript declarations, explicit version manifest,
+  SHA-256 checksums, and the browser dependency license inventory. Consecutive
+  builds produced identical checksums, and all committed checksums verified.
+- Added both an Electron/N-API presenter fixture using DialogForge's exact
+  Electron 22.3.27 / Node 16.17.1 / N-API 8 / `@number0/iroh` 0.35.0 binding
+  and a Rust 0.35 native diagnostic peer. Both peers construct messages from
+  the synchronized protocol fixtures.
+- In rendered Chromium, the committed browser artifact joined the exact native
+  binding, authorized the session, and observed `welcome`, `snapshot`, `edit`,
+  a resynchronizing `snapshot`, and `session-ended`. The native fixture observed
+  both the participant acknowledgement and `resync-request`.
+- Built the locked x86-64 `iroh-relay` 0.35.0 release and installed it as an
+  enabled user service on the authorized Hetzner host at `49.13.88.42`. The
+  local and installed binaries share SHA-256
+  `e5d64a8945571099d3a5e78922e890c64968f4c54368c0e6176fc813f7fae842`.
+- The external Hetzner firewall currently blocks public TCP 3340, so the relay
+  proof used an SSH forward to the deployed process. The rebuilt committed WASM
+  completed the full browser/native sequence, while the native peer reported
+  `relay(http://127.0.0.1:3341/)`, proving it did not use a direct path.
+- The implementation and evidence were committed in `DialogForgeIroh` as
+  `ff7a90e`, `c4d507d`, `b829fda`, `76c71fa`, `38ccbfb`, `87e901b`, and
+  `a717c3a`.
+
+Still open:
+
+- None for the Phase 6 acceptance gate. Public exposure of the test-only relay
+  requires opening its Hetzner firewall port. Production browser use requires a
+  DNS hostname and trusted TLS/WSS on 443; those are deployment concerns and do
+  not replace the verified encrypted peer session.
+
+Deferred:
+
+- Browser presenter hosting remains intentionally deferred until the
+  installed-presenter-to-browser-participant path in Phase 7 is stable.
+
+Next:
+
+- Begin Phase 7 by consuming the pinned `DialogForgeIroh` manifest and checksum
+  in DialogForge, then add the lazy-loaded `src/shell-web` participant adapter.
 
 ### Phase 7: Integrate Browser Participants
 
