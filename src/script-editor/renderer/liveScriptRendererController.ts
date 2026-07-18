@@ -33,6 +33,7 @@ export interface LiveScriptRendererControllerOptions {
         sessionId: string,
         state: LiveScriptParticipantState
     ): void;
+    participantCursorChanged(sessionId: string): void;
     transportStateChanged(event: LiveScriptTransportStateEvent): void;
 }
 
@@ -52,11 +53,16 @@ export interface LiveScriptRendererController {
         expiresAt?: number
     ): Promise<LiveScriptHostDocumentResult>;
     join(ticket: LiveScriptSessionTicket): Promise<ScriptDocument>;
-    stopHosting(documentId: string): Promise<void>;
+    stopHosting(
+        documentId: string,
+        reason?: "stopped" | "expired" | "instructor-closed"
+    ): Promise<void>;
     detachParticipant(documentId: string): Promise<void>;
     makeEditableCopy(documentId: string): ScriptDocument | null;
     getHostedSessionId(documentId: string): string;
+    getHostedState(documentId: string): LiveScriptHostState | null;
     getParticipantSessionId(documentId: string): string;
+    setFollowInstructorCursor(documentId: string, follow: boolean): void;
 }
 
 
@@ -65,6 +71,7 @@ interface HostedDocument {
     sessionId: string;
     disposeChange(): void;
     publishing: Promise<void>;
+    disposeCursor(): void;
 }
 
 
@@ -74,6 +81,8 @@ export const createLiveScriptRendererController = function(
     const hostedByDocument = new Map<string, HostedDocument>();
     const participantByDocument = new Map<string, string>();
     const participantBySession = new Map<string, ScriptDocument>();
+    const pendingParticipantStates = new Map<string, LiveScriptParticipantState>();
+    const followedParticipantSessions = new Set<string>();
 
     const sessions = createLiveScriptSessionController({
         transport: options.transport,
@@ -82,8 +91,11 @@ export const createLiveScriptRendererController = function(
             const monaco = options.getMonaco();
 
             if (!document || !monaco) {
+                pendingParticipantStates.set(sessionId, state);
                 return;
             }
+
+            document.liveStatus = state.status;
 
             if (frame.type === "edit") {
                 applyLiveScriptEditsToDocument(
@@ -92,6 +104,23 @@ export const createLiveScriptRendererController = function(
                     document,
                     frame
                 );
+            }
+            else if (frame.type === "cursor"
+                && followedParticipantSessions.has(sessionId)
+                && options.getEditor()?.getModel() === document.model) {
+                const editor = options.getEditor();
+
+                if (frame.payload.selection) {
+                    editor?.setSelection(frame.payload.selection);
+                }
+                else {
+                    editor?.setPosition(frame.payload.position);
+                }
+
+                editor?.revealPositionInCenterIfOutsideViewport(
+                    frame.payload.position
+                );
+                options.participantCursorChanged(sessionId);
             }
             else if (frame.type === "snapshot") {
                 replaceLiveScriptDocumentContent(
@@ -113,9 +142,34 @@ export const createLiveScriptRendererController = function(
             document.dirty = false;
             options.refreshTabs();
         },
-        participantStateChanged: options.participantStateChanged,
+        participantStateChanged: (sessionId, state) => {
+            const document = participantBySession.get(sessionId);
+
+            if (document) {
+                document.liveStatus = state.status;
+                options.refreshTabs();
+            }
+            else {
+                pendingParticipantStates.set(sessionId, state);
+            }
+
+            options.participantStateChanged(sessionId, state);
+        },
         hostStateChanged: options.hostStateChanged,
-        transportStateChanged: options.transportStateChanged
+        transportStateChanged: (event) => {
+            const document = event.sessionId
+                ? participantBySession.get(event.sessionId)
+                : null;
+
+            if (document
+                && document.liveStatus !== "ended"
+                && document.liveStatus !== "failed") {
+                document.liveStatus = event.state;
+                options.refreshTabs();
+            }
+
+            options.transportStateChanged(event);
+        }
     });
 
     const hostDocument = async function(
@@ -144,7 +198,8 @@ export const createLiveScriptRendererController = function(
             document,
             sessionId,
             disposeChange: () => {},
-            publishing: Promise.resolve()
+            publishing: Promise.resolve(),
+            disposeCursor: () => {}
         };
 
         const changeDisposable = document.model.onDidChangeContent((event) => {
@@ -153,28 +208,52 @@ export const createLiveScriptRendererController = function(
             }
 
             const edits = liveScriptEditsFromMonacoChange(event);
+            const expectedContent = document.model.getValue();
             hosted.publishing = hosted.publishing.then(async () => {
                 try {
                     await sessions.publishHostEdits(sessionId, edits);
 
                     if (sessions.getHostState(sessionId)?.content
-                        !== document.model.getValue()) {
+                        !== expectedContent) {
                         await sessions.replaceHostContent(
                             sessionId,
-                            document.model.getValue()
+                            expectedContent
                         );
                     }
                 }
                 catch {
                     await sessions.replaceHostContent(
                         sessionId,
-                        document.model.getValue()
+                        expectedContent
                     );
                 }
             });
         });
 
         hosted.disposeChange = () => changeDisposable.dispose();
+        const editor = options.getEditor();
+        const cursorDisposable = editor?.onDidChangeCursorPosition((event) => {
+            if (editor.getModel() !== document.model) {
+                return;
+            }
+
+            const selection = editor.getSelection();
+            const selectedRange = selection && !selection.isEmpty()
+                ? {
+                    startLineNumber: selection.startLineNumber,
+                    startColumn: selection.startColumn,
+                    endLineNumber: selection.endLineNumber,
+                    endColumn: selection.endColumn
+                }
+                : undefined;
+
+            void sessions.publishHostCursor(
+                sessionId,
+                event.position,
+                selectedRange
+            ).catch(() => {});
+        });
+        hosted.disposeCursor = () => cursorDisposable?.dispose();
         hostedByDocument.set(document.id, hosted);
         return result;
     };
@@ -195,21 +274,30 @@ export const createLiveScriptRendererController = function(
 
         participantByDocument.set(document.id, ticket.sessionId);
         participantBySession.set(ticket.sessionId, document);
-        const state = sessions.getParticipantState(ticket.sessionId);
+        const state = pendingParticipantStates.get(ticket.sessionId)
+            || sessions.getParticipantState(ticket.sessionId);
+        pendingParticipantStates.delete(ticket.sessionId);
 
         if (state) {
             document.displayName = state.displayName;
-            replaceLiveScriptDocumentContent(
-                options.getEditor(),
-                document,
-                state.content
-            );
+            document.liveStatus = state.status;
+
+            if (document.model.getValue() !== state.content) {
+                replaceLiveScriptDocumentContent(
+                    options.getEditor(),
+                    document,
+                    state.content
+                );
+            }
         }
 
         return document;
     };
 
-    const stopHosting = async function(documentId: string): Promise<void> {
+    const stopHosting = async function(
+        documentId: string,
+        reason: "stopped" | "expired" | "instructor-closed" = "stopped"
+    ): Promise<void> {
         const hosted = hostedByDocument.get(documentId);
 
         if (!hosted) {
@@ -217,9 +305,10 @@ export const createLiveScriptRendererController = function(
         }
 
         hosted.disposeChange();
+        hosted.disposeCursor();
         hostedByDocument.delete(documentId);
         await hosted.publishing;
-        await sessions.endHost(hosted.sessionId, "stopped");
+        await sessions.endHost(hosted.sessionId, reason);
     };
 
     const detachParticipant = async function(documentId: string): Promise<void> {
@@ -231,6 +320,8 @@ export const createLiveScriptRendererController = function(
 
         participantByDocument.delete(documentId);
         participantBySession.delete(sessionId);
+        pendingParticipantStates.delete(sessionId);
+        followedParticipantSessions.delete(sessionId);
         await sessions.closeParticipant(sessionId);
     };
 
@@ -262,8 +353,26 @@ export const createLiveScriptRendererController = function(
         getHostedSessionId: function(documentId) {
             return hostedByDocument.get(documentId)?.sessionId || "";
         },
+        getHostedState: function(documentId) {
+            const sessionId = hostedByDocument.get(documentId)?.sessionId;
+            return sessionId ? sessions.getHostState(sessionId) : null;
+        },
         getParticipantSessionId: function(documentId) {
             return participantByDocument.get(documentId) || "";
+        },
+        setFollowInstructorCursor: function(documentId, follow) {
+            const sessionId = participantByDocument.get(documentId);
+
+            if (!sessionId) {
+                return;
+            }
+
+            if (follow) {
+                followedParticipantSessions.add(sessionId);
+            }
+            else {
+                followedParticipantSessions.delete(sessionId);
+            }
         }
     };
 };

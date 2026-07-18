@@ -100,8 +100,18 @@ import type {
 import {
   createLiveScriptRendererController
 } from './liveScriptRendererController';
+import {
+  createLiveScriptPanelController,
+  type LiveScriptPanelController,
+  type LiveScriptPanelLabels
+} from './liveScriptPanelController';
 import type {
   LiveScriptRendererBridge
+} from '../collaboration';
+import {
+  createLiveScriptJoinLink,
+  parseLiveScriptJoinText,
+  sanitizeLiveScriptDisplayName
 } from '../collaboration';
 import {
   scriptEditorEventChannels,
@@ -245,14 +255,32 @@ const surfaceState = createScriptEditorSurfaceStateController({
     tabController.setHost(host);
   }
 });
+let liveAvailable = false;
+let livePanelController: LiveScriptPanelController | null = null;
+let livePanelDocumentId = '';
+const hostedLinks = new Map<string, string>();
+
+const updateLiveToolbarState = function(): void {
+  const active = tabController.getActiveTab();
+
+  surfaceState.toolbarView?.updateLiveState({
+    available: liveAvailable,
+    isParticipant: active?.kind === 'live-participant',
+    isHosting: Boolean(
+      active && liveScriptController.getHostedSessionId(active.id)
+    )
+  });
+};
 const tabController: ScriptEditorTabController = createScriptEditorTabController({
   getEditor: () => surfaceState.editor,
   getLabels: () => ({
     untitled: t('Untitled'),
-    closeTab: t('Close Tab')
+    closeTab: t('Close Tab'),
+    liveReadOnly: t('Live · read-only')
   }),
   activeTabChanged: () => {
     scriptEditorReactions.activeTabChanged();
+    updateLiveToolbarState();
   },
   tabStateChanged: () => {
     scriptEditorReactions.tabStateChanged();
@@ -302,6 +330,22 @@ const scriptExecution = createScriptExecutionController({
 });
 
 const getToolbarLabels = () => createScriptToolbarLabels(t);
+const getLivePanelLabels = (): LiveScriptPanelLabels => ({
+  shareLive: t('Share live'),
+  joinLive: t('Join live script'),
+  close: t('Close'),
+  copyLink: t('Copy link'),
+  stopSharing: t('Stop sharing'),
+  makeEditableCopy: t('Make editable copy'),
+  detach: t('Detach'),
+  followInstructorCursor: t('Follow instructor cursor'),
+  sessionLink: t('Session link'),
+  shortCode: t('Short code'),
+  shortCodeUnavailable: t('Unavailable for this session'),
+  participants: t('Participants'),
+  connection: t('Connection'),
+  enterLink: t('Paste a live-script link or ticket')
+});
 const reportDirtyState = scriptEditorViewState.reportDirtyState;
 const updateTitle = scriptEditorViewState.updateTitle;
 const updateToolbarState = scriptEditorViewState.updateToolbarState;
@@ -347,11 +391,21 @@ const liveScriptController = createLiveScriptRendererController({
   getEditor: () => surfaceState.editor,
   createTab,
   refreshTabs: () => {
+    tabController.refresh();
     scriptEditorReactions.tabStateChanged();
+    updateLiveToolbarState();
   },
-  hostStateChanged: () => {},
-  participantStateChanged: () => {},
-  transportStateChanged: () => {}
+  hostStateChanged: (_sessionId, state) => {
+    livePanelController?.updateHost(state);
+    updateLiveToolbarState();
+  },
+  participantStateChanged: (_sessionId, state) => {
+    livePanelController?.updateParticipant(state);
+  },
+  participantCursorChanged: () => {},
+  transportStateChanged: (event) => {
+    livePanelController?.updateTransport(event);
+  }
 });
 
 const scriptFileController: ScriptEditorFileController =
@@ -367,7 +421,8 @@ const scriptFileController: ScriptEditorFileController =
 tabController.setCloseHandler((tabId) => {
   void (async () => {
     if (liveScriptController.getHostedSessionId(tabId)) {
-      await liveScriptController.stopHosting(tabId);
+      await liveScriptController.stopHosting(tabId, 'instructor-closed');
+      hostedLinks.delete(tabId);
     }
 
     if (liveScriptController.getParticipantSessionId(tabId)) {
@@ -455,6 +510,127 @@ const scriptEditorActions = createScriptEditorActionController({
   saveCurrentAs
 });
 
+const randomOpaqueId = function(bytes: number): string {
+  const value = new Uint8Array(bytes);
+  crypto.getRandomValues(value);
+  let binary = '';
+
+  value.forEach((byte) => {
+    binary += String.fromCharCode(byte);
+  });
+
+  return btoa(binary)
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/g, '');
+};
+
+const showShareLive = async function(): Promise<void> {
+  const active = getActiveTab();
+
+  if (!active || !livePanelController) {
+    return;
+  }
+
+  livePanelDocumentId = active.id;
+
+  if (active.kind === 'live-participant') {
+    livePanelController.showParticipant(
+      active.displayName,
+      active.liveStatus || 'joining'
+    );
+    return;
+  }
+
+  const existingLink = hostedLinks.get(active.id);
+
+  if (existingLink) {
+    await livePanelController.showHost(
+      existingLink,
+      sanitizeLiveScriptDisplayName(active.filePath || active.displayName)
+    );
+    const state = liveScriptController.getHostedState(active.id);
+
+    if (state) {
+      livePanelController.updateHost(state);
+    }
+    return;
+  }
+
+  const result = await liveScriptController.hostDocument(
+    active,
+    randomOpaqueId(18),
+    randomOpaqueId(32),
+    sanitizeLiveScriptDisplayName(active.filePath || active.displayName)
+  );
+  const link = createLiveScriptJoinLink(result.ticket);
+  hostedLinks.set(active.id, link);
+  updateLiveToolbarState();
+  await livePanelController.showHost(link, result.state.displayName);
+  livePanelController.updateHost(result.state);
+};
+
+const showJoinLive = function(): void {
+  livePanelController?.showJoin();
+};
+
+const initializeLiveScriptUi = async function(): Promise<void> {
+  const root = document.getElementById('root');
+
+  if (!root || livePanelController) {
+    return;
+  }
+
+  livePanelController = createLiveScriptPanelController({
+    root,
+    getLabels: getLivePanelLabels,
+    join: async (value) => {
+      const parsed = parseLiveScriptJoinText(value);
+
+      if (!parsed.ok) {
+        throw new Error(parsed.message);
+      }
+
+      const joinedDocument = await liveScriptController.join(parsed.ticket);
+      livePanelDocumentId = joinedDocument.id;
+      livePanelController?.showParticipant(
+        joinedDocument.displayName,
+        joinedDocument.liveStatus || 'joining'
+      );
+      updateLiveToolbarState();
+    },
+    stopSharing: async () => {
+      if (!livePanelDocumentId) {
+        return;
+      }
+
+      await liveScriptController.stopHosting(livePanelDocumentId);
+      hostedLinks.delete(livePanelDocumentId);
+      livePanelController?.close();
+      updateLiveToolbarState();
+    },
+    detach: async () => {
+      await liveScriptController.detachParticipant(livePanelDocumentId);
+      updateLiveToolbarState();
+    },
+    makeEditableCopy: async () => {
+      liveScriptController.makeEditableCopy(livePanelDocumentId);
+      await liveScriptController.detachParticipant(livePanelDocumentId);
+      updateLiveToolbarState();
+    },
+    followInstructorCursor: (follow) => {
+      liveScriptController.setFollowInstructorCursor(
+        livePanelDocumentId,
+        follow
+      );
+    }
+  });
+
+  const capability = await scriptEditorBridge.live.capability();
+  liveAvailable = capability.available;
+  updateLiveToolbarState();
+};
+
 const scriptEditorInputController = createScriptEditorInputController({
   runCodeAtCursor,
   saveCurrent: scriptEditorActions.save,
@@ -501,6 +677,14 @@ const scriptEditorBootstrapFlow = createScriptEditorBootstrapFlowController({
   showHelp: scriptEditorActions.showHelp,
   save: scriptEditorActions.save,
   saveAs: scriptEditorActions.saveAs,
+  shareLive: () => {
+    void showShareLive().catch((error) => {
+      livePanelController?.showError(
+        error instanceof Error ? error.message : String(error)
+      );
+    });
+  },
+  joinLive: showJoinLive,
   getFilePath: droppedFilePathReader.read,
   createDroppedFilePlan: createRDroppedScriptFilePlan,
   openFile: openFileIntoTab,
@@ -515,7 +699,10 @@ const scriptEditorBootstrapFlow = createScriptEditorBootstrapFlowController({
   bindInput: (monaco, nextEditor) => {
     scriptEditorInputController.bind(monaco, nextEditor);
   },
-  completeBootstrap: scriptEditorLifecycle.completeBootstrap
+  completeBootstrap: () => {
+    scriptEditorLifecycle.completeBootstrap();
+    void initializeLiveScriptUi();
+  }
 });
 const bootstrap = scriptEditorBootstrapFlow.bootstrap;
 

@@ -3,12 +3,15 @@ export interface ScriptTabStripItem {
     filePath: string;
     displayName?: string;
     dirty: boolean;
+    liveReadOnly?: boolean;
+    liveStatus?: string;
 }
 
 
 export interface ScriptTabStripLabels {
     untitled: string;
     closeTab: string;
+    liveReadOnly: string;
 }
 
 
@@ -48,6 +51,18 @@ export const renderScriptTabStrip = function(
             || (tab.filePath ? basename(tab.filePath) : labels.untitled);
         label.textContent = tab.dirty ? `${baseName} •` : baseName;
         label.title = tab.filePath || tab.displayName || labels.untitled;
+
+        if (tab.liveReadOnly) {
+            button.classList.add("dm-script-tab--live");
+            label.title = `${baseName} — ${labels.liveReadOnly}`;
+            const liveBadge = document.createElement("span");
+            liveBadge.className = "dm-script-tab-live";
+            liveBadge.textContent = tab.liveStatus
+                && tab.liveStatus !== "active"
+                ? `${labels.liveReadOnly} · ${tab.liveStatus}`
+                : labels.liveReadOnly;
+            button.appendChild(liveBadge);
+        }
 
         const closeButton = document.createElement("button");
         closeButton.type = "button";
@@ -119,7 +134,7 @@ export const renderScriptTabStrip = function(
         button.addEventListener("click", () => {
             callbacks.activate(tab.id);
         });
-        button.appendChild(label);
+        button.insertBefore(label, button.firstChild);
         button.appendChild(closeButton);
         host.appendChild(button);
     });

@@ -413,6 +413,12 @@ export const createNativeIrohLiveScriptTransport = function(
             state.sessions.delete(sessionId);
 
             if (state.sessions.size === 0) {
+                try {
+                    await state.writeQueue;
+                    await state.send.finish();
+                }
+                catch {}
+
                 closeConnection(state);
             }
         }

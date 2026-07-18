@@ -2,7 +2,7 @@
 
 ## Status And Purpose
 
-Status: implementation in progress. Phases 0 through 3 completed on 2026-07-18.
+Status: implementation in progress. Phases 0 through 4 completed on 2026-07-18.
 
 This document is the execution plan for adding live Script Editor tab sharing
 to DialogForge. It is written for an AI agent working in a dedicated task. The
@@ -34,7 +34,7 @@ marked `done` only when its acceptance gate is satisfied.
 | 1 | Define the host-neutral live-script contract | done |
 | 2 | Prove native iroh transport in DialogForge | done |
 | 3 | Implement shared single-writer synchronization | done |
-| 4 | Add and verify installed-app sharing UI | not started |
+| 4 | Add and verify installed-app sharing UI | done |
 | 5 | Harden native sessions and packaging | not started |
 | 6 | Create the separately versioned Rust/WebAssembly client | not started |
 | 7 | Integrate browser participants | not started |
@@ -677,6 +677,35 @@ Acceptance gate:
   second instance joins, edits update visibly, Ctrl/Cmd+Enter executes only on
   the participant, detaching creates an editable copy, and stopping the session
   visibly ends it.
+
+#### Phase 4 Evidence (2026-07-18)
+
+- The existing Script Editor toolbar, tab geometry, Monaco surface, icons, and
+  dataset-modal dialog styling were inspected and preserved. The shared action
+  surface now exposes `Share live` and `Join live script`, and the compact
+  session panel shows the full-ticket QR code, copyable link, explicit
+  short-code-unavailable state, participant count, connection state, and stop
+  action.
+- Participant tabs retain the existing tab structure and add `Live · read-only`
+  and terminal `Live · read-only · ended` state labels. The participant panel
+  includes cursor following, close, detach, and editable-copy actions. Shared
+  English localization owns the new labels and messages.
+- `tests/electron/verify-live-script-sharing-workflow.js` launched two real
+  Electron instances with distinct user-data directories and native iroh
+  identities. It executed a harmless command against both real runtimes before
+  sharing, drove the visible share and join controls, verified the initial
+  snapshot and a later edit, confirmed participant typing was blocked, and
+  confirmed incoming content executed nowhere automatically.
+- The rendered workflow selected the received code and invoked Ctrl/Cmd+Enter,
+  then confirmed the resulting object existed only in the participant runtime.
+  It stopped sharing from the instructor, observed the ended participant badge,
+  and created an editable detached copy. Screenshots cover the joined host and
+  participant panels, synchronized edit, and ended state.
+- The rendered check exposed and fixed an initial-snapshot race, a stale
+  terminal badge refresh, and unnecessary authoritative snapshots during rapid
+  typing. The targeted renderer synchronization test now also covers queued
+  rapid edits. Full-ticket QR sharing remains independent of rendezvous; short
+  classroom codes remain honestly unavailable until Phase 5.
 
 ### Phase 5: Harden Native Sessions And Packaging
 

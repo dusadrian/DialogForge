@@ -6,6 +6,7 @@ export interface ScriptDocument {
     model: Monaco.editor.ITextModel;
     kind: "local" | "live-participant";
     displayName: string;
+    liveStatus: string;
     filePath: string;
     dirty: boolean;
     scrollTop: number;
@@ -54,6 +55,7 @@ export const createScriptDocument = function(
         model,
         kind: options.kind || "local",
         displayName: String(options.displayName || ""),
+        liveStatus: "",
         filePath: String(options.filePath || ""),
         dirty: false,
         scrollTop: 0,

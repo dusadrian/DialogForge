@@ -177,7 +177,14 @@ export const createLiveScriptParticipantSession = function(
         if (frame.type === "session-ended") {
             status = "ended";
             resyncPending = false;
-            return [];
+            return [outbound({
+                ...frameBase("participant-state"),
+                timestamp: Date.now(),
+                payload: {
+                    endpointId,
+                    state: "left"
+                }
+            })];
         }
 
         if (frame.type === "error") {

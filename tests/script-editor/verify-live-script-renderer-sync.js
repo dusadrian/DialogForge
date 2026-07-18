@@ -155,6 +155,7 @@ const createEditor = function() {
         savedViewState: { cursorState: [{ position: { lineNumber: 1, column: 1 } }] },
         restoredViewState: null,
         selection: null,
+        cursorListeners: new Set(),
         getModel() {
             return this.model;
         },
@@ -177,7 +178,11 @@ const createEditor = function() {
             return { lineNumber: 1, column: 1 };
         },
         setPosition() {},
-        revealPositionInCenterIfOutsideViewport() {}
+        revealPositionInCenterIfOutsideViewport() {},
+        onDidChangeCursorPosition(listener) {
+            this.cursorListeners.add(listener);
+            return { dispose: () => this.cursorListeners.delete(listener) };
+        }
     };
 };
 
@@ -233,6 +238,7 @@ const createHarness = function(transport, monaco) {
                 model,
                 kind: options.kind || "local",
                 displayName: options.displayName || "",
+                liveStatus: "",
                 filePath: options.filePath || "",
                 dirty: options.dirty === true,
                 scrollTop: 0,
@@ -281,6 +287,7 @@ const run = async function() {
         model: new TestModel("value <- 1\n"),
         kind: "local",
         displayName: "",
+        liveStatus: "",
         filePath: "/private/instructor/demo.R",
         dirty: false,
         scrollTop: 0,
@@ -325,6 +332,18 @@ const run = async function() {
             "participant did not apply an instructor edit"
         );
     }
+
+    for (const character of "rapid") {
+        hostDocument.model.applyUserChanges([{
+            rangeOffset: hostDocument.model.getValue().length,
+            rangeLength: 0,
+            text: character
+        }]);
+    }
+    await waitFor(
+        () => participantDocument.model.getValue() === hostDocument.model.getValue(),
+        "participant did not apply rapidly queued edits"
+    );
 
     assert.equal(participantDocument.dirty, false);
     assert.equal(participantDocument.model.setValueCount, 1);

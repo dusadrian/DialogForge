@@ -20,6 +20,7 @@
         "verify:production:web": "node scripts/verify-production-web.js"
     },
     "devDependencies": {
+        "@types/qrcode": "^1.5.6",
         "@types/sortablejs": "^1.15.9",
         "electron": "^22.0.0",
         "electron-builder": "26.9.0",
@@ -35,6 +36,7 @@
         "electron-updater": "^6.8.9",
         "monaco-editor": "^0.55.1",
         "preact": "^10.29.7",
+        "qrcode": "^1.5.4",
         "sortablejs": "^1.15.7",
         "webr": "^0.6.0"
     },

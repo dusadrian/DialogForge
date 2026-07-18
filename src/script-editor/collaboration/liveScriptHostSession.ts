@@ -5,6 +5,7 @@ import {
     LIVE_SCRIPT_PROTOCOL,
     LIVE_SCRIPT_PROTOCOL_VERSION,
     type LiveScriptEditFrame,
+    type LiveScriptCursorFrame,
     type LiveScriptErrorFrame,
     type LiveScriptFrame,
     type LiveScriptOutboundFrame,
@@ -39,6 +40,10 @@ export interface LiveScriptHostSession {
     state(): LiveScriptHostState;
     receive(frame: LiveScriptFrame, remoteEndpointId: string): LiveScriptOutboundFrame[];
     publishEdits(edits: LiveScriptTextEdit[]): LiveScriptOutboundFrame[];
+    publishCursor(
+        position: LiveScriptCursorFrame["payload"]["position"],
+        selection?: LiveScriptCursorFrame["payload"]["selection"]
+    ): LiveScriptOutboundFrame[];
     replaceContent(content: string): LiveScriptOutboundFrame[];
     end(reason?: LiveScriptSessionEndedFrame["payload"]["reason"]): LiveScriptOutboundFrame[];
 }
@@ -203,6 +208,22 @@ export const createLiveScriptHostSession = function(
             return [];
         }
 
+        if (frame.type === "participant-state") {
+            if (frame.payload.endpointId !== remoteEndpointId) {
+                return [errorFor(
+                    remoteEndpointId,
+                    "authorization-failed",
+                    "Live session is not available."
+                )];
+            }
+
+            if (frame.payload.state === "left") {
+                participants.delete(remoteEndpointId);
+            }
+
+            return [];
+        }
+
         if (frame.type === "resync-request") {
             return [snapshotFor(remoteEndpointId)];
         }
@@ -270,6 +291,29 @@ export const createLiveScriptHostSession = function(
         return Array.from(participants.keys()).map(snapshotFor);
     };
 
+    const publishCursor = function(
+        position: LiveScriptCursorFrame["payload"]["position"],
+        selection?: LiveScriptCursorFrame["payload"]["selection"]
+    ): LiveScriptOutboundFrame[] {
+        if (status === "ended") {
+            return [];
+        }
+
+        const frame: LiveScriptCursorFrame = {
+            ...frameBase("cursor"),
+            timestamp: Date.now(),
+            payload: {
+                position,
+                ...(selection ? { selection } : {})
+            }
+        };
+
+        return Array.from(participants.keys()).map((recipientEndpointId) => ({
+            frame,
+            recipientEndpointId
+        }));
+    };
+
     const end = function(
         reason: LiveScriptSessionEndedFrame["payload"]["reason"] = "stopped"
     ): LiveScriptOutboundFrame[] {
@@ -301,6 +345,7 @@ export const createLiveScriptHostSession = function(
         },
         receive,
         publishEdits,
+        publishCursor,
         replaceContent,
         end
     };

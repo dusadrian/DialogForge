@@ -10,6 +10,7 @@ import {
 } from "./liveScriptParticipantSession";
 import type {
     LiveScriptFrame,
+    LiveScriptCursorFrame,
     LiveScriptOutboundFrame,
     LiveScriptSessionEndedFrame,
     LiveScriptTextEdit
@@ -65,6 +66,11 @@ export interface LiveScriptSessionController {
     host(input: LiveScriptHostedSessionInput): Promise<LiveScriptHostedSessionResult>;
     join(ticket: LiveScriptSessionTicket): Promise<LiveScriptParticipantState>;
     publishHostEdits(sessionId: string, edits: LiveScriptTextEdit[]): Promise<void>;
+    publishHostCursor(
+        sessionId: string,
+        position: LiveScriptCursorFrame["payload"]["position"],
+        selection?: LiveScriptCursorFrame["payload"]["selection"]
+    ): Promise<void>;
     replaceHostContent(sessionId: string, content: string): Promise<void>;
     endHost(
         sessionId: string,
@@ -81,8 +87,9 @@ export const createLiveScriptSessionController = function(
 ): LiveScriptSessionController {
     const hosts = new Map<string, LiveScriptHostSession>();
     const participants = new Map<string, LiveScriptParticipantSession>();
+    let outboundQueue = Promise.resolve();
 
-    const sendOutbound = async function(
+    const sendOutboundNow = async function(
         frames: LiveScriptOutboundFrame[]
     ): Promise<void> {
         for (const outbound of frames) {
@@ -95,6 +102,16 @@ export const createLiveScriptSessionController = function(
                 throw new Error(result.message);
             }
         }
+    };
+
+    const sendOutbound = function(
+        frames: LiveScriptOutboundFrame[]
+    ): Promise<void> {
+        const pending = outboundQueue.catch(() => {}).then(() => {
+            return sendOutboundNow(frames);
+        });
+        outboundQueue = pending;
+        return pending;
     };
 
     const routeFrame = async function(
@@ -230,12 +247,35 @@ export const createLiveScriptSessionController = function(
         options.hostStateChanged(sessionId, session.state());
     };
 
+    const publishHostCursor = async function(
+        sessionId: string,
+        position: LiveScriptCursorFrame["payload"]["position"],
+        selection?: LiveScriptCursorFrame["payload"]["selection"]
+    ): Promise<void> {
+        await sendOutbound(requireHost(sessionId).publishCursor(position, selection));
+    };
+
     const endHost = async function(
         sessionId: string,
         reason: LiveScriptSessionEndedFrame["payload"]["reason"] = "stopped"
     ): Promise<void> {
         const session = requireHost(sessionId);
-        await sendOutbound(session.end(reason));
+        const frames = session.end(reason);
+
+        try {
+            await sendOutbound(frames);
+
+            const acknowledgementDeadline = Date.now() + 750;
+
+            while (session.state().participants.length > 0
+                && Date.now() < acknowledgementDeadline) {
+                await new Promise((resolve) => setTimeout(resolve, 10));
+            }
+        }
+        catch {
+            // Ending remains authoritative even if a participant already left.
+        }
+
         options.hostStateChanged(sessionId, session.state());
         hosts.delete(sessionId);
         await options.transport.close(sessionId);
@@ -250,6 +290,7 @@ export const createLiveScriptSessionController = function(
         host,
         join,
         publishHostEdits,
+        publishHostCursor,
         replaceHostContent,
         endHost,
         closeParticipant,

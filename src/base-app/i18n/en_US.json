@@ -144,5 +144,19 @@
     "Pick color": "Pick color",
     "Reset": "Reset",
     "Save": "Save",
-    "Cancel": "Cancel"
+    "Cancel": "Cancel",
+    "Share live": "Share live",
+    "Join live script": "Join live script",
+    "Copy link": "Copy link",
+    "Stop sharing": "Stop sharing",
+    "Make editable copy": "Make editable copy",
+    "Detach": "Detach",
+    "Follow instructor cursor": "Follow instructor cursor",
+    "Session link": "Session link",
+    "Short code": "Short code",
+    "Unavailable for this session": "Unavailable for this session",
+    "Participants": "Participants",
+    "Connection": "Connection",
+    "Paste a live-script link or ticket": "Paste a live-script link or ticket",
+    "Live · read-only": "Live · read-only"
 }

@@ -13,6 +13,7 @@ import { renderScriptTabStrip } from "../view/scriptTabStrip";
 export interface ScriptEditorTabLabels {
     untitled: string;
     closeTab: string;
+    liveReadOnly: string;
 }
 
 
@@ -285,7 +286,9 @@ export const createScriptEditorTabController = function(
                         id: tab.id,
                         filePath: tab.filePath,
                         displayName: tab.displayName,
-                        dirty: tab.dirty
+                        dirty: tab.dirty,
+                        liveReadOnly: tab.kind === "live-participant",
+                        liveStatus: tab.liveStatus
                     })),
                     activeTabId,
                     options.getLabels(),

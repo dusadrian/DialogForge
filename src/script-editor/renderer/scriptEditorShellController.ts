@@ -39,6 +39,8 @@ export const createScriptEditorShellController = function(
         showHelp(): void;
         save(): void;
         saveAs(): void;
+        shareLive(): void;
+        joinLive(): void;
         getFilePath(file: File): string;
         createDroppedFilePlan?: CreateDroppedScriptFilePlan;
         openFile(
@@ -58,7 +60,9 @@ export const createScriptEditorShellController = function(
             toggleOutline: options.toggleOutline,
             showHelp: options.showHelp,
             save: options.save,
-            saveAs: options.saveAs
+            saveAs: options.saveAs,
+            shareLive: options.shareLive,
+            joinLive: options.joinLive
         }
     );
 

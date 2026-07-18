@@ -27,6 +27,9 @@ export type LiveScriptTicketParseResult =
     | { ok: false; message: string };
 
 
+const LIVE_SCRIPT_LINK_PREFIX = "dialogforge://live-script/join#ticket=";
+
+
 const isRecord = function(value: unknown): value is Record<string, unknown> {
     return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 };
@@ -145,4 +148,59 @@ export const parseLiveScriptSessionTicket = function(
             ...(value.displayName === undefined ? {} : { displayName: value.displayName })
         }
     };
+};
+
+
+const bytesToBase64Url = function(bytes: Uint8Array): string {
+    let binary = "";
+
+    for (const byte of bytes) {
+        binary += String.fromCharCode(byte);
+    }
+
+    return btoa(binary)
+        .replace(/\+/g, "-")
+        .replace(/\//g, "_")
+        .replace(/=+$/g, "");
+};
+
+
+const base64UrlToBytes = function(value: string): Uint8Array {
+    const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = normalized + "=".repeat((4 - normalized.length % 4) % 4);
+    const binary = atob(padded);
+
+    return Uint8Array.from(binary, (character) => character.charCodeAt(0));
+};
+
+
+export const createLiveScriptJoinLink = function(
+    ticket: LiveScriptSessionTicket
+): string {
+    const encoded = new TextEncoder().encode(JSON.stringify(ticket));
+    return LIVE_SCRIPT_LINK_PREFIX + bytesToBase64Url(encoded);
+};
+
+
+export const parseLiveScriptJoinText = function(
+    value: unknown
+): LiveScriptTicketParseResult {
+    const text = String(value || "").trim();
+
+    if (!text) {
+        return { ok: false, message: "Enter a live-script link or ticket." };
+    }
+
+    try {
+        const ticketText = text.startsWith(LIVE_SCRIPT_LINK_PREFIX)
+            ? new TextDecoder().decode(base64UrlToBytes(
+                text.slice(LIVE_SCRIPT_LINK_PREFIX.length)
+            ))
+            : text;
+
+        return parseLiveScriptSessionTicket(JSON.parse(ticketText));
+    }
+    catch {
+        return { ok: false, message: "Live-script link or ticket is invalid." };
+    }
 };

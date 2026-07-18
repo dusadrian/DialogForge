@@ -10,6 +10,8 @@ export interface ScriptToolbarLabels {
     helpForSelection: string;
     save: string;
     saveAs: string;
+    shareLive: string;
+    joinLive: string;
 }
 
 
@@ -21,6 +23,8 @@ export interface ScriptToolbarActions {
     showHelp(): void;
     save(): void;
     saveAs(): void;
+    shareLive(): void;
+    joinLive(): void;
 }
 
 
@@ -38,7 +42,9 @@ export const createScriptToolbarLabels = function(
         noFunctions: translate("No functions"),
         helpForSelection: translate("Help for Selection"),
         save: translate("Save"),
-        saveAs: translate("Save As")
+        saveAs: translate("Save As"),
+        shareLive: translate("Share live"),
+        joinLive: translate("Join live script")
     };
 };
 
@@ -52,6 +58,11 @@ export interface ScriptToolbarView {
         functionCount: number,
         canSave?: boolean
     ): void;
+    updateLiveState(input: {
+        available: boolean;
+        isParticipant: boolean;
+        isHosting: boolean;
+    }): void;
 }
 
 
@@ -165,6 +176,25 @@ export const createScriptToolbarView = function(
     );
     runButton.classList.add("dm-script-btn-run");
     toolbar.appendChild(runButton);
+    toolbar.appendChild(createDivider());
+
+    const shareLiveButton = createToolbarButton(
+        labels.shareLive,
+        "codicon-broadcast",
+        actions.shareLive,
+        { title: labels.shareLive }
+    );
+    shareLiveButton.classList.add("dm-script-btn-share-live");
+    toolbar.appendChild(shareLiveButton);
+
+    const joinLiveButton = createToolbarButton(
+        labels.joinLive,
+        "codicon-sign-in",
+        actions.joinLive,
+        { title: labels.joinLive }
+    );
+    joinLiveButton.classList.add("dm-script-btn-join-live");
+    toolbar.appendChild(joinLiveButton);
 
     const spacer = document.createElement("div");
     spacer.style.flex = "1 1 auto";
@@ -223,6 +253,16 @@ export const createScriptToolbarView = function(
         saveButton.setAttribute("aria-label", nextLabels.save);
         saveAsButton.setAttribute("data-tooltip", nextLabels.saveAs);
         saveAsButton.setAttribute("aria-label", nextLabels.saveAs);
+        setButtonLabel(
+            shareLiveButton,
+            nextLabels.shareLive,
+            nextLabels.shareLive
+        );
+        setButtonLabel(
+            joinLiveButton,
+            nextLabels.joinLive,
+            nextLabels.joinLive
+        );
     };
 
     const updateDocumentState = function(
@@ -251,10 +291,25 @@ export const createScriptToolbarView = function(
         }
     };
 
+    const updateLiveState = function(input: {
+        available: boolean;
+        isParticipant: boolean;
+        isHosting: boolean;
+    }): void {
+        shareLiveButton.disabled = !input.available;
+        joinLiveButton.disabled = !input.available || input.isParticipant;
+        shareLiveButton.dataset.state = input.isParticipant
+            ? "participant"
+            : input.isHosting
+                ? "hosting"
+                : "idle";
+    };
+
     return {
         element: toolbar,
         outlineButton,
         updateLabels,
-        updateDocumentState
+        updateDocumentState,
+        updateLiveState
     };
 };
