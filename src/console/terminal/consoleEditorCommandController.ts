@@ -25,6 +25,12 @@ export interface ConsoleEditorCommandBindings {
 }
 
 
+interface ConsoleFindController {
+    getState?(): { isRevealed?: boolean };
+    closeFindWidget?(): void;
+}
+
+
 const writeClipboardText = async function(text: string): Promise<boolean> {
     const normalized = String(text || "");
 
@@ -166,6 +172,24 @@ export const wireConsoleEditorCommands = function(
             editor.focus?.();
         }
         catch {}
+    };
+
+    const closeConsoleFindWidget = function(): boolean {
+        try {
+            const findController = editor.getContribution(
+                "editor.contrib.findController"
+            ) as ConsoleFindController | null;
+
+            if (!findController?.getState?.().isRevealed) {
+                return false;
+            }
+
+            findController.closeFindWidget?.();
+            return true;
+        }
+        catch {
+            return false;
+        }
     };
 
     const disposable = editor.onKeyDown((event: Monaco.IKeyboardEvent) => {
@@ -428,6 +452,9 @@ export const wireConsoleEditorCommands = function(
     editor.addCommand(KeyMod.CtrlCmd | KeyCode.DownArrow, scrollToPrompt);
     editor.addCommand(KeyMod.CtrlCmd | KeyCode.LeftArrow, moveCursorToLineStart);
     editor.addCommand(KeyMod.CtrlCmd | KeyCode.RightArrow, moveCursorToLineEnd);
+    editor.addCommand(KeyMod.CtrlCmd | KeyCode.KeyF, closeConsoleFindWidget);
+    editor.addCommand(KeyMod.CtrlCmd | KeyCode.KeyH, closeConsoleFindWidget);
+    editor.addCommand(KeyMod.CtrlCmd | KeyCode.KeyE, closeConsoleFindWidget);
 
     editor.addAction({
         id: "dm.acceptSuggestionTab",
@@ -446,6 +473,11 @@ export const wireConsoleEditorCommands = function(
     });
 
     editor.addCommand(KeyCode.Escape, () => {
+        if (closeConsoleFindWidget()) {
+            bindings.disarmEscapeClear();
+            return;
+        }
+
         if (isSuggestionVisible()) {
             try {
                 editor.trigger("keyboard", "hideSuggestWidget", {});
