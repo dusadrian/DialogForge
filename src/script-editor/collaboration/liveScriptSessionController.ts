@@ -105,15 +105,30 @@ export const createLiveScriptSessionController = function(
     const sendOutboundNow = async function(
         frames: LiveScriptOutboundFrame[]
     ): Promise<void> {
-        for (const outbound of frames) {
-            const result = await options.transport.send(
-                outbound.frame,
-                outbound.recipientEndpointId
-            );
+        let delivered = 0;
+        let lastError: unknown = null;
 
-            if (!result.ok) {
-                throw new Error(result.message);
+        for (const outbound of frames) {
+            try {
+                const result = await options.transport.send(
+                    outbound.frame,
+                    outbound.recipientEndpointId
+                );
+
+                if (result.ok) {
+                    delivered += 1;
+                }
+                else {
+                    lastError = new Error(result.message);
+                }
             }
+            catch (error) {
+                lastError = error;
+            }
+        }
+
+        if (frames.length > 0 && delivered === 0 && lastError) {
+            throw lastError;
         }
     };
 

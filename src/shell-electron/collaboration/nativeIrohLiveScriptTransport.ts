@@ -55,6 +55,7 @@ export interface NativeIrohCapability {
 export interface NativeIrohLiveScriptTransport extends LiveScriptTransport {
     capability(): Promise<NativeIrohCapability>;
     closeAllSessions(): Promise<void>;
+    disconnectPeer(endpointId: string): Promise<void>;
 }
 
 
@@ -444,6 +445,16 @@ export const createNativeIrohLiveScriptTransport = function(
         }));
     };
 
+    const disconnectPeer = async function(endpointId: string): Promise<void> {
+        const state = connectionsByEndpoint.get(endpointId);
+
+        if (!state || state.closed) {
+            return;
+        }
+
+        closeConnection(state);
+    };
+
     const shutdown = async function(): Promise<void> {
         if (shuttingDown) {
             return;
@@ -477,6 +488,7 @@ export const createNativeIrohLiveScriptTransport = function(
         send,
         closeSession,
         closeAllSessions,
+        disconnectPeer,
         shutdown,
         onFrame: function(listener) {
             frameListeners.add(listener);

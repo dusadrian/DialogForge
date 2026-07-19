@@ -2,7 +2,7 @@
 
 ## Status And Purpose
 
-Status: implementation in progress. Phases 0 through 6 completed by 2026-07-19.
+Status: implementation in progress. Phases 0 through 7 completed by 2026-07-19.
 
 This document is the execution plan for adding live Script Editor tab sharing
 to DialogForge. It is written for an AI agent working in a dedicated task. The
@@ -37,7 +37,7 @@ marked `done` only when its acceptance gate is satisfied.
 | 4 | Add and verify installed-app sharing UI | done |
 | 5 | Harden native sessions and packaging | done |
 | 6 | Create the separately versioned Rust/WebAssembly client | done |
-| 7 | Integrate browser participants | not started |
+| 7 | Integrate browser participants | done |
 | 8 | Verify mixed-host classrooms and decide fan-out transport | not started |
 | 9 | Release, document, and enable the capability | not started |
 
@@ -994,7 +994,8 @@ Work:
 7. Add browser instructor hosting only after the installed-to-browser path is
    stable; browser hosting remains relay-based.
 8. Surface relay/network failures clearly and preserve the last acknowledged
-   read-only snapshot.
+   snapshot. Once a session ends permanently, transfer that same tab to the
+   participant as an unsaved editable local document.
 9. Ensure web deployment includes the WASM MIME type, cache/version policy,
    required headers, and subresource paths.
 
@@ -1002,7 +1003,43 @@ Acceptance gate:
 
 - In a rendered browser, a participant joins an installed instructor, receives
   live updates in the existing Script Editor, preserves selection, executes
-  locally through WebR, reconnects, detaches, and observes session termination.
+  locally through WebR, reconnects, and receives the ended tab as an editable
+  local document while the termination notice remains visible.
+
+#### Phase 7 Evidence (2026-07-19)
+
+- Commit `b3224541` pins the separately versioned `DialogForgeIroh` `0.1.0`
+  browser artifact by manifest, source revision, file size, and SHA-256, and
+  stages it into the web distribution during `npm run build:web`.
+- Commit `3057d813` adds the lazy browser participant transport, routes delivered
+  links into the shared `Join live script` panel, reuses the existing Script
+  Editor controller, and serves the versioned module and WebAssembly binary with
+  the required isolation, MIME, and immutable-cache headers.
+- A rendered mixed-host run used a real Electron presenter and the browser
+  Script Editor. The browser joined through the Rust/WebAssembly transport,
+  received presenter edits, executed `print(42)` locally through WebR with
+  output `[1] 42`, observed termination, and reported no page errors.
+- A deterministic rendered reconnect run closed the native presenter's active
+  peer connection. The browser displayed reconnecting states, established a new
+  endpoint, retained its acknowledged snapshot and selection, and received a
+  subsequent presenter update. Delivery now continues to active recipients
+  while a stale endpoint remains in its disconnect grace period.
+- Commit `42f9b8ff` removes the early `Make editable copy` action. On permanent
+  termination or failed reconnect, the existing participant tab becomes a
+  dirty local document in place, Monaco becomes writable, Save is enabled, the
+  red termination notice remains visible, and `Join live script` is available.
+- The final rendered ownership check visibly entered
+  `participant_owned <- TRUE` in the transferred tab, retained the
+  `Session ended · editable` badge and red notice, and produced no page errors.
+- `npm run build:web` succeeds with the pinned artifact staged. Direct requests
+  return HTTP 200 for the shell, composition endpoint, versioned module, and
+  WebAssembly binary; the binary is served as `application/wasm`.
+
+Deferred:
+
+- Browser presenter hosting remains deferred until the optional browser-host
+  matrices are considered in Phase 8. Phase 7's installed-presenter to browser-
+  participant acceptance gate is satisfied.
 
 ### Phase 8: Verify Mixed-Host Classrooms And Decide Fan-Out Transport
 
