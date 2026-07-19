@@ -158,6 +158,16 @@ export const createLiveScriptSessionController = function(
         options.participantFrameApplied(frame.sessionId, frame, state);
         options.participantStateChanged(frame.sessionId, state);
         await sendOutbound(responses);
+
+        if (state.status === "ended" || state.status === "failed") {
+            reconnectGeneration.set(
+                frame.sessionId,
+                (reconnectGeneration.get(frame.sessionId) || 0) + 1
+            );
+            participants.delete(frame.sessionId);
+            participantTickets.delete(frame.sessionId);
+            await options.transport.close(frame.sessionId);
+        }
     };
 
     const wait = function(delayMs: number): Promise<void> {
@@ -213,6 +223,10 @@ export const createLiveScriptSessionController = function(
 
             participant.fail("Live-script connection could not be restored.");
             options.participantStateChanged(sessionId, participant.state());
+            reconnectGeneration.set(sessionId, generation + 1);
+            participants.delete(sessionId);
+            participantTickets.delete(sessionId);
+            await options.transport.close(sessionId);
         }
         finally {
             reconnecting.delete(sessionId);

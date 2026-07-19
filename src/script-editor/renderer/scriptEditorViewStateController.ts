@@ -84,7 +84,7 @@ export const createScriptEditorViewStateController = function(
         );
 
         if (liveNotice) {
-            const terminalStatus = active?.kind === "live-participant"
+            const terminalStatus = active
                 && (active.liveStatus === "ended" || active.liveStatus === "failed")
                 ? active.liveStatus
                 : "";
@@ -92,11 +92,11 @@ export const createScriptEditorViewStateController = function(
             liveNotice.dataset.status = terminalStatus;
             liveNotice.textContent = terminalStatus === "failed"
                 ? options.translate(
-                    "The connection to this shared script was lost. You can join another session or make an editable copy."
+                    "The connection to this shared script was lost. This tab now belongs to you and is editable."
                 )
                 : terminalStatus === "ended"
                     ? options.translate(
-                        "The presenter ended this shared script. You can join another session or make an editable copy."
+                        "The presenter ended this shared script. This tab now belongs to you and is editable."
                     )
                     : "";
         }

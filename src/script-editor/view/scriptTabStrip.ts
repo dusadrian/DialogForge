@@ -54,15 +54,16 @@ export const renderScriptTabStrip = function(
         label.textContent = tab.dirty ? `${baseName} •` : baseName;
         label.title = tab.filePath || tab.displayName || labels.untitled;
 
-        if (tab.liveReadOnly) {
+        const terminalLabel = tab.liveStatus === "ended"
+            ? labels.sessionEndedReadOnly
+            : tab.liveStatus === "failed"
+                ? labels.connectionLostReadOnly
+                : "";
+
+        if (tab.liveReadOnly || terminalLabel) {
             button.classList.add("dm-script-tab--live");
             const liveBadge = document.createElement("span");
             liveBadge.className = "dm-script-tab-live";
-            const terminalLabel = tab.liveStatus === "ended"
-                ? labels.sessionEndedReadOnly
-                : tab.liveStatus === "failed"
-                    ? labels.connectionLostReadOnly
-                    : "";
 
             if (terminalLabel) {
                 button.classList.add("dm-script-tab--ended");

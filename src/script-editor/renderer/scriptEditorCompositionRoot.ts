@@ -281,7 +281,8 @@ const updateLiveToolbarState = function(): void {
     available: liveAvailable,
     canHost: liveCanHost,
     canJoin: liveCanJoin,
-    isParticipant: active?.kind === 'live-participant'
+    isParticipant: active?.kind === 'live-participant',
+    participantSessionActive: active?.kind === 'live-participant'
       && active.liveStatus !== 'ended'
       && active.liveStatus !== 'failed',
     isHosting: Boolean(
@@ -295,8 +296,8 @@ const tabController: ScriptEditorTabController = createScriptEditorTabController
     untitled: t('Untitled'),
     closeTab: t('Close Tab'),
     liveReadOnly: t('Live · read-only'),
-    sessionEndedReadOnly: t('Session ended · read-only'),
-    connectionLostReadOnly: t('Connection lost · read-only')
+    sessionEndedReadOnly: t('Session ended · editable'),
+    connectionLostReadOnly: t('Connection lost · editable')
   }),
   activeTabChanged: () => {
     scriptEditorReactions.activeTabChanged();
@@ -357,7 +358,6 @@ const getLivePanelLabels = (): LiveScriptPanelLabels => ({
   close: t('Close'),
   copyLink: t('Copy link'),
   stopSharing: t('Stop sharing'),
-  makeEditableCopy: t('Make editable copy'),
   detach: t('Detach'),
   followInstructorCursor: t('Follow presenter cursor'),
   sessionLink: t('Session link'),
@@ -714,11 +714,6 @@ const initializeLiveScriptUi = async function(): Promise<void> {
       updateLiveToolbarState();
     },
     detach: async () => {
-      await liveScriptController.detachParticipant(livePanelDocumentId);
-      updateLiveToolbarState();
-    },
-    makeEditableCopy: async () => {
-      liveScriptController.makeEditableCopy(livePanelDocumentId);
       await liveScriptController.detachParticipant(livePanelDocumentId);
       updateLiveToolbarState();
     },

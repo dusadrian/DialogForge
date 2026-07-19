@@ -149,7 +149,6 @@
     "Join live script": "Join live script",
     "Copy link": "Copy link",
     "Stop sharing": "Stop sharing",
-    "Make editable copy": "Make editable copy",
     "Detach": "Detach",
     "Follow presenter cursor": "Follow presenter cursor",
     "Session link": "Session link",
@@ -161,8 +160,8 @@
     "Connection": "Connection",
     "Paste a live-script link or ticket": "Paste a live-script link or ticket",
     "Live · read-only": "Live · read-only",
-    "Session ended · read-only": "Session ended · read-only",
-    "Connection lost · read-only": "Connection lost · read-only",
-    "The presenter ended this shared script. You can join another session or make an editable copy.": "The presenter ended this shared script. You can join another session or make an editable copy.",
-    "The connection to this shared script was lost. You can join another session or make an editable copy.": "The connection to this shared script was lost. You can join another session or make an editable copy."
+    "Session ended · editable": "Session ended · editable",
+    "Connection lost · editable": "Connection lost · editable",
+    "The presenter ended this shared script. This tab now belongs to you and is editable.": "The presenter ended this shared script. This tab now belongs to you and is editable.",
+    "The connection to this shared script was lost. This tab now belongs to you and is editable.": "The connection to this shared script was lost. This tab now belongs to you and is editable."
 }

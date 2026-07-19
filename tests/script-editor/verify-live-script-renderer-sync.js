@@ -311,7 +311,7 @@ const run = async function() {
         network.createEndpoint("participant-endpoint")
     );
     const participant = createHarness(participantBridge, monaco);
-    const hostDocument = host.controller.makeEditableCopy("missing") || {
+    const hostDocument = {
         id: "host-tab",
         model: new TestModel("value <- 1\n"),
         kind: "local",
@@ -470,15 +470,15 @@ const run = async function() {
         payload: { chunks: ["print(value)"] }
     }]);
 
-    const copy = participant.controller.makeEditableCopy(participantDocument.id);
-    assert.ok(copy);
-    assert.equal(copy.kind, "local");
-    assert.equal(copy.filePath, "");
-    assert.equal(copy.dirty, true);
-    assert.equal(copy.model.getValue(), participantDocument.model.getValue());
-
     await host.controller.stopHosting(hostDocument.id);
-    await participant.controller.detachParticipant(participantDocument.id);
+    await waitFor(
+        () => participantDocument.kind === "local",
+        "ended participant document should become local"
+    );
+    assert.equal(participantDocument.liveStatus, "ended");
+    assert.equal(participantDocument.filePath, "");
+    assert.equal(participantDocument.dirty, true);
+    assert.equal(participant.editor.readOnly, false);
     process.stdout.write("live-script renderer synchronization: ok\n");
 };
 

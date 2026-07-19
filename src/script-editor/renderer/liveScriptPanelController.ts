@@ -11,7 +11,6 @@ export interface LiveScriptPanelLabels {
     close: string;
     copyLink: string;
     stopSharing: string;
-    makeEditableCopy: string;
     detach: string;
     followInstructorCursor: string;
     sessionLink: string;
@@ -31,7 +30,6 @@ export interface LiveScriptPanelControllerOptions {
     join(value: string): Promise<void>;
     stopSharing(): Promise<void>;
     detach(): Promise<void>;
-    makeEditableCopy(): Promise<void>;
     regenerateShortCode(): Promise<void>;
     followInstructorCursor(follow: boolean): void;
 }
@@ -240,13 +238,6 @@ export const createLiveScriptPanelController = function(
             action(labels.close, false, close),
             action(labels.detach, false, () => {
                 void options.detach().then(close).catch((error) => {
-                    message.textContent = error instanceof Error
-                        ? error.message
-                        : String(error);
-                });
-            }),
-            action(labels.makeEditableCopy, true, () => {
-                void options.makeEditableCopy().then(close).catch((error) => {
                     message.textContent = error instanceof Error
                         ? error.message
                         : String(error);

@@ -62,7 +62,6 @@ export interface LiveScriptRendererController {
     shutdown(
         reason?: "stopped" | "expired" | "instructor-closed"
     ): Promise<void>;
-    makeEditableCopy(documentId: string): ScriptDocument | null;
     getHostedSessionId(documentId: string): string;
     getHostedState(documentId: string): LiveScriptHostState | null;
     getParticipantSessionId(documentId: string): string;
@@ -98,6 +97,27 @@ export const createLiveScriptRendererController = function(
         }
 
         instructorDecorationsBySession.delete(sessionId);
+    };
+
+    const transferParticipantDocument = function(
+        sessionId: string,
+        document: ScriptDocument,
+        status: "ended" | "failed"
+    ): void {
+        clearInstructorDecorations(sessionId);
+        participantByDocument.delete(document.id);
+        participantBySession.delete(sessionId);
+        pendingParticipantStates.delete(sessionId);
+        followedParticipantSessions.delete(sessionId);
+
+        document.kind = "local";
+        document.liveStatus = status;
+        document.filePath = "";
+        document.dirty = true;
+
+        if (options.getEditor()?.getModel() === document.model) {
+            options.getEditor()?.updateOptions({ readOnly: false });
+        }
     };
 
     const showInstructorCursor = function(
@@ -213,7 +233,11 @@ export const createLiveScriptRendererController = function(
                 document.liveStatus = state.status;
 
                 if (state.status === "ended" || state.status === "failed") {
-                    clearInstructorDecorations(sessionId);
+                    transferParticipantDocument(
+                        sessionId,
+                        document,
+                        state.status
+                    );
                 }
 
                 options.refreshTabs();
@@ -412,25 +436,6 @@ export const createLiveScriptRendererController = function(
         await sessions.closeParticipant(sessionId);
     };
 
-    const makeEditableCopy = function(documentId: string): ScriptDocument | null {
-        const sessionId = participantByDocument.get(documentId);
-        const document = sessionId
-            ? participantBySession.get(sessionId)
-            : null;
-
-        if (!document) {
-            return null;
-        }
-
-        return options.createTab({
-            kind: "local",
-            filePath: "",
-            content: document.model.getValue(),
-            dirty: true,
-            activate: true
-        });
-    };
-
     const shutdown = async function(
         reason: "stopped" | "expired" | "instructor-closed" = "instructor-closed"
     ): Promise<void> {
@@ -451,7 +456,6 @@ export const createLiveScriptRendererController = function(
         stopHosting,
         detachParticipant,
         shutdown,
-        makeEditableCopy,
         getHostedSessionId: function(documentId) {
             return hostedByDocument.get(documentId)?.sessionId || "";
         },
