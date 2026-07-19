@@ -72,6 +72,9 @@ import {
     createBrowserLiveScriptTransport
 } from "/browser-esm/src/shell-web/browserLiveScriptTransport.js";
 import {
+    showBrowserScriptSavePrompt
+} from "/browser-esm/src/shell-web/browserScriptSavePrompt.js";
+import {
     readLiveScriptJoinTextFromUrl
 } from "/browser-esm/src/script-editor/collaboration/liveScriptTicket.js";
 import {
@@ -1868,7 +1871,26 @@ const browserScriptChannels = function () {
                 };
             },
             saveFile: saveBrowserScriptFile,
-            openFile: chooseBrowserScriptFile
+            openFile: chooseBrowserScriptFile,
+            async confirmSave(filePath) {
+                const fileName = readScriptBaseName(filePath || "Untitled.R");
+                const action = await showBrowserScriptSavePrompt({
+                    title: translateCompositionText(
+                        "Save changes?",
+                        "Save changes?"
+                    ),
+                    message: translateCompositionTemplate(
+                        "Save changes to {fileName} before closing the Script editor?",
+                        "Save changes to {fileName} before closing the Script editor?",
+                        { fileName }
+                    ),
+                    save: translateCompositionText("Save", "Save"),
+                    dontSave: translateCompositionText("Don't Save", "Don't Save"),
+                    cancel: translateCompositionText("Cancel", "Cancel")
+                });
+
+                return { action };
+            }
         });
     }
 

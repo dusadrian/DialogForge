@@ -86,6 +86,7 @@
         "src/shell-web/browserScriptFileAdapter.ts",
         "src/shell-web/browserStorageAdapter.ts",
         "src/script-editor/files/scriptPath.ts",
+        "src/shell-web/browserScriptSavePrompt.ts",
         "src/shell-web/browserSurfaceGeometry.ts",
         "src/shell-web/browserWorkbenchLayout.ts",
         "src/shell-web/browserZoomAdapter.ts",

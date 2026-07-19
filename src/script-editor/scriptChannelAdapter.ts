@@ -9,7 +9,6 @@ import {
     runScriptCodeBatch
 } from "./run/scriptCodeBatch";
 import {
-    createScriptEditorConfirmSaveResult,
     createUnsupportedScriptDirectoryResult,
     type ScriptDirectoryResult
 } from "./files/scriptDirectoryResult";
@@ -22,6 +21,7 @@ export interface ScriptChannelAdapterBindings {
     getDocument(): ScriptEditorDocumentState;
     saveFile(input: unknown, saveAs: boolean): Promise<unknown>;
     openFile(): Promise<unknown>;
+    confirmSave(filePath: string): Promise<{ action: string }>;
 }
 
 export interface ScriptChannelAdapter {
@@ -32,7 +32,7 @@ export interface ScriptChannelAdapter {
     openFile(): Promise<unknown>;
     openFilePath(): null;
     listDirectory(): ScriptDirectoryResult;
-    confirmSave(): { action: string };
+    confirmSave(input?: unknown): Promise<{ action: string }>;
 }
 
 const readInput = function(value: unknown): Record<string, unknown> {
@@ -82,8 +82,10 @@ export const createScriptChannelAdapter = function(
             return createUnsupportedScriptDirectoryResult();
         },
 
-        confirmSave() {
-            return createScriptEditorConfirmSaveResult("save");
+        confirmSave(value) {
+            const input = readInput(value);
+
+            return bindings.confirmSave(String(input.filePath || ""));
         }
     };
 };

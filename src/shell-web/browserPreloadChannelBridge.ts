@@ -65,7 +65,7 @@ interface BrowserPreloadScriptChannels {
     openFile(): Promise<unknown>;
     openFilePath(): unknown;
     listDirectory(): unknown;
-    confirmSave(): unknown;
+    confirmSave(input: Record<string, unknown>): unknown;
 }
 
 
@@ -269,7 +269,7 @@ export const createBrowserPreloadChannelBridge = function(
                 return options.scriptChannels().listDirectory();
             }
             if (channel === scriptEditorIpcChannels.confirmSave) {
-                return options.scriptChannels().confirmSave();
+                return options.scriptChannels().confirmSave(input);
             }
             if (channel === liveScriptIpcChannels.capability) {
                 return options.liveScriptChannels().capability();
