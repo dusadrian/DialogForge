@@ -370,7 +370,7 @@ const main = async function() {
     });
 
     try {
-        await waitForServer(`http://127.0.0.1:${port}/api/composition`, server, 30000);
+        await waitForServer(`http://127.0.0.1:${port}/`, server, 30000);
         await verifyRenderedHelp(options, product, port);
     }
     catch (error) {

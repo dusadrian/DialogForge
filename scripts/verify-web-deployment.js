@@ -9,9 +9,12 @@ const baseUrl = String(process.argv[2] || process.env.DIALOGFORGE_WEB_URL || "ht
 const runBrowserCheck = process.argv.includes("--browser");
 
 const requiredEndpoints = [
+    "/",
     "/start?k=EN-DS-26-0001",
     "/api/composition",
     "/api/product.css",
+    "/vendor/dialogforge-iroh/0.1.0/index.mjs",
+    "/vendor/dialogforge-iroh/0.1.0/dialogforge_iroh_bg.wasm",
     "/vendor/preact/preact.module.js",
     "/vendor/preact/hooks.module.js",
     "/webr/webr.js",
@@ -80,6 +83,38 @@ const assertIsolationHeaders = function(result) {
 };
 
 
+const assertContentType = function(result, expected) {
+    const contentType = String(result.headers["content-type"] || "")
+        .toLowerCase();
+
+    if (!contentType.startsWith(expected)) {
+        throw new Error(
+            `${result.pathname} returned content-type ${contentType || "<missing>"}; `
+            + `expected ${expected}`
+        );
+    }
+};
+
+
+const verifyWebAssetContract = function(result) {
+    if (result.pathname === "/") {
+        assertContentType(result, "text/html");
+
+        if (result.body.toString("utf8").trim() === "Not found") {
+            throw new Error("/ returned the fallback Not found response");
+        }
+    }
+
+    if (result.pathname.endsWith("/index.mjs")) {
+        assertContentType(result, "text/javascript");
+    }
+
+    if (result.pathname.endsWith(".wasm")) {
+        assertContentType(result, "application/wasm");
+    }
+};
+
+
 const verifyComposition = function(result) {
     const composition = JSON.parse(result.body.toString("utf8"));
 
@@ -127,6 +162,7 @@ const main = async function() {
 
         assertOkEndpoint(result);
         assertIsolationHeaders(result);
+        verifyWebAssetContract(result);
 
         if (endpoint === "/api/composition") {
             verifyComposition(result);
