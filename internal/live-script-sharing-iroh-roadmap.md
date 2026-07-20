@@ -1229,11 +1229,22 @@ Done:
   8.66 s p95, and 8.83 s maximum, again with one snapshot per participant and
   no errors. Browser presenter heap use was 35.1 MB at 30 participants and
   50.4 MB at 50 participants.
+- Added a self-contained geographic diagnostic that extracts the accepted
+  Linux x64 AppImage into a validated temporary directory on Hetzner, runs its
+  packaged Electron 22 / N-API 8 participant, and removes only that extraction
+  afterward. A Bucharest native presenter synchronized the 256-byte initial
+  fixture to Hetzner in 1.25 s, delivered an edit in 37.76 ms, forced a real
+  reconnect in 118.80 ms with exactly one new snapshot, delivered the recovery
+  edit in 36.82 ms, and ended cleanly. The ticket advertised iroh's
+  `euw1-1` relay plus direct addresses; the selected path and byte split are
+  not exposed by the current N-API transport.
 
 Still open:
 
-- Geographically distributed installed/browser measurements and explicit relay
-  traffic accounting. The controlled local mixed matrix is complete.
+- A geographically distributed browser-participant measurement and explicit
+  relay/direct byte accounting. Geographic installed-participant recovery and
+  the controlled local mixed matrices are complete; the current N-API binding
+  does not expose selected-path byte counters.
 - An actual operating-system sleep/wake exercise and geographically
   distributed recovery. Controlled reconnect storms, slow-participant
   backpressure, rapid maximum-size edits, large paste, undo/redo, full resync,
@@ -1319,10 +1330,11 @@ Done:
 
 Still open before describing a release as classroom-ready:
 
-- The Phase 8 geographic recovery/relay-accounting exercise, a real operating-
-  system sleep/wake exercise, and approved-language human read-aloud checks.
-  These require external environments or people and are not represented as
-  automated passes.
+- A geographically distributed browser-participant/relay-accounting exercise,
+  a real operating-system sleep/wake exercise, and approved-language human
+  read-aloud checks. The installed Hetzner recovery path is complete; the
+  remaining items require an external browser environment, operating-system
+  action, or people and are not represented as automated passes.
 
 Deferred:
 
@@ -1332,8 +1344,8 @@ Deferred:
 
 Next:
 
-- Run the three explicit manual acceptance items, record their evidence, and
-  only then apply the classroom-ready release description.
+- Run the remaining explicit manual acceptance items, record their evidence,
+  and only then apply the classroom-ready release description.
 
 ## Deferred Features
 
