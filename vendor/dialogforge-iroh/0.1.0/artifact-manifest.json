@@ -12,43 +12,43 @@
     "wasmBindgen": "0.2.100",
     "nativeDialogForgeBinding": "@number0/iroh@0.35.0"
   },
-  "sourceRevision": "87e901bdc546a4dc880daaff72258ef6d6f3da53",
+  "sourceRevision": "b57010c41d5d5e624b7d3b2e7d88b8c1aaeb8c85",
   "artifacts": {
     "dialogforge_iroh.d.ts": {
-      "bytes": 5845,
-      "sha256": "4d127f5576f6d73341d3d3b7502464ba8fc1838f17e6c879f8a882495b6e19a4"
+      "bytes": 6758,
+      "sha256": "aa23eed33062b241820b5d788dca8644e206a62b268382062f39e090d9064dc0"
     },
     "dialogforge_iroh.js": {
-      "bytes": 41470,
-      "sha256": "eab7dd9aa8781451da2ea8d8f8cc6e902b0ad481731f226131f66c13e4b7ff1c"
+      "bytes": 43863,
+      "sha256": "627fbbca525fcdb2fb639dfab0270705f7db310e0b1c5c5e58b58dd2736f02bb"
     },
     "dialogforge_iroh_bg.wasm": {
-      "bytes": 4683143,
-      "sha256": "4faf2a32b8b92f5eda78a40f45df3f7d7d81f5fedd1cb6ddacd720e21c31aec7"
+      "bytes": 4729851,
+      "sha256": "c0dad3d560d59e2bfe43b5bead6563e8d3e9d2b4f96809fc9f6a7762275c7a6f"
     },
     "dialogforge_iroh_bg.wasm.d.ts": {
-      "bytes": 3417,
-      "sha256": "cf09533d88da9545265df8ef0603644f6f391787d5744bbc9e842666ecbac381"
+      "bytes": 3808,
+      "sha256": "b28da3a8933d66f9ce0b37c51b2a66334eccdf4583aff4a1222450bec4f965f6"
     },
     "index.d.ts": {
       "bytes": 461,
       "sha256": "4ec8b310274f0ca8a3df7366f8506747abf16efdea6dee234e806c55862cc694"
     },
     "index.mjs": {
-      "bytes": 656,
-      "sha256": "ad6288fc1f91397eb645359cefb3abdc746d519d6c4524b8d89817cfd9682b88"
+      "bytes": 696,
+      "sha256": "a0570cfccb1068920e0690e01dec4611272e5e640d52a632a08a92259cddf7a1"
     },
     "licenses.json": {
       "bytes": 79113,
       "sha256": "3e39c3774cbc58a8b2f3786ce24dc1e168ed489b8b9fd5aef2de10b7bf8580eb"
     },
     "liveScriptTransport.d.ts": {
-      "bytes": 2115,
-      "sha256": "499db1c9774f18fa0c12eebe89c06d967cc0f40e53445d9c553611324b646db7"
+      "bytes": 2401,
+      "sha256": "924a472049ed3960443e16a3573788f2fdc4377dec98025e79397f46f27c82c5"
     },
     "liveScriptTransport.mjs": {
-      "bytes": 4900,
-      "sha256": "6b48749a193ce93f78207d97bcbd91ed2cc30c7b8e4912cbe94c28c558ce4c4e"
+      "bytes": 8898,
+      "sha256": "4546c089662342bb8a4eed4b17d87350a7d478151e15aefb7ece83688413abee"
     },
     "package.json": {
       "bytes": 358,

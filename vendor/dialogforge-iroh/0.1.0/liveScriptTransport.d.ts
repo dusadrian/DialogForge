@@ -55,8 +55,17 @@ export interface DialogForgeWasmClient {
     free?(): void;
 }
 
+export interface DialogForgeWasmHost {
+    readonly endpointId: string;
+    transportAddress(): Promise<string>;
+    acceptClient(): Promise<DialogForgeWasmClient>;
+    shutdown(): Promise<void>;
+    free?(): void;
+}
+
 export interface DialogForgeWasmModule {
     connectLiveScript(ticketJson: string): Promise<DialogForgeWasmClient>;
+    hostLiveScript(sessionId: string): Promise<DialogForgeWasmHost>;
 }
 
 export interface LiveScriptTransport {
@@ -77,4 +86,3 @@ export interface LiveScriptTransport {
 export function createLiveScriptTransport(
     wasm: DialogForgeWasmModule
 ): LiveScriptTransport;
-

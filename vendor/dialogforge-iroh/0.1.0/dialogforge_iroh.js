@@ -224,17 +224,6 @@ function debugString(val) {
     // TODO we could test for more things here, like `Set`s and `Map`s.
     return className;
 }
-/**
- * Imports a DialogForge ticket and connects to its authenticated presenter.
- * @param {string} ticket_json
- * @returns {Promise<LiveScriptClient>}
- */
-export function connectLiveScript(ticket_json) {
-    const ptr0 = passStringToWasm0(ticket_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    const len0 = WASM_VECTOR_LEN;
-    const ret = wasm.connectLiveScript(ptr0, len0);
-    return ret;
-}
 
 function takeFromExternrefTable0(idx) {
     const value = wasm.__wbindgen_export_2.get(idx);
@@ -267,8 +256,32 @@ export function normalizeLiveScriptTicket(ticket_json) {
     }
 }
 
+/**
+ * Imports a DialogForge ticket and connects to its authenticated presenter.
+ * @param {string} ticket_json
+ * @returns {Promise<LiveScriptClient>}
+ */
+export function connectLiveScript(ticket_json) {
+    const ptr0 = passStringToWasm0(ticket_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.connectLiveScript(ptr0, len0);
+    return ret;
+}
+
+/**
+ * Starts an iroh listener for a browser-presented DialogForge session.
+ * @param {string} session_id
+ * @returns {Promise<LiveScriptHost>}
+ */
+export function hostLiveScript(session_id) {
+    const ptr0 = passStringToWasm0(session_id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.hostLiveScript(ptr0, len0);
+    return ret;
+}
+
 function __wbg_adapter_30(arg0, arg1, arg2) {
-    wasm.closure1179_externref_shim(arg0, arg1, arg2);
+    wasm.closure1193_externref_shim(arg0, arg1, arg2);
 }
 
 function __wbg_adapter_33(arg0, arg1) {
@@ -284,7 +297,7 @@ function __wbg_adapter_39(arg0, arg1) {
 }
 
 function __wbg_adapter_42(arg0, arg1, arg2) {
-    wasm.closure2830_externref_shim(arg0, arg1, arg2);
+    wasm.closure2844_externref_shim(arg0, arg1, arg2);
 }
 
 function __wbg_adapter_45(arg0, arg1) {
@@ -292,11 +305,11 @@ function __wbg_adapter_45(arg0, arg1) {
 }
 
 function __wbg_adapter_48(arg0, arg1, arg2) {
-    wasm.closure2902_externref_shim(arg0, arg1, arg2);
+    wasm.closure2916_externref_shim(arg0, arg1, arg2);
 }
 
-function __wbg_adapter_214(arg0, arg1, arg2, arg3) {
-    wasm.closure3039_externref_shim(arg0, arg1, arg2, arg3);
+function __wbg_adapter_221(arg0, arg1, arg2, arg3) {
+    wasm.closure3053_externref_shim(arg0, arg1, arg2, arg3);
 }
 
 const __wbindgen_enum_BinaryType = ["blob", "arraybuffer"];
@@ -540,6 +553,72 @@ export class LiveScriptClient {
     }
 }
 
+const LiveScriptHostFinalization = (typeof FinalizationRegistry === 'undefined')
+    ? { register: () => {}, unregister: () => {} }
+    : new FinalizationRegistry(ptr => wasm.__wbg_livescripthost_free(ptr >>> 0, 1));
+/**
+ * A browser-side iroh listener. DialogForge remains responsible for session
+ * authorization and document state after each transport peer is accepted.
+ */
+export class LiveScriptHost {
+
+    static __wrap(ptr) {
+        ptr = ptr >>> 0;
+        const obj = Object.create(LiveScriptHost.prototype);
+        obj.__wbg_ptr = ptr;
+        LiveScriptHostFinalization.register(obj, obj.__wbg_ptr, obj);
+        return obj;
+    }
+
+    __destroy_into_raw() {
+        const ptr = this.__wbg_ptr;
+        this.__wbg_ptr = 0;
+        LiveScriptHostFinalization.unregister(this);
+        return ptr;
+    }
+
+    free() {
+        const ptr = this.__destroy_into_raw();
+        wasm.__wbg_livescripthost_free(ptr, 0);
+    }
+    /**
+     * @returns {string}
+     */
+    get endpointId() {
+        let deferred1_0;
+        let deferred1_1;
+        try {
+            const ret = wasm.livescripthost_endpointId(this.__wbg_ptr);
+            deferred1_0 = ret[0];
+            deferred1_1 = ret[1];
+            return getStringFromWasm0(ret[0], ret[1]);
+        } finally {
+            wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
+        }
+    }
+    /**
+     * @returns {Promise<LiveScriptClient>}
+     */
+    acceptClient() {
+        const ret = wasm.livescripthost_acceptClient(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * @returns {Promise<string>}
+     */
+    transportAddress() {
+        const ret = wasm.livescripthost_transportAddress(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * @returns {Promise<void>}
+     */
+    shutdown() {
+        const ret = wasm.livescripthost_shutdown(this.__wbg_ptr);
+        return ret;
+    }
+}
+
 async function __wbg_load(module, imports) {
     if (typeof Response === 'function' && module instanceof Response) {
         if (typeof WebAssembly.instantiateStreaming === 'function') {
@@ -749,6 +828,10 @@ function __wbg_get_imports() {
         const ret = LiveScriptClient.__wrap(arg0);
         return ret;
     };
+    imports.wbg.__wbg_livescripthost_new = function(arg0) {
+        const ret = LiveScriptHost.__wrap(arg0);
+        return ret;
+    };
     imports.wbg.__wbg_message_5c5d919204d42400 = function(arg0, arg1) {
         const ret = arg1.message;
         const ptr1 = passStringToWasm0(ret, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
@@ -775,7 +858,7 @@ function __wbg_get_imports() {
                 const a = state0.a;
                 state0.a = 0;
                 try {
-                    return __wbg_adapter_214(a, state0.b, arg0, arg1);
+                    return __wbg_adapter_221(a, state0.b, arg0, arg1);
                 } finally {
                     state0.a = a;
                 }
@@ -1044,32 +1127,32 @@ function __wbg_get_imports() {
         const ret = false;
         return ret;
     };
-    imports.wbg.__wbindgen_closure_wrapper1953 = function(arg0, arg1, arg2) {
-        const ret = makeMutClosure(arg0, arg1, 1180, __wbg_adapter_30);
+    imports.wbg.__wbindgen_closure_wrapper1997 = function(arg0, arg1, arg2) {
+        const ret = makeMutClosure(arg0, arg1, 1194, __wbg_adapter_30);
         return ret;
     };
-    imports.wbg.__wbindgen_closure_wrapper3000 = function(arg0, arg1, arg2) {
-        const ret = makeMutClosure(arg0, arg1, 1582, __wbg_adapter_33);
+    imports.wbg.__wbindgen_closure_wrapper3044 = function(arg0, arg1, arg2) {
+        const ret = makeMutClosure(arg0, arg1, 1596, __wbg_adapter_33);
         return ret;
     };
-    imports.wbg.__wbindgen_closure_wrapper3025 = function(arg0, arg1, arg2) {
-        const ret = makeClosure(arg0, arg1, 1586, __wbg_adapter_36);
+    imports.wbg.__wbindgen_closure_wrapper3069 = function(arg0, arg1, arg2) {
+        const ret = makeClosure(arg0, arg1, 1600, __wbg_adapter_36);
         return ret;
     };
-    imports.wbg.__wbindgen_closure_wrapper3273 = function(arg0, arg1, arg2) {
-        const ret = makeMutClosure(arg0, arg1, 1730, __wbg_adapter_39);
+    imports.wbg.__wbindgen_closure_wrapper3317 = function(arg0, arg1, arg2) {
+        const ret = makeMutClosure(arg0, arg1, 1744, __wbg_adapter_39);
         return ret;
     };
-    imports.wbg.__wbindgen_closure_wrapper6083 = function(arg0, arg1, arg2) {
-        const ret = makeMutClosure(arg0, arg1, 2831, __wbg_adapter_42);
+    imports.wbg.__wbindgen_closure_wrapper6145 = function(arg0, arg1, arg2) {
+        const ret = makeMutClosure(arg0, arg1, 2845, __wbg_adapter_42);
         return ret;
     };
-    imports.wbg.__wbindgen_closure_wrapper6586 = function(arg0, arg1, arg2) {
-        const ret = makeMutClosure(arg0, arg1, 2893, __wbg_adapter_45);
+    imports.wbg.__wbindgen_closure_wrapper6648 = function(arg0, arg1, arg2) {
+        const ret = makeMutClosure(arg0, arg1, 2907, __wbg_adapter_45);
         return ret;
     };
-    imports.wbg.__wbindgen_closure_wrapper6612 = function(arg0, arg1, arg2) {
-        const ret = makeMutClosure(arg0, arg1, 2903, __wbg_adapter_48);
+    imports.wbg.__wbindgen_closure_wrapper6674 = function(arg0, arg1, arg2) {
+        const ret = makeMutClosure(arg0, arg1, 2917, __wbg_adapter_48);
         return ret;
     };
     imports.wbg.__wbindgen_debug_string = function(arg0, arg1) {

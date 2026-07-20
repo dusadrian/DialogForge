@@ -1,4 +1,4 @@
-import effEnglishWords from "diceware-wordlist-en-eff";
+import effEnglishWords from "./liveScriptShortCodeWords";
 
 
 export const LIVE_SCRIPT_SHORT_CODE_VERSION = 1 as const;

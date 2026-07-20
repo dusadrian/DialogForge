@@ -338,7 +338,7 @@ export const createLiveScriptSessionController = function(
 
         const capability = await options.transport.capability();
 
-        if (!capability.available || !capability.endpointId) {
+        if (!capability.available) {
             throw new Error(capability.message || "Live-script sharing is unavailable.");
         }
 
@@ -359,11 +359,17 @@ export const createLiveScriptSessionController = function(
             throw new Error(operation.message);
         }
 
+        const hostEndpointId = operation.endpointId || capability.endpointId;
+
+        if (!hostEndpointId) {
+            throw new Error("Live-script presenter identity is unavailable.");
+        }
+
         const displayName = sanitizeLiveScriptDisplayName(input.displayName);
         const session = createLiveScriptHostSession({
             sessionId: input.sessionId,
             capability: input.capability,
-            endpointId: capability.endpointId,
+            endpointId: hostEndpointId,
             displayName,
             content: input.content,
             expiresAt
@@ -372,7 +378,7 @@ export const createLiveScriptSessionController = function(
         hosts.set(input.sessionId, session);
         const ticket: LiveScriptSessionTicket = {
             formatVersion: LIVE_SCRIPT_TICKET_FORMAT_VERSION,
-            instructorEndpointId: capability.endpointId,
+            instructorEndpointId: hostEndpointId,
             transportAddress: operation.transportAddress,
             sessionId: input.sessionId,
             capability: input.capability,

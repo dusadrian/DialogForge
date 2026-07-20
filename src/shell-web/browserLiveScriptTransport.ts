@@ -96,7 +96,7 @@ export const createBrowserLiveScriptTransport = function(
 
     const capability = async function(): Promise<LiveScriptCapabilityResult> {
         let available = true;
-        let message = "Browser participants can join live scripts.";
+        let message = "Browser live-script presenting and joining are available.";
 
         if (typeof WebAssembly !== "object" || !globalThis.isSecureContext) {
             available = false;
@@ -105,7 +105,7 @@ export const createBrowserLiveScriptTransport = function(
 
         return {
             available,
-            canHost: false,
+            canHost: available,
             canJoin: available,
             endpointId: "",
             message,
@@ -113,10 +113,26 @@ export const createBrowserLiveScriptTransport = function(
         };
     };
 
-    const host = async function(_sessionId: string): Promise<LiveScriptOperationResult> {
-        return operationFailure(new Error(
-            "Browser live-script presenting is not available yet."
-        ));
+    const host = async function(sessionId: string): Promise<LiveScriptOperationResult> {
+        try {
+            const transport = await loadTransport();
+
+            if (activeSessionId) {
+                await transport.closeSession(activeSessionId);
+            }
+
+            const transportAddress = await transport.host(sessionId);
+            activeSessionId = sessionId;
+            return {
+                ok: true,
+                message: "Browser live-script transport is hosting.",
+                endpointId: transport.endpointId,
+                transportAddress
+            };
+        }
+        catch (error) {
+            return operationFailure(error);
+        }
     };
 
     const join = async function(ticketValue: unknown): Promise<LiveScriptOperationResult> {

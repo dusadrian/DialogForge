@@ -160,7 +160,12 @@ export const createLiveScriptPanelController = function(
     ): Promise<void> {
         const labels = options.getLabels();
         clear("host", `${labels.shareLive}: ${displayName}`);
-        const qrcode = await import("qrcode");
+        const webHosted = location.protocol === "http:"
+            || location.protocol === "https:";
+        const qrcodeModule = webHosted
+            ? "/vendor/qrcode/qrcode.mjs"
+            : "qrcode";
+        const qrcode = await import(qrcodeModule);
         const qrImage = createElement("img", "dm-live-panel__qr");
         qrImage.alt = labels.sessionLink;
         qrImage.src = await qrcode.default.toDataURL(link, {

@@ -315,6 +315,22 @@ const runParticipants = async function() {
     });
 
     process.on("message", (message) => {
+        if (message?.type === "wait-revision") {
+            const expectedRevision = Number(message.revision);
+
+            void waitFor(
+                () => participants.every((entry) => {
+                    return entry.participant.state().revision >= expectedRevision;
+                }),
+                `Native participants did not reach revision ${expectedRevision}.`
+            ).then(() => {
+                report({ type: "revision-complete", revision: expectedRevision });
+            }).catch((error) => {
+                report({ type: "failure", message: error.stack || error.message });
+            });
+            return;
+        }
+
         if (message?.type === "reconnect") {
             void Promise.all(participants.map(async (entry, index) => {
                 const snapshotCount = entry.getSnapshotCount();

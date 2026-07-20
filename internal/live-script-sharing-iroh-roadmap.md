@@ -1198,6 +1198,37 @@ Done:
   results meet their target contracts, so `iroh-gossip` would add complexity
   without solving an observed release-blocking limit. Snapshot and resync
   channels therefore remain on the same direct authenticated connections.
+- Added browser presenter support to the separately owned Rust/WebAssembly
+  transport. The WASM listener accepts multiple authenticated iroh
+  connections, exports the same transport address contract as native hosts,
+  and leaves authorization, revisions, snapshots, resync, and editor behavior
+  in DialogForge. Its generated artifacts are pinned from source commit
+  `b57010c` and include safe asynchronous shutdown without eager WASM wrapper
+  disposal.
+- Enabled the existing browser Script Editor host path without changing its
+  toolbar DOM or styling. A rendered Chromium check clicked `Share live`,
+  observed the existing green hosting state and QR panel, published a real
+  spoken code, copied the full ticket, synchronized an installed N-API
+  participant, propagated `browser_presenter <- 42`, stopped sharing, returned
+  the button to idle, and reported no page errors.
+- Browser QR rendering now uses a web-build ESM bundle of the same `qrcode`
+  package used by Electron. The spoken-code EFF vocabulary is checked in as a
+  generated TypeScript module from the pinned package, so browser publication
+  keeps the same filtering and entropy contract without unresolved bare module
+  imports.
+- The required browser-presenter matrix connected 15 installed and 15 browser
+  participants to a 262,176-byte script. Initial synchronization measured
+  746.09 ms p50, 790.86 ms p95, and 872.99 ms maximum. One hundred editor edits
+  measured 78.80 ms p50, 83.96 ms p95, and 96.44 ms maximum. Reconnect measured
+  1.64 s p50, 8.37 s p95, and 8.45 s maximum, with exactly one snapshot per
+  participant; the recovery edit took 82.66 ms and no errors were reported.
+- The 50-participant browser-presenter stretch matrix connected 25 installed
+  and 25 browser participants. Initial synchronization measured 746.13 ms p50,
+  840.27 ms p95, and 1.71 s maximum; edit propagation measured 82.64 ms p50,
+  112.56 ms p95, and 179.00 ms maximum. Reconnect measured 2.34 s p50,
+  8.66 s p95, and 8.83 s maximum, again with one snapshot per participant and
+  no errors. Browser presenter heap use was 35.1 MB at 30 participants and
+  50.4 MB at 50 participants.
 
 Still open:
 
@@ -1210,7 +1241,6 @@ Still open:
 - The approved-language human spoken-code transcription checks. Automated
   spoken-code, collision, regeneration, expiry, revocation, throttling, and
   indistinguishable-failure checks are complete.
-- Browser presenter implementation and its installed/browser matrices.
 
 Deferred:
 
@@ -1219,9 +1249,9 @@ Deferred:
 
 Next:
 
-- Implement browser presenter hosting through the existing provider-neutral
-  host/session contracts, then run its browser and installed participant
-  matrices.
+- Begin the Phase 9 release/documentation slice while the operating-system
+  sleep/wake, geographically distributed recovery, and human transcription
+  checks remain explicit manual acceptance items.
 
 ### Phase 9: Release, Document, And Enable The Capability
 

@@ -15,6 +15,7 @@ const requiredEndpoints = [
     "/api/product.css",
     "/vendor/dialogforge-iroh/0.1.0/index.mjs",
     "/vendor/dialogforge-iroh/0.1.0/dialogforge_iroh_bg.wasm",
+    "/vendor/qrcode/qrcode.mjs",
     "/vendor/preact/preact.module.js",
     "/vendor/preact/hooks.module.js",
     "/webr/webr.js",

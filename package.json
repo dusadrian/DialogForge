@@ -11,6 +11,7 @@
         "build": "tsc -p tsconfig.json && node scripts/copy-static.js && node scripts/generate-core-sdk.js && node dist/scripts/package-product-if-requested.js",
         "build:web": "node scripts/build-web.js",
         "sdk:core": "node scripts/generate-core-sdk.js",
+        "generate:live-script-words": "node scripts/generate-live-script-short-code-words.js",
         "check:build-ownership": "node scripts/check-build-ownership.js",
         "start": "npm run build && node dist/scripts/start-app.js",
         "dev:watch": "npm run build && node scripts/watch-product.js",
@@ -24,6 +25,7 @@
         "@types/sortablejs": "^1.15.9",
         "electron": "^22.0.0",
         "electron-builder": "26.9.0",
+        "esbuild": "^0.28.1",
         "playwright": "^1.61.1",
         "typescript": "^6.0.3"
     },

@@ -2,7 +2,9 @@
 /* eslint-disable */
 export const memory: WebAssembly.Memory;
 export const __wbg_livescriptclient_free: (a: number, b: number) => void;
+export const __wbg_livescripthost_free: (a: number, b: number) => void;
 export const connectLiveScript: (a: number, b: number) => any;
+export const hostLiveScript: (a: number, b: number) => any;
 export const livescriptclient_endpointId: (a: number) => [number, number];
 export const livescriptclient_receiveFrame: (a: number) => any;
 export const livescriptclient_remoteEndpointId: (a: number) => [number, number];
@@ -10,6 +12,10 @@ export const livescriptclient_sendFrame: (a: number, b: number, c: number) => an
 export const livescriptclient_shutdown: (a: number) => any;
 export const livescriptclient_state: (a: number) => [number, number];
 export const livescriptclient_transportAddress: (a: number) => any;
+export const livescripthost_acceptClient: (a: number) => any;
+export const livescripthost_endpointId: (a: number) => [number, number];
+export const livescripthost_shutdown: (a: number) => any;
+export const livescripthost_transportAddress: (a: number) => any;
 export const normalizeLiveScriptTicket: (a: number, b: number) => [number, number, number, number];
 export const __wbg_intounderlyingsink_free: (a: number, b: number) => void;
 export const intounderlyingsink_abort: (a: number, b: any) => any;
@@ -33,12 +39,12 @@ export const __wbindgen_realloc: (a: number, b: number, c: number, d: number) =>
 export const __wbindgen_export_5: WebAssembly.Table;
 export const __wbindgen_free: (a: number, b: number, c: number) => void;
 export const __externref_table_dealloc: (a: number) => void;
-export const closure1179_externref_shim: (a: number, b: number, c: any) => void;
+export const closure1193_externref_shim: (a: number, b: number, c: any) => void;
 export const _dyn_core__ops__function__FnMut_____Output___R_as_wasm_bindgen__closure__WasmClosure___describe__invoke__hb3a7e7bdf55412ba: (a: number, b: number) => void;
 export const _dyn_core__ops__function__Fn_____Output___R_as_wasm_bindgen__closure__WasmClosure___describe__invoke__hd7c25fa05e490b9a: (a: number, b: number) => void;
 export const _dyn_core__ops__function__FnMut_____Output___R_as_wasm_bindgen__closure__WasmClosure___describe__invoke__ha434db71dabd3b59: (a: number, b: number) => void;
-export const closure2830_externref_shim: (a: number, b: number, c: any) => void;
+export const closure2844_externref_shim: (a: number, b: number, c: any) => void;
 export const _dyn_core__ops__function__FnMut_____Output___R_as_wasm_bindgen__closure__WasmClosure___describe__invoke__hc1daa0bdda595118: (a: number, b: number) => void;
-export const closure2902_externref_shim: (a: number, b: number, c: any) => void;
-export const closure3039_externref_shim: (a: number, b: number, c: any, d: any) => void;
+export const closure2916_externref_shim: (a: number, b: number, c: any) => void;
+export const closure3053_externref_shim: (a: number, b: number, c: any, d: any) => void;
 export const __wbindgen_start: () => void;

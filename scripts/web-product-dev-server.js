@@ -1233,6 +1233,11 @@ const createWebProductDevServer = function(options) {
                 return;
             }
 
+            if (pathname === "/vendor/qrcode/qrcode.mjs") {
+                serveFile(response, path.join(rootDir, "vendor/qrcode/qrcode.mjs"));
+                return;
+            }
+
             if (pathname === "/vendor/preact/preact.module.js") {
                 serveFile(response, path.join(
                     preactRoot,

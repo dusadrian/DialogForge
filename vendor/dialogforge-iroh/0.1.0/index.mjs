@@ -20,6 +20,8 @@ export const createLiveScriptTransport = async function() {
 
 export {
     connectLiveScript,
+    hostLiveScript,
     LiveScriptClient,
+    LiveScriptHost,
     normalizeLiveScriptTicket
 } from "./dialogforge_iroh.js";

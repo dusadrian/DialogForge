@@ -1,13 +1,17 @@
 /* tslint:disable */
 /* eslint-disable */
 /**
+ * Validates a DialogForge ticket and exports its canonical JSON representation.
+ */
+export function normalizeLiveScriptTicket(ticket_json: string): string;
+/**
  * Imports a DialogForge ticket and connects to its authenticated presenter.
  */
 export function connectLiveScript(ticket_json: string): Promise<LiveScriptClient>;
 /**
- * Validates a DialogForge ticket and exports its canonical JSON representation.
+ * Starts an iroh listener for a browser-presented DialogForge session.
  */
-export function normalizeLiveScriptTicket(ticket_json: string): string;
+export function hostLiveScript(session_id: string): Promise<LiveScriptHost>;
 /**
  * The `ReadableStreamType` enum.
  *
@@ -50,13 +54,27 @@ export class LiveScriptClient {
   readonly remoteEndpointId: string;
   readonly state: string;
 }
+/**
+ * A browser-side iroh listener. DialogForge remains responsible for session
+ * authorization and document state after each transport peer is accepted.
+ */
+export class LiveScriptHost {
+  private constructor();
+  free(): void;
+  acceptClient(): Promise<LiveScriptClient>;
+  transportAddress(): Promise<string>;
+  shutdown(): Promise<void>;
+  readonly endpointId: string;
+}
 
 export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
 
 export interface InitOutput {
   readonly memory: WebAssembly.Memory;
   readonly __wbg_livescriptclient_free: (a: number, b: number) => void;
+  readonly __wbg_livescripthost_free: (a: number, b: number) => void;
   readonly connectLiveScript: (a: number, b: number) => any;
+  readonly hostLiveScript: (a: number, b: number) => any;
   readonly livescriptclient_endpointId: (a: number) => [number, number];
   readonly livescriptclient_receiveFrame: (a: number) => any;
   readonly livescriptclient_remoteEndpointId: (a: number) => [number, number];
@@ -64,6 +82,10 @@ export interface InitOutput {
   readonly livescriptclient_shutdown: (a: number) => any;
   readonly livescriptclient_state: (a: number) => [number, number];
   readonly livescriptclient_transportAddress: (a: number) => any;
+  readonly livescripthost_acceptClient: (a: number) => any;
+  readonly livescripthost_endpointId: (a: number) => [number, number];
+  readonly livescripthost_shutdown: (a: number) => any;
+  readonly livescripthost_transportAddress: (a: number) => any;
   readonly normalizeLiveScriptTicket: (a: number, b: number) => [number, number, number, number];
   readonly __wbg_intounderlyingsink_free: (a: number, b: number) => void;
   readonly intounderlyingsink_abort: (a: number, b: any) => any;
@@ -87,14 +109,14 @@ export interface InitOutput {
   readonly __wbindgen_export_5: WebAssembly.Table;
   readonly __wbindgen_free: (a: number, b: number, c: number) => void;
   readonly __externref_table_dealloc: (a: number) => void;
-  readonly closure1179_externref_shim: (a: number, b: number, c: any) => void;
+  readonly closure1193_externref_shim: (a: number, b: number, c: any) => void;
   readonly _dyn_core__ops__function__FnMut_____Output___R_as_wasm_bindgen__closure__WasmClosure___describe__invoke__hb3a7e7bdf55412ba: (a: number, b: number) => void;
   readonly _dyn_core__ops__function__Fn_____Output___R_as_wasm_bindgen__closure__WasmClosure___describe__invoke__hd7c25fa05e490b9a: (a: number, b: number) => void;
   readonly _dyn_core__ops__function__FnMut_____Output___R_as_wasm_bindgen__closure__WasmClosure___describe__invoke__ha434db71dabd3b59: (a: number, b: number) => void;
-  readonly closure2830_externref_shim: (a: number, b: number, c: any) => void;
+  readonly closure2844_externref_shim: (a: number, b: number, c: any) => void;
   readonly _dyn_core__ops__function__FnMut_____Output___R_as_wasm_bindgen__closure__WasmClosure___describe__invoke__hc1daa0bdda595118: (a: number, b: number) => void;
-  readonly closure2902_externref_shim: (a: number, b: number, c: any) => void;
-  readonly closure3039_externref_shim: (a: number, b: number, c: any, d: any) => void;
+  readonly closure2916_externref_shim: (a: number, b: number, c: any) => void;
+  readonly closure3053_externref_shim: (a: number, b: number, c: any, d: any) => void;
   readonly __wbindgen_start: () => void;
 }
 
