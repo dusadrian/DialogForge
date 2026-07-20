@@ -148,6 +148,9 @@ The 50-participant runs are recorded stretch evidence, not a release guarantee.
 Geographic Bucharest-to-Hetzner recovery has also passed for both an installed
 participant and a Chromium Rust/WebAssembly participant, including exactly one
 authoritative reconnect snapshot and a subsequent recovery edit.
+The real operating-system recovery check also passed: a macOS presenter slept
+and woke while the Hetzner browser participant remained open, after which the
+existing live session resumed and delivered a new presenter edit.
 Direct presenter fan-out remains selected because synchronization, edit
 latency, memory, reconnect storms, and slow-participant isolation met the
 target. The pinned DialogForgeIroh 0.1.0 Rust/WebAssembly artifact owns browser

@@ -1246,6 +1246,11 @@ Done:
   run synchronized in 988.80 ms, delivered its first edit in 2.55 ms,
   reconnected in 633.71 ms with exactly one authoritative snapshot, delivered
   the recovery edit in 1.92 ms, and ended cleanly.
+- Completed the real operating-system suspension check with a macOS presenter
+  and the Hetzner browser participant kept alive in its NoMachine session. The
+  presenter Mac slept and woke without quitting the application; the live
+  session recovered and a post-wake presenter edit reached the existing
+  participant tab. The user confirmed the rendered workflow behaved correctly.
 
 Still open:
 
@@ -1253,10 +1258,6 @@ Still open:
   and browser participants, including reconnect and recovery, are complete;
   the current N-API and WebAssembly bindings do not expose selected-path byte
   counters.
-- An actual operating-system sleep/wake exercise. Controlled reconnect storms,
-  geographically distributed recovery, slow-participant
-  backpressure, rapid maximum-size edits, large paste, undo/redo, full resync,
-  expiry, revocation, and version mismatch are complete.
 - The approved-language human spoken-code transcription checks. Automated
   spoken-code, collision, regeneration, expiry, revocation, throttling, and
   indistinguishable-failure checks are complete.
@@ -1268,9 +1269,8 @@ Deferred:
 
 Next:
 
-- Complete the operating-system sleep/wake and human transcription checks,
-  and either expose selected-path byte counters or explicitly accept that
-  transport-observability limitation.
+- Complete the human transcription checks, and either expose selected-path byte
+  counters or explicitly accept that transport-observability limitation.
 
 ### Phase 9: Release, Document, And Enable The Capability
 
@@ -1338,11 +1338,11 @@ Done:
 
 Still open before describing a release as classroom-ready:
 
-- A real operating-system sleep/wake exercise and approved-language human
-  read-aloud checks. Geographic installed and browser recovery paths are now
-  complete. Explicit selected-path relay/direct byte counters remain absent
-  from the current bindings and must either be exposed or accepted as a
-  documented transport-observability limitation.
+- Approved-language human read-aloud checks. Geographic installed and browser
+  recovery paths and the real macOS presenter sleep/wake path are complete.
+  Explicit selected-path relay/direct byte counters remain absent from the
+  current bindings and must either be exposed or accepted as a documented
+  transport-observability limitation.
 
 Deferred:
 
@@ -1352,7 +1352,7 @@ Deferred:
 
 Next:
 
-- Run the two remaining manual acceptance items, decide the path-accounting
+- Run the remaining human acceptance item, decide the path-accounting
   limitation, record that evidence, and only then apply the classroom-ready
   release description.
 
