@@ -1282,6 +1282,59 @@ Acceptance gate:
   classroom-ready must include a working short-code path for participants who
   have only a computer and no delivered link.
 
+#### Phase 9 Evidence (2026-07-20)
+
+Done:
+
+- Kept the shared capability negotiation as the release gate and made its
+  policy explicit. Live Script Sharing is enabled by default on a host only
+  when its native or secure WebAssembly transport is available. Electron and
+  web deployments can disable hosting and joining with
+  `DIALOGFORGE_LIVE_SCRIPT_ENABLED=false`; the disabled path does not load the
+  transport and has direct controller coverage.
+- Both hosts use the production invite-code service by default and accept
+  `DIALOGFORGE_LIVE_SCRIPT_RENDEZVOUS_URL` as a deployment override. Browser
+  composition publishes this policy to the shared Script Editor. Browser
+  presenters now place their actual HTTPS origin in copied links and QR images;
+  Electron deployments may supply `DIALOGFORGE_LIVE_SCRIPT_BROWSER_URL`.
+- Added an end-user guide for presenting, three-word, delivered-link, pasted-
+  ticket, and QR joining, presenter-cursor following, local-only execution,
+  reconnect, stop, and participant ownership after termination. It explains
+  why the complete invitation remains as a fallback while the spoken code is
+  the projector-friendly path.
+- Added deployment guidance for capability policy, Cloudflare or compatible
+  self-hosted rendezvous, privacy, expiry, browser link configuration, current
+  relay support boundaries, and release checks. The invite-code service README
+  now records both desktop and web overrides and the deployment disable flag.
+- Updated the migration status with shared ownership, the verified installed
+  and browser host matrix, the required 30-participant target, the measured
+  50-participant stretch case, the direct fan-out decision, and the separately
+  versioned WASM transport boundary. No product-specific parity divergence was
+  introduced, so the DialogR and DialogQCA parity ledgers do not change.
+- `npm run build` and `npm run build:web` succeed with the pinned WASM artifact
+  and browser QR module. The deployment probe returns the shell, composition,
+  QR module, WASM module and binary, WebR, Monaco, and product library. The
+  rendered browser-presenter to installed-participant workflow passes with a
+  real short code and no page errors.
+
+Still open before describing a release as classroom-ready:
+
+- The Phase 8 geographic recovery/relay-accounting exercise, a real operating-
+  system sleep/wake exercise, and approved-language human read-aloud checks.
+  These require external environments or people and are not represented as
+  automated passes.
+
+Deferred:
+
+- Private-relay application configuration. Self-hosted iroh 0.35 relay
+  interoperability is proven in DialogForgeIroh, but DialogForge does not yet
+  expose a supported policy input that forces application clients to it.
+
+Next:
+
+- Run the three explicit manual acceptance items, record their evidence, and
+  only then apply the classroom-ready release description.
+
 ## Deferred Features
 
 Do not pull these into version 1 without explicit approval:

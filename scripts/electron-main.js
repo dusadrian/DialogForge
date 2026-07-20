@@ -687,6 +687,9 @@ scriptEditorComposition = scriptEditorCompositionModule.createScriptEditorCompos
     productId: product,
     settingsPath: location.settingsPath,
     userDataPath: electron.app.getPath("userData"),
+    liveScriptEnabled: !/^(?:0|false|off)$/i.test(String(
+        process.env.DIALOGFORGE_LIVE_SCRIPT_ENABLED || "true"
+    ).trim()),
     liveScriptRendezvousUrl: String(
         process.env.DIALOGFORGE_LIVE_SCRIPT_RENDEZVOUS_URL
             || liveScriptRendezvousModule.defaultLiveScriptRendezvousUrl

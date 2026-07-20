@@ -20,6 +20,7 @@ import type {
 
 
 export interface LiveScriptIpcControllerOptions {
+    enabled?: boolean;
     ipcMain: IpcMain;
     transport: NativeIrohLiveScriptTransport;
     rendezvousUrl?: string;
@@ -49,6 +50,16 @@ export const createLiveScriptIpcController = function(
     });
 
     options.ipcMain.handle(liveScriptIpcChannels.capability, async () => {
+        if (options.enabled === false) {
+            return {
+                available: false,
+                canHost: false,
+                canJoin: false,
+                endpointId: "",
+                message: "Live-script sharing is disabled by deployment policy."
+            };
+        }
+
         const capability = await options.transport.capability();
         return {
             ...capability,
@@ -61,6 +72,12 @@ export const createLiveScriptIpcController = function(
         _event: IpcMainInvokeEvent,
         input: { sessionId?: string }
     ) => {
+        if (options.enabled === false) {
+            return operationFailure(new Error(
+                "Live-script sharing is disabled by deployment policy."
+            ));
+        }
+
         const sessionId = String(input?.sessionId || "").trim();
 
         if (sessionId.length < 16 || sessionId.length > 256) {
@@ -86,6 +103,12 @@ export const createLiveScriptIpcController = function(
         _event: IpcMainInvokeEvent,
         input: { ticket?: unknown }
     ) => {
+        if (options.enabled === false) {
+            return operationFailure(new Error(
+                "Live-script sharing is disabled by deployment policy."
+            ));
+        }
+
         const parsed = parseLiveScriptSessionTicket(input?.ticket);
 
         if (!parsed.ok) {

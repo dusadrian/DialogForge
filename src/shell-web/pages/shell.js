@@ -1899,7 +1899,11 @@ const browserScriptChannels = function () {
 
 const browserLiveScriptChannels = function () {
     if (!state.browserLiveScriptTransport) {
+        const liveScriptPolicy = state.composition?.liveScript || {};
         state.browserLiveScriptTransport = createBrowserLiveScriptTransport({
+            enabled: liveScriptPolicy.enabled !== false,
+            rendezvousUrl: String(liveScriptPolicy.rendezvousUrl || ""),
+            browserJoinUrl: `${window.location.origin}${window.location.pathname}`,
             publish(channel, event) {
                 postBrowserPreloadEvent(
                     state.scriptEditor.frame?.contentWindow,

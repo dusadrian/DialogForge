@@ -737,6 +737,17 @@ const serializeComposition = function(rootDir, productPath, options = {}) {
         storageAdapter: inertStorageAdapter
     });
     const composition = result.composition;
+    const liveScriptInfrastructure = require(path.join(
+        rootDir,
+        "src/script-editor/collaboration/liveScriptInfrastructure"
+    ));
+    const liveScriptEnabled = !/^(?:0|false|off)$/i.test(String(
+        process.env.DIALOGFORGE_LIVE_SCRIPT_ENABLED || "true"
+    ).trim());
+    const liveScriptRendezvousUrl = String(
+        process.env.DIALOGFORGE_LIVE_SCRIPT_RENDEZVOUS_URL
+            || liveScriptInfrastructure.defaultLiveScriptRendezvousUrl
+    ).trim();
 
     return {
         host: result.host,
@@ -752,6 +763,10 @@ const serializeComposition = function(rootDir, productPath, options = {}) {
         sharedDialogs: composition.sharedDialogs,
         productDialogs: composition.productDialogs,
         menu: composition.menu,
+        liveScript: {
+            enabled: liveScriptEnabled,
+            rendezvousUrl: liveScriptRendezvousUrl
+        },
         windowTitle: composition.windowTitle
     };
 };
@@ -798,6 +813,7 @@ const createBuildManifest = function(rootDir, productPath) {
             sharedDialogs: composition.sharedDialogs,
             productDialogs: composition.productDialogs,
             menu: composition.menu,
+            liveScript: composition.liveScript,
             windowTitle: composition.windowTitle,
             dialogs: composition.productDialogs.map((dialog) => {
                 return {

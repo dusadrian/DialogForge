@@ -29,8 +29,10 @@ interface DialogForgeIrohBrowserModule {
 
 
 export interface BrowserLiveScriptTransportOptions {
+    enabled?: boolean;
     moduleUrl?: string;
     rendezvousUrl?: string;
+    browserJoinUrl?: string;
     publish(channel: string, event: unknown): void;
 }
 
@@ -95,10 +97,13 @@ export const createBrowserLiveScriptTransport = function(
     };
 
     const capability = async function(): Promise<LiveScriptCapabilityResult> {
-        let available = true;
+        let available = options.enabled !== false;
         let message = "Browser live-script presenting and joining are available.";
 
-        if (typeof WebAssembly !== "object" || !globalThis.isSecureContext) {
+        if (!available) {
+            message = "Live-script sharing is disabled by deployment policy.";
+        }
+        else if (typeof WebAssembly !== "object" || !globalThis.isSecureContext) {
             available = false;
             message = "Browser live scripts require WebAssembly and a secure context.";
         }
@@ -109,11 +114,20 @@ export const createBrowserLiveScriptTransport = function(
             canJoin: available,
             endpointId: "",
             message,
-            rendezvousUrl: options.rendezvousUrl || defaultLiveScriptRendezvousUrl
+            rendezvousUrl: options.rendezvousUrl || defaultLiveScriptRendezvousUrl,
+            ...(options.browserJoinUrl
+                ? { browserJoinUrl: options.browserJoinUrl }
+                : {})
         };
     };
 
     const host = async function(sessionId: string): Promise<LiveScriptOperationResult> {
+        if (options.enabled === false) {
+            return operationFailure(new Error(
+                "Live-script sharing is disabled by deployment policy."
+            ));
+        }
+
         try {
             const transport = await loadTransport();
 
@@ -136,6 +150,12 @@ export const createBrowserLiveScriptTransport = function(
     };
 
     const join = async function(ticketValue: unknown): Promise<LiveScriptOperationResult> {
+        if (options.enabled === false) {
+            return operationFailure(new Error(
+                "Live-script sharing is disabled by deployment policy."
+            ));
+        }
+
         const parsed = parseLiveScriptSessionTicket(ticketValue);
 
         if (!parsed.ok) {

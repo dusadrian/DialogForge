@@ -57,6 +57,7 @@ export interface ScriptEditorCompositionOptions {
     userDataPath: string;
     liveScriptRendezvousUrl?: string;
     liveScriptBrowserJoinUrl?: string;
+    liveScriptEnabled?: boolean;
     title: string;
     nativeWindowIconPath?: string;
     pagePath: string;
@@ -346,6 +347,7 @@ export const createScriptEditorComposition = function(
     const collaborationTransport = createNativeIrohLiveScriptTransport({});
     createLiveScriptIpcController({
         ipcMain: options.ipcMain,
+        enabled: options.liveScriptEnabled,
         transport: collaborationTransport,
         rendezvousUrl: options.liveScriptRendezvousUrl,
         browserJoinUrl: options.liveScriptBrowserJoinUrl,

@@ -180,6 +180,7 @@ const run = async function() {
         const link = await editorFrame.locator("body").evaluate(() => {
             return navigator.clipboard.readText();
         });
+        assert.equal(new URL(link).origin, new URL(webUrl).origin);
         const parsed = parseLiveScriptJoinText(link);
         assert.equal(parsed.ok, true, parsed.message);
 

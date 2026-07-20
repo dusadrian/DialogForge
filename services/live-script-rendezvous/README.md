@@ -50,8 +50,12 @@ https://dialogforge-live-script-rendezvous.dusa-adrian.workers.dev
 
 Desktop builds use this origin by default. Set
 `DIALOGFORGE_LIVE_SCRIPT_RENDEZVOUS_URL` only to test another compatible
-deployment; the application receives the public origin, never the encryption
-secret.
+deployment. The DialogForge web server accepts the same environment override.
+The application receives the public origin, never the encryption secret.
+
+Live Script Sharing is enabled by default when the selected host transport is
+available. Set `DIALOGFORGE_LIVE_SCRIPT_ENABLED=false` to disable both hosting
+and joining for a deployment without changing product behavior.
 
 `openapi.yaml` is also the self-hosted contract. A replacement service
 must preserve atomic collision responses, identical missing/expired/revoked/
