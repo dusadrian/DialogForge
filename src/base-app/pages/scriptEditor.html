@@ -89,6 +89,20 @@
       background: #d6d6d6;
     }
 
+    .dm-script-toolbar .dm-script-btn-share-live[data-state="hosting"] {
+      background: #d9f2df;
+      color: #1f6f3d;
+      font-weight: 600;
+    }
+
+    .dm-script-toolbar .dm-script-btn-share-live[data-state="hosting"]:hover {
+      background: #c8e9d1;
+    }
+
+    .dm-script-toolbar .dm-script-btn-share-live[data-state="hosting"]:active {
+      background: #b7dfc3;
+    }
+
     .dm-script-toolbar .dm-script-btn[disabled] {
       opacity: 0.45;
       cursor: default;
@@ -512,6 +526,13 @@
 
     .dm-live-panel__value {
       overflow-wrap: anywhere;
+    }
+
+    .dm-live-panel__row--short-code .dm-live-panel__value {
+      color: #1f6f3d;
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
     }
 
     .dm-live-panel__follow {

@@ -168,11 +168,6 @@ export const createLiveScriptPanelController = function(
             margin: 1,
             width: 196
         });
-        const ticket = createElement("textarea", "dm-live-panel__ticket");
-        ticket.rows = 4;
-        ticket.readOnly = true;
-        ticket.value = link;
-        ticket.setAttribute("aria-label", labels.sessionLink);
         const copy = action(labels.copyLink, false, () => {
             void navigator.clipboard.writeText(link).then(() => {
                 message.textContent = labels.copyLink;
@@ -182,12 +177,13 @@ export const createLiveScriptPanelController = function(
             labels.shortCode,
             shortCodeState || labels.shortCodeUnavailable
         );
+        shortCodeRow.classList.add("dm-live-panel__row--short-code");
         shortCodeValue = shortCodeRow.lastElementChild as HTMLElement;
         const participantRow = row(labels.participants, "0");
         const connectionRow = row(labels.connection, "hosting");
         participantCount = participantRow.lastElementChild as HTMLElement;
         connectionState = connectionRow.lastElementChild as HTMLElement;
-        body.append(qrImage, ticket, copy, shortCodeRow);
+        body.append(qrImage, shortCodeRow, copy);
 
         if (canRegenerate) {
             body.appendChild(action(labels.regenerateCode, false, () => {
