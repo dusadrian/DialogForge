@@ -1173,19 +1173,43 @@ Done:
   rejection; reuse after expiry; alarm cleanup; revocation; lookup throttling
   before storage access; and identical 404 bodies for malformed, missing, and
   throttled lookups. The automated suite passes locally.
+- The slow-participant review found that the renderer controller serialized
+  every host broadcast behind one global delivery promise. That prevented the
+  existing per-peer 4 MiB transport bound from engaging during ordinary
+  editor publishing and allowed one stalled recipient to delay later edits.
+  Host edit, snapshot-replacement, and cursor broadcasts are now queued
+  independently; the transport retains per-peer ordering, and a recipient
+  whose queue rejects is removed without blocking healthy recipients. Join,
+  resync, and shutdown exchanges retain their awaited lifecycle behavior.
+- The controller stress gate sent twenty consecutive 256 KiB edit frames to a
+  healthy and a deliberately stalled participant, followed by undo and redo.
+  The healthy recipient received the twenty-frame burst in 10.86 ms, in order,
+  while the stalled queue peaked at 3.76 MiB and never crossed the 4 MiB
+  per-peer bound. The stalled participant was then removed. The native
+  two-instance transport check still measured local edits at 1.28 ms and
+  0.37 ms, and the host-neutral missed-revision/full-resync contract passed.
+- Version mismatch now has explicit acceptance coverage and is rejected before
+  a participant is admitted. Expired-host rejection and edit-independent
+  expiry timers remain covered alongside the invite-code expiry and revocation
+  checks.
+- Retained direct authenticated presenter-to-participant fan-out for the
+  required 30-participant target and the observed 50-participant stretch case.
+  The measured mixed-host latency, memory, reconnect, and isolated-slow-peer
+  results meet their target contracts, so `iroh-gossip` would add complexity
+  without solving an observed release-blocking limit. Snapshot and resync
+  channels therefore remain on the same direct authenticated connections.
 
 Still open:
 
 - Geographically distributed installed/browser measurements and explicit relay
   traffic accounting. The controlled local mixed matrix is complete.
-- Slow-participant backpressure, rapid typing, large paste, undo/redo, resync,
-  sleep, and version-mismatch evidence. Controlled
-  reconnect-storm evidence is complete; geographically distributed recovery
-  remains part of the network matrix.
+- An actual operating-system sleep/wake exercise and geographically
+  distributed recovery. Controlled reconnect storms, slow-participant
+  backpressure, rapid maximum-size edits, large paste, undo/redo, full resync,
+  expiry, revocation, and version mismatch are complete.
 - The approved-language human spoken-code transcription checks. Automated
   spoken-code, collision, regeneration, expiry, revocation, throttling, and
   indistinguishable-failure checks are complete.
-- The direct fan-out versus `iroh-gossip` decision.
 - Browser presenter implementation and its installed/browser matrices.
 
 Deferred:
@@ -1195,8 +1219,9 @@ Deferred:
 
 Next:
 
-- Measure slow-participant backpressure and the remaining edit/resync failure
-  matrix, then use those results to make the direct fan-out decision.
+- Implement browser presenter hosting through the existing provider-neutral
+  host/session contracts, then run its browser and installed participant
+  matrices.
 
 ### Phase 9: Release, Document, And Enable The Capability
 

@@ -147,6 +147,37 @@ export const createLiveScriptSessionController = function(
         return pending;
     };
 
+    const removeUnreachableHostParticipant = function(
+        outbound: LiveScriptOutboundFrame
+    ): void {
+        const host = hosts.get(outbound.frame.sessionId);
+        const recipientEndpointId = outbound.recipientEndpointId;
+
+        if (!host || !recipientEndpointId) {
+            return;
+        }
+
+        host.removeParticipant(recipientEndpointId);
+        options.hostStateChanged(outbound.frame.sessionId, host.state());
+    };
+
+    const queueHostBroadcast = function(
+        frames: LiveScriptOutboundFrame[]
+    ): void {
+        for (const outbound of frames) {
+            void options.transport.send(
+                outbound.frame,
+                outbound.recipientEndpointId
+            ).then((result) => {
+                if (!result.ok) {
+                    removeUnreachableHostParticipant(outbound);
+                }
+            }).catch(() => {
+                removeUnreachableHostParticipant(outbound);
+            });
+        }
+    };
+
     const routeFrame = async function(
         frame: LiveScriptFrame,
         remoteEndpointId: string
@@ -415,7 +446,7 @@ export const createLiveScriptSessionController = function(
         edits: LiveScriptTextEdit[]
     ): Promise<void> {
         const session = requireHost(sessionId);
-        await sendOutbound(session.publishEdits(edits));
+        queueHostBroadcast(session.publishEdits(edits));
         options.hostStateChanged(sessionId, session.state());
     };
 
@@ -424,7 +455,7 @@ export const createLiveScriptSessionController = function(
         content: string
     ): Promise<void> {
         const session = requireHost(sessionId);
-        await sendOutbound(session.replaceContent(content));
+        queueHostBroadcast(session.replaceContent(content));
         options.hostStateChanged(sessionId, session.state());
     };
 
@@ -433,7 +464,9 @@ export const createLiveScriptSessionController = function(
         position: LiveScriptCursorFrame["payload"]["position"],
         selection?: LiveScriptCursorFrame["payload"]["selection"]
     ): Promise<void> {
-        await sendOutbound(requireHost(sessionId).publishCursor(position, selection));
+        queueHostBroadcast(
+            requireHost(sessionId).publishCursor(position, selection)
+        );
     };
 
     const endHost = async function(
@@ -450,8 +483,7 @@ export const createLiveScriptSessionController = function(
         }
 
         try {
-            await sendOutbound(frames);
-
+            queueHostBroadcast(frames);
             const acknowledgementDeadline = Date.now() + 750;
 
             while (session.state().participants.length > 0
