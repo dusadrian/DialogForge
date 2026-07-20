@@ -1238,15 +1238,23 @@ Done:
   edit in 36.82 ms, and ended cleanly. The ticket advertised iroh's
   `euw1-1` relay plus direct addresses; the selected path and byte split are
   not exposed by the current N-API transport.
+- Added a separate self-contained geographic browser diagnostic. It opens a
+  temporary SSH reverse tunnel to the current web build, installs Playwright's
+  matching Chromium only inside a validated Hetzner temporary directory, runs
+  the real Rust/WebAssembly participant, and removes the browser and test
+  directory afterward. The final Bucharest native-presenter to Hetzner-browser
+  run synchronized in 988.80 ms, delivered its first edit in 2.55 ms,
+  reconnected in 633.71 ms with exactly one authoritative snapshot, delivered
+  the recovery edit in 1.92 ms, and ended cleanly.
 
 Still open:
 
-- A geographically distributed browser-participant measurement and explicit
-  relay/direct byte accounting. Geographic installed-participant recovery and
-  the controlled local mixed matrices are complete; the current N-API binding
-  does not expose selected-path byte counters.
-- An actual operating-system sleep/wake exercise and geographically
-  distributed recovery. Controlled reconnect storms, slow-participant
+- Explicit selected-path relay/direct byte accounting. Geographic installed
+  and browser participants, including reconnect and recovery, are complete;
+  the current N-API and WebAssembly bindings do not expose selected-path byte
+  counters.
+- An actual operating-system sleep/wake exercise. Controlled reconnect storms,
+  geographically distributed recovery, slow-participant
   backpressure, rapid maximum-size edits, large paste, undo/redo, full resync,
   expiry, revocation, and version mismatch are complete.
 - The approved-language human spoken-code transcription checks. Automated
@@ -1260,9 +1268,9 @@ Deferred:
 
 Next:
 
-- Begin the Phase 9 release/documentation slice while the operating-system
-  sleep/wake, geographically distributed recovery, and human transcription
-  checks remain explicit manual acceptance items.
+- Complete the operating-system sleep/wake and human transcription checks,
+  and either expose selected-path byte counters or explicitly accept that
+  transport-observability limitation.
 
 ### Phase 9: Release, Document, And Enable The Capability
 
@@ -1330,11 +1338,11 @@ Done:
 
 Still open before describing a release as classroom-ready:
 
-- A geographically distributed browser-participant/relay-accounting exercise,
-  a real operating-system sleep/wake exercise, and approved-language human
-  read-aloud checks. The installed Hetzner recovery path is complete; the
-  remaining items require an external browser environment, operating-system
-  action, or people and are not represented as automated passes.
+- A real operating-system sleep/wake exercise and approved-language human
+  read-aloud checks. Geographic installed and browser recovery paths are now
+  complete. Explicit selected-path relay/direct byte counters remain absent
+  from the current bindings and must either be exposed or accepted as a
+  documented transport-observability limitation.
 
 Deferred:
 
@@ -1344,8 +1352,9 @@ Deferred:
 
 Next:
 
-- Run the remaining explicit manual acceptance items, record their evidence,
-  and only then apply the classroom-ready release description.
+- Run the two remaining manual acceptance items, decide the path-accounting
+  limitation, record that evidence, and only then apply the classroom-ready
+  release description.
 
 ## Deferred Features
 

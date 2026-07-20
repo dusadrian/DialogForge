@@ -80,7 +80,8 @@ Before enabling a new host or deployment:
 4. exercise a rendered host and participant, including stop and reconnect;
 5. confirm received text does not execute automatically;
 6. record the supported participant count and latency target;
-7. perform the approved-language human read-aloud check.
+7. exercise presenter sleep/wake while a participant is connected;
+8. perform the approved-language human read-aloud check.
 
 The current controlled target is 30 participants. Fifty participants is a
 measured stretch case rather than a release guarantee.

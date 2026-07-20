@@ -145,6 +145,9 @@ replaceable rendezvous origin.
 The supported controlled classroom target is 30 participants, with measured
 mixed installed/browser matrices for both installed and browser presenters.
 The 50-participant runs are recorded stretch evidence, not a release guarantee.
+Geographic Bucharest-to-Hetzner recovery has also passed for both an installed
+participant and a Chromium Rust/WebAssembly participant, including exactly one
+authoritative reconnect snapshot and a subsequent recovery edit.
 Direct presenter fan-out remains selected because synchronization, edit
 latency, memory, reconnect storms, and slow-participant isolation met the
 target. The pinned DialogForgeIroh 0.1.0 Rust/WebAssembly artifact owns browser
