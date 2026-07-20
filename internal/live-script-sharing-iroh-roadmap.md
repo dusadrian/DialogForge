@@ -1128,11 +1128,32 @@ Done:
   14.6 MiB host outbound data, 11.5 MiB additional heap, and 24.3 MiB
   additional RSS. These are same-process protocol measurements and are not
   presented as native/browser or network service-level results.
+- Added a real mixed-host classroom harness with a native N-API presenter in
+  its own Electron process, a separate Electron process containing real N-API
+  installed-participant endpoints, and real Rust/WebAssembly endpoints in
+  Chromium. The coordinator measures each participant's join-to-snapshot time,
+  waits for every participant acknowledgement on every edit, separates
+  presenter and installed-cluster memory, counts presenter outbound data, and
+  rejects browser or transport errors.
+- The required mixed matrix connected 15 installed and 15 browser participants.
+  Its 262,154-byte initial script measured 681.13 ms p50, 851.32 ms p95, and
+  903.43 ms maximum join-to-snapshot time. Across 100 edits it measured
+  132.08 ms p50, 159.12 ms p95, and 193.58 ms maximum propagation to all 30
+  acknowledgements. Presenter output was 8.9 MiB and presenter RSS increased
+  by 47.0 MiB. No browser or transport errors were reported.
+- The stretch mixed matrix connected 25 installed and 25 browser participants.
+  Initial synchronization measured 738.93 ms p50, 849.05 ms p95, and
+  883.99 ms maximum. Across 100 edits it measured 131.49 ms p50, 146.68 ms
+  p95, and 183.04 ms maximum propagation to all 50 acknowledgements. Presenter
+  output was 14.8 MiB and presenter RSS increased by 58.4 MiB. No browser or
+  transport errors were reported. Both matrices used the ordinary iroh
+  endpoint infrastructure from the local macOS host; they do not claim a
+  geographically distributed classroom result.
 
 Still open:
 
-- Real installed, browser, and mixed-host matrices at the target classroom
-  sizes, including network and relay measurements.
+- Geographically distributed installed/browser measurements and explicit relay
+  traffic accounting. The controlled local mixed matrix is complete.
 - Reconnect storms, slow-participant backpressure, rapid typing, large paste,
   undo/redo, resync, sleep, expiry, revocation, and version-mismatch evidence.
 - Spoken-code robustness and approved-language human transcription checks.
