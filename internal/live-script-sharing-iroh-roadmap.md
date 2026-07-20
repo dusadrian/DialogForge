@@ -1166,16 +1166,25 @@ Done:
   143.71 ms. At the 50-participant stretch size, reconnect measured 1.22 s p50,
   8.35 s p95, and 8.35 s maximum; its first recovery edit completed in
   131.22 ms. Neither run reported a browser or transport error.
+- Extended the invite-code acceptance test through the HTTP provider, Worker
+  router, and Durable Object. It now proves upper/lower-case, spaces, hyphens,
+  and repeated-whitespace normalization; atomic collision retry and the
+  eight-attempt allocation bound; encrypted-at-rest tickets; collision
+  rejection; reuse after expiry; alarm cleanup; revocation; lookup throttling
+  before storage access; and identical 404 bodies for malformed, missing, and
+  throttled lookups. The automated suite passes locally.
 
 Still open:
 
 - Geographically distributed installed/browser measurements and explicit relay
   traffic accounting. The controlled local mixed matrix is complete.
 - Slow-participant backpressure, rapid typing, large paste, undo/redo, resync,
-  sleep, expiry, revocation, and version-mismatch evidence. Controlled
+  sleep, and version-mismatch evidence. Controlled
   reconnect-storm evidence is complete; geographically distributed recovery
   remains part of the network matrix.
-- Spoken-code robustness and approved-language human transcription checks.
+- The approved-language human spoken-code transcription checks. Automated
+  spoken-code, collision, regeneration, expiry, revocation, throttling, and
+  indistinguishable-failure checks are complete.
 - The direct fan-out versus `iroh-gossip` decision.
 - Browser presenter implementation and its installed/browser matrices.
 
@@ -1186,9 +1195,8 @@ Deferred:
 
 Next:
 
-- Implement the repeatable real mixed-host harness using the same target
-  contract, beginning with one installed presenter and a controlled mix of
-  installed and browser participants.
+- Measure slow-participant backpressure and the remaining edit/resync failure
+  matrix, then use those results to make the direct fan-out decision.
 
 ### Phase 9: Release, Document, And Enable The Capability
 
