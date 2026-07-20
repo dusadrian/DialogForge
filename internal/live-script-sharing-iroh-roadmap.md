@@ -3,6 +3,7 @@
 ## Status And Purpose
 
 Status: implementation in progress. Phases 0 through 7 completed by 2026-07-19.
+Phase 8 began on 2026-07-20.
 
 This document is the execution plan for adding live Script Editor tab sharing
 to DialogForge. It is written for an AI agent working in a dedicated task. The
@@ -38,7 +39,7 @@ marked `done` only when its acceptance gate is satisfied.
 | 5 | Harden native sessions and packaging | done |
 | 6 | Create the separately versioned Rust/WebAssembly client | done |
 | 7 | Integrate browser participants | done |
-| 8 | Verify mixed-host classrooms and decide fan-out transport | not started |
+| 8 | Verify mixed-host classrooms and decide fan-out transport | in progress |
 | 9 | Release, document, and enable the capability | not started |
 
 ## Non-Negotiable Product Invariants
@@ -1046,6 +1047,35 @@ Deferred:
 Why now: direct instructor-to-participant connections are the simplest proven
 version. Fan-out should change only if measured classroom behavior requires it.
 
+#### Phase 8 Target Contract (2026-07-20)
+
+The supported-classroom decision uses a required target of 30 simultaneous
+participants and a non-blocking stretch target of 50 simultaneous participants.
+The checked-in machine-readable copy is
+`tests/script-editor/live-script-classroom-targets.json`.
+
+For the required 30-participant mixed-host matrix:
+
+- a 256 KiB initial script must reach every connected participant within five
+  seconds;
+- presenter edit propagation to all healthy participants must remain at or
+  below 250 ms at p95 and below one second at the observed maximum;
+- at least 95% of reconnecting participants must recover within ten seconds,
+  every recoverable participant must settle within 30 seconds, and each
+  successful reconnect must receive exactly one authoritative snapshot;
+- presenter incremental RSS must remain at or below 256 MiB for collaboration
+  work, and the host-neutral in-process baseline must remain at or below
+  128 MiB of additional heap;
+- one slow or disconnected participant must not push healthy-participant p95
+  above 250 ms or allow its pending outbound data to exceed the existing 4 MiB
+  per-peer bound;
+- no received snapshot or edit may execute automatically.
+
+The 50-participant stretch matrix records the same measurements with a 350 ms
+p95 observation threshold, a 1.5 second observed maximum, and 384 MiB presenter
+incremental RSS. Stretch failure does not block the 30-participant release
+target, but its measured limit must be documented.
+
 Work:
 
 1. Test these matrices:
@@ -1077,6 +1107,48 @@ Acceptance gate:
 - The selected topology meets the documented classroom-size and latency target
   in mixed native/browser testing, or the remaining scale limit is explicit and
   approved.
+
+#### Phase 8 Evidence (2026-07-20)
+
+Done:
+
+- Defined and checked in the required 30-participant and stretch
+  50-participant classroom targets, including synchronization, edit latency,
+  reconnect, memory, and slow-participant boundaries.
+- Reworked the existing host-neutral performance diagnostic to consume that
+  target contract, measure initial synchronization, p50/p95/p99/maximum edit
+  propagation, presenter outbound frames and bytes, heap, and RSS, and fail
+  when the selected scenario exceeds its applicable local gate.
+- The required local baseline synchronized 30 participants with a 262,160-byte
+  script in 21.00 ms. Across 100 edits it measured 0.34 ms p50, 0.56 ms p95,
+  2.02 ms maximum, 8.8 MiB host outbound data, 11.3 MiB additional heap, and
+  20.1 MiB additional RSS.
+- The non-blocking stretch baseline synchronized 50 participants in 34.44 ms.
+  Across 100 edits it measured 0.35 ms p50, 0.64 ms p95, 1.39 ms maximum,
+  14.6 MiB host outbound data, 11.5 MiB additional heap, and 24.3 MiB
+  additional RSS. These are same-process protocol measurements and are not
+  presented as native/browser or network service-level results.
+
+Still open:
+
+- Real installed, browser, and mixed-host matrices at the target classroom
+  sizes, including network and relay measurements.
+- Reconnect storms, slow-participant backpressure, rapid typing, large paste,
+  undo/redo, resync, sleep, expiry, revocation, and version-mismatch evidence.
+- Spoken-code robustness and approved-language human transcription checks.
+- The direct fan-out versus `iroh-gossip` decision.
+- Browser presenter implementation and its installed/browser matrices.
+
+Deferred:
+
+- None. Browser presenting remains ordered after the installed-presenter mixed
+  baseline rather than being silently removed from Phase 8.
+
+Next:
+
+- Implement the repeatable real mixed-host harness using the same target
+  contract, beginning with one installed presenter and a controlled mix of
+  installed and browser participants.
 
 ### Phase 9: Release, Document, And Enable The Capability
 

@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "initialScriptBytes": 262144,
+  "editCount": 100,
+  "required": {
+    "participants": 30,
+    "initialSyncMs": 5000,
+    "editP95Ms": 250,
+    "editMaximumMs": 1000,
+    "reconnectP95Ms": 10000,
+    "reconnectMaximumMs": 30000,
+    "presenterIncrementalRssMiB": 256,
+    "inMemoryHeapDeltaMiB": 128
+  },
+  "stretch": {
+    "participants": 50,
+    "initialSyncMs": 7500,
+    "editP95Ms": 350,
+    "editMaximumMs": 1500,
+    "reconnectP95Ms": 15000,
+    "reconnectMaximumMs": 45000,
+    "presenterIncrementalRssMiB": 384,
+    "inMemoryHeapDeltaMiB": 192
+  }
+}
