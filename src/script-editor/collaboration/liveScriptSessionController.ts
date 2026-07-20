@@ -64,6 +64,8 @@ export interface LiveScriptSessionControllerOptions {
     ): void;
     transportStateChanged(event: LiveScriptTransportStateEvent): void;
     reconnectDelaysMs?: number[];
+    reconnectJitterMs?: number;
+    random?: () => number;
     participantDisconnectGraceMs?: number;
 }
 
@@ -99,6 +101,9 @@ export const createLiveScriptSessionController = function(
     const expiryTimers = new Map<string, ReturnType<typeof setTimeout>>();
     const participantDisconnectTimers = new Map<string, ReturnType<typeof setTimeout>>();
     const reconnectDelaysMs = options.reconnectDelaysMs || [0, 250, 500, 1000, 2000, 4000];
+    const reconnectJitterMs = options.reconnectJitterMs
+        ?? (options.reconnectDelaysMs ? 0 : 250);
+    const random = options.random || Math.random;
     const participantDisconnectGraceMs = options.participantDisconnectGraceMs ?? 30_000;
     let outboundQueue = Promise.resolve();
 
@@ -217,7 +222,10 @@ export const createLiveScriptSessionController = function(
                     state: "reconnecting",
                     message: "Reconnecting to the live script."
                 });
-                await wait(Math.max(0, delayMs));
+                const jitterMs = Math.floor(
+                    Math.max(0, reconnectJitterMs) * random()
+                );
+                await wait(Math.max(0, delayMs) + jitterMs);
 
                 try {
                     const operation = await options.transport.join(ticket);

@@ -44,6 +44,29 @@ const sendOutbound = async function(transport, frames, metrics = null) {
 };
 
 
+const sendHostOutbound = async function(transport, frames, metrics) {
+    let delivered = 0;
+    let lastError = null;
+
+    for (const outbound of frames) {
+        metrics.frames += 1;
+        metrics.bytes += Buffer.byteLength(JSON.stringify(outbound.frame)) + 4;
+
+        try {
+            await transport.send(outbound.frame, outbound.recipientEndpointId);
+            delivered += 1;
+        }
+        catch (error) {
+            lastError = error;
+        }
+    }
+
+    if (frames.length > 0 && delivered === 0 && lastError) {
+        throw lastError;
+    }
+};
+
+
 const waitFor = async function(predicate, message, timeoutMs = 60000) {
     const deadline = Date.now() + timeoutMs;
 
@@ -95,7 +118,7 @@ const runHost = async function() {
         displayName: "mixed-classroom.R",
         content: initialContent,
         expiresAt,
-        maxParticipants: expectedParticipantCount
+        maxParticipants: collaboration.LIVE_SCRIPT_MAX_PARTICIPANTS
     });
     const outboundMetrics = { frames: 0, bytes: 0 };
     let receiveQueue = Promise.resolve();
@@ -104,7 +127,7 @@ const runHost = async function() {
 
     transport.onFrame((event) => {
         receiveQueue = receiveQueue.then(async () => {
-            await sendOutbound(
+            await sendHostOutbound(
                 transport,
                 host.receive(event.frame, event.remoteEndpointId),
                 outboundMetrics
@@ -113,6 +136,11 @@ const runHost = async function() {
             receiveError = error;
             report({ type: "failure", message: error.stack || error.message });
         });
+    });
+    transport.onState((event) => {
+        if (event.state === "disconnected" && event.remoteEndpointId) {
+            host.participantDisconnected(event.remoteEndpointId);
+        }
     });
 
     report({
@@ -156,7 +184,7 @@ const runHost = async function() {
                 const text = String(message.text || "");
                 const revision = host.state().revision + 1;
 
-                await sendOutbound(
+                await sendHostOutbound(
                     transport,
                     host.publishEdits([{
                         range: {
@@ -173,9 +201,9 @@ const runHost = async function() {
                 );
                 await waitFor(
                     () => Boolean(receiveError)
-                        || host.state().participants.every((participant) => {
+                        || host.state().participants.filter((participant) => {
                             return participant.acknowledgedRevision >= revision;
-                        }),
+                        }).length >= expectedParticipantCount,
                     `Mixed participants did not acknowledge revision ${revision}.`
                 );
 
@@ -201,7 +229,7 @@ const runHost = async function() {
         }
 
         if (message?.type === "shutdown") {
-            void sendOutbound(transport, host.end("stopped"), outboundMetrics)
+            void sendHostOutbound(transport, host.end("stopped"), outboundMetrics)
                 .catch(() => {})
                 .then(() => transport.shutdown())
                 .then(() => report({ type: "shutdown" }))
@@ -224,11 +252,16 @@ const createParticipant = async function(ticket, index) {
     let participant = null;
     let receiveQueue = Promise.resolve();
     let receiveError = null;
+    let snapshotCount = 0;
 
     transport.onFrame((event) => {
         receiveQueue = receiveQueue.then(async () => {
             if (!participant) {
                 return;
+            }
+
+            if (event.frame.type === "snapshot") {
+                snapshotCount += 1;
             }
 
             await sendOutbound(
@@ -259,7 +292,9 @@ const createParticipant = async function(ticket, index) {
     return {
         transport,
         participant,
-        initialSyncMs: Number(process.hrtime.bigint() - started) / 1_000_000
+        initialSyncMs: Number(process.hrtime.bigint() - started) / 1_000_000,
+        getSnapshotCount: () => snapshotCount,
+        getReceiveError: () => receiveError
     };
 };
 
@@ -280,6 +315,52 @@ const runParticipants = async function() {
     });
 
     process.on("message", (message) => {
+        if (message?.type === "reconnect") {
+            void Promise.all(participants.map(async (entry, index) => {
+                const snapshotCount = entry.getSnapshotCount();
+                const revision = entry.participant.state().revision;
+                const started = process.hrtime.bigint();
+
+                await new Promise((resolve) => {
+                    setTimeout(resolve, Math.floor(Math.random() * 250));
+                });
+                await entry.transport.closeSession(ticket.sessionId);
+                await entry.transport.join(ticket);
+                await sendOutbound(entry.transport, [
+                    entry.participant.reconnect(entry.transport.endpointId)
+                ]);
+                await waitFor(
+                    () => Boolean(entry.getReceiveError())
+                        || (entry.participant.state().status === "active"
+                            && entry.getSnapshotCount() === snapshotCount + 1),
+                    `Native participant ${index} did not reconnect.`,
+                    90000
+                );
+
+                if (entry.getReceiveError()) {
+                    throw entry.getReceiveError();
+                }
+
+                if (entry.participant.state().revision !== revision) {
+                    throw new Error(
+                        `Native participant ${index} changed revision during reconnect.`
+                    );
+                }
+
+                return {
+                    reconnectMs:
+                        Number(process.hrtime.bigint() - started) / 1_000_000,
+                    snapshots: entry.getSnapshotCount() - snapshotCount,
+                    revision: entry.participant.state().revision
+                };
+            })).then((results) => {
+                report({ type: "reconnected", results });
+            }).catch((error) => {
+                report({ type: "failure", message: error.stack || error.message });
+            });
+            return;
+        }
+
         if (message?.type === "metrics") {
             report({
                 type: "metrics",

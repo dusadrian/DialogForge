@@ -1149,13 +1149,32 @@ Done:
   transport errors were reported. Both matrices used the ordinary iroh
   endpoint infrastructure from the local macOS host; they do not claim a
   geographically distributed classroom result.
+- The initial all-at-once reconnect stress exposed a thundering-herd weakness:
+  every participant's first retry was scheduled at zero milliseconds, and one
+  browser endpoint did not settle. The shared session controller now adds up
+  to 250 ms of default reconnect jitter while preserving deterministic timing
+  whenever a test injects an explicit retry schedule.
+- The reconnect harness also preserves production's stale-recipient behavior:
+  ephemeral browser reconnects may use a new endpoint ID, closed recipients
+  remain in their 30-second grace period, and presenter delivery continues to
+  reachable recipients instead of aborting the broadcast on the first stale
+  send. The supported 30-participant target retains headroom under the protocol
+  limit of 100 while those records age out.
+- In the rerun, all 30 required-matrix endpoints recovered with exactly one new
+  authoritative snapshot each. Reconnect measured 1.27 s p50, 8.31 s p95, and
+  8.31 s maximum; the first edit after recovery reached all active endpoints in
+  143.71 ms. At the 50-participant stretch size, reconnect measured 1.22 s p50,
+  8.35 s p95, and 8.35 s maximum; its first recovery edit completed in
+  131.22 ms. Neither run reported a browser or transport error.
 
 Still open:
 
 - Geographically distributed installed/browser measurements and explicit relay
   traffic accounting. The controlled local mixed matrix is complete.
-- Reconnect storms, slow-participant backpressure, rapid typing, large paste,
-  undo/redo, resync, sleep, expiry, revocation, and version-mismatch evidence.
+- Slow-participant backpressure, rapid typing, large paste, undo/redo, resync,
+  sleep, expiry, revocation, and version-mismatch evidence. Controlled
+  reconnect-storm evidence is complete; geographically distributed recovery
+  remains part of the network matrix.
 - Spoken-code robustness and approved-language human transcription checks.
 - The direct fan-out versus `iroh-gossip` decision.
 - Browser presenter implementation and its installed/browser matrices.

@@ -191,6 +191,16 @@ const installBrowserParticipants = async function(page, ticket, count) {
                         return;
                     }
 
+                    if (event.frame.type === "snapshot") {
+                        const entry = participants.find((candidate) => {
+                            return candidate.transport === transport;
+                        });
+
+                        if (entry) {
+                            entry.snapshotCount += 1;
+                        }
+                    }
+
                     await sendOutboundFrames(
                         transport,
                         session.receive(event.frame, event.remoteEndpointId)
@@ -209,13 +219,15 @@ const installBrowserParticipants = async function(page, ticket, count) {
             participants.push({
                 transport,
                 session,
-                initialSyncMs: performance.now() - started
+                initialSyncMs: performance.now() - started,
+                snapshotCount: 1
             });
         }
 
         window.__dialogForgeMixedClassroom = {
             participants,
-            errors
+            errors,
+            ticket: sessionTicket
         };
 
         return participants.map((entry) => entry.initialSyncMs);
@@ -238,6 +250,57 @@ const shutdownBrowserParticipants = function(page) {
             return entry.transport.shutdown();
         }));
     }).catch(() => {});
+};
+
+
+const reconnectBrowserParticipants = function(page) {
+    return page.evaluate(async () => {
+        const classroom = window.__dialogForgeMixedClassroom;
+
+        return Promise.all(classroom.participants.map(async (entry, index) => {
+            const snapshotCount = entry.snapshotCount;
+            const revision = entry.session.state().revision;
+            const started = performance.now();
+
+            await new Promise((resolve) => {
+                setTimeout(resolve, Math.floor(Math.random() * 250));
+            });
+            await entry.transport.closeSession(classroom.ticket.sessionId);
+            await entry.transport.join(classroom.ticket);
+            const outbound = entry.session.reconnect(entry.transport.endpointId);
+            await entry.transport.send(
+                outbound.frame,
+                outbound.recipientEndpointId
+            );
+
+            const deadline = Date.now() + 90000;
+
+            while (Date.now() < deadline) {
+                if (entry.session.state().status === "active"
+                    && entry.snapshotCount === snapshotCount + 1) {
+                    break;
+                }
+
+                await new Promise((resolve) => setTimeout(resolve, 10));
+            }
+
+            if (entry.session.state().status !== "active") {
+                throw new Error(`Browser participant ${index} did not reconnect.`);
+            }
+
+            if (entry.session.state().revision !== revision) {
+                throw new Error(
+                    `Browser participant ${index} changed revision during reconnect.`
+                );
+            }
+
+            return {
+                reconnectMs: performance.now() - started,
+                snapshots: entry.snapshotCount - snapshotCount,
+                revision: entry.session.state().revision
+            };
+        }));
+    });
 };
 
 
@@ -304,6 +367,30 @@ const run = async function() {
             );
         }
 
+        participantPeer.child.send({ type: "reconnect" });
+        const browserReconnectPromise = reconnectBrowserParticipants(browserPage);
+        const nativeReconnect = await participantPeer.waitFor((message) => {
+            return message?.type === "reconnected";
+        });
+        const browserReconnect = await browserReconnectPromise;
+        const reconnectResults = [
+            ...nativeReconnect.results,
+            ...browserReconnect
+        ];
+        const recoveryRevision = targets.editCount + 1;
+        const recoveryStarted = process.hrtime.bigint();
+        hostPeer.child.send({
+            type: "edit",
+            text: "# post-reconnect confirmation\n"
+        });
+        await hostPeer.waitFor((message) => {
+            return message?.type === "revision-complete"
+                && message.revision === recoveryRevision;
+        });
+        const recoveryEditMs = Number(
+            process.hrtime.bigint() - recoveryStarted
+        ) / 1_000_000;
+
         hostPeer.child.send({ type: "metrics" });
         participantPeer.child.send({ type: "metrics" });
         const hostMetrics = await hostPeer.waitFor((message) => {
@@ -351,6 +438,23 @@ const run = async function() {
                 p99: percentile(editLatenciesMs, 0.99),
                 maximum: Math.max(...editLatenciesMs)
             },
+            reconnectMs: {
+                p50: percentile(
+                    reconnectResults.map((entry) => entry.reconnectMs),
+                    0.50
+                ),
+                p95: percentile(
+                    reconnectResults.map((entry) => entry.reconnectMs),
+                    0.95
+                ),
+                maximum: Math.max(...reconnectResults.map((entry) => {
+                    return entry.reconnectMs;
+                }))
+            },
+            reconnectSnapshots: reconnectResults.map((entry) => {
+                return entry.snapshots;
+            }),
+            recoveryEditMs,
             hostOutboundFrames: hostMetrics.outbound.frames,
             hostOutboundMiB: toMiB(hostMetrics.outbound.bytes),
             presenterHeapDeltaMiB: toMiB(hostMetrics.memory.heapDelta),
@@ -363,19 +467,24 @@ const run = async function() {
 
         assert.equal(
             participantMetrics.revisions.every((revision) => {
-                return revision === targets.editCount;
+                return revision === recoveryRevision;
             }),
             true,
             "Installed participants did not reach the final revision."
         );
         assert.equal(
             browserState.revisions.every((revision) => {
-                return revision === targets.editCount;
+                return revision === recoveryRevision;
             }),
             true,
             "Browser participants did not reach the final revision."
         );
         assert.equal(result.errors.length, 0, result.errors.join("\n"));
+        assert.equal(
+            result.reconnectSnapshots.every((count) => count === 1),
+            true,
+            "Reconnect did not deliver exactly one authoritative snapshot."
+        );
         assert.ok(
             result.initialSyncMs.p95 <= scenario.initialSyncMs,
             `Initial sync p95 exceeded ${scenario.initialSyncMs} ms.`
@@ -387,6 +496,14 @@ const run = async function() {
         assert.ok(
             result.editLatencyMs.maximum <= scenario.editMaximumMs,
             `Maximum edit latency exceeded ${scenario.editMaximumMs} ms.`
+        );
+        assert.ok(
+            result.reconnectMs.p95 <= scenario.reconnectP95Ms,
+            `Reconnect p95 exceeded ${scenario.reconnectP95Ms} ms.`
+        );
+        assert.ok(
+            result.reconnectMs.maximum <= scenario.reconnectMaximumMs,
+            `Reconnect maximum exceeded ${scenario.reconnectMaximumMs} ms.`
         );
         assert.ok(
             result.presenterRssDeltaMiB <= scenario.presenterIncrementalRssMiB,
