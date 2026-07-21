@@ -220,6 +220,49 @@ const defaultUtf8LocaleForPlatform = function(platform: NodeJS.Platform): string
 };
 
 
+const prependRBinaryDirectoryToPath = function(
+    env: Record<string, string>,
+    command: string,
+    platform: NodeJS.Platform
+): Record<string, string> {
+    const result = Object.assign({}, env);
+    const commandPath = platform === "win32" ? path.win32 : path.posix;
+
+    if (!commandPath.isAbsolute(command)) {
+        return result;
+    }
+
+    const delimiter = platform === "win32" ? ";" : ":";
+    const binaryDirectory = commandPath.dirname(command);
+    const pathNames = Object.keys(result).filter((name) => {
+        return name.toLowerCase() === "path";
+    });
+    const currentPath = pathNames
+        .map((name) => result[name])
+        .find((value) => Boolean(value)) || "";
+    const comparableBinaryDirectory = platform === "win32"
+        ? binaryDirectory.toLowerCase()
+        : binaryDirectory;
+    const currentEntries = currentPath
+        .split(delimiter)
+        .filter((entry) => {
+            const comparableEntry = platform === "win32"
+                ? entry.toLowerCase()
+                : entry;
+
+            return entry && comparableEntry !== comparableBinaryDirectory;
+        });
+
+    for (const name of pathNames) {
+        delete result[name];
+    }
+
+    result.PATH = [binaryDirectory, ...currentEntries].join(delimiter);
+
+    return result;
+};
+
+
 export const normalizeRRuntimeLocaleEnvironment = function(
     env: Record<string, string>,
     platform: NodeJS.Platform
@@ -262,10 +305,15 @@ export const createRRuntimeLaunchPlan = function(options: RRuntimeLaunchPlanOpti
         }
     });
 
-    const runtimeEnv = normalizeRRuntimeLocaleEnvironment(baseEnv, platform);
+    const command = resolveRCommand(options.command, env, platform);
+    const runtimeEnv = prependRBinaryDirectoryToPath(
+        normalizeRRuntimeLocaleEnvironment(baseEnv, platform),
+        command,
+        platform
+    );
 
     return {
-        command: resolveRCommand(options.command, env, platform),
+        command,
         args: [
             "--no-save",
             "-e",
