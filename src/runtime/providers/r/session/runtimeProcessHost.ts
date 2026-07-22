@@ -6,7 +6,10 @@ import * as fs from "fs";
 import type {
     RuntimeSessionSnapshot
 } from "../../../provider-contract/runtimeProvider";
-import { terminateProcessTree } from "../../../session/processTree";
+import {
+    registerEmergencyProcessTreeTermination,
+    terminateProcessTree
+} from "../../../session/processTree";
 import {
     createRuntimeControlClient,
     readRuntimeControlMeta,
@@ -82,6 +85,7 @@ export const createRRuntimeProcessHost = function(
     let client: ReturnType<typeof createRuntimeControlClient> | null = null;
     let startupPromise: Promise<RuntimeSessionSnapshot> | null = null;
     let lifecycleGeneration = 0;
+    let unregisterEmergencyTermination: (() => void) | null = null;
 
     const replaceClient = function(
         nextClient: ReturnType<typeof createRuntimeControlClient> | null
@@ -131,7 +135,7 @@ export const createRRuntimeProcessHost = function(
         }
     };
 
-    const stopRuntime = function(): void {
+    const stopRuntime = async function(): Promise<void> {
         const activePlan = plan;
 
         if (client) {
@@ -148,18 +152,20 @@ export const createRRuntimeProcessHost = function(
             } catch {}
         }
 
-        terminateProcessTree({
+        await terminateProcessTree({
             pid: childPid,
             sync: process.platform === "win32"
         });
 
         if (runtimePid && runtimePid !== childPid) {
-            terminateProcessTree({
+            await terminateProcessTree({
                 pid: runtimePid,
                 sync: process.platform === "win32"
             });
         }
 
+        unregisterEmergencyTermination?.();
+        unregisterEmergencyTermination = null;
         child = null;
         meta = null;
         plan = null;
@@ -240,6 +246,8 @@ export const createRRuntimeProcessHost = function(
             }
         };
         child = spawnedChild;
+        unregisterEmergencyTermination =
+            registerEmergencyProcessTreeTermination(spawnedChild.pid);
         spawnedChild.stdout.on("data", appendActiveProcessOutput);
         spawnedChild.stderr.on("data", appendActiveProcessOutput);
         spawnedChild.once("error", (error) => {
@@ -250,12 +258,19 @@ export const createRRuntimeProcessHost = function(
         spawnedChild.once("exit", (code, signal) => {
             const isCurrentProcess = child === spawnedChild;
 
+            void terminateProcessTree({
+                pid: spawnedChild.pid,
+                sync: true
+            });
+
             if (isCurrentProcess && client) {
                 client.detach();
                 replaceClient(null);
             }
 
             if (isCurrentProcess) {
+                unregisterEmergencyTermination?.();
+                unregisterEmergencyTermination = null;
                 child = null;
                 meta = null;
                 plan = null;
@@ -291,7 +306,7 @@ export const createRRuntimeProcessHost = function(
 
         if (generation !== lifecycleGeneration) {
             if (child === spawnedChild) {
-                stopRuntime();
+                await stopRuntime();
             }
 
             return stoppedSnapshot(snapshot);
@@ -307,7 +322,7 @@ export const createRRuntimeProcessHost = function(
             );
 
             if (child === spawnedChild) {
-                stopRuntime();
+                await stopRuntime();
             }
 
             return Object.assign({}, snapshot, {
@@ -362,7 +377,7 @@ export const createRRuntimeProcessHost = function(
         ): Promise<RuntimeSessionSnapshot> {
             lifecycleGeneration += 1;
             startupPromise = null;
-            stopRuntime();
+            await stopRuntime();
 
             return stoppedSnapshot(snapshot);
         },

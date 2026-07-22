@@ -61,6 +61,7 @@ export interface RuntimeLifecycleCompositionOptions {
         message: string
     ): Promise<void>;
     stopCollaboration(): Promise<unknown>;
+    stopAuxiliaryProcesses(): Promise<unknown>;
     beforeResumeQuit?(): void;
     quitApp(): void;
 }
@@ -250,6 +251,7 @@ export const createRuntimeLifecycleComposition = function(
             await options.runtimeSessionManager.stop();
         },
         stopCollaboration: options.stopCollaboration,
+        stopAuxiliaryProcesses: options.stopAuxiliaryProcesses,
         beforeResumeQuit: options.beforeResumeQuit,
         quitApp: options.quitApp
     });

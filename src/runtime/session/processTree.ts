@@ -7,7 +7,7 @@ export interface TerminateProcessTreeOptions {
     sync?: boolean;
     killDelayMs?: number;
     schedule?: (callback: () => void, delayMs: number) => NodeJS.Timeout;
-    kill?: (pid: number, signal: NodeJS.Signals) => void;
+    kill?: (pid: number, signal: NodeJS.Signals | 0) => void;
     execFile?: typeof execFile;
     execFileSync?: typeof execFileSync;
 }
@@ -35,13 +35,15 @@ export const createTerminateProcessTreePlan = function(
     return [
         { kind: "kill", target: -safePid, signal: "SIGTERM" },
         { kind: "kill", target: safePid, signal: "SIGTERM" },
-        { kind: "delayedKill", target: -safePid, signal: "SIGKILL" },
-        { kind: "delayedKill", target: safePid, signal: "SIGKILL" }
+        { kind: sync ? "kill" : "delayedKill", target: -safePid, signal: "SIGKILL" },
+        { kind: sync ? "kill" : "delayedKill", target: safePid, signal: "SIGKILL" }
     ];
 };
 
 
-export const terminateProcessTree = function(options: TerminateProcessTreeOptions): void {
+export const terminateProcessTree = async function(
+    options: TerminateProcessTreeOptions
+): Promise<void> {
     const platform = options.platform || process.platform;
     const plan = createTerminateProcessTreePlan(options.pid, platform, Boolean(options.sync));
     const runExecFile = options.execFile || execFile;
@@ -50,10 +52,16 @@ export const terminateProcessTree = function(options: TerminateProcessTreeOption
     const schedule = options.schedule || setTimeout;
     const killDelayMs = options.killDelayMs ?? 1200;
 
+    const pending: Promise<void>[] = [];
+
     plan.forEach((step) => {
         try {
             if (step.kind === "execFile" && step.args) {
-                runExecFile(String(step.target), step.args, () => {});
+                pending.push(new Promise((resolve) => {
+                    runExecFile(String(step.target), step.args || [], () => {
+                        resolve();
+                    });
+                }));
                 return;
             }
 
@@ -68,16 +76,45 @@ export const terminateProcessTree = function(options: TerminateProcessTreeOption
             }
 
             if (step.kind === "delayedKill" && step.signal) {
-                const timer = schedule(() => {
-                    try {
-                        runKill(Number(step.target), step.signal as NodeJS.Signals);
-                    } catch {}
-                }, killDelayMs);
+                pending.push(new Promise((resolve) => {
+                    schedule(() => {
+                        try {
+                            runKill(
+                                Number(step.target),
+                                step.signal as NodeJS.Signals
+                            );
+                        } catch {}
 
-                try {
-                    timer.unref();
-                } catch {}
+                        resolve();
+                    }, killDelayMs);
+                }));
             }
         } catch {}
     });
+
+    await Promise.all(pending);
+};
+
+
+export const registerEmergencyProcessTreeTermination = function(
+    pid: number | undefined | null
+): () => void {
+    const safePid = Number(pid);
+
+    if (!Number.isFinite(safePid) || safePid <= 0) {
+        return function(): void {};
+    }
+
+    const terminateOnProcessExit = function(): void {
+        void terminateProcessTree({
+            pid: safePid,
+            sync: true
+        });
+    };
+
+    process.once("exit", terminateOnProcessExit);
+
+    return function(): void {
+        process.off("exit", terminateOnProcessExit);
+    };
 };

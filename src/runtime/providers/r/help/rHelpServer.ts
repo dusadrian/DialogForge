@@ -4,6 +4,10 @@ import {
     findConfiguredRBinary,
     findLatestInstalledRBinary
 } from "../session/rBinaryDiscovery";
+import {
+    registerEmergencyProcessTreeTermination,
+    terminateProcessTree
+} from "../../../session/processTree";
 
 
 export interface RHelpServerOptions {
@@ -67,8 +71,11 @@ export const createRHelpServer = function(options: RHelpServerOptions = {}) {
     let processHandle: ChildProcessWithoutNullStreams | null = null;
     let port = 0;
     let startPromise: Promise<number> | null = null;
+    let unregisterEmergencyTermination: (() => void) | null = null;
 
     const reset = function(): void {
+        unregisterEmergencyTermination?.();
+        unregisterEmergencyTermination = null;
         processHandle = null;
         port = 0;
         startPromise = null;
@@ -111,10 +118,13 @@ export const createRHelpServer = function(options: RHelpServerOptions = {}) {
             ], {
                 cwd: os.homedir(),
                 env: environment,
+                detached: process.platform !== "win32",
                 stdio: ["pipe", "pipe", "pipe"]
             });
 
             processHandle = child;
+            unregisterEmergencyTermination =
+                registerEmergencyProcessTreeTermination(child.pid);
 
             return new Promise<number>((resolve, reject) => {
                 let stdoutBuffer = "";
@@ -136,10 +146,10 @@ export const createRHelpServer = function(options: RHelpServerOptions = {}) {
                             `R help server start timed out.${stderrBuffer ? ` ${stderrBuffer.trim()}` : ""}`.trim()
                         ));
                     });
-                    try {
-                        child.kill();
-                    } catch {}
-                    reset();
+                    void terminateProcessTree({
+                        pid: child.pid,
+                        sync: process.platform === "win32"
+                    }).finally(reset);
                 }, 12000);
 
                 child.stdout.on("data", (chunk: Buffer | string) => {
@@ -176,6 +186,10 @@ export const createRHelpServer = function(options: RHelpServerOptions = {}) {
 
                 child.once("exit", (code) => {
                     clearTimeout(timeout);
+                    void terminateProcessTree({
+                        pid: child.pid,
+                        sync: true
+                    });
                     finish(() => {
                         reject(new Error(
                             `R help server exited before reporting a port (${String(code ?? "")}).${stderrBuffer ? ` ${stderrBuffer.trim()}` : ""}`.trim()
@@ -220,14 +234,17 @@ export const createRHelpServer = function(options: RHelpServerOptions = {}) {
         return target.toString();
     };
 
-    const stop = function(): void {
+    const stop = async function(): Promise<void> {
         if (!processHandle) {
             return;
         }
 
-        try {
-            processHandle.kill();
-        } catch {}
+        const pid = processHandle.pid;
+
+        await terminateProcessTree({
+            pid,
+            sync: process.platform === "win32"
+        });
 
         reset();
     };

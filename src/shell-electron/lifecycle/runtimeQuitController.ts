@@ -7,6 +7,7 @@ export interface RuntimeQuitControllerOptions {
     prepareQuit?: () => Promise<boolean>;
     stopRuntime(): Promise<unknown>;
     stopCollaboration(): Promise<unknown>;
+    stopAuxiliaryProcesses(): Promise<unknown>;
     beforeResumeQuit?(): void;
     quitApp(): void;
 }
@@ -23,6 +24,7 @@ export const createRuntimeQuitController = function(
 ): RuntimeQuitController {
     let stopStarted = false;
     let collaborationStopStarted = false;
+    let auxiliaryStopStarted = false;
     let resumedQuit = false;
     let shutdownStarted = false;
 
@@ -69,10 +71,26 @@ export const createRuntimeQuitController = function(
         }
     };
 
+    const stopAuxiliaryProcesses = async function(): Promise<void> {
+        if (auxiliaryStopStarted) {
+            return;
+        }
+
+        auxiliaryStopStarted = true;
+
+        try {
+            await options.stopAuxiliaryProcesses();
+        }
+        catch {
+            // Auxiliary process cleanup is best-effort during application shutdown.
+        }
+    };
+
     const stopApplicationServices = async function(): Promise<void> {
         await Promise.all([
             stopRuntime(),
-            stopCollaboration()
+            stopCollaboration(),
+            stopAuxiliaryProcesses()
         ]);
     };
 

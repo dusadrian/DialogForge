@@ -569,6 +569,9 @@ runtimeLifecycleComposition = runtimeLifecycleCompositionModule.createRuntimeLif
     stopCollaboration: function () {
         return scriptEditorComposition.shutdownCollaboration();
     },
+    stopAuxiliaryProcesses: function () {
+        return rHelpServer.stop();
+    },
     beforeResumeQuit: function () {
         mainWindowCloseApprovedForQuit = true;
     },

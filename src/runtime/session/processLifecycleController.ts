@@ -3,7 +3,10 @@ import type {
     RuntimeLifecycleController,
     RuntimeSessionSnapshot
 } from "../provider-contract/runtimeProvider";
-import { terminateProcessTree } from "./processTree";
+import {
+    registerEmergencyProcessTreeTermination,
+    terminateProcessTree
+} from "./processTree";
 
 
 export interface RuntimeProcessLaunchPlan {
@@ -61,11 +64,12 @@ export const createProcessLifecycleController = function(
     options: RuntimeProcessLifecycleOptions
 ): RuntimeLifecycleController {
     let child: ChildProcessWithoutNullStreams | null = null;
+    let unregisterEmergencyTermination: (() => void) | null = null;
     let lastPlan: RuntimeProcessLaunchPlan | null = null;
     const startupTimeoutMs = options.startupTimeoutMs ?? 250;
 
-    const stopChild = function(): void {
-        if (!child || child.killed) {
+    const stopChild = async function(): Promise<void> {
+        if (!child) {
             child = null;
             return;
         }
@@ -78,11 +82,13 @@ export const createProcessLifecycleController = function(
             // Process termination is best-effort during app shutdown.
         }
 
-        terminateProcessTree({
+        await terminateProcessTree({
             pid,
             sync: process.platform === "win32"
         });
 
+        unregisterEmergencyTermination?.();
+        unregisterEmergencyTermination = null;
         child = null;
     };
 
@@ -104,13 +110,30 @@ export const createProcessLifecycleController = function(
                 detached: plan.detached === undefined ? process.platform !== "win32" : plan.detached,
                 stdio: "pipe"
             });
+            unregisterEmergencyTermination =
+                registerEmergencyProcessTreeTermination(child.pid);
+            const spawnedChild = child;
+
+            spawnedChild.once("exit", () => {
+                if (child !== spawnedChild) {
+                    return;
+                }
+
+                void terminateProcessTree({
+                    pid: spawnedChild.pid,
+                    sync: true
+                });
+                unregisterEmergencyTermination?.();
+                unregisterEmergencyTermination = null;
+                child = null;
+            });
 
             try {
-                await waitForProcessStart(child, startupTimeoutMs);
+                await waitForProcessStart(spawnedChild, startupTimeoutMs);
             } catch (error) {
                 const message = error instanceof Error ? error.message : String(error);
 
-                stopChild();
+                await stopChild();
 
                 return Object.assign({}, snapshot, {
                     status: "failed",
@@ -126,7 +149,7 @@ export const createProcessLifecycleController = function(
             });
         },
         stop: async function(snapshot: RuntimeSessionSnapshot): Promise<RuntimeSessionSnapshot> {
-            stopChild();
+            await stopChild();
 
             return Object.assign({}, snapshot, {
                 status: "stopped",

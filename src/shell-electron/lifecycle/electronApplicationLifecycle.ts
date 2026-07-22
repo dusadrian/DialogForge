@@ -28,7 +28,7 @@ export interface ElectronApplicationLifecycleOptions {
     appendBootLog(message: string): void;
     requestApplicationQuit(): void;
     runtimeQuitController: RuntimeQuitSupport;
-    stopHelpServer(): void;
+    stopHelpServer(): Promise<void>;
     reportError(error: unknown): void;
 }
 
@@ -67,11 +67,13 @@ export const bindElectronApplicationLifecycle = function(
                 await options.runSmoke(win);
                 await options.stopRuntime();
                 await options.stopCollaboration();
+                await options.stopHelpServer();
                 options.app.exit(0);
             } catch (error) {
                 options.reportError(error);
                 await options.stopRuntime();
                 await options.stopCollaboration();
+                await options.stopHelpServer();
                 options.app.exit(1);
             }
 
@@ -97,7 +99,7 @@ export const bindElectronApplicationLifecycle = function(
 
     options.app.on("will-quit", () => {
         options.appendBootLog("app will-quit");
-        options.stopHelpServer();
+        void options.stopHelpServer();
         options.runtimeQuitController.handleWillQuit();
     });
 
