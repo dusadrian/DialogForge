@@ -13,6 +13,7 @@ import type {
     DeclaredMissingSnapshot,
     DeclaredMissingUpdateRequest,
     DeclaredMissingUpdateResult,
+    RuntimeCommandExecutionResult,
     RuntimeSessionSnapshot,
     RuntimeTabularController,
     TranscriptEvent,
@@ -33,7 +34,9 @@ import {
     asRuntimeControlObject,
     parseRuntimeControlResultObject
 } from "../protocol/runtimeControlEvents";
-import { createRuntimeControlClient } from "../protocol/runtimeControlClient";
+import type {
+    RRuntimeControlClient
+} from "../protocol/runtimeControlClient";
 import { optionalRuntimeNumber } from "../tabular/runtimeTabularValues";
 
 
@@ -49,13 +52,13 @@ type MetadataTabularController = Pick<
 
 
 export interface RTabularMetadataControllerOptions {
-    getClient(): ReturnType<typeof createRuntimeControlClient> | null;
+    getClient(): RRuntimeControlClient | null;
     createRequestId(prefix: string): string;
     executeVisibleCommand(
         commandText: string,
         source: string,
         snapshot: RuntimeSessionSnapshot
-    ): Promise<TranscriptEvent[]>;
+    ): Promise<RuntimeCommandExecutionResult>;
     transcriptHasFailure(transcriptEvents: TranscriptEvent[]): boolean;
 }
 
@@ -163,6 +166,7 @@ export const createRTabularMetadataController = function(
                 measure: String(variable.measure || ""),
                 numeric: variable.numeric === true,
                 factor: variable.factor === true,
+                declared: variable.declared === true,
                 calibrated: variable.calibrated === true,
                 binary: variable.binary === true,
                 character: variable.character === true,
@@ -277,11 +281,12 @@ export const createRTabularMetadataController = function(
             const commandText = String(
                 request.visibleCommandText || ""
             ).trim() || createVisibleVariableMetadataUpdateCommand(request);
-            const transcriptEvents = await options.executeVisibleCommand(
+            const commandResult = await options.executeVisibleCommand(
                 commandText,
                 "ui.dataset.writeVariableMetadata",
                 snapshot
             );
+            const transcriptEvents = commandResult.transcriptEvents;
             const failed = options.transcriptHasFailure(transcriptEvents);
 
             return createVariableMetadataUpdateResult({
@@ -293,6 +298,7 @@ export const createRTabularMetadataController = function(
                 value: request.value,
                 label: request.label,
                 transcriptEvents,
+                workspaceUpdate: commandResult.workspaceUpdate,
                 message: failed
                     ? "R visible variable-metadata command failed."
                     : "R visible variable-metadata command updated metadata."
@@ -337,11 +343,12 @@ export const createRTabularMetadataController = function(
         ).trim() || createVisibleValueLabelUpdateCommand(request);
 
         if (request.uiCommandVisibility === "visible") {
-            const transcriptEvents = await options.executeVisibleCommand(
+            const commandResult = await options.executeVisibleCommand(
                 commandText,
                 "ui.dataset.writeValueLabels",
                 snapshot
             );
+            const transcriptEvents = commandResult.transcriptEvents;
             const failed = options.transcriptHasFailure(transcriptEvents);
 
             return createValueLabelUpdateResult({
@@ -351,6 +358,7 @@ export const createRTabularMetadataController = function(
                 variableName: request.variableName,
                 labels: request.labels,
                 transcriptEvents,
+                workspaceUpdate: commandResult.workspaceUpdate,
                 message: failed
                     ? "R visible value-label command failed."
                     : "R visible value-label command updated value labels."
@@ -380,11 +388,12 @@ export const createRTabularMetadataController = function(
         ).trim() || createVisibleDeclaredMissingUpdateCommand(request);
 
         if (request.uiCommandVisibility === "visible") {
-            const transcriptEvents = await options.executeVisibleCommand(
+            const commandResult = await options.executeVisibleCommand(
                 commandText,
                 "ui.dataset.writeDeclaredMissing",
                 snapshot
             );
+            const transcriptEvents = commandResult.transcriptEvents;
             const failed = options.transcriptHasFailure(transcriptEvents);
 
             return createDeclaredMissingUpdateResult({
@@ -394,6 +403,7 @@ export const createRTabularMetadataController = function(
                 variableName: request.variableName,
                 values: request.values,
                 transcriptEvents,
+                workspaceUpdate: commandResult.workspaceUpdate,
                 message: failed
                     ? "R visible declared-missing command failed."
                     : "R visible declared-missing command updated declared missing values."

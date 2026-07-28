@@ -198,6 +198,43 @@ const applyProductSettingsToDialogs = function(
 };
 
 
+const runtimeRequiredPackages = function(
+    packages: string[] | undefined,
+    runtime: RuntimeProviderManifest
+): string[] {
+    const satisfiedByRuntime = new Set(
+        runtime.policies?.packages?.satisfiedByRuntime || []
+    );
+
+    return Array.from(new Set(packages || [])).filter((packageName) => {
+        return !satisfiedByRuntime.has(packageName);
+    });
+};
+
+
+const applyRuntimePackagePolicyToDialogs = function(
+    dialogs: DialogDefinition[],
+    runtime: RuntimeProviderManifest
+): DialogDefinition[] {
+    return dialogs.map((dialog) => {
+        const rPackages = runtimeRequiredPackages(dialog.rPackages, runtime);
+
+        if (
+            rPackages.length === (dialog.rPackages || []).length
+            && rPackages.every((packageName, index) => {
+                return packageName === dialog.rPackages?.[index];
+            })
+        ) {
+            return dialog;
+        }
+
+        return Object.assign({}, dialog, {
+            rPackages
+        });
+    });
+};
+
+
 const readProductMenu = function(location: ResolvedProductLocation): MenuItemDefinition[] {
     if (location.source === "base") {
         return [];
@@ -445,6 +482,7 @@ const evaluateProductCapabilities = function(
         const missing = listMissingCapabilities(runtime, requirement);
 
         return Object.assign({}, capability, {
+            rPackages: runtimeRequiredPackages(capability.rPackages, runtime),
             missing,
             enabled: missing.length === 0,
             reason: missing.length === 0 ? "" : disabledCapabilityReason(i18n)
@@ -465,6 +503,7 @@ const evaluateStartupTasks = function(
         const missing = listMissingCapabilities(runtime, requirement);
 
         return Object.assign({}, task, {
+            rPackages: runtimeRequiredPackages(task.rPackages, runtime),
             missing,
             enabled: missing.length === 0,
             reason: missing.length === 0 ? "" : disabledCapabilityReason(i18n)
@@ -604,7 +643,7 @@ const evaluateMenuItem = function(
         role: item.role,
         accelerator: item.accelerator,
         runtimeProvider: item.runtimeProvider,
-        rPackages: item.rPackages || [],
+        rPackages: runtimeRequiredPackages(item.rPackages, runtime),
         label: resolveLabel(item, i18n),
         enabled: true,
         reason: "",
@@ -698,12 +737,18 @@ export const composeApplication = function(options: ApplicationCompositionOption
     const runtimeSession = runtimeProvider.createSession();
     const i18n = readI18n(rootDir, location, locale);
     const features = evaluateFeatures(runtime, i18n);
-    const sharedDialogs = readSharedDialogs(rootDir);
+    const sharedDialogs = applyRuntimePackagePolicyToDialogs(
+        readSharedDialogs(rootDir),
+        runtime
+    );
     const featureEntrypoints = readFeatureEntrypoints(rootDir);
     const productAbout = readProductAbout(location);
-    const productDialogs = applyProductSettingsToDialogs(
-        readProductDialogs(location),
-        productSettings
+    const productDialogs = applyRuntimePackagePolicyToDialogs(
+        applyProductSettingsToDialogs(
+            readProductDialogs(location),
+            productSettings
+        ),
+        runtime
     );
     const productCapabilities = evaluateProductCapabilities(
         readProductCapabilities(location),

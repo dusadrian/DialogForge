@@ -282,6 +282,7 @@ declare global {
             preview(input: unknown): void;
             cancelPreview(): void;
             save(input: unknown): void;
+            close?(): void;
         };
         menuCustomization: {
             onLoaded(callback: (payload: unknown) => void): void;

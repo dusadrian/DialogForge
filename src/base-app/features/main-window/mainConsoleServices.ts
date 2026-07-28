@@ -4,18 +4,12 @@ import type {
 import type {
     ConsoleCommandHistory
 } from "../../../console/services/consoleCommandHistory";
-import {
-    createConsoleCommandHistory
-} from "../../../console/services/consoleCommandHistory";
 import type {
     ConsoleSessionState
 } from "../../../console/services/consoleSessionState";
 import type {
     CompletionModel
 } from "../../../console/terminal/completionTypes";
-import {
-    createCompletionModel
-} from "../../../console/terminal/completionModel";
 import {
     rDefaultTerminalSymbols
 } from "../../../runtime/providers/r/completions/rCompletionDefaults";
@@ -33,8 +27,8 @@ import {
     parseRConsoleHelpCommand
 } from "../../../runtime/providers/r/help/rContextualHelp";
 import {
-    createMainConsoleCoordinator
-} from "../../../console/renderer/mainConsoleCoordinator";
+    createConsoleServices
+} from "../../../console/renderer/consoleServices";
 
 
 export interface MainConsoleServicesOptions {
@@ -51,84 +45,68 @@ export interface MainConsoleServicesOptions {
 export interface MainConsoleServices {
     completionModel: CompletionModel;
     commandHistory: ConsoleCommandHistory;
-    coordinator: ReturnType<typeof createMainConsoleCoordinator>;
+    coordinator: ReturnType<typeof createConsoleServices>["coordinator"];
 }
 
 
 export const createMainConsoleServices = function(
     options: MainConsoleServicesOptions
 ): MainConsoleServices {
-    const completionModel = createCompletionModel({
-        initialTerminalSymbols: rDefaultTerminalSymbols,
-        suppressedTerminalSymbols: [...rInternalCompletionSymbolNames],
-        contextParser: getRCompletionContext,
-        packageRequestParser: readRRequestedPackages,
-        completionFetch: async function(params, timeoutMs) {
-            const result = await options.dialogForge.readCompletions({
-                prefix: String(params.prefix || ""),
-                code: String(params.code || ""),
-                cursorColumn: params.cursorColumn,
-                timeoutMs,
-                packageName: String(params.packageName || ""),
-                includeInternals: params.includeInternals === true,
-                source: "base-app.console-input"
-            });
-
-            return {
-                ok: result.status === "ready",
-                value: result
-            };
-        }
-    });
-
-    const commandHistory = createConsoleCommandHistory({
-        maximumItems: 500,
-        readHistory: function(scope) {
-            return options.dialogForge.readConsoleHistory(scope);
-        },
-        writeHistory: function(request) {
-            return options.dialogForge.writeConsoleHistory(request);
-        },
-        registerCompletionInput: function(command) {
-            completionModel.registerCommandInput(command);
-        },
-        excludeFromHistory: function(command) {
-            return command.includes("__DIALOGFORGE_DATASET_READY_");
-        }
-    });
-
-    const coordinator = createMainConsoleCoordinator({
+    return createConsoleServices({
         document: options.document,
         session: options.session,
-        completionModel,
-        getHistory: function() {
-            return commandHistory.getInputHistory();
-        },
-        getRuntimeSession: options.getRuntimeSession,
-        startRuntimeSession: options.startRuntimeSession,
-        renderStatus: options.renderStatus,
-        recordHistory: options.recordHistory,
-        registerCompletionInput: function(text): void {
-            completionModel.registerCommandInput(text);
-        },
-        navigateFallbackHistory: options.navigateFallbackHistory,
-        executeRuntimeMethod: options.dialogForge.executeRuntimeMethod,
-        executeVisibleCommand: options.dialogForge.executeVisibleCommand,
-        buildContextualHelpRequest: buildRContextualHelpRequest,
-        parseHelpCommand: parseRConsoleHelpCommand,
-        openHelpTopic: function(input): void {
-            void options.dialogForge.openHelpTopic(input);
-        },
-        readClipboardText: async function(): Promise<string> {
-            const result = await options.dialogForge.readClipboardText();
-            return String(result?.text || "");
-        },
-        writeClipboardText: options.dialogForge.writeClipboardText
-    });
+        completion: {
+            initialTerminalSymbols: rDefaultTerminalSymbols,
+            suppressedTerminalSymbols: [...rInternalCompletionSymbolNames],
+            contextParser: getRCompletionContext,
+            packageRequestParser: readRRequestedPackages,
+            completionFetch: async function(params, timeoutMs) {
+                const result = await options.dialogForge.readCompletions({
+                    prefix: String(params.prefix || ""),
+                    code: String(params.code || ""),
+                    cursorColumn: params.cursorColumn,
+                    timeoutMs,
+                    packageName: String(params.packageName || ""),
+                    includeInternals: params.includeInternals === true,
+                    source: "base-app.console-input"
+                });
 
-    return {
-        completionModel,
-        commandHistory,
-        coordinator
-    };
+                return {
+                    ok: result.status === "ready",
+                    value: result
+                };
+            }
+        },
+        history: {
+            maximumItems: 500,
+            readHistory: function(scope) {
+                return options.dialogForge.readConsoleHistory(scope);
+            },
+            writeHistory: function(request) {
+                return options.dialogForge.writeConsoleHistory(request);
+            },
+            excludeFromHistory: function(command) {
+                return command.includes("__DIALOGFORGE_DATASET_READY_");
+            }
+        },
+        coordinator: {
+            getRuntimeSession: options.getRuntimeSession,
+            startRuntimeSession: options.startRuntimeSession,
+            renderStatus: options.renderStatus,
+            recordHistory: options.recordHistory,
+            navigateFallbackHistory: options.navigateFallbackHistory,
+            executeRuntimeMethod: options.dialogForge.executeRuntimeMethod,
+            executeVisibleCommand: options.dialogForge.executeVisibleCommand,
+            buildContextualHelpRequest: buildRContextualHelpRequest,
+            parseHelpCommand: parseRConsoleHelpCommand,
+            openHelpTopic: function(input): void {
+                void options.dialogForge.openHelpTopic(input);
+            },
+            readClipboardText: async function(): Promise<string> {
+                const result = await options.dialogForge.readClipboardText();
+                return String(result?.text || "");
+            },
+            writeClipboardText: options.dialogForge.writeClipboardText
+        }
+    });
 };

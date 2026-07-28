@@ -29,6 +29,7 @@ import type {
     StartupTaskExecutionRequest,
     TranscriptEvent,
     VisibleCommandRequest,
+    WorkspaceListOptions,
     WorkspaceSnapshot
 } from "../../runtime/provider-contract/runtimeProvider";
 import {
@@ -66,9 +67,9 @@ export interface RuntimeSessionIpcControllerOptions {
     sendRuntimeSession(snapshot: RuntimeSessionSnapshot): void;
     executeVisibleCommand(request: VisibleCommandRequest): Promise<TranscriptEvent[]>;
     captureWorkspaceBaseline(source: string): Promise<void>;
-    refreshWorkspaceAndBroadcast(options?: {
-        forceRefresh?: boolean;
-    }): Promise<WorkspaceSnapshot>;
+    refreshWorkspaceAndBroadcast(
+        options?: WorkspaceListOptions
+    ): Promise<WorkspaceSnapshot>;
     broadcastRuntimeEvents(): Promise<void>;
     invalidateInitialDatasetPreview(objectName?: string): void;
     sendTranscriptEvents(events: TranscriptEvent[]): void;
@@ -133,7 +134,7 @@ export const createRuntimeSessionIpcController = function(
 
     options.ipcMain.handle(workspaceIpcChannels.refresh, async () => {
         return options.refreshWorkspaceAndBroadcast({
-            forceRefresh: true
+            detectChanges: true
         });
     });
 

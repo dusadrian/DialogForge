@@ -254,7 +254,7 @@ export const createBrowserPlotObjectUrl = function(
 const defaultPlotViewerPayload = function(): PlotViewerPayload {
     return {
         status: "waiting",
-        message: "Plots created in R will appear here when the WebR graphics bridge is active.",
+        message: "Plots created by the runtime will appear here when graphics capture is active.",
         url: "",
         urls: [],
         count: 0,

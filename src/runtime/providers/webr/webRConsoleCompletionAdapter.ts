@@ -1,28 +1,16 @@
 import {
-    createCompletionItem,
-    createCompletionRequest,
-    createCompletionResult
+    createCompletionRequest
 } from "../../completions/completionProtocol";
 import type {
     CompletionResult,
-    RuntimeProvider,
-    RuntimeSessionManager,
-    RuntimeSessionSnapshot
+    RuntimeSessionManager
 } from "../../provider-contract/runtimeProvider";
-import {
-    createRuntimeSessionManager
-} from "../../session/runtimeSessionManager";
 import {
     filterRInternalCompletionSymbols
 } from "../r/completions/rInternalCompletionSymbols";
 import {
-    createBrowserWebRSessionSnapshot
-} from "./webRBrowserStartup";
-import {
-    readWebRCompletionResult,
     type WebRCompletionRequest,
-    type WebRCompletionResult,
-    type WebRCompletionRuntime
+    type WebRCompletionResult
 } from "./webRCompletionAdapter";
 
 
@@ -69,71 +57,6 @@ const readWorkspaceColumnSymbols = function(
             ? entry.columns.map((name) => String(name || "")).filter(Boolean)
             : [];
     });
-};
-
-
-export const createBrowserWebRCompletionProvider = function(
-    runtime: WebRCompletionRuntime,
-    canReadRuntime: () => boolean
-): RuntimeProvider {
-    const snapshot: RuntimeSessionSnapshot = createBrowserWebRSessionSnapshot(
-        "ready",
-        "Browser WebR runtime is ready for completions.",
-        "connected"
-    );
-
-    return {
-        manifest: {
-            id: "webr",
-            label: "WebR",
-            language: "r",
-            status: "experimental",
-            capabilities: ["completions.symbols"]
-        },
-        createSession: function() {
-            return snapshot;
-        },
-        toolController: {
-            readCompletions: async function(request) {
-                const result = await readWebRCompletionResult(
-                    runtime,
-                    request,
-                    { canReadRuntime }
-                );
-
-                if (!result) {
-                    return createCompletionResult({
-                        status: "unavailable",
-                        providerId: snapshot.providerId,
-                        prefix: request.prefix,
-                        message: "WebR runtime completions are not available."
-                    });
-                }
-
-                return createCompletionResult({
-                    status: "ready",
-                    providerId: snapshot.providerId,
-                    prefix: request.prefix,
-                    items: (result.value.items || []).map((item) => {
-                        return createCompletionItem(item);
-                    }),
-                    exports: result.value.exports || [],
-                    internals: result.value.internals || [],
-                    symbols: result.value.symbols || [],
-                    message: "WebR runtime completions read through the shared session manager."
-                });
-            }
-        }
-    };
-};
-
-export const createBrowserWebRCompletionSessionManager = function(
-    runtime: WebRCompletionRuntime,
-    canReadRuntime: () => boolean
-): RuntimeSessionManager {
-    return createRuntimeSessionManager(
-        createBrowserWebRCompletionProvider(runtime, canReadRuntime)
-    );
 };
 
 

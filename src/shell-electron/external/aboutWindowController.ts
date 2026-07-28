@@ -29,39 +29,7 @@ export interface AboutWindowController {
 
 const renderScript = function(payload: AboutWindowPayload): string {
     return `
-        (() => {
-            const data = ${JSON.stringify(payload)};
-            document.title = data.title;
-            document.getElementById("aboutTitle").textContent = data.title;
-            document.getElementById("aboutVersion").textContent = data.version;
-            const body = document.getElementById("aboutBody");
-            body.replaceChildren(...data.body.map((text) => {
-                const paragraph = document.createElement("p");
-                paragraph.textContent = text;
-                return paragraph;
-            }));
-            const highlights = document.getElementById("aboutHighlights");
-            highlights.replaceChildren(...data.highlights.map((text) => {
-                const item = document.createElement("li");
-                item.textContent = text;
-                return item;
-            }));
-            highlights.hidden = data.highlights.length === 0;
-            document.getElementById("authorLabel").textContent = data.authorLabel;
-            const author = document.getElementById("authorName");
-            if (data.authorUrl) {
-                const link = document.createElement("a");
-                link.href = data.authorUrl;
-                link.textContent = data.authorName;
-                link.target = "_blank";
-                link.rel = "noreferrer";
-                author.replaceChildren(link);
-            }
-            else {
-                author.textContent = data.authorName;
-            }
-            document.getElementById("aboutCopyright").textContent = data.copyright;
-        })();
+        window.renderDialogForgeAbout(${JSON.stringify(payload)});
     `;
 };
 

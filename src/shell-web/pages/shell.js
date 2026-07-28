@@ -7,9 +7,7 @@ import {
 import {
     routeDialogHostExternalCall
 } from "/browser-esm/src/dialog-runtime/custom-js/dialogHostExternalCallRouter.js";
-import {
-    readDialogConsoleStateChips
-} from "/browser-esm/src/core/contracts/productContribution.js";
+import productContribution from "/api/product-contribution.js";
 import {
     createWorkspacePane
 } from "/browser-esm/src/base-app/features/workspace-pane/workspacePane.js";
@@ -27,23 +25,38 @@ import {
     createMainMenuCommandHandler
 } from "/browser-esm/src/base-app/features/menu-commands/mainMenuCommandRouter.js";
 import {
+    createMainDatasetNavigationSupport
+} from "/browser-esm/src/base-app/features/main-window/mainDatasetNavigationSupport.js";
+import {
+    applicationEventChannels
+} from "/browser-esm/src/base-app/bootstrap/applicationEvents.js";
+import {
+    applicationSettingsEventChannels
+} from "/browser-esm/src/base-app/features/settings/applicationSettingsIpc.js";
+import {
+    createFactoryApplicationSettings,
+    defaultApplicationTerminalSettings,
+    mergeApplicationSettings,
+    synchronizeApplicationSettingsLocale
+} from "/browser-esm/src/base-app/features/settings/applicationSettingsPolicy.js";
+import {
     isDatasetGoToCommand,
     isDatasetOpenActiveCommand,
     isPlotViewerOpenCommand,
     isSupportedAuxiliaryShellCommand
 } from "/browser-esm/src/base-app/features/menu-commands/menuCommandGroups.js";
 import {
-    createWebRDatasetChannelAdapter
-} from "/browser-esm/src/runtime/providers/webr/webRDatasetChannelAdapter.js";
-import {
-    createWebRDatasetEditorRuntimeBindings
-} from "/browser-esm/src/runtime/providers/webr/webRDatasetEditorRuntimeBindings.js";
+    createRuntimeSessionDatasetChannelAdapter
+} from "/browser-esm/src/runtime/tabular-data/runtimeSessionDatasetChannelAdapter.js";
 import {
     createDialogChannelAdapter
 } from "/browser-esm/src/dialog-runtime/dialogChannelAdapter.js";
 import {
     createDialogExternalCallHost
 } from "/browser-esm/src/dialog-runtime/custom-js/externalCallHost.js";
+import {
+    createCompositeDialogExternalCallHost
+} from "/browser-esm/src/dialog-runtime/custom-js/compositeExternalCallHost.js";
 import {
     dialogRuntimeEventChannels,
     dialogRuntimeIpcChannels
@@ -81,6 +94,9 @@ import {
     createBrowserMenuAdapter
 } from "/browser-esm/src/shell-web/browserMenuAdapter.js";
 import {
+    createBrowserNativeEditRoleAdapter
+} from "/browser-esm/src/shell-web/browserNativeEditRoleAdapter.js";
+import {
     createBrowserConsoleBootstrap,
     exposeBrowserConsoleHandle
 } from "/browser-esm/src/shell-web/browserConsoleBootstrap.js";
@@ -94,6 +110,9 @@ import {
     createBrowserDataEditorSurface
 } from "/browser-esm/src/shell-web/browserDataEditorSurface.js?v=20260709-data-editor-tabs";
 import {
+    createDatasetNavigationCommandController
+} from "/browser-esm/src/dataset-editor/renderer/datasetNavigationCommandController.js";
+import {
     findBrowserDialogLayerForMessage
 } from "/browser-esm/src/shell-web/browserDialogSurface.js";
 import {
@@ -103,15 +122,23 @@ import {
     createBrowserWorkbenchLayout
 } from "/browser-esm/src/shell-web/browserWorkbenchLayout.js";
 import {
-    createBrowserWebRCompletionSessionManager,
     readWebRConsoleCompletionResult
 } from "/browser-esm/src/runtime/providers/webr/webRConsoleCompletionAdapter.js";
 import {
-    executeWebRRuntimeMethod
-} from "/browser-esm/src/runtime/providers/webr/webRRuntimeMethodRouter.js";
-import {
     createWebRPromptCoordinator
 } from "/browser-esm/src/runtime/providers/webr/webRPromptBridge.js";
+import {
+    createBrowserWebRSession
+} from "/browser-esm/src/runtime/providers/webr/webRBrowserSession.js";
+import {
+    createWebRRuntimeOperationQueue
+} from "/browser-esm/src/runtime/providers/webr/webRRuntimeOperationQueue.js";
+import {
+    createWebRRuntimeRestartWorkspaceController
+} from "/browser-esm/src/runtime/providers/webr/webRRuntimeRestartWorkspace.js";
+import {
+    installWebRSharedRuntimeControl
+} from "/browser-esm/src/runtime/providers/webr/webRSharedRuntimeControl.js";
 import {
     getRCompletionContext
 } from "/browser-esm/src/runtime/providers/r/completions/rCompletionContext.js";
@@ -133,32 +160,47 @@ import {
 import {
     fetchWebRHelpPageByUrl,
     fetchWebRHelpHomeDocument,
-    fetchWebRHelpTopicDocument,
-    runWebRHelpExample
+    prepareWebRHelpDocumentHtml
 } from "/browser-esm/src/runtime/providers/webr/webRHelpDocument.js";
 import {
+    buildHelpExampleCommand,
     parseHelpCommandUrl
 } from "/browser-esm/src/runtime/help/helpCommandUrl.js";
+import {
+    buildHelpChooserDocument
+} from "/browser-esm/src/runtime/help/helpChooserDocument.js";
+import {
+    createRHelpFallbackHtml
+} from "/browser-esm/src/runtime/help/rHelpDocument.js";
 import {
     buildRContextualHelpRequest,
     parseRConsoleHelpCommand
 } from "/browser-esm/src/runtime/providers/r/help/rContextualHelp.js";
 import {
-    buildRClearWorkspaceCommand,
-    buildRRemoveWorkspaceObjectCommand
-} from "/browser-esm/src/runtime/providers/r/workspace/rWorkspaceSnapshotCommands.js";
+    readRuntimeVersion
+} from "/browser-esm/src/runtime/lifecycle/runtimeVersion.js";
 import {
-    createWebRDirectRuntimeTransport
-} from "/browser-esm/src/runtime/providers/webr/webRDirectRuntimeTransport.js";
+    createWorkspaceDatasetCacheEffects,
+    workspaceUpdateChangesDialogVariables
+} from "/browser-esm/src/runtime/workspace/workspaceUpdateEffects.js";
 import {
-    createWebRWorkspaceController
-} from "/browser-esm/src/runtime/providers/webr/webRWorkspaceController.js";
+    workspaceUpdateHasChanges
+} from "/browser-esm/src/runtime/workspace/workspaceUpdate.js";
 import {
-    ensureWebRDirectory
+    createWebRFilePath,
+    ensureWebRDirectory,
+    sanitizeWebRFileName,
+    writeWebRFile
 } from "/browser-esm/src/runtime/providers/webr/webRFileSystem.js";
 import {
-    createWorkspaceSnapshot
-} from "/browser-esm/src/runtime/workspace/workspaceProtocol.js";
+    createRuntimeFileWorkflow
+} from "/browser-esm/src/runtime/files/runtimeFileWorkflow.js";
+import {
+    rScriptFilePolicy
+} from "/browser-esm/src/runtime/providers/r/script/rScriptFilePolicy.js";
+import {
+    rWorkspaceFilePolicy
+} from "/browser-esm/src/runtime/providers/r/workspace/rWorkspaceFilePolicy.js";
 import {
     closeBrowserCapturedPlotImages,
     copyBrowserPlot,
@@ -188,21 +230,14 @@ import {
 } from "/browser-esm/src/runtime/providers/r/commands/rCommandIntents.js";
 import {
     captureWebRHiddenText,
-    executeWebRSourceVisibleCommand,
     prewarmWebRGraphicsCapture as runWebRGraphicsPrewarm
 } from "/browser-esm/src/runtime/providers/webr/webRCommandCapture.js";
-import {
-    createWebRVisibleCommandRunner
-} from "/browser-esm/src/runtime/providers/webr/webRVisibleCommandRunner.js";
 import {
     createWebRRuntimePackageAdapter
 } from "/browser-esm/src/runtime/providers/webr/webRRuntimePackageAdapter.js";
 import {
     isWebRSessionPackageMenuCommand
 } from "/browser-esm/src/runtime/providers/webr/webRPackageMenuPolicy.js";
-import {
-    executeWebRInvisibleMutation
-} from "/browser-esm/src/runtime/providers/webr/webRInvisibleMutationAdapter.js";
 import {
     createBrowserRuntimeProgressController
 } from "/browser-esm/src/shell-web/browserRuntimeProgressAdapter.js";
@@ -236,9 +271,6 @@ import {
     isLikelyIncompleteScriptFragment
 } from "/browser-esm/src/script-editor/run/scriptFragmentHeuristic.js";
 import {
-    checkRScriptFragmentCompleteness
-} from "/browser-esm/src/runtime/providers/r/script/rScriptFragmentCompleteness.js";
-import {
     installBrowserDraggableSurface,
     installBrowserResizableSurface
 } from "/browser-esm/src/shell-web/browserSurfaceGeometry.js";
@@ -266,23 +298,28 @@ const state = {
     commandPreviewDialogId: "",
     commandPreviewColorizer: null,
     commandPreviewController: null,
-    dialogOpeningCover: null,
-    dialogOpeningCoverId: "",
+    dialogOpeningActivityEnd: null,
+    dialogOpeningActivityId: "",
+    dialogWorkspaceDataPromises: new WeakMap(),
+    workspaceMetadataRefreshPromise: null,
+    workspaceMetadataReady: false,
     productStateChips: [],
     dialogBindingState: createDialogBindingState(),
     dialogExternalCallHost: null,
     commandHistory: null,
     loadedRuntimePackages: new Set(),
     datasetChannelAdapter: null,
-    datasetEditorRuntimeBindings: null,
     dialogChannelAdapter: null,
     generalChannelAdapter: null,
     browserImportAdapter: null,
     runtimePackageAdapter: null,
+    runtimeFileWorkflow: null,
     browserRuntimeProgressController: null,
-    completionSessionManager: null,
-    workspaceController: null,
-    workspaceControllerRuntime: null,
+    runtimeSession: null,
+    runtimeSessionRuntime: null,
+    runtimeControlClient: null,
+    runtimeOperationQueue: null,
+    runtimeRestartWorkspaceController: null,
     scriptChannelAdapter: null,
     browserScriptEditorSurface: null,
     browserLiveScriptTransport: null,
@@ -293,10 +330,12 @@ const state = {
     browserHelpViewerSurface: null,
     browserWorkbenchLayout: null,
     settingsLayer: null,
+    settingsPreview: null,
+    goToContext: null,
     devDiagnosticsLayer: null,
     promptCoordinator: null,
-    visibleCommandRunner: null,
     workingDirectoryPath: "/web",
+    workingDirectoryHandle: null,
     homeDirectoryPath: "",
     activeDatasetName: "",
     plotViewerGraphicsWarmupPromise: null,
@@ -364,13 +403,6 @@ const state = {
     }
 };
 
-const dialogRuntimePackageRequirements = {
-    frequencies: ["admisc", "declared"],
-    crosstable: ["admisc", "declared"],
-    summaries: ["admisc", "declared"],
-    independentsamplesttest: ["statistics"]
-};
-
 const elements = {
     menuBar: document.getElementById("webMenuBar"),
     workspaceSummary: document.getElementById("workspaceSummary")
@@ -418,6 +450,10 @@ const escapeHtml = function (value) {
 };
 
 const browserHostAdapter = createBrowserHostAdapter();
+const browserNativeEditRoleAdapter = createBrowserNativeEditRoleAdapter(
+    document,
+    navigator
+);
 const browserApplicationStorageAdapter = createBrowserStorageAdapter({
     settingsKey: "dialogforge.settings"
 });
@@ -444,38 +480,15 @@ const readSelectedLocale = function () {
 };
 
 const webTerminalDefaults = {
-    fontFamily: "\"Dialog Mono\", monospace",
-    cursorStyle: "bar",
-    cursorBlink: true,
-    selectionBackground: "rgba(86, 156, 214, 0.42)",
-    startQuiet: false,
-    inputMode: "console",
-    showFullErrorContext: false
+    ...defaultApplicationTerminalSettings
 };
 
-const webSettingsFontOptions = [
-    {
-        value: "\"Dialog Mono\", monospace",
-        label: "Liberation Mono"
-    },
-    {
-        value: "\"JetBrains Mono\", \"Dialog Mono\", monospace",
-        label: "JetBrains Mono"
-    },
-    {
-        value: "\"Fira Code\", \"Dialog Mono\", monospace",
-        label: "Fira Code"
-    },
-    {
-        value: "\"Source Code Pro\", \"Dialog Mono\", monospace",
-        label: "Source Code Pro"
-    }
-];
-
-const webSettingsCursorOptions = ["bar", "block", "underline"];
-
-const readTerminalSettings = function () {
-    const settings = browserApplicationStorageAdapter.readSettings();
+const readTerminalSettings = function (settingsInput = null) {
+    const settings = settingsInput
+        && typeof settingsInput === "object"
+        && !Array.isArray(settingsInput)
+        ? settingsInput
+        : browserApplicationStorageAdapter.readSettings();
     const terminalSettings = settings.terminalSettings;
     const productSettings = state.composition?.productSettings;
     const productTerminalSettings = productSettings
@@ -495,8 +508,8 @@ const readTerminalSettings = function () {
     );
 };
 
-const applyWebTerminalSettings = function () {
-    const terminalSettings = readTerminalSettings();
+const applyWebTerminalSettings = function (settingsInput = null) {
+    const terminalSettings = readTerminalSettings(settingsInput);
     const fontFamily = String(
         terminalSettings.fontFamily || webTerminalDefaults.fontFamily
     );
@@ -525,156 +538,12 @@ const writeSelectedLocale = function (locale) {
     ));
 };
 
-const createSettingsSelect = function (frameDocument, id, options, value) {
-    const select = frameDocument.createElement("dm-select");
-
-    select.id = id;
-
-    if (typeof select.setOptions === "function") {
-        select.setOptions(options);
-    } else {
-        options.forEach((option) => {
-            const normalized = typeof option === "string"
-                ? { value: option, label: option }
-                : option;
-            const node = frameDocument.createElement("option");
-
-            node.value = normalized.value;
-            node.textContent = normalized.label;
-            select.appendChild(node);
-        });
-    }
-
-    select.value = String(value || "");
-
-    return select;
-};
-
-const createSettingsCheckbox = function (frameDocument, id, checked) {
-    const checkbox = frameDocument.createElement("dm-checkbox");
-
-    checkbox.id = id;
-    checkbox.checked = checked === true;
-
-    return checkbox;
-};
-
-const createSettingsCheckboxField = function (
-    frameDocument,
-    grid,
-    options
-) {
-    const field = frameDocument.createElement("div");
-    const row = frameDocument.createElement("div");
-    const label = frameDocument.createElement("label");
-    const checkbox = createSettingsCheckbox(
-        frameDocument,
-        options.controlId,
-        options.checked
-    );
-
-    field.className = options.wide
-        ? "field wide checkbox-field"
-        : "field checkbox-field";
-    row.className = "field-inline";
-    label.id = options.labelId || "";
-    label.htmlFor = options.controlId;
-    label.textContent = options.label;
-    label.addEventListener("click", (event) => {
-        event.preventDefault();
-        checkbox.checked = !checkbox.checked;
-    });
-    row.append(checkbox, label);
-    field.appendChild(row);
-    grid.appendChild(field);
-};
-
-const appendSettingsField = function (
-    frameDocument,
-    grid,
-    options
-) {
-    const field = frameDocument.createElement("div");
-    const label = frameDocument.createElement("label");
-
-    field.className = options.wide
-        ? "field wide"
-        : "field";
-    label.id = options.labelId || "";
-    label.htmlFor = options.controlId;
-    label.textContent = options.label;
-    field.append(label, options.control);
-    grid.appendChild(field);
-};
-
-const createSettingsColorInput = function (frameDocument, id, value) {
-    const row = frameDocument.createElement("div");
-    const input = frameDocument.createElement("input");
-    const button = frameDocument.createElement("button");
-
-    row.className = "color-input-row";
-    input.id = id;
-    input.type = "text";
-    input.spellcheck = false;
-    input.value = String(value || "");
-
-    button.id = `${id}Swatch`;
-    button.className = "color-swatch-btn";
-    button.type = "button";
-    button.title = translateCompositionText("Pick color", "Pick color");
-    button.setAttribute("aria-label", button.title);
-    button.style.background = input.value || webTerminalDefaults.selectionBackground;
-    button.addEventListener("click", () => {
-        input.focus();
-    });
-    input.addEventListener("input", () => {
-        button.style.background = input.value || webTerminalDefaults.selectionBackground;
-    });
-
-    row.append(input, button);
-
-    return row;
-};
-
-const readSettingsControlValue = function (frameDocument, id) {
-    return String(frameDocument.getElementById(id)?.value || "");
-};
-
-const readSettingsControlChecked = function (frameDocument, id) {
-    return frameDocument.getElementById(id)?.checked === true;
-};
-
-const writeSettingsControlValue = function (frameDocument, id, value) {
-    const control = frameDocument.getElementById(id);
-
-    if (control) {
-        control.value = String(value || "");
-    }
-};
-
-const writeSettingsControlChecked = function (frameDocument, id, checked) {
-    const control = frameDocument.getElementById(id);
-
-    if (control) {
-        control.checked = checked === true;
-    }
-};
-
-const updateSettingsColorSwatch = function (frameDocument, id) {
-    const input = frameDocument.getElementById(id);
-    const button = frameDocument.getElementById(`${id}Swatch`);
-
-    if (button) {
-        button.style.background = input?.value || webTerminalDefaults.selectionBackground;
-    }
-};
-
 const buildWebRuntimeProviderOptions = function () {
     const runtime = state.composition?.runtime || {};
     const id = String(runtime.id || "webr");
 
     return [{
-        value: id,
+        id,
         label: String(runtime.label || id)
     }];
 };
@@ -686,7 +555,7 @@ const buildWebLocaleOptions = function () {
 
     if (locales.length === 0) {
         return [{
-            value: "en_US",
+            code: "en_US",
             label: "English (United States)"
         }];
     }
@@ -695,405 +564,130 @@ const buildWebLocaleOptions = function () {
         const code = String(locale.code || "").trim();
 
         return {
-            value: code,
+            code,
             label: String(locale.label || localeDisplayName(code))
         };
-    }).filter((locale) => locale.value);
+    }).filter((locale) => locale.code);
 };
 
-const createSettingsFrameHtml = function () {
-    return `<!doctype html>
-<html>
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="stylesheet" href="/src/base-app/pages/shared/dmTheme.css">
-<script src="/src/base-app/pages/shared/dmControls.js"></script>
-<style>
-html, body {
-    box-sizing: border-box;
-    width: 100%;
-    height: 100%;
-    min-height: 100%;
-    margin: 0;
-    padding: 0;
-    background: #fff;
-}
-*, *::before, *::after { box-sizing: inherit; }
-.settings-shell {
-    box-sizing: border-box;
-    width: 100%;
-    height: 100%;
-    padding: 0;
-    overflow: auto;
-    background: #fff;
-}
-.settings-root {
-    box-sizing: border-box;
-    width: 100%;
-    padding: 20px 24px;
-    background: #fff;
-    --settings-control-width: 250px;
-    --settings-column-gap: 32px;
-    --settings-content-width:
-        calc((2 * var(--settings-control-width)) + var(--settings-column-gap));
-}
-h1 {
-    margin: 0 0 14px;
-    font-size: 17px;
-    font-weight: 600;
-}
-.settings-grid {
-    display: flex;
-    gap: var(--settings-column-gap);
-    width: var(--settings-content-width);
-}
-.settings-column {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    width: var(--settings-control-width);
-}
-.field {
-    display: flex;
-    flex-direction: column;
-    gap: 5px;
-}
-.field.wide {
-    grid-column: 1 / -1;
-}
-.field-inline {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-label {
-    color: #222;
-    font-size: 12px;
-    font-weight: 600;
-}
-select, dm-select {
-    display: block;
-    width: var(--settings-control-width);
-}
-.color-input-row {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    width: var(--settings-control-width);
-}
-.color-input-row input[type="text"] {
-    box-sizing: border-box;
-    flex: 1 1 auto;
-    min-width: 0;
-    height: 24px;
-    padding: 1px 6px;
-    border: 1px solid #8c8c8c;
-    border-radius: 4px;
-}
-.color-swatch-btn {
-    width: 24px;
-    height: 24px;
-    min-width: 24px;
-    padding: 0;
-    border: 0.5px solid #000;
-    border-radius: 2px;
-}
-.color-swatch-btn:focus,
-.color-swatch-btn:focus-visible {
-    outline: none;
-    box-shadow: none;
-}
-.checkbox-field .field-inline {
-    gap: 0px;
-}
-.checkbox-field label {
-    cursor: pointer;
-    user-select: none;
-}
-.actions {
-    width: var(--settings-content-width);
-    display: flex;
-    justify-content: flex-end;
-    gap: 10px;
-    margin-top: 16px;
-    padding-top: 12px;
-    border-top: 1px solid #e2e2e2;
-}
-.reset-button {
-    margin-right: auto;
-}
-@media (max-width: 580px) {
-    .settings-root {
-        --settings-column-gap: 14px;
-        --settings-content-width: 100%;
-    }
+const readBrowserRuntimeLocationState = function (providerId) {
+    const runtime = state.composition?.runtime || {};
+    const runtimeLabel = String(runtime.label || runtime.id || providerId);
 
-    .settings-grid {
-        flex-direction: column;
-        gap: 16px;
-    }
-
-    .settings-column {
-        width: 100%;
-        max-width: var(--settings-control-width);
-    }
-
-    select, dm-select,
-    .color-input-row {
-        width: min(var(--settings-control-width), 100%);
-    }
-}
-</style>
-</head>
-<body>
-<div class="settings-shell">
-    <div class="settings-root">
-        <h1>${escapeHtml(translateCompositionText("Settings", "Settings"))}</h1>
-        <div class="settings-grid" id="settingsGrid">
-            <div class="settings-column" id="settingsColumn1"></div>
-            <div class="settings-column" id="settingsColumn2"></div>
-        </div>
-        <div class="actions">
-            <button id="resetSettings" class="dm-action-button reset-button" type="button">${escapeHtml(translateCompositionText("Reset", "Reset"))}</button>
-            <button id="saveSettings" class="dm-action-button" type="button">${escapeHtml(translateCompositionText("Save", "Save"))}</button>
-            <button id="cancelSettings" class="dm-action-button" type="button">${escapeHtml(translateCompositionText("Cancel", "Cancel"))}</button>
-        </div>
-    </div>
-</div>
-</body>
-</html>`;
+    return {
+        providerId,
+        configurable: false,
+        configuredPath: "",
+        resolvedPath: runtimeLabel,
+        source: "unavailable",
+        message: translateCompositionText(
+            "This runtime provider has no local executable.",
+            "This runtime provider has no local executable."
+        )
+    };
 };
 
-
-const renderSettingsFrame = function (frame, surface) {
-    const frameDocument = frame?.contentDocument;
-
-    if (!frameDocument) {
-        return false;
-    }
-
-    const col1 = frameDocument.getElementById("settingsColumn1");
-    const col2 = frameDocument.getElementById("settingsColumn2");
-
-    if (!col1 || !col2) {
-        return false;
-    }
-
-    col1.replaceChildren();
-    col2.replaceChildren();
-
+const readBrowserSettingsPayload = function () {
     const settings = browserApplicationStorageAdapter.readSettings();
-    const terminalSettings = readTerminalSettings();
-    const runtimeStartup = settings.runtimeStartup
-        && typeof settings.runtimeStartup === "object"
-        ? settings.runtimeStartup
-        : {};
+    const runtimeProviders = buildWebRuntimeProviderOptions();
     const selectedRuntimeProvider = String(
-        runtimeStartup.providerId || state.composition?.runtime?.id || "webr"
+        settings.runtimeStartup?.providerId
+        || state.composition?.runtime?.id
+        || runtimeProviders[0]?.id
+        || "webr"
     );
 
-    appendSettingsField(frameDocument, col1, {
-        label: translateCompositionText("Language", "Language"),
-        controlId: "defaultLanguage",
-        control: createSettingsSelect(
-            frameDocument,
-            "defaultLanguage",
-            buildWebLocaleOptions(),
-            settings.defaultLanguage || settings.languageNS || "en_US"
-        )
-    });
-    appendSettingsField(frameDocument, col2, {
-        label: translateCompositionText("Runtime provider", "Runtime provider"),
-        controlId: "runtimeProvider",
-        control: createSettingsSelect(
-            frameDocument,
-            "runtimeProvider",
-            buildWebRuntimeProviderOptions(),
+    return {
+        settings,
+        factorySettings: createFactoryApplicationSettings(
             selectedRuntimeProvider
-        )
-    });
-    appendSettingsField(frameDocument, col1, {
-        label: translateCompositionText("Console font", "Console font"),
-        controlId: "terminalFont",
-        control: createSettingsSelect(
-            frameDocument,
-            "terminalFont",
-            webSettingsFontOptions,
-            terminalSettings.fontFamily
-        )
-    });
-    appendSettingsField(frameDocument, col2, {
-        label: translateCompositionText("Console cursor", "Console cursor"),
-        controlId: "terminalCursorStyle",
-        control: createSettingsSelect(
-            frameDocument,
-            "terminalCursorStyle",
-            webSettingsCursorOptions,
-            terminalSettings.cursorStyle
-        )
-    });
-    createSettingsCheckboxField(frameDocument, col1, {
-        label: translateCompositionText("Console cursor blink", "Console cursor blink"),
-        controlId: "terminalCursorBlink",
-        checked: Boolean(terminalSettings.cursorBlink)
-    });
-    appendSettingsField(frameDocument, col2, {
-        label: translateCompositionText("Console selection color", "Console selection color"),
-        controlId: "terminalSelectionColor",
-        control: createSettingsColorInput(
-            frameDocument,
-            "terminalSelectionColor",
-            terminalSettings.selectionBackground
-        )
-    });
-    createSettingsCheckboxField(frameDocument, col1, {
-        label: translateCompositionText("Start runtime quietly", "Start runtime quietly"),
-        controlId: "terminalQuiet",
-        checked: terminalSettings.startQuiet === true
-    });
-    createSettingsCheckboxField(frameDocument, col1, {
-        label: translateCompositionText(
-            "Show full console error context",
-            "Show full console error context"
         ),
-        controlId: "terminalErrorContext",
-        checked: Boolean(terminalSettings.showFullErrorContext)
+        locales: buildWebLocaleOptions(),
+        runtimeProviders,
+        runtimeLocationStates: {
+            [selectedRuntimeProvider]:
+                readBrowserRuntimeLocationState(selectedRuntimeProvider)
+        },
+        selectedRuntimeProvider,
+        strings: state.composition?.i18n || {}
+    };
+};
+
+const previewBrowserSettings = async function (input) {
+    const current = browserApplicationStorageAdapter.readSettings();
+    const providerId = String(
+        state.composition?.runtime?.id || "webr"
+    );
+    const next = mergeApplicationSettings(
+        current,
+        input,
+        [providerId],
+        providerId
+    );
+    const nextLocale = String(
+        next.defaultLanguage || next.languageNS || "en_US"
+    );
+
+    state.settingsPreview = next;
+    applyWebTerminalSettings(next);
+    await applyBrowserLanguage(nextLocale, {
+        persist: false,
+        refreshSettings: false
     });
-    appendSettingsField(frameDocument, col2, {
-        label: translateCompositionText("Input mode", "Input mode"),
-        controlId: "terminalInputMode",
-        control: createSettingsSelect(
-            frameDocument,
-            "terminalInputMode",
-            ["console", "terminal"],
-            terminalSettings.inputMode === "terminal" ? "terminal" : "console"
-        )
+};
+
+const cancelBrowserSettingsPreview = async function () {
+    const saved = browserApplicationStorageAdapter.readSettings();
+    const savedLocale = String(
+        saved.defaultLanguage || saved.languageNS || "en_US"
+    );
+
+    state.settingsPreview = null;
+    applyWebTerminalSettings(saved);
+    await applyBrowserLanguage(savedLocale, {
+        persist: false,
+        refreshSettings: false
     });
-    createSettingsCheckboxField(frameDocument, col1, {
-        label: translateCompositionText(
-            "Enable authoring features",
-            "Enable authoring features"
+};
+
+const saveBrowserSettings = async function (input, sourceWindow) {
+    const current = browserApplicationStorageAdapter.readSettings();
+    const providerId = String(
+        state.composition?.runtime?.id || "webr"
+    );
+    const next = synchronizeApplicationSettingsLocale(
+        current,
+        mergeApplicationSettings(
+            current,
+            input,
+            [providerId],
+            providerId
         ),
-        controlId: "enableAuthoringFeatures",
-        checked: settings.enableAuthoringFeatures === true
-    });
+        input
+    );
+    const nextLocale = String(
+        next.defaultLanguage || next.languageNS || "en_US"
+    );
 
-    frameDocument.getElementById("resetSettings").addEventListener("click", () => {
-        writeSettingsControlValue(frameDocument, "defaultLanguage", "en_US");
-        writeSettingsControlValue(
-            frameDocument,
-            "runtimeProvider",
-            state.composition?.runtime?.id || selectedRuntimeProvider
-        );
-        writeSettingsControlValue(
-            frameDocument,
-            "terminalFont",
-            webTerminalDefaults.fontFamily
-        );
-        writeSettingsControlValue(
-            frameDocument,
-            "terminalCursorStyle",
-            webTerminalDefaults.cursorStyle
-        );
-        writeSettingsControlChecked(
-            frameDocument,
-            "terminalCursorBlink",
-            Boolean(webTerminalDefaults.cursorBlink)
-        );
-        writeSettingsControlValue(
-            frameDocument,
-            "terminalSelectionColor",
-            webTerminalDefaults.selectionBackground
-        );
-        updateSettingsColorSwatch(frameDocument, "terminalSelectionColor");
-        writeSettingsControlChecked(
-            frameDocument,
-            "terminalQuiet",
-            webTerminalDefaults.startQuiet === true
-        );
-        writeSettingsControlChecked(
-            frameDocument,
-            "terminalErrorContext",
-            Boolean(webTerminalDefaults.showFullErrorContext)
-        );
-        writeSettingsControlValue(
-            frameDocument,
-            "terminalInputMode",
-            webTerminalDefaults.inputMode
-        );
-        writeSettingsControlChecked(
-            frameDocument,
-            "enableAuthoringFeatures",
-            false
-        );
+    state.settingsPreview = null;
+    browserApplicationStorageAdapter.writeSettings(next);
+    applyWebTerminalSettings(next);
+    await applyBrowserLanguage(nextLocale, {
+        persist: false,
+        refreshSettings: false
     });
-    frameDocument.getElementById("cancelSettings").addEventListener("click", () => {
-        browserFrameSurfaces().close("settings");
-    });
-    frameDocument.getElementById("saveSettings").addEventListener("click", () => {
-        const previousLocale = readSelectedLocale();
-        const nextLocale = readSettingsControlValue(frameDocument, "defaultLanguage") || "en_US";
-        const nextSettings = browserApplicationStorageAdapter.writeSettings(Object.assign(
-            {},
-            settings,
-            {
-                defaultLanguage: nextLocale,
-                languageNS: nextLocale,
-                terminalSettings: {
-                    fontFamily: readSettingsControlValue(frameDocument, "terminalFont")
-                        || webTerminalDefaults.fontFamily,
-                    cursorStyle: readSettingsControlValue(frameDocument, "terminalCursorStyle")
-                        || webTerminalDefaults.cursorStyle,
-                    cursorBlink: readSettingsControlChecked(frameDocument, "terminalCursorBlink"),
-                    selectionBackground: readSettingsControlValue(frameDocument, "terminalSelectionColor")
-                        || webTerminalDefaults.selectionBackground,
-                    startQuiet: readSettingsControlChecked(frameDocument, "terminalQuiet"),
-                    inputMode: readSettingsControlValue(frameDocument, "terminalInputMode") === "terminal"
-                        ? "terminal"
-                        : "console",
-                    showFullErrorContext:
-                        readSettingsControlChecked(frameDocument, "terminalErrorContext")
-                },
-                runtimeStartup: Object.assign({}, runtimeStartup, {
-                    providerId: readSettingsControlValue(frameDocument, "runtimeProvider")
-                        || selectedRuntimeProvider
-                }),
-                enableAuthoringFeatures:
-                    readSettingsControlChecked(frameDocument, "enableAuthoringFeatures")
-            }
-        ));
-
-        applyWebTerminalSettings(nextSettings.terminalSettings);
-        browserFrameSurfaces().close("settings");
-
-        if (nextLocale !== previousLocale) {
-            void applyBrowserLanguage(nextLocale);
-        }
-    });
-
-    return true;
+    postBrowserPreloadEvent(
+        sourceWindow,
+        applicationSettingsEventChannels.settingsSaved
+    );
 };
 
 const openSettingsModal = function () {
     const title = translateCompositionText("Settings", "Settings");
-    let surface = null;
-    let rendered = false;
-    const render = function () {
-        if (rendered) {
-            return;
-        }
-
-        if (surface) {
-            rendered = renderSettingsFrame(surface.frame, surface);
-        }
-    };
-
-    surface = browserFrameSurfaces().open({
+    const surface = browserFrameSurfaces().open({
         id: "settings",
         title,
-        src: "about:blank",
-        srcdoc: createSettingsFrameHtml(),
+        src: "/src/base-app/pages/settings.html",
         width: 600,
         height: 400,
         role: "dialog",
@@ -1103,22 +697,23 @@ const openSettingsModal = function () {
         shellClass: "dialogforge-web-settings-window",
         layerClass: "dialogforge-web-settings-layer",
         frameClass: "dialogforge-web-settings-frame",
-        onFrameLoad: render,
+        onFrameLoad: function (frame) {
+            browserZoomAdapter.postToWindow(frame?.contentWindow || null);
+        },
         onActivate: function (layer) {
             activateModelessSurface("settings");
             state.settingsLayer = layer;
         },
         onClose: function () {
             state.settingsLayer = null;
+            if (state.settingsPreview) {
+                void cancelBrowserSettingsPreview();
+            }
         }
     });
 
     state.settingsLayer = surface.layer;
     installModelessSurfaceActivation("settings", surface.layer);
-    if (!surface.created) {
-        rendered = false;
-    }
-    render();
 };
 
 applyWebTerminalSettings();
@@ -1151,10 +746,17 @@ const browserPreloadChannelBridge = createBrowserPreloadChannelBridge({
         };
     },
     readGoToContext() {
-        return {
-            datasetName: state.dataEditor.datasetName || state.activeDatasetName || "",
+        const context = state.goToContext || {
+            datasetName:
+                state.dataEditor.datasetName
+                || state.activeDatasetName
+                || "",
             mode: "Variable"
         };
+
+        state.goToContext = null;
+
+        return context;
     },
     async gotoVariable(input) {
         const variableName = String(input.variableName || "").trim();
@@ -1233,6 +835,69 @@ const browserPreloadChannelBridge = createBrowserPreloadChannelBridge({
     },
     resolveScriptCloseRequest(input) {
         browserScriptEditorSurface().resolveCloseRequest(input || {});
+    },
+    readSettingsPayload: readBrowserSettingsPayload,
+    readApplicationSettings() {
+        return browserApplicationStorageAdapter.readSettings();
+    },
+    readComposition() {
+        return state.composition;
+    },
+    readRuntimeSession() {
+        return browserRuntimeSessionManager()?.getSnapshot()
+            || (
+                state.runtimeStarting
+                    ? runtimeSnapshot("starting", "WebR is starting.")
+                    : state.runtimeReady
+                        ? runtimeSnapshot("ready", "WebR ready.")
+                        : runtimeSnapshot("stopped", "WebR not started.")
+            );
+    },
+    listRuntimeEvents() {
+        const manager = browserRuntimeSessionManager();
+
+        return manager
+            ? manager.listRuntimeEvents()
+            : {
+                status: state.runtimeStarting ? "starting" : "stopped",
+                records: []
+            };
+    },
+    listRuntimePrompts() {
+        const manager = browserRuntimeSessionManager();
+
+        return manager
+            ? manager.listPrompts()
+            : {
+                status: "ready",
+                prompts: []
+            };
+    },
+    async refreshWorkspace() {
+        await refreshWebRWorkspacePane({
+            detectChanges: true
+        });
+
+        return state.workspaceSnapshot;
+    },
+    chooseRuntimeLocation() {
+        return null;
+    },
+    discoverRuntimeLocation(input) {
+        const providerId = String(
+            input.providerId || state.composition?.runtime?.id || "webr"
+        );
+
+        return readBrowserRuntimeLocationState(providerId);
+    },
+    previewSettings: previewBrowserSettings,
+    cancelSettingsPreview: cancelBrowserSettingsPreview,
+    saveSettings: saveBrowserSettings,
+    closeSettingsWindow() {
+        browserFrameSurfaces().close("settings");
+    },
+    restartRuntime(action) {
+        return restartBrowserRuntime(action);
     }
 });
 
@@ -1270,12 +935,92 @@ const transcript = function () {
     return state.console?.coordinator?.getTranscript?.() || null;
 };
 
+const webRRuntimeSession = function () {
+    if (!state.runtimeReady || !state.runtime) {
+        return null;
+    }
+
+    if (
+        !state.runtimeSession
+        || state.runtimeSessionRuntime !== state.runtime
+    ) {
+        state.runtimeSession = createBrowserWebRSession({
+            runtime: state.runtime,
+            runtimeControlClient: state.runtimeControlClient,
+            runRuntimeOperation: function (action) {
+                return state.runtimeOperationQueue.run(action);
+            },
+            visibleCommands: {
+                loadedPackages: state.loadedRuntimePackages,
+                ensureRuntime,
+                readConsoleOutputWidth: readBrowserConsoleOutputWidth,
+                transcript,
+                createActivity: function (text, options = {}) {
+                    return options.preRecorded
+                        ? {
+                            id: String(options.activityId || `web_cmd_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`),
+                            commandText: normalizeConstructedCommandText(text)
+                        }
+                        : createVisibleCommandActivity(text, String(options.activityId || ""));
+                },
+                setRuntimeBusy: function (busy) {
+                    state.console?.session?.setRuntimeBusy?.(busy);
+                },
+                renderToolbar: function () {
+                    state.console?.toolbar?.render?.();
+                },
+                openHelpTopic: openHelpTopicModal,
+                maybeOpenPlotViewer: maybeOpenPlotViewerForCommand,
+                updatePlotImages: updatePlotViewerFromCapturedImages,
+                requestPrompt: function (input) {
+                    return webRPromptCoordinator().requestPrompt(input || {});
+                },
+                setWorkspaceMetadataStatus: function () {
+                    browserRuntimeProgress().setActivityMessage(
+                        "Retrieving variables metadata..."
+                    );
+                }
+            },
+            workspaceChanged: applyBrowserWorkspaceUpdate,
+            sessionManagerOptions: {
+                dialogs: [
+                    ...(state.composition?.sharedDialogs || []),
+                    ...(state.composition?.productDialogs || [])
+                ],
+                startupTasks: state.composition?.startupTasks || [],
+                dialogExternalCallHost: browserDialogExternalCallHost()
+            },
+            runtimeMethods: {
+                checkCodeFragmentComplete,
+                isRuntimeBusy: function () {
+                    return Boolean(state.console?.session?.isRuntimeBusy?.());
+                },
+                setRuntimeStatus,
+                setRuntimeBusy: function (busy) {
+                    state.console?.session?.setRuntimeBusy?.(busy);
+                },
+                renderToolbar: function () {
+                    state.console?.toolbar?.render?.();
+                },
+                getRuntime: function () {
+                    return state.runtimeReady ? state.runtime : null;
+                },
+                getPromptCoordinator: webRPromptCoordinator
+            }
+        });
+        state.runtimeSessionRuntime = state.runtime;
+    }
+
+    return state.runtimeSession;
+};
+
 const webRPromptCoordinator = function () {
     if (!state.promptCoordinator) {
         state.promptCoordinator = createWebRPromptCoordinator({
             getRuntime: function () {
                 return state.runtimeReady ? state.runtime : null;
-            }
+            },
+            runtimeSessionManager: webRRuntimeSession()?.runtimeSessionManager
         });
     }
 
@@ -1283,38 +1028,21 @@ const webRPromptCoordinator = function () {
 };
 
 const webRCompletionSessionManager = function () {
-    if (!state.runtimeReady || !state.runtime) {
-        return null;
-    }
-
-    if (!state.completionSessionManager) {
-        state.completionSessionManager = createBrowserWebRCompletionSessionManager(
-            state.runtime,
-            function () {
-                return !state.console?.session?.isRuntimeBusy?.();
-            }
-        );
-    }
-
-    return state.completionSessionManager;
+    return webRRuntimeSession()?.runtimeSessionManager || null;
 };
 
-const webRWorkspaceController = function () {
-    if (!state.runtimeReady || !state.runtime) {
-        return null;
-    }
+const browserRuntimeSessionManager = function () {
+    return webRRuntimeSession()?.runtimeSessionManager || null;
+};
 
-    if (
-        !state.workspaceController
-        || state.workspaceControllerRuntime !== state.runtime
-    ) {
-        const transport = createWebRDirectRuntimeTransport(state.runtime, "webr");
+const captureBrowserRuntimeText = function (runtime, command) {
+    const capture = function () {
+        return captureWebRHiddenText(runtime, command);
+    };
 
-        state.workspaceController = createWebRWorkspaceController(transport);
-        state.workspaceControllerRuntime = state.runtime;
-    }
-
-    return state.workspaceController;
+    return state.runtimeOperationQueue
+        ? state.runtimeOperationQueue.run(capture)
+        : capture();
 };
 
 const appendTranscript = function (text, className = "") {
@@ -1378,6 +1106,20 @@ const workspaceObjectByName = function (objectName) {
     }) || null;
 };
 
+const isBrowserTabularWorkspaceObject = function (object) {
+    const kind = String(object?.kind || "").trim().toLowerCase();
+    const capabilities = Array.isArray(object?.capabilities)
+        ? object.capabilities
+        : [];
+
+    return (
+        kind === "data.frame"
+        || kind === "table"
+        || kind === "tibble"
+        || capabilities.includes("tabular.read")
+    );
+};
+
 const browserDialogDatasets = async function () {
     return readProductDialogDatasetDescriptors(
         workspaceEntries().map((entry) => ({
@@ -1401,9 +1143,36 @@ const readDataEditorVariableBatch = function (datasetName, start, count) {
 
 const browserDialogExternalCallHost = function () {
     if (!state.dialogExternalCallHost) {
-        state.dialogExternalCallHost = createDialogExternalCallHost({
+        const sharedHost = createDialogExternalCallHost({
             resolveDatasets: browserDialogDatasets,
             state: state.dialogBindingState
+        });
+        const productContext = {
+            executeRuntimeMethod(request) {
+                const manager = webRRuntimeSession()?.runtimeSessionManager;
+
+                if (!manager) {
+                    throw new Error(
+                        "Runtime session is not ready for a product contribution call."
+                    );
+                }
+
+                return manager.executeRuntimeMethod(request);
+            },
+            async callSharedDialogExternal(name, parameters = {}) {
+                const result = await sharedHost.call(name, parameters);
+
+                return result?.status === "ready" ? result.value : null;
+            }
+        };
+        const productHosts = productContribution
+            && typeof productContribution.createDialogExternalCallHosts === "function"
+            ? productContribution.createDialogExternalCallHosts(productContext)
+            : {};
+
+        state.dialogExternalCallHost = createCompositeDialogExternalCallHost({
+            shared: sharedHost,
+            products: productHosts
         });
     }
 
@@ -1422,9 +1191,7 @@ const notifyBrowserDialogsWorkspaceChanged = function () {
 };
 
 const clearDialogOpeningCover = function (dialogId = "") {
-    const cover = state.dialogOpeningCover;
-
-    if (!cover) {
+    if (typeof state.dialogOpeningActivityEnd !== "function") {
         return;
     }
 
@@ -1432,42 +1199,44 @@ const clearDialogOpeningCover = function (dialogId = "") {
 
     if (
         requestedDialogId
-        && state.dialogOpeningCoverId
-        && requestedDialogId !== state.dialogOpeningCoverId
+        && state.dialogOpeningActivityId
+        && requestedDialogId !== state.dialogOpeningActivityId
     ) {
         return;
     }
 
-    cover.remove();
-    state.dialogOpeningCover = null;
-    state.dialogOpeningCoverId = "";
+    state.dialogOpeningActivityEnd();
+    state.dialogOpeningActivityEnd = null;
+    state.dialogOpeningActivityId = "";
 };
 
 const showDialogOpeningCover = function (dialog) {
     clearDialogOpeningCover();
 
-    const cover = document.createElement("div");
-    const spinner = document.createElement("div");
     const dialogId = String(dialog?.id || "").trim();
     const label = String(dialog?.label || dialogId || "dialog").trim();
 
-    cover.className = "dialogforge-web-dialog-cover";
-    cover.dataset.dialogId = dialogId;
-    cover.setAttribute("role", "status");
-    cover.setAttribute("aria-label", `Opening ${label}`);
-    spinner.className = "dialogforge-web-dialog-cover__spinner";
-    spinner.setAttribute("aria-hidden", "true");
+    state.dialogOpeningActivityEnd = browserRuntimeProgress().beginActivity(
+        `Opening ${label}...`
+    );
+    state.dialogOpeningActivityId = dialogId;
 
-    cover.append(spinner);
-    document.body.appendChild(cover);
-    state.dialogOpeningCover = cover;
-    state.dialogOpeningCoverId = dialogId;
-
-    return cover;
+    return null;
 };
 
 const browserProductContributionContext = function () {
     return {
+        executeRuntimeMethod(request) {
+            const manager = webRRuntimeSession()?.runtimeSessionManager;
+
+            if (!manager) {
+                throw new Error(
+                    "Runtime session is not ready for a product contribution call."
+                );
+            }
+
+            return manager.executeRuntimeMethod(request);
+        },
         async callSharedDialogExternal(name, parameters = {}) {
             const result = await browserDialogExternalCallHost().call(name, parameters);
 
@@ -1479,12 +1248,18 @@ const browserProductContributionContext = function () {
 const readBrowserConsoleStateChips = async function (dataset) {
     const datasetName = String(dataset || state.activeDatasetName || "").trim();
 
-    return datasetName
-        ? readDialogConsoleStateChips(
-            browserProductContributionContext(),
-            datasetName
-        )
-        : [];
+    if (
+        !datasetName
+        || !productContribution
+        || typeof productContribution.readConsoleStateChips !== "function"
+    ) {
+        return [];
+    }
+
+    return productContribution.readConsoleStateChips(
+        browserProductContributionContext(),
+        datasetName
+    );
 };
 
 const refreshBrowserConsoleStateChips = function (dataset = state.activeDatasetName) {
@@ -1522,10 +1297,44 @@ const notifyBrowserDialogsStateChanged = function (dataset = state.activeDataset
     });
 };
 
-const refreshWebRWorkspaceSurfaces = async function () {
-    await refreshWebRWorkspacePane();
-    notifyBrowserDialogsWorkspaceChanged();
+const applyBrowserWorkspaceUpdate = async function (update, snapshot) {
+    if (!workspaceUpdateHasChanges(update)) {
+        return false;
+    }
+
+    const previousDatasetNames = workspaceDatasetNames();
+    const effects = createWorkspaceDatasetCacheEffects(update);
+
+    effects.forEach((effect) => {
+        state.dataEditor.cache.delete(effect.name);
+    });
+
+    state.workspaceSnapshot = snapshot;
+    state.workspaceMetadataReady = true;
+    selectActiveDatasetAfterWorkspaceRefresh(previousDatasetNames);
+    renderWorkspacePane();
+    broadcastBrowserPreloadEvent(
+        applicationEventChannels.workspace,
+        state.workspaceSnapshot
+    );
+
+    if (workspaceUpdateChangesDialogVariables(effects)) {
+        notifyBrowserDialogsWorkspaceChanged();
+    }
+
     refreshBrowserConsoleStateChips();
+
+    return true;
+};
+
+const applyBrowserRuntimeMethodWorkspaceUpdate = async function (
+    result,
+    manager
+) {
+    return applyBrowserWorkspaceUpdate(
+        result?.workspaceUpdate,
+        manager.getWorkspaceSnapshot()
+    );
 };
 
 const workspaceColumnNames = function (objectName) {
@@ -1552,16 +1361,45 @@ const isTokenLaunchSession = function () {
 
 const executeWorkspaceRemove = async function (name) {
     const objectName = String(name || "").trim();
+    const manager = webRRuntimeSession()?.runtimeSessionManager;
 
-    if (!objectName) {
+    if (!objectName || !manager) {
         return;
     }
 
-    await executeVisibleCommand(buildRRemoveWorkspaceObjectCommand(objectName));
+    const previousDatasetNames = workspaceDatasetNames();
+
+    state.workspaceSnapshot = await manager.removeWorkspaceObjects([objectName]);
+    state.workspaceMetadataReady = true;
+    selectActiveDatasetAfterWorkspaceRefresh(previousDatasetNames);
+    renderWorkspacePane();
+    notifyBrowserDialogsWorkspaceChanged();
+    refreshBrowserConsoleStateChips();
+    broadcastBrowserPreloadEvent(
+        applicationEventChannels.workspace,
+        state.workspaceSnapshot
+    );
 };
 
 const executeWorkspaceClear = async function () {
-    await executeVisibleCommand(buildRClearWorkspaceCommand());
+    const manager = webRRuntimeSession()?.runtimeSessionManager;
+
+    if (!manager) {
+        return;
+    }
+
+    const previousDatasetNames = workspaceDatasetNames();
+
+    state.workspaceSnapshot = await manager.clearWorkspace();
+    state.workspaceMetadataReady = true;
+    selectActiveDatasetAfterWorkspaceRefresh(previousDatasetNames);
+    renderWorkspacePane();
+    notifyBrowserDialogsWorkspaceChanged();
+    refreshBrowserConsoleStateChips();
+    broadcastBrowserPreloadEvent(
+        applicationEventChannels.workspace,
+        state.workspaceSnapshot
+    );
 };
 
 const readWorkspacePaneSnapshot = function () {
@@ -1572,7 +1410,7 @@ const setActiveWorkspaceDataset = function (name) {
     const datasetName = String(name || "").trim();
     const object = workspaceObjectByName(datasetName);
 
-    if (!datasetName || object?.kind !== "data.frame") {
+    if (!datasetName || !isBrowserTabularWorkspaceObject(object)) {
         return;
     }
 
@@ -1617,12 +1455,28 @@ const renderWorkspacePane = function () {
 
 const workspaceDatasetNames = function () {
     return workspaceEntries()
-        .filter((entry) => entry.kind === "data.frame")
+        .filter(isBrowserTabularWorkspaceObject)
         .map((entry) => entry.name);
 };
 
 const applyActiveWorkspaceDatasetName = function (datasetName) {
     state.activeDatasetName = String(datasetName || "").trim();
+
+    const manager = webRRuntimeSession()?.runtimeSessionManager;
+
+    if (
+        manager
+        && state.activeDatasetName
+        && manager.getActiveDataset().objectName !== state.activeDatasetName
+    ) {
+        manager.setActiveDataset(state.activeDatasetName).catch((error) => {
+            appendTranscript(
+                error instanceof Error ? error.message : String(error),
+                "web-transcript__line--stderr"
+            );
+        });
+    }
+
     refreshBrowserConsoleStateChips(state.activeDatasetName);
     notifyBrowserDialogsStateChanged(state.activeDatasetName);
 };
@@ -1649,58 +1503,56 @@ const selectActiveDatasetAfterWorkspaceRefresh = function (previousDatasetNames 
     applyActiveWorkspaceDatasetName(datasetNames[0] || "");
 };
 
-const refreshWebRWorkspacePaneFast = async function () {
-    const controller = webRWorkspaceController();
+const refreshWebRWorkspacePane = async function (options = {}) {
+    const controller = browserRuntimeSessionManager();
+    const forceRefresh = options.forceRefresh === true;
+    const detectChanges =
+        options.detectChanges === true && !forceRefresh;
 
     if (!controller) {
         renderWorkspacePane();
         return;
     }
 
-    const previousDatasetNames = workspaceDatasetNames();
-
-    state.workspaceSnapshot = createWorkspaceSnapshot({
-        status: "ready",
-        providerId: "webr",
-        objects: await controller.listWorkspaceObjects(
-            createBrowserWebRSessionSnapshot("ready", "WebR ready."),
-            { forceRefresh: false }
-        ),
-        message: "Workspace objects were read from the WebR provider."
-    });
-
-    selectActiveDatasetAfterWorkspaceRefresh(previousDatasetNames);
-    renderWorkspacePane();
-};
-
-const refreshWebRWorkspaceMetadataInBackground = function () {
-    refreshWebRWorkspaceSurfaces().catch((error) => {
-        console.error(error);
-    });
-};
-
-const refreshWebRWorkspacePane = async function () {
-    const controller = webRWorkspaceController();
-
-    if (!controller) {
-        renderWorkspacePane();
-        return;
+    if (state.workspaceMetadataRefreshPromise) {
+        return state.workspaceMetadataRefreshPromise;
     }
 
-    const previousDatasetNames = workspaceDatasetNames();
+    const refreshMetadata = async function () {
+        const previousDatasetNames = workspaceDatasetNames();
 
-    state.workspaceSnapshot = createWorkspaceSnapshot({
-        status: "ready",
-        providerId: "webr",
-        objects: await controller.listWorkspaceObjects(
-            createBrowserWebRSessionSnapshot("ready", "WebR ready."),
-            { forceRefresh: true }
-        ),
-        message: "Workspace objects were read from the WebR provider."
-    });
+        if (forceRefresh) {
+            state.workspaceMetadataReady = false;
+            browserRuntimeProgress().setActivityMessage(
+                "Retrieving variables metadata..."
+            );
+        }
 
-    selectActiveDatasetAfterWorkspaceRefresh(previousDatasetNames);
-    renderWorkspacePane();
+        state.workspaceSnapshot = await controller.listWorkspaceObjects({
+            forceRefresh,
+            detectChanges
+        });
+        state.workspaceMetadataReady = true;
+
+        selectActiveDatasetAfterWorkspaceRefresh(previousDatasetNames);
+        renderWorkspacePane();
+        broadcastBrowserPreloadEvent(
+            applicationEventChannels.workspace,
+            state.workspaceSnapshot
+        );
+    };
+    const pending = refreshMetadata();
+
+    state.workspaceMetadataRefreshPromise = pending;
+
+    try {
+        return await pending;
+    }
+    finally {
+        if (state.workspaceMetadataRefreshPromise === pending) {
+            state.workspaceMetadataRefreshPromise = null;
+        }
+    }
 };
 
 const DATA_EDITOR_INITIAL_ROWS = 40;
@@ -1735,23 +1587,8 @@ const getDataEditorCache = function (datasetName) {
     return cache;
 };
 
-const browserDatasetEditorRuntimeBindings = function () {
-    if (!state.datasetEditorRuntimeBindings) {
-        state.datasetEditorRuntimeBindings = createWebRDatasetEditorRuntimeBindings({
-            ensureRuntime,
-            invalidateDataset(datasetName) {
-                state.dataEditor.cache.delete(String(datasetName || "").trim());
-            }
-        });
-    }
-
-    return state.datasetEditorRuntimeBindings;
-};
-
 const readBrowserDatasetNames = function () {
-    return workspaceEntries().filter((entry) => {
-        return entry.kind === "data.frame";
-    }).map((entry) => {
+    return workspaceEntries().filter(isBrowserTabularWorkspaceObject).map((entry) => {
         return entry.name;
     });
 };
@@ -1804,7 +1641,7 @@ const openSharedDataEditorModal = async function (datasetName) {
 
     const object = workspaceObjectByName(cleanName);
 
-    if (object?.kind === "data.frame") {
+    if (isBrowserTabularWorkspaceObject(object)) {
         setActiveWorkspaceDataset(cleanName);
     }
 
@@ -2029,32 +1866,91 @@ const readBrowserPickerFile = async function (options) {
     });
 };
 
-const sanitizeWebRFileName = function (name, fallback) {
-    const value = String(name || fallback || "file")
-        .replace(/[\\/:\0]/g, "_")
-        .replace(/^\.+$/, "")
-        .trim();
-
-    return value || fallback || "file";
-};
-
-const joinWebRPath = function (directory, fileName) {
-    const base = String(directory || "/web").replace(/\/+$/g, "") || "/web";
-
-    return `${base}/${sanitizeWebRFileName(fileName, "file")}`;
-};
-
 const writeFileToWebRWorkingDirectory = async function (file) {
     const runtime = await ensureRuntime();
-    const virtualPath = joinWebRPath(
+
+    return writeWebRFile(
+        runtime,
         state.workingDirectoryPath,
-        file.name || "file"
+        file.name || "file",
+        new Uint8Array(await file.arrayBuffer())
+    );
+};
+
+const stageBrowserDirectoryInWebR = async function (
+    runtime,
+    directoryHandle,
+    virtualPath
+) {
+    await ensureWebRDirectory(runtime, virtualPath);
+
+    for await (const [name, entry] of directoryHandle.entries()) {
+        if (entry.kind === "directory") {
+            await stageBrowserDirectoryInWebR(
+                runtime,
+                entry,
+                createWebRFilePath(virtualPath, name)
+            );
+            continue;
+        }
+
+        if (entry.kind !== "file") {
+            continue;
+        }
+
+        const file = await entry.getFile();
+
+        await writeWebRFile(
+            runtime,
+            virtualPath,
+            name,
+            new Uint8Array(await file.arrayBuffer())
+        );
+    }
+};
+
+const selectBrowserWorkingDirectory = async function () {
+    if (!window.showDirectoryPicker) {
+        return {
+            canceled: true,
+            message: translateCompositionTemplate(
+                "This browser does not provide directory access. The runtime remains in {path}.",
+                `This browser does not provide directory access. The runtime remains in ${state.workingDirectoryPath}.`,
+                { path: state.workingDirectoryPath }
+            )
+        };
+    }
+
+    let handle;
+
+    try {
+        handle = await window.showDirectoryPicker({
+            mode: "readwrite"
+        });
+    }
+    catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") {
+            return {
+                canceled: true
+            };
+        }
+
+        throw error;
+    }
+
+    const runtime = await ensureRuntime();
+    const virtualPath = createWebRFilePath(
+        "/web",
+        handle.name || "working-directory"
     );
 
-    await ensureWebRDirectory(runtime, state.workingDirectoryPath);
-    await runtime.FS.writeFile(virtualPath, new Uint8Array(await file.arrayBuffer()));
+    await stageBrowserDirectoryInWebR(runtime, handle, virtualPath);
 
-    return virtualPath;
+    return {
+        canceled: false,
+        filePath: virtualPath,
+        handle
+    };
 };
 
 const downloadBrowserBytes = function (fileName, bytes, type) {
@@ -2074,7 +1970,7 @@ const downloadBrowserBytes = function (fileName, bytes, type) {
     }, 1000);
 };
 
-const selectBrowserSaveFileHandle = async function (fileName, type, extensions) {
+const selectBrowserSaveFileHandle = async function (fileName, types) {
     if (!window.showSaveFilePicker) {
         return null;
     }
@@ -2082,12 +1978,7 @@ const selectBrowserSaveFileHandle = async function (fileName, type, extensions) 
     try {
         return await window.showSaveFilePicker({
             suggestedName: sanitizeWebRFileName(fileName, "workspace.RData"),
-            types: [{
-                description: "R workspace files",
-                accept: {
-                    [type || "application/octet-stream"]: extensions || [".RData"]
-                }
-            }]
+            types
         });
     }
     catch (error) {
@@ -2110,81 +2001,138 @@ const writeBrowserSaveFile = async function (handle, bytes) {
     }
 };
 
-const runBrowserScriptFile = async function () {
+const selectBrowserScriptRuntimeFile = async function () {
     const file = await readBrowserPickerFile({
-        types: [{
-            description: "R script files",
-            accept: {
-                "text/plain": [".R", ".r", ".q"]
-            }
-        }]
+        types: rScriptFilePolicy.browserOpenFileTypes
     });
 
     if (!file) {
-        return;
+        return {
+            canceled: true
+        };
     }
 
-    const virtualPath = await writeFileToWebRWorkingDirectory(file);
-
-    await executeVisibleCommand(`source(${JSON.stringify(virtualPath)}, local = .GlobalEnv)`);
+    return {
+        canceled: false,
+        filePath: await writeFileToWebRWorkingDirectory(file)
+    };
 };
 
-const openBrowserWorkspaceFile = async function () {
+const selectBrowserWorkspaceRuntimeFile = async function () {
     const file = await readBrowserPickerFile({
-        types: [{
-            description: "R workspace files",
-            accept: {
-                "application/octet-stream": [".RData", ".rda", ".Rda"]
-            }
-        }]
+        types: rWorkspaceFilePolicy.browserFileTypes
     });
 
     if (!file) {
-        return;
+        return {
+            canceled: true
+        };
     }
 
-    const virtualPath = await writeFileToWebRWorkingDirectory(file);
-
-    await executeVisibleCommand(`load(${JSON.stringify(virtualPath)}, envir = .GlobalEnv)`);
-    await refreshWebRWorkspaceSurfaces();
+    return {
+        canceled: false,
+        filePath: await writeFileToWebRWorkingDirectory(file)
+    };
 };
 
-const saveBrowserWorkspaceFile = async function () {
-    const fileName = "workspace.RData";
-    const type = "application/octet-stream";
+const selectBrowserWorkspaceSaveTarget = async function () {
+    const fileName = rWorkspaceFilePolicy.defaultFileName;
     const saveHandle = await selectBrowserSaveFileHandle(
         fileName,
-        type,
-        [".RData", ".rda", ".Rda"]
+        rWorkspaceFilePolicy.browserFileTypes
     );
 
     if (saveHandle === false) {
-        return;
+        return {
+            canceled: true
+        };
     }
 
     const runtime = await ensureRuntime();
-    const virtualPath = joinWebRPath(
+    const virtualPath = createWebRFilePath(
         state.workingDirectoryPath,
         fileName
     );
 
     await ensureWebRDirectory(runtime, state.workingDirectoryPath);
-    await runtime.evalRVoid([
-        "save(",
-        "list = ls(envir = .GlobalEnv, all.names = TRUE),",
-        `file = ${JSON.stringify(virtualPath)},`,
-        "envir = .GlobalEnv",
-        ")"
-    ].join(" "));
 
-    const bytes = await runtime.FS.readFile(virtualPath);
+    return {
+        canceled: false,
+        filePath: virtualPath,
+        fileName,
+        saveHandle,
+        type: rWorkspaceFilePolicy.blobType
+    };
+};
 
-    if (saveHandle) {
-        await writeBrowserSaveFile(saveHandle, bytes);
-        return;
+const browserRuntimeFileWorkflow = function () {
+    if (!state.runtimeFileWorkflow) {
+        state.runtimeFileWorkflow = createRuntimeFileWorkflow({
+            selectWorkingDirectory: selectBrowserWorkingDirectory,
+            selectScriptFile: selectBrowserScriptRuntimeFile,
+            selectWorkspaceOpenFile: selectBrowserWorkspaceRuntimeFile,
+            selectWorkspaceSaveFile: selectBrowserWorkspaceSaveTarget,
+            async execute(input) {
+                const manager = webRRuntimeSession()?.runtimeSessionManager;
+
+                if (!manager) {
+                    throw new Error("WebR runtime session is not ready.");
+                }
+
+                return manager.executeRuntimeMethod(input);
+            },
+            selectionCanceled(selection) {
+                if (selection?.message) {
+                    appendTranscript(selection.message);
+                }
+            },
+            async executionFinished(result, context) {
+                if (result.status !== "ready") {
+                    throw new Error(
+                        result.message
+                        || "The runtime file operation could not be completed."
+                    );
+                }
+
+                const manager = webRRuntimeSession()?.runtimeSessionManager;
+
+                if (!manager) {
+                    throw new Error("WebR runtime session is not ready.");
+                }
+
+                await applyBrowserRuntimeMethodWorkspaceUpdate(result, manager);
+
+                if (context.operation === "set-working-directory") {
+                    state.workingDirectoryHandle =
+                        context.selection.handle || null;
+                }
+
+                if (context.operation !== "save-workspace") {
+                    return;
+                }
+
+                const selection = context.selection;
+                const runtime = await ensureRuntime();
+                const bytes = await runtime.FS.readFile(selection.filePath);
+
+                if (selection.saveHandle) {
+                    await writeBrowserSaveFile(selection.saveHandle, bytes);
+                    return;
+                }
+
+                downloadBrowserBytes(
+                    selection.fileName,
+                    bytes,
+                    selection.type
+                );
+            },
+            async refreshWorkingDirectory() {
+                await state.console?.toolbar?.refreshWorkingDirectory?.();
+            }
+        });
     }
 
-    downloadBrowserBytes(fileName, bytes, type);
+    return state.runtimeFileWorkflow;
 };
 
 const cleanupWebRDefaultPlotFile = async function (runtime) {
@@ -2193,7 +2141,7 @@ const cleanupWebRDefaultPlotFile = async function (runtime) {
     }
 
     const candidates = [
-        joinWebRPath(state.workingDirectoryPath, "Rplots.pdf"),
+        createWebRFilePath(state.workingDirectoryPath, "Rplots.pdf"),
         "/web/Rplots.pdf"
     ];
 
@@ -2286,7 +2234,9 @@ const browserCommandPreviewController = function () {
                 state.console?.coordinator?.focus?.();
             },
             writeClipboardText: async function (text) {
-                await navigator.clipboard?.writeText?.(text);
+                await browserHostAdapter.writeClipboardText(
+                    String(text || "")
+                );
             },
             insertScriptEditorCode: async function (text) {
                 await openSharedScriptEditorModal(text);
@@ -2320,15 +2270,40 @@ const browserImportAdapter = function () {
                 return state.workingDirectoryPath;
             },
             ensureRuntime,
-            captureHiddenRText: captureWebRHiddenText,
-            executeHiddenImport: async function (command) {
-                const runtime = await ensureRuntime();
+            executeRuntimeMethod: async function (request) {
+                await ensureRuntime();
+                const manager = webRRuntimeSession()?.runtimeSessionManager;
 
-                await executeWebRSourceVisibleCommand(runtime, command);
+                if (!manager) {
+                    throw new Error("WebR runtime session is not ready.");
+                }
+
+                return manager.executeRuntimeMethod(request);
             },
-            executeVisibleImport: executeVisibleCommand,
-            refreshWorkspace: refreshWebRWorkspaceSurfaces,
-            setActiveDataset: setActiveWorkspaceDataset
+            importThroughRuntime: async function (request) {
+                const session = webRRuntimeSession();
+
+                if (!session) {
+                    throw new Error("WebR runtime session is not ready.");
+                }
+
+                const result = await session.runtimeSessionManager.importData(request);
+
+                if (result.status === "imported") {
+                    state.workspaceSnapshot = session.runtimeSessionManager
+                        .getWorkspaceSnapshot();
+                    state.workspaceMetadataReady = true;
+                    applyActiveWorkspaceDatasetName(
+                        session.runtimeSessionManager.getActiveDataset().objectName
+                            || result.targetName
+                    );
+                    renderWorkspacePane();
+                    notifyBrowserDialogsWorkspaceChanged();
+                    refreshBrowserConsoleStateChips();
+                }
+
+                return result;
+            }
         });
     }
 
@@ -2377,6 +2352,17 @@ const notifyConsoleSession = function () {
     try {
         state.console?.session?.notifySessionPhase?.();
         state.console?.toolbar?.render?.();
+        broadcastBrowserPreloadEvent(
+            applicationEventChannels.runtimeSession,
+            browserRuntimeSessionManager()?.getSnapshot()
+            || (
+                state.runtimeStarting
+                    ? runtimeSnapshot("starting", "WebR is starting.")
+                    : state.runtimeReady
+                        ? runtimeSnapshot("ready", "WebR ready.")
+                        : runtimeSnapshot("stopped", "WebR not started.")
+            )
+        );
     }
     catch { }
 };
@@ -2385,25 +2371,19 @@ const runtimeSnapshot = function (status, message = "") {
     return createBrowserWebRSessionSnapshot(status, message);
 };
 
-const readWebRRestartVersion = async function () {
-    try {
-        const runtime = await ensureRuntime();
-        const text = await captureWebRHiddenText(
-            runtime,
-            "cat(paste(R.version$major, R.version$minor, sep = \".\"))"
-        );
+const readBrowserRuntimeVersion = async function () {
+    await ensureRuntime();
+    const manager = webRRuntimeSession()?.runtimeSessionManager;
 
-        return String(text || "").trim();
-    }
-    catch {
-        return "";
-    }
+    return manager
+        ? readRuntimeVersion(manager, "browser.runtime.version")
+        : "";
 };
 
-const loadComposition = async function () {
+const loadComposition = async function (locale = readSelectedLocale()) {
     state.composition = await loadBrowserComposition({
         fetch: window.fetch.bind(window),
-        locale: readSelectedLocale()
+        locale
     });
     state.workingDirectoryPath = createBrowserProductWorkingDirectory(state.composition);
     state.homeDirectoryPath = state.workingDirectoryPath;
@@ -2459,7 +2439,10 @@ const isMenuActionSupported = function (item) {
         || item.type === "product-command"
         || (
             item.type === "native-role"
-            && Boolean(browserZoomActionForMenuRole(item.role))
+            && (
+                Boolean(browserZoomActionForMenuRole(item.role))
+                || browserNativeEditRoleAdapter.isSupported(item.role)
+            )
         )
         || (
             item.type === "shell-command"
@@ -2525,9 +2508,16 @@ const applyWebShellTranslations = function () {
     const windowTitle = document.querySelector(".web-workbench-window__title");
 
     if (windowTitle) {
-        windowTitle.textContent = translateCompositionText(
-            "WebR console",
-            "WebR console"
+        const runtimeName = String(
+            state.composition?.runtime?.label
+            || state.composition?.runtime?.id
+            || "Runtime"
+        );
+
+        windowTitle.textContent = translateCompositionTemplate(
+            "{runtimeName} console",
+            `${runtimeName} console`,
+            { runtimeName }
         );
     }
 
@@ -2648,69 +2638,13 @@ const buildAboutPayload = function () {
 };
 
 const renderAboutPayload = function (frame, payload) {
-    const frameDocument = frame?.contentDocument;
+    const render = frame?.contentWindow?.renderDialogForgeAbout;
 
-    if (!frameDocument) {
+    if (typeof render !== "function") {
         return false;
     }
 
-    const title = frameDocument.getElementById("aboutTitle");
-    const version = frameDocument.getElementById("aboutVersion");
-    const body = frameDocument.getElementById("aboutBody");
-    const highlights = frameDocument.getElementById("aboutHighlights");
-    const authorLabel = frameDocument.getElementById("authorLabel");
-    const author = frameDocument.getElementById("authorName");
-    const copyright = frameDocument.getElementById("aboutCopyright");
-
-    if (
-        !title
-        || !version
-        || !body
-        || !highlights
-        || !authorLabel
-        || !author
-        || !copyright
-    ) {
-        return false;
-    }
-
-    frameDocument.title = payload.title;
-    title.textContent = payload.title;
-    version.textContent = payload.version;
-
-    body.replaceChildren(...payload.body.map((text) => {
-        const paragraph = frameDocument.createElement("p");
-
-        paragraph.textContent = text;
-
-        return paragraph;
-    }));
-
-    highlights.replaceChildren(...payload.highlights.map((text) => {
-        const item = frameDocument.createElement("li");
-
-        item.textContent = text;
-
-        return item;
-    }));
-    highlights.hidden = payload.highlights.length === 0;
-
-    authorLabel.textContent = payload.authorLabel;
-
-    if (payload.authorUrl) {
-        const link = frameDocument.createElement("a");
-
-        link.href = payload.authorUrl;
-        link.textContent = payload.authorName;
-        link.target = "_blank";
-        link.rel = "noreferrer";
-        author.replaceChildren(link);
-    }
-    else {
-        author.textContent = payload.authorName;
-    }
-
-    copyright.textContent = payload.copyright;
+    render(payload);
 
     return true;
 };
@@ -2740,195 +2674,15 @@ const openAboutModal = function () {
     render();
 };
 
-const createDeveloperDiagnosticsFrameHtml = function () {
-    return `<!doctype html>
-<html lang="en">
-<head>
-    <meta charset="utf-8">
-    <title>${escapeHtml(translateCompositionText("menu.root.view.developerDiagnostics", "Developer Diagnostics"))}</title>
-    <style>
-        :root {
-            color-scheme: light;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-            font-size: 13px;
-            color: #20242a;
-            background: #f4f5f7;
-        }
-
-        body {
-            margin: 0;
-        }
-
-        .shell {
-            padding: 14px;
-            display: grid;
-            gap: 14px;
-        }
-
-        .toolbar {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 12px;
-        }
-
-        h1 {
-            margin: 0;
-            font-size: 16px;
-        }
-
-        h2 {
-            margin: 0 0 10px;
-            font-size: 14px;
-        }
-
-        .grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-            gap: 14px;
-        }
-
-        .panel {
-            border: 1px solid #d7dbe2;
-            border-radius: 4px;
-            background: #ffffff;
-            padding: 12px;
-            min-width: 0;
-        }
-
-        button {
-            border: 1px solid #cbd1da;
-            border-radius: 4px;
-            background: #ffffff;
-            padding: 5px 10px;
-            font: inherit;
-            cursor: pointer;
-        }
-
-        pre {
-            margin: 0;
-            overflow: auto;
-            white-space: pre-wrap;
-            overflow-wrap: anywhere;
-            font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-        }
-    </style>
-</head>
-<body>
-    <div class="shell">
-        <div class="toolbar">
-            <h1>${escapeHtml(translateCompositionText("menu.root.view.developerDiagnostics", "Developer Diagnostics"))}</h1>
-            <button id="refresh" type="button">${escapeHtml(translateCompositionText("Refresh", "Refresh"))}</button>
-        </div>
-        <div class="grid">
-            <section class="panel">
-                <h2>Runtime Session</h2>
-                <pre id="runtimeSession">Loading...</pre>
-            </section>
-            <section class="panel">
-                <h2>Runtime Events</h2>
-                <pre id="runtimeEvents">Loading...</pre>
-            </section>
-            <section class="panel">
-                <h2>Runtime Prompts</h2>
-                <pre id="runtimePrompts">Loading...</pre>
-            </section>
-            <section class="panel">
-                <h2>Workspace</h2>
-                <pre id="workspace">Loading...</pre>
-            </section>
-            <section class="panel">
-                <h2>Settings</h2>
-                <pre id="settings">Loading...</pre>
-            </section>
-            <section class="panel">
-                <h2>Composition</h2>
-                <pre id="composition">Loading...</pre>
-            </section>
-        </div>
-    </div>
-</body>
-</html>`;
-};
-
-const readDeveloperDiagnosticsPayload = async function () {
-    return {
-        runtimeSession: state.runtimeReady
-            ? runtimeSnapshot("ready", "WebR ready.")
-            : state.runtimeStarting
-                ? runtimeSnapshot("starting", "WebR is starting.")
-                : runtimeSnapshot("stopped", "WebR not started."),
-        runtimeEvents: {
-            status: state.runtimeReady ? "ready" : state.runtimeStarting ? "starting" : "stopped",
-            records: []
-        },
-        runtimePrompts: state.promptCoordinator
-            ? await state.promptCoordinator.listPrompts()
-            : { status: "ready", prompts: [] },
-        workspace: state.workspaceSnapshot,
-        settings: browserApplicationStorageAdapter.readSettings(),
-        composition: state.composition
-    };
-};
-
-const renderDeveloperDiagnosticsFrame = async function (frame) {
-    const frameDocument = frame.contentDocument;
-
-    if (!frameDocument) {
-        return;
-    }
-
-    const write = function (id, value) {
-        const target = frameDocument.getElementById(id);
-
-        if (target) {
-            target.textContent = JSON.stringify(value, null, 4);
-        }
-    };
-    const refresh = async function () {
-        const payload = await readDeveloperDiagnosticsPayload();
-
-        write("runtimeSession", payload.runtimeSession);
-        write("runtimeEvents", payload.runtimeEvents);
-        write("runtimePrompts", payload.runtimePrompts);
-        write("workspace", payload.workspace);
-        write("settings", payload.settings);
-        write("composition", payload.composition);
-    };
-    const refreshButton = frameDocument.getElementById("refresh");
-
-    if (refreshButton) {
-        refreshButton.onclick = function () {
-            refresh().catch((error) => {
-                write("runtimeEvents", {
-                    status: "error",
-                    message: error instanceof Error ? error.message : String(error)
-                });
-            });
-        };
-    }
-    await refresh();
-};
-
 const openDeveloperDiagnosticsModal = function () {
-    const title = translateCompositionText("menu.root.view.developerDiagnostics", "Developer Diagnostics");
-    let surface = null;
-    const render = function () {
-        if (surface) {
-            renderDeveloperDiagnosticsFrame(surface.frame).catch((error) => {
-                appendTranscript(
-                    error instanceof Error ? error.message : String(error),
-                    "web-transcript__line--stderr"
-                );
-            });
-        }
-    };
-
-    surface = browserFrameSurfaces().open({
+    const title = translateCompositionText(
+        "menu.root.view.developerDiagnostics",
+        "Developer Diagnostics"
+    );
+    const surface = browserFrameSurfaces().open({
         id: "devDiagnostics",
         title,
-        src: "about:blank",
-        srcdoc: createDeveloperDiagnosticsFrameHtml(),
+        src: "/src/base-app/pages/devDiagnostics.html",
         width: 980,
         height: 720,
         role: "dialog",
@@ -2938,7 +2692,9 @@ const openDeveloperDiagnosticsModal = function () {
         shellClass: "dialogforge-web-dev-diagnostics-window",
         layerClass: "dialogforge-web-dev-diagnostics-layer",
         frameClass: "dialogforge-web-dev-diagnostics-frame",
-        onFrameLoad: render,
+        onFrameLoad: function (frame) {
+            browserZoomAdapter.postToWindow(frame?.contentWindow || null);
+        },
         onActivate: function (layer) {
             activateModelessSurface("devDiagnostics");
             state.devDiagnosticsLayer = layer;
@@ -2950,7 +2706,6 @@ const openDeveloperDiagnosticsModal = function () {
 
     state.devDiagnosticsLayer = surface.layer;
     installModelessSurfaceActivation("devDiagnostics", surface.layer);
-    render();
 };
 
 const insertLanguageMenu = function (menu) {
@@ -3003,7 +2758,7 @@ const insertLanguageMenu = function (menu) {
     ]);
 };
 
-const refreshOpenTranslatedSurfaces = async function () {
+const refreshOpenTranslatedSurfaces = async function (options = {}) {
     const plotLayer = state.browserPlotViewerHost?.layer?.();
 
     if (plotLayer?.isConnected) {
@@ -3022,7 +2777,10 @@ const refreshOpenTranslatedSurfaces = async function () {
         openAboutModal();
     }
 
-    if (state.settingsLayer?.isConnected) {
+    if (
+        options.refreshSettings !== false
+        && state.settingsLayer?.isConnected
+    ) {
         openSettingsModal();
     }
 
@@ -3031,19 +2789,106 @@ const refreshOpenTranslatedSurfaces = async function () {
     }
 };
 
-const applyBrowserLanguage = async function (locale) {
+const applyBrowserLanguage = async function (locale, options = {}) {
     const cleanLocale = String(locale || "").trim();
 
-    if (!cleanLocale || cleanLocale === state.composition?.locale) {
+    if (!cleanLocale) {
         return;
     }
 
-    writeSelectedLocale(cleanLocale);
-    await loadComposition();
+    if (options.persist !== false) {
+        writeSelectedLocale(cleanLocale);
+    }
+    if (cleanLocale === state.composition?.locale) {
+        return;
+    }
+
+    await loadComposition(cleanLocale);
     renderComposition();
     browserZoomAdapter.broadcast();
-    await refreshOpenTranslatedSurfaces();
+    await refreshOpenTranslatedSurfaces({
+        refreshSettings: options.refreshSettings
+    });
 };
+
+const browserDatasetNavigationSupport = createMainDatasetNavigationSupport({
+    getProductCapabilities() {
+        return state.composition?.productCapabilities || [];
+    },
+    getProductDialogs() {
+        return state.composition?.productDialogs || [];
+    },
+    prepareContext(mode) {
+        return {
+            datasetName:
+                state.dataEditor.datasetName
+                || state.activeDatasetName
+                || "",
+            mode
+        };
+    },
+    async executeGoToDialog(dialogId, _owner, mode, datasetName) {
+        const dialog = findProductDialog(dialogId);
+
+        if (!dialog) {
+            return;
+        }
+
+        state.goToContext = {
+            datasetName,
+            mode: mode === "case" ? "Case" : "Variable"
+        };
+        await openDialog(dialog);
+    }
+});
+
+const browserDatasetNavigationController =
+    createDatasetNavigationCommandController({
+        getPreview() {
+            const object = workspaceObjectByName(
+                state.dataEditor.datasetName
+                || state.activeDatasetName
+                || ""
+            );
+
+            if (!object) {
+                return null;
+            }
+
+            return {
+                objectName: String(object.name || ""),
+                columns: workspaceColumnNames(object.name).map((name) => {
+                    return { name };
+                })
+            };
+        },
+        prompt(message, defaultValue) {
+            return window.prompt(
+                translateCompositionText(message, message),
+                defaultValue
+            );
+        },
+        getGoToDialogId:
+            browserDatasetNavigationSupport.findDialogId,
+        executeProductGoToDialog:
+            browserDatasetNavigationSupport.executeGoToDialog,
+        selectRow(objectName, rowIndex) {
+            void handleBrowserGoToStateUpdate({
+                dataset: objectName,
+                value: {
+                    caseNumber: rowIndex + 1
+                }
+            });
+        },
+        selectColumn(objectName, columnName) {
+            void handleBrowserGoToStateUpdate({
+                dataset: objectName,
+                value: {
+                    variableName: columnName
+                }
+            });
+        }
+    });
 
 const sharedMenuCommandHandler = createMainMenuCommandHandler({
     recordCommand() { },
@@ -3054,10 +2899,12 @@ const sharedMenuCommandHandler = createMainMenuCommandHandler({
         void stopWebRRuntime("Runtime stopped.");
     },
     refreshWorkspace() {
-        void refreshWebRWorkspacePane();
+        void refreshWebRWorkspacePane({
+            detectChanges: true
+        });
     },
     openWorkspaceFile() {
-        void openBrowserWorkspaceFile().catch((error) => {
+        void browserRuntimeFileWorkflow().openWorkspaceFile().catch((error) => {
             appendTranscript(
                 error instanceof Error ? error.message : String(error),
                 "web-transcript__line--stderr"
@@ -3065,7 +2912,7 @@ const sharedMenuCommandHandler = createMainMenuCommandHandler({
         });
     },
     saveWorkspaceFile() {
-        void saveBrowserWorkspaceFile().catch((error) => {
+        void browserRuntimeFileWorkflow().saveWorkspaceFile().catch((error) => {
             appendTranscript(
                 error instanceof Error ? error.message : String(error),
                 "web-transcript__line--stderr"
@@ -3073,13 +2920,12 @@ const sharedMenuCommandHandler = createMainMenuCommandHandler({
         });
     },
     setWorkingDirectory() {
-        appendTranscript(
-            translateCompositionTemplate(
-                "WebR uses the browser virtual working directory {path}. Browser directory mounting is not available from this menu yet.",
-                `WebR uses the browser virtual working directory ${state.workingDirectoryPath}. Browser directory mounting is not available from this menu yet.`,
-                { path: state.workingDirectoryPath }
-            )
-        );
+        void browserRuntimeFileWorkflow().setWorkingDirectory().catch((error) => {
+            appendTranscript(
+                error instanceof Error ? error.message : String(error),
+                "web-transcript__line--stderr"
+            );
+        });
     },
     openScriptFile() {
         void openSharedScriptEditorLocalFile().catch((error) => {
@@ -3102,7 +2948,7 @@ const sharedMenuCommandHandler = createMainMenuCommandHandler({
         openDeveloperDiagnosticsModal();
     },
     runScriptFile() {
-        void runBrowserScriptFile().catch((error) => {
+        void browserRuntimeFileWorkflow().runScriptFile().catch((error) => {
             appendTranscript(
                 error instanceof Error ? error.message : String(error),
                 "web-transcript__line--stderr"
@@ -3115,12 +2961,13 @@ const sharedMenuCommandHandler = createMainMenuCommandHandler({
             return;
         }
 
-        if (isDatasetGoToCommand(command)) {
-            const dialog = findProductDialog("goto");
+        if (command === "dataset.goToCase") {
+            browserDatasetNavigationController.goToCase();
+            return;
+        }
 
-            if (dialog) {
-                void openDialog(dialog);
-            }
+        if (command === "dataset.goToVariable") {
+            browserDatasetNavigationController.goToVariable();
         }
     },
     openDialog(dialogId) {
@@ -3131,7 +2978,35 @@ const sharedMenuCommandHandler = createMainMenuCommandHandler({
             void openDialog(dialog);
         }
     },
-    async executeProductCommand() { },
+    async executeProductCommand(item) {
+        await ensureRuntime();
+        const manager = webRRuntimeSession()?.runtimeSessionManager;
+
+        if (!manager) {
+            throw new Error("WebR runtime session is not ready.");
+        }
+
+        const result = await manager.executeProductCommand({
+            productId: String(state.composition?.product?.id || ""),
+            command: String(item.command || ""),
+            label: String(item.label || ""),
+            capability: String(item.capability || ""),
+            rPackages: Array.isArray(item.rPackages)
+                ? item.rPackages
+                : [],
+            source: "browser.product-command"
+        });
+
+        if (result.message) {
+            appendTranscript(
+                result.message,
+                result.status === "failed"
+                    || result.status === "unavailable"
+                    ? "web-transcript__line--stderr"
+                    : ""
+            );
+        }
+    },
     activateFeature(command) {
         if (isPlotViewerOpenCommand(command?.command)) {
             openPlotViewerModal();
@@ -3146,6 +3021,14 @@ const executeMenuItem = async function (item) {
 
     if (item.type === "native-role" && zoomAction) {
         browserZoomAdapter.execute(zoomAction);
+        return;
+    }
+
+    if (
+        item.type === "native-role"
+        && browserNativeEditRoleAdapter.isSupported(item.role)
+    ) {
+        await browserNativeEditRoleAdapter.execute(item.role);
         return;
     }
 
@@ -3189,6 +3072,9 @@ const renderMenu = function (menu) {
     if (!state.browserMenuAdapter) {
         state.browserMenuAdapter = createBrowserMenuAdapter({
             menuBar: elements.menuBar,
+            onMenuOpening() {
+                browserNativeEditRoleAdapter.captureTarget();
+            },
             isActionSupported: isMenuActionSupported,
             execute: executeMenuItem,
             onError(error) {
@@ -3243,11 +3129,42 @@ const loadMoodleLaunchDataset = async function (runtime) {
     state.moodleLaunchCodeProcessed = true;
 
     try {
-        const result = await loadBrowserMoodleLaunchDataset(runtime, launchCode);
+        const manager = webRRuntimeSession()?.runtimeSessionManager;
+
+        if (!manager) {
+            throw new Error("WebR runtime session is not ready.");
+        }
+
+        const result = await loadBrowserMoodleLaunchDataset(
+            runtime,
+            launchCode,
+            async function (path, objectName) {
+                const loaded = await manager.executeRuntimeMethod({
+                    method: "runtime.load_serialized_object",
+                    params: {
+                        path,
+                        name: objectName
+                    },
+                    source: "browser.launch.dataset"
+                });
+
+                if (loaded.status !== "ready") {
+                    throw new Error(
+                        loaded.message
+                        || "Launch dataset could not be loaded."
+                    );
+                }
+
+                await applyBrowserRuntimeMethodWorkspaceUpdate(
+                    loaded,
+                    manager
+                );
+            }
+        );
 
         if (result.loaded) {
-            state.activeDatasetName = result.datasetName;
-            await refreshWebRWorkspacePane();
+            applyActiveWorkspaceDatasetName(result.datasetName);
+            state.workspacePane?.setActiveDataset(result.datasetName);
         }
     }
     catch (error) {
@@ -3297,6 +3214,7 @@ const ensureRuntime = async function () {
         const startQuiet = readTerminalSettings().startQuiet === true;
 
         state.loadedRuntimePackages.clear();
+        state.runtimeOperationQueue = createWebRRuntimeOperationQueue();
 
         const runtime = await startBrowserWebRRuntime({
             baseUrl: "/webr/",
@@ -3313,11 +3231,76 @@ const ensureRuntime = async function () {
             writeStartupOutput: appendTranscript
         });
 
+        setRuntimeStatus("Loading shared R runtime services...");
+        state.runtimeControlClient = await installWebRSharedRuntimeControl({
+            runtime,
+            runRuntimeOperation: function (action) {
+                return state.runtimeOperationQueue.run(action);
+            },
+            fetchSource: async function (sourceName) {
+                const response = await fetch(
+                    `/src/runtime/providers/r/r-sources/${encodeURIComponent(sourceName)}`
+                );
+
+                if (!response.ok) {
+                    throw new Error(
+                        `Shared R runtime source could not be loaded: ${sourceName}.`
+                    );
+                }
+
+                return response.text();
+            },
+            fetchProductSource: async function () {
+                const response = await fetch(
+                    "/api/product-runtime-profile.R"
+                );
+
+                if (!response.ok) {
+                    throw new Error(
+                        "Product R runtime profile could not be loaded."
+                    );
+                }
+
+                return response.text();
+            }
+        });
         state.runtime = runtime;
         state.runtimeReady = true;
         state.activeDatasetName = "";
+        setRuntimeStatus("Running application startup tasks...");
+        const runtimeSessionManager = webRRuntimeSession()
+            ?.runtimeSessionManager;
+        const startupTasks = Array.isArray(state.composition?.startupTasks)
+            ? state.composition.startupTasks
+            : [];
+
+        for (const task of startupTasks) {
+            if (task?.enabled !== true) {
+                continue;
+            }
+
+            const result = await runtimeSessionManager?.executeStartupTask({
+                taskId: String(task.id || ""),
+                owner: String(task.owner || ""),
+                source: "base-app.startup"
+            });
+
+            if (
+                result
+                && result.status !== "ready"
+                && result.status !== "planned"
+            ) {
+                appendTranscript(
+                    result.message
+                    || `Startup task failed: ${String(task.label || task.id || "")}`,
+                    "web-transcript__line--stderr"
+                );
+            }
+        }
         setRuntimeStatus("Reading WebR workspace...");
-        await refreshWebRWorkspacePane();
+        await refreshWebRWorkspacePane({
+            forceRefresh: true
+        });
         if (String(state.moodleLaunchCode || "").trim()) {
             setRuntimeStatus("Loading launch dataset...");
         }
@@ -3352,24 +3335,101 @@ const checkCodeFragmentComplete = async function (code) {
         return "complete";
     }
 
+    if (!state.runtimeReady && state.runtimeStartPromise) {
+        await ensureRuntime();
+    }
+
     if (!state.runtimeReady) {
         return isLikelyIncompleteScriptFragment(text) ? "incomplete" : "complete";
     }
 
-    return checkRScriptFragmentCompleteness(await ensureRuntime(), text);
+    await ensureRuntime();
+    const manager = webRRuntimeSession()?.runtimeSessionManager;
+
+    if (!manager) {
+        return isLikelyIncompleteScriptFragment(text) ? "incomplete" : "complete";
+    }
+
+    const result = await manager.executeRuntimeMethod({
+        method: "check_completeness",
+        params: {
+            code: text
+        },
+        source: "browser.script-editor"
+    });
+    const value = result.value && typeof result.value === "object"
+        ? result.value
+        : {};
+
+    return String(value.state || "unknown");
 };
 
 const fetchHelpTopicDocument = async function (topic, packageName = "") {
     const runtime = await ensureRuntime();
+    const manager = webRRuntimeSession()?.runtimeSessionManager;
 
-    return fetchWebRHelpTopicDocument(
+    if (!manager) {
+        throw new Error("WebR runtime session is not ready.");
+    }
+
+    const result = await manager.readHelpTopic({
         topic,
-        packageName,
-        window.location.origin,
-        function (command) {
-            return captureWebRHiddenText(runtime, command);
-        }
-    );
+        package: packageName,
+        allowSearch: false,
+        kind: "topic",
+        source: "browser.help"
+    });
+    const path = String(result.path || "");
+    const pathMatch = path.match(/\/library\/([^/]+)\/html\/([^/]+)\.html$/);
+    const resolvedPackage = String(
+        packageName
+        || pathMatch?.[1]
+        || result.matches?.[0]?.package
+        || ""
+    ).trim();
+    const baseUrl = path
+        ? `${window.location.origin}${path}`
+        : "";
+    let html = prepareWebRHelpDocumentHtml(result.body).trim();
+
+    if (!html && Array.isArray(result.matches) && result.matches.length > 0) {
+        html = buildHelpChooserDocument(
+            result,
+            function (pathValue) {
+                const helpPath = String(pathValue || "");
+
+                return `${window.location.origin}${
+                    helpPath.startsWith("/") ? helpPath : `/${helpPath}`
+                }`;
+            }
+        );
+    }
+
+    if (!html && path) {
+        const page = await fetchWebRHelpPageByUrl(
+            path,
+            window.location.origin,
+            function (command) {
+                return captureBrowserRuntimeText(runtime, command);
+            }
+        );
+
+        html = page.ok
+            ? prepareWebRHelpDocumentHtml(page.text).trim()
+            : "";
+    }
+
+    return {
+        html: html || createRHelpFallbackHtml(
+            topic,
+            `No help page was found for ${
+                packageName ? `${packageName}::` : ""
+            }${topic}.`
+        ),
+        topic: String(result.topic || topic || "").trim(),
+        packageName: resolvedPackage,
+        baseUrl
+    };
 };
 
 const fetchHelpTopicHtml = async function (topic, packageName = "") {
@@ -3406,7 +3466,7 @@ const openHelpHomeModal = async function () {
     const document = await fetchWebRHelpHomeDocument(
         window.location.origin,
         function (command) {
-            return captureWebRHiddenText(runtime, command);
+            return captureBrowserRuntimeText(runtime, command);
         }
     );
 
@@ -3418,17 +3478,57 @@ const openHelpHomeModal = async function () {
 };
 
 const runHelpExampleInPage = async function (input = {}) {
-    const runtime = await ensureRuntime();
+    const command = buildHelpExampleCommand(
+        String(input.topic || ""),
+        String(input.package || "")
+    );
 
-    return runWebRHelpExample(input, function (command) {
-        return captureWebRHiddenText(runtime, command);
-    });
+    if (!command) {
+        return {
+            status: "invalid",
+            message: "Invalid help example request."
+        };
+    }
+
+    const result = await executeVisibleCommand(command);
+
+    return {
+        status: result.ok === false ? "error" : "ready",
+        message: result.ok === false
+            ? "R help example failed."
+            : "R help example completed."
+    };
 };
 
 const executeBrowserPlotMutation = async function (input = {}) {
-    const runtime = await ensureRuntime();
+    const text = String(input?.text || "").trim();
 
-    return executeWebRInvisibleMutation(runtime, input);
+    if (!text) {
+        return {
+            ok: false,
+            message: "No plot mutation command was provided."
+        };
+    }
+
+    await ensureRuntime();
+    const manager = webRRuntimeSession()?.runtimeSessionManager;
+
+    if (!manager) {
+        return {
+            ok: false,
+            message: "WebR runtime session is not ready."
+        };
+    }
+
+    const result = await manager.executeInvisibleQuery({
+        query: text,
+        source: "browser.plot-viewer"
+    });
+
+    return {
+        ok: result.status === "ready",
+        message: result.message
+    };
 };
 
 const handleHelpViewerMessage = async function (event) {
@@ -3465,7 +3565,7 @@ const fetchBrowserRHelpPage = async function (value) {
         value,
         window.location.origin,
         function (command) {
-            return captureWebRHiddenText(runtime, command);
+            return captureBrowserRuntimeText(runtime, command);
         }
     );
 };
@@ -3483,7 +3583,12 @@ const installBrowserHelpBridge = function () {
         },
         previewImportFile: readBrowserImportPreview,
         importData: function (input) {
-            return browserImportAdapter().importData(input || {});
+            return browserRuntimeProgress().runActivity(
+                "Importing data...",
+                function () {
+                    return browserImportAdapter().importData(input || {});
+                }
+            );
         },
         executeInvisibleMutation: executeBrowserPlotMutation,
         savePlot: saveBrowserPlot,
@@ -3494,85 +3599,61 @@ const installBrowserHelpBridge = function () {
     });
 };
 
-const refreshWorkspaceAfterVisibleCommand = async function (options) {
-    if (options?.deferWorkspaceRefresh) {
-        return;
-    }
-
-    if (options?.fastWorkspaceRefresh) {
-        await refreshWebRWorkspacePaneFast();
-        refreshWebRWorkspaceMetadataInBackground();
-        return;
-    }
-
-    await refreshWebRWorkspaceSurfaces();
-};
-
 const webRVisibleCommandRunner = function () {
-    if (!state.visibleCommandRunner) {
-        state.visibleCommandRunner = createWebRVisibleCommandRunner({
-            loadedPackages: state.loadedRuntimePackages,
-            ensureRuntime,
-            readConsoleOutputWidth: readBrowserConsoleOutputWidth,
-            transcript,
-            createActivity: function (text, options = {}) {
-                return options.preRecorded
-                    ? {
-                        id: String(options.activityId || `web_cmd_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`),
-                        commandText: normalizeConstructedCommandText(text)
-                    }
-                    : createVisibleCommandActivity(text, String(options.activityId || ""));
-            },
-            setRuntimeBusy: function (busy) {
-                state.console?.session?.setRuntimeBusy?.(busy);
-            },
-            renderToolbar: function () {
-                state.console?.toolbar?.render?.();
-            },
-            openHelpTopic: openHelpTopicModal,
-            maybeOpenPlotViewer: maybeOpenPlotViewerForCommand,
-            refreshWorkspace: refreshWorkspaceAfterVisibleCommand,
-            updatePlotImages: updatePlotViewerFromCapturedImages,
-            requestPrompt: function (input) {
-                return webRPromptCoordinator().requestPrompt(input || {});
-            }
-        });
-    }
-
-    return state.visibleCommandRunner;
+    return webRRuntimeSession();
 };
 
 const executeVisibleCommand = async function (text, options = {}) {
-    return webRVisibleCommandRunner().execute(text, options);
-};
+    await ensureRuntime();
 
-const webRRestartWorkspacePath = "/web/.dialogforge-runtime-restart.RData";
+    const session = webRVisibleCommandRunner();
 
-const saveWebRRestartWorkspace = async function () {
-    if (!state.runtimeReady || !state.runtime) {
-        return null;
+    if (!session) {
+        return { ok: false };
     }
 
-    await state.runtime.evalRVoid([
-        "save(",
-        "list = ls(envir = .GlobalEnv, all.names = TRUE),",
-        `file = ${JSON.stringify(webRRestartWorkspacePath)},`,
-        "envir = .GlobalEnv",
-        ")"
-    ].join(" "));
-
-    return await state.runtime.FS.readFile(webRRestartWorkspacePath);
+    return session.executeVisibleCommand(text, options);
 };
 
-const loadWebRRestartWorkspace = async function (bytes) {
-    if (!bytes || !state.runtimeReady || !state.runtime) {
-        return;
+const webRRuntimeRestartWorkspace = function () {
+    if (!state.runtimeRestartWorkspaceController) {
+        state.runtimeRestartWorkspaceController =
+            createWebRRuntimeRestartWorkspaceController({
+                getRuntime() {
+                    return state.runtimeReady ? state.runtime : null;
+                },
+                getRuntimeSessionManager() {
+                    return webRRuntimeSession()?.runtimeSessionManager || null;
+                },
+                workspaceRestored: applyBrowserRuntimeMethodWorkspaceUpdate
+            });
     }
 
-    await state.runtime.FS.writeFile(webRRestartWorkspacePath, bytes);
-    await state.runtime.evalRVoid(
-        `load(${JSON.stringify(webRRestartWorkspacePath)}, envir = .GlobalEnv)`
-    );
+    return state.runtimeRestartWorkspaceController;
+};
+
+const restartBrowserRuntime = async function (action) {
+    try {
+        const savedWorkspace = action === "restore"
+            ? await webRRuntimeRestartWorkspace().save()
+            : null;
+
+        await stopWebRRuntime("Restarting R...");
+        await ensureRuntime();
+        await webRRuntimeRestartWorkspace().restore(savedWorkspace);
+
+        return runtimeSnapshot("ready", "WebR ready.");
+    }
+    catch (error) {
+        const message = error instanceof Error
+            ? error.message
+            : String(error);
+
+        appendTranscript(message, "web-transcript__line--stderr");
+        setRuntimeStatus(message);
+
+        return runtimeSnapshot("failed", message);
+    }
 };
 
 const stopWebRRuntime = async function (message) {
@@ -3583,9 +3664,14 @@ const stopWebRRuntime = async function (message) {
     state.runtimeReady = false;
     state.runtimeStarting = false;
     state.loadedRuntimePackages.clear();
-    state.completionSessionManager = null;
-    state.workspaceController = null;
-    state.workspaceControllerRuntime = null;
+    state.runtimeSession = null;
+    state.runtimeSessionRuntime = null;
+    state.runtimeControlClient?.detach?.();
+    state.runtimeControlClient = null;
+    state.runtimeOperationQueue = null;
+    state.workspaceMetadataReady = false;
+    state.datasetChannelAdapter = null;
+    state.promptCoordinator = null;
     state.plotViewerGraphicsWarmupPromise = null;
     state.plotViewerGraphicsWarm = false;
     setRuntimeStatus(message || "WebR stopped");
@@ -3593,33 +3679,33 @@ const stopWebRRuntime = async function (message) {
 };
 
 const executeRuntimeMethod = async function (input) {
-    return executeWebRRuntimeMethod(input, {
-        checkCodeFragmentComplete,
-        isRuntimeBusy: function () {
-            return Boolean(state.console?.session?.isRuntimeBusy?.());
-        },
-        setRuntimeStatus,
-        setRuntimeBusy: function (busy) {
-            state.console?.session?.setRuntimeBusy?.(busy);
-        },
-        renderToolbar: function () {
-            state.console?.toolbar?.render?.();
-        },
-        getRuntime: function () {
-            return state.runtimeReady ? state.runtime : null;
-        },
-        getPromptCoordinator: webRPromptCoordinator
+    const record = input && typeof input === "object" ? input : {};
+    const manager = webRRuntimeSession()?.runtimeSessionManager;
+    const result = await manager?.executeRuntimeMethod({
+        method: String(record.method || ""),
+        params: record.params && typeof record.params === "object"
+            ? record.params
+            : {},
+        source: "browser.webr.runtime-method"
     });
+
+    if (result && manager) {
+        await applyBrowserRuntimeMethodWorkspaceUpdate(result, manager);
+    }
+
+    return {
+        value: result?.value
+    };
 };
 const initializeSharedConsole = async function () {
     const readRuntimeStatus = function () {
-        if (state.runtimeReady) return "ready";
         if (state.runtimeStarting) return "starting";
+        if (state.runtimeReady) return "ready";
         return "not-started";
     };
     const readRuntimeSnapshot = function () {
-        if (state.runtimeReady) return runtimeSnapshot("ready", "WebR ready.");
         if (state.runtimeStarting) return runtimeSnapshot("starting", "WebR is starting.");
+        if (state.runtimeReady) return runtimeSnapshot("ready", "WebR ready.");
 
         return runtimeSnapshot("stopped", "WebR not started.");
     };
@@ -3684,7 +3770,10 @@ const initializeSharedConsole = async function () {
             return browserHostAdapter.writeClipboardText(String(text || ""));
         },
         appendMessage: appendTranscript,
-        readRestartVersion: readWebRRestartVersion,
+        runtimeRestartName: String(
+            state.composition?.runtime?.label || "Runtime"
+        ),
+        readRestartVersion: readBrowserRuntimeVersion,
         getWorkingDirectoryPath: function () {
             return state.workingDirectoryPath;
         },
@@ -3710,32 +3799,11 @@ const initializeSharedConsole = async function () {
                 home: state.homeDirectoryPath
             };
         },
-        restartRuntime: async function (action) {
-            try {
-                const savedWorkspace = action === "restore"
-                    ? await saveWebRRestartWorkspace()
-                    : null;
-
-                await stopWebRRuntime("Restarting R...");
-                await ensureRuntime();
-                await loadWebRRestartWorkspace(savedWorkspace);
-                await refreshWebRWorkspacePane();
-
-                return runtimeSnapshot("ready", "WebR ready.");
-            }
-            catch (error) {
-                const message = error instanceof Error
-                    ? error.message
-                    : String(error);
-
-                appendTranscript(message, "web-transcript__line--stderr");
-                setRuntimeStatus(message);
-
-                return runtimeSnapshot("failed", message);
-            }
-        },
+        restartRuntime: restartBrowserRuntime,
         refreshWorkspace: async function () {
-            await refreshWebRWorkspacePane();
+            await refreshWebRWorkspacePane({
+                detectChanges: true
+            });
         }
     });
     const { session, completionModel, commandHistory, coordinator, toolbar } = consoleBootstrap;
@@ -3896,8 +3964,17 @@ const browserDialogChannels = function () {
             getWorkingDirectory() {
                 return state.workingDirectoryPath || "/";
             },
+            openImportFile() {
+                return browserImportAdapter().selectOpenFile();
+            },
+            previewImportFile(input) {
+                return readBrowserImportPreview(input);
+            },
             readVariableValues(input) {
                 return browserDatasetChannels().readDialogVariableValues(input);
+            },
+            runActivity(message, action) {
+                return browserRuntimeProgress().runActivity(message, action);
             },
             loadRuntimePackages,
             executeVisibleCommand,
@@ -3919,6 +3996,16 @@ const postBrowserPreloadEvent = function (sourceWindow, channel, ...args) {
     browserPreloadHostRouter.postEvent(sourceWindow, channel, ...args);
 };
 
+const broadcastBrowserPreloadEvent = function (channel, ...args) {
+    document.querySelectorAll("iframe").forEach((frame) => {
+        browserPreloadHostRouter.postEvent(
+            frame.contentWindow,
+            channel,
+            ...args
+        );
+    });
+};
+
 const postSharedDialogCreatedEvent = async function (frame, dialogId, dialogPayload = null) {
     const cleanId = String(dialogId || "").trim();
 
@@ -3926,42 +4013,62 @@ const postSharedDialogCreatedEvent = async function (frame, dialogId, dialogPayl
         return;
     }
 
-    let payload = dialogPayload;
+    const pending = state.dialogWorkspaceDataPromises.get(frame);
 
-    if (state.runtimeReady) {
-        await refreshWebRWorkspacePane();
+    if (pending) {
+        return pending;
     }
 
-    if (!payload) {
-        const response = await fetch(`/api/dialog/${encodeURIComponent(cleanId)}`);
+    const prepareDialog = async function () {
+        let payload = dialogPayload;
 
-        if (!response.ok) {
-            throw new Error(await response.text());
+        try {
+            if (state.workspaceMetadataRefreshPromise) {
+                await state.workspaceMetadataRefreshPromise;
+            }
+            else if (state.runtimeReady && !state.workspaceMetadataReady) {
+                browserRuntimeProgress().setActivityMessage(
+                    "Retrieving variables metadata..."
+                );
+                await refreshWebRWorkspacePane({
+                    forceRefresh: true
+                });
+            }
+
+            if (!payload) {
+                const response = await fetch(`/api/dialog/${encodeURIComponent(cleanId)}`);
+
+                if (!response.ok) {
+                    throw new Error(await response.text());
+                }
+
+                payload = await response.json();
+            }
+
+            const workspaceData = readBrowserDialogWorkspaceData();
+            const dialogSource = Object.assign({}, payload.source || {});
+
+            if (payload.actions && !dialogSource.customJS) {
+                dialogSource.customJS = String(payload.actions || "");
+            }
+
+            postBrowserPreloadEvent(frame.contentWindow, dialogRuntimeEventChannels.created, {
+                dialogID: cleanId,
+                data: dialogSource,
+                workspaceData
+            });
         }
+        catch (error) {
+            clearDialogOpeningCover(cleanId);
+            throw error;
+        }
+    };
 
-        payload = await response.json();
-    }
+    const task = prepareDialog();
 
-    const workspaceData = readBrowserDialogWorkspaceData();
-    const dialogSource = Object.assign({}, payload.source || {});
+    state.dialogWorkspaceDataPromises.set(frame, task);
 
-    if (payload.actions && !dialogSource.customJS) {
-        dialogSource.customJS = String(payload.actions || "");
-    }
-
-    postBrowserPreloadEvent(frame.contentWindow, dialogRuntimeEventChannels.created, {
-        dialogID: cleanId,
-        data: dialogSource,
-        workspaceData
-    });
-    window.setTimeout(() => {
-        postBrowserPreloadEvent(
-            frame.contentWindow,
-            dialogRuntimeEventChannels.incomingData,
-            workspaceData
-        );
-    }, 0);
-    clearDialogOpeningCover(cleanId);
+    return task;
 };
 
 const readBrowserDialogWorkspaceData = function () {
@@ -3971,26 +4078,39 @@ const readBrowserDialogWorkspaceData = function () {
     );
 };
 
-const invalidateBrowserDataset = async function (datasetName) {
+const invalidateBrowserDataset = async function (datasetName, effect = {}) {
     state.dataEditor.cache.delete(String(datasetName || "").trim());
-    await refreshWebRWorkspacePane();
+    const manager = webRRuntimeSession()?.runtimeSessionManager;
+
+    if (manager) {
+        const previousDatasetNames = workspaceDatasetNames();
+
+        state.workspaceSnapshot = manager.getWorkspaceSnapshot();
+        state.workspaceMetadataReady = true;
+        selectActiveDatasetAfterWorkspaceRefresh(previousDatasetNames);
+        renderWorkspacePane();
+    }
+
+    if (effect.variableMetadataChanged === true) {
+        notifyBrowserDialogsWorkspaceChanged();
+    }
+
+    refreshBrowserConsoleStateChips();
 };
 
 const browserDatasetChannels = function () {
     if (!state.datasetChannelAdapter) {
-        const datasetEditorRuntime = browserDatasetEditorRuntimeBindings();
+        const manager = webRRuntimeSession()?.runtimeSessionManager;
 
-        state.datasetChannelAdapter = createWebRDatasetChannelAdapter({
+        if (!manager) {
+            throw new Error("Runtime session is not ready for dataset operations.");
+        }
+
+        state.datasetChannelAdapter = createRuntimeSessionDatasetChannelAdapter({
+            runtimeSessionManager: manager,
             initialRows: DATA_EDITOR_INITIAL_ROWS,
             initialColumns: DATA_EDITOR_INITIAL_COLUMNS,
             variableOverscanRows: DATA_EDITOR_VARIABLE_OVERSCAN_ROWS,
-            ensureRuntime,
-            readSnapshot: datasetEditorRuntime.readSnapshot,
-            readVariableBatch: datasetEditorRuntime.readVariableBatch,
-            writeCellValue: datasetEditorRuntime.writeCellValue,
-            writeVariableName: datasetEditorRuntime.writeVariableName,
-            writeVariableAttribute: datasetEditorRuntime.writeVariableAttribute,
-            writeValueLabels: datasetEditorRuntime.writeValueLabels,
             invalidateDataset: invalidateBrowserDataset
         });
     }
@@ -4089,7 +4209,6 @@ const browserRuntimePackages = function () {
     if (!state.runtimePackageAdapter) {
         state.runtimePackageAdapter = createWebRRuntimePackageAdapter({
             loadedPackages: state.loadedRuntimePackages,
-            packageRequirementsByDialogId: dialogRuntimePackageRequirements,
             createActivity: createVisibleCommandActivity,
             finishActivity: finishVisibleCommandActivity,
             recordRuntimeMessageStream(message) {
@@ -4102,7 +4221,28 @@ const browserRuntimePackages = function () {
                 state.console?.toolbar?.render?.();
             },
             ensureRuntime,
-            captureHiddenText: captureWebRHiddenText,
+            evaluateHiddenText: async function (command) {
+                await ensureRuntime();
+                const manager = webRRuntimeSession()?.runtimeSessionManager;
+
+                if (!manager) {
+                    throw new Error("WebR runtime session is not ready.");
+                }
+
+                const result = await manager.executeInvisibleQuery({
+                    query: command,
+                    source: "browser.packages.status"
+                });
+
+                if (result.status !== "ready") {
+                    throw new Error(
+                        result.message
+                        || "WebR package status query failed."
+                    );
+                }
+
+                return String(result.value || "");
+            },
             executeVisibleCommand
         });
     }
@@ -4166,9 +4306,7 @@ const openDialog = async function (dialog) {
             }
         },
         onFrameLoad: function () {
-            postSharedDialogCreatedEvent(result.frame, dialog.id, dialogPayload).catch((error) => {
-                appendTranscript(error instanceof Error ? error.message : String(error), "web-transcript__line--stderr");
-            });
+            browserZoomAdapter.postToWindow(result.frame.contentWindow);
         }
     });
 
@@ -4221,8 +4359,6 @@ loadComposition()
         state.runtimeReady = false;
         state.runtimeStarting = false;
         state.runtimeStartPromise = null;
-        state.workspaceController = null;
-        state.workspaceControllerRuntime = null;
         notifyConsoleSession();
         setRuntimeStatus(state.composition ? "WebR failed" : "Composition failed.");
         appendTranscript(error instanceof Error ? error.message : String(error), "web-transcript__line--stderr");

@@ -84,35 +84,14 @@ catch (error) {
     process.exit(1);
 }
 const product = location.id;
+process.env.DIALOGFORGE_PRODUCT_COMPILED_ROOT =
+    String(location.compiledRootPath || location.rootPath || "").trim();
 const settingsStoragePaths = function () {
     return {
         systemSettingsPath: location.settingsPath,
         userSettingsPath: path.join(electron.app.getPath("userData"), "settings.json")
     };
 };
-const enforceProductStartupSettings = function () {
-    if (product !== "DialogQCA") {
-        return;
-    }
-
-    const settings = settingsStorage.readEffectiveSettings(settingsStoragePaths());
-    const terminalSettings = settings.terminalSettings && typeof settings.terminalSettings === "object"
-        ? settings.terminalSettings
-        : {};
-
-    if (terminalSettings.startQuiet === true) {
-        return;
-    }
-
-    settingsStorage.writeUserSettings(settingsStoragePaths(), {
-        terminalSettings: Object.assign({}, terminalSettings, {
-            startQuiet: true
-        })
-    });
-};
-
-enforceProductStartupSettings();
-
 const initialSettings = settingsStorage.readEffectiveSettings(settingsStoragePaths());
 const readRuntimeSettings = function (providerId) {
     const settings = settingsStorage.readEffectiveSettings(settingsStoragePaths());
@@ -439,10 +418,31 @@ const runtimeIpcComposition = runtimeIpcCompositionModule.createRuntimeIpcCompos
     }
 });
 const { sendRuntimeSession, sendTranscriptEvents, refreshWorkspaceAndBroadcast, sendActiveDataset, broadcastRuntimeEvents, executeVisibleCommandAndBroadcast } = runtimeIpcComposition;
+const translateCompositionText = function (key, values = {}) {
+    let text = String(composition.i18n[key] || key);
+    Object.entries(values).forEach(([name, value]) => {
+        text = text.replaceAll(`{${name}}`, value);
+    });
+    return text;
+};
+const shellFileDialogController = shellFileDialogControllerModule.createShellFileDialogController({
+    dialog: electron.dialog,
+    translate: translateCompositionText
+});
+shellFileDialogIpcController.createShellFileDialogIpcController({
+    ipcMain: electron.ipcMain,
+    fileDialogController: shellFileDialogController
+});
 productDialogRuntimeComposition.registerProductDialogRuntimeComposition({
     ipcMain: electron.ipcMain,
     runtimeSessionManager,
     productId: product,
+    openImportFile: function () {
+        return shellFileDialogController.openImportFile();
+    },
+    previewImportFile: function (input) {
+        return importFileController.previewFile(input || {});
+    },
     getUiCommandVisibility: uiActionCommandVisibility,
     executeVisibleCommandAndBroadcast,
     sendTranscriptEvents,
@@ -488,21 +488,6 @@ const mainWindowComposition = mainWindowCompositionModule.createMainWindowCompos
 });
 const mainWindowZoomController = mainWindowComposition.zoomController;
 const createMainWindow = mainWindowComposition.createWindow;
-const translateCompositionText = function (key, values = {}) {
-    let text = String(composition.i18n[key] || key);
-    Object.entries(values).forEach(([name, value]) => {
-        text = text.replaceAll(`{${name}}`, value);
-    });
-    return text;
-};
-const shellFileDialogController = shellFileDialogControllerModule.createShellFileDialogController({
-    dialog: electron.dialog,
-    translate: translateCompositionText
-});
-shellFileDialogIpcController.createShellFileDialogIpcController({
-    ipcMain: electron.ipcMain,
-    fileDialogController: shellFileDialogController
-});
 const packageInstallDialogController = packageInstallDialogControllerModule.createPackageInstallDialogController({
     dialog: electron.dialog,
     translate: translateCompositionText

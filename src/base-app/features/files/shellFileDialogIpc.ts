@@ -10,7 +10,6 @@ import {
 
 export const shellFileDialogIpcChannels = {
     selectImportFile: "base-app:selectImportFile",
-    legacyOpenImportFile: "importFromFile:openFile",
     selectWorkingDirectory: "base-app:selectWorkingDirectory",
     selectWorkspaceOpenFile: "base-app:selectWorkspaceOpenFile",
     selectWorkspaceSaveFile: "base-app:selectWorkspaceSaveFile",
@@ -21,7 +20,6 @@ export const shellFileDialogIpcChannels = {
 
 interface ShellFileDialogIpcRoutes {
     "base-app:selectImportFile": { input: []; result: OpenFileResult };
-    "importFromFile:openFile": { input: []; result: unknown };
     "base-app:selectWorkingDirectory": { input: []; result: OpenFileResult };
     "base-app:selectWorkspaceOpenFile": { input: []; result: OpenFileResult };
     "base-app:selectWorkspaceSaveFile": { input: []; result: OpenFileResult };

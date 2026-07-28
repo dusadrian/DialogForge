@@ -50,6 +50,14 @@ const run = function(command, args, env = process.env) {
 const main = function() {
     const options = readArgs();
     const outputDir = path.resolve(options.outputDir);
+    const declaredProductPath = process.env.DIALOGFORGE_WEB_PRODUCT_PATH
+        || options.productArgs.find((argument) => {
+            return !String(argument || "").startsWith("-");
+        })
+        || "";
+    const productPath = declaredProductPath
+        ? path.resolve(declaredProductPath)
+        : "";
     const env = Object.assign({}, process.env, {
         DIALOGFORGE_SOURCE_ROOT: rootDir,
         DIALOGFORGE_DIST_DIR: outputDir
@@ -67,6 +75,16 @@ const main = function() {
     ], env);
     run(process.execPath, ["scripts/build-shell-web-modules.js"], env);
     run(process.execPath, ["scripts/stage-live-script-browser-artifact.js"], env);
+
+    if (productPath) {
+        run(process.execPath, [
+            "scripts/stage-product-browser-dialog-runtime.js",
+            "--product-path",
+            productPath,
+            "--out-dir",
+            outputDir
+        ], env);
+    }
 
     if (options.productArgs.length > 0 || process.env.DIALOGFORGE_WEB_PRODUCT_PATH) {
         run(process.execPath, [

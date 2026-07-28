@@ -228,8 +228,8 @@ export function createDialogRuntime() {
       } catch {}
     },
     buildElement: controlBuilderController.buildElement,
-    setupCustomJS: function(dialogSpec, runtimeState): void {
-      customJSRuntime.setup(dialogSpec, runtimeState, coms);
+    setupCustomJS: function(dialogSpec, runtimeState): Promise<void> {
+      return customJSRuntime.setup(dialogSpec, runtimeState, coms);
     },
     logBuildError: function(message): void {
       coms.sendTo('main', 'consolog', message);
@@ -237,8 +237,11 @@ export function createDialogRuntime() {
   });
 
   return {
-    build(dialogID: string, dialogSpec: RuntimeDialogSchema) {
-      runtimeBuildController.build(dialogID, dialogSpec);
+    build(
+      dialogID: string,
+      dialogSpec: RuntimeDialogSchema
+    ): Promise<void> {
+      return runtimeBuildController.build(dialogID, dialogSpec);
     },
 
     changeDialogState(data: Record<string, Record<string, unknown>>, saveCurrent: boolean) {

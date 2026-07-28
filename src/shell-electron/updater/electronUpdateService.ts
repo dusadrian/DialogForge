@@ -233,7 +233,7 @@ export const createElectronUpdateService = function(
             setTimeout(() => {
                 void showUpdateError(
                     "The update installer did not start.",
-                    "Please close DialogR and open it again to complete the update."
+                    `Please close ${productName} and open it again to complete the update.`
                 ).catch(options.reportError);
             }, 15000);
         }

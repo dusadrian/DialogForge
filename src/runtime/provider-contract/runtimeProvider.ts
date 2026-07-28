@@ -54,6 +54,7 @@ export interface RuntimePackagePolicy {
     availability: string;
     installation: string;
     message: string;
+    satisfiedByRuntime?: string[];
 }
 
 
@@ -129,8 +130,35 @@ export interface WorkspaceSnapshot {
 }
 
 
+export interface WorkspaceDatasetChange {
+    name: string;
+    kind: string;
+    columns: string[];
+    rows: number[];
+    rowCount?: number;
+    columnCount?: number;
+    columnIndex?: number;
+    schemaChanged: boolean;
+}
+
+
+export interface WorkspaceUpdate {
+    added: WorkspaceObjectSnapshot[];
+    updated: WorkspaceObjectSnapshot[];
+    removed: string[];
+    datasets: {
+        added: string[];
+        removed: string[];
+        changed: WorkspaceDatasetChange[];
+    };
+    objectCount: number;
+    updatedAt: number;
+}
+
+
 export interface WorkspaceListOptions {
     forceRefresh?: boolean;
+    detectChanges?: boolean;
 }
 
 
@@ -241,6 +269,7 @@ export interface CellUpdateResult {
         declaredMissing?: boolean;
     };
     transcriptEvents: TranscriptEvent[];
+    workspaceUpdate?: WorkspaceUpdate | null;
     message: string;
     updatedAt: string;
 }
@@ -274,6 +303,7 @@ export interface ColumnRenameResult {
     fromName: string;
     toName: string;
     transcriptEvents: TranscriptEvent[];
+    workspaceUpdate?: WorkspaceUpdate | null;
     message: string;
     updatedAt: string;
 }
@@ -297,6 +327,7 @@ export interface ColumnInsertResult {
     columnIndex: number;
     columnCount?: number;
     transcriptEvents: TranscriptEvent[];
+    workspaceUpdate?: WorkspaceUpdate | null;
     message: string;
     updatedAt: string;
 }
@@ -317,6 +348,7 @@ export interface ColumnRemoveResult {
     columnName: string;
     columnCount?: number;
     transcriptEvents: TranscriptEvent[];
+    workspaceUpdate?: WorkspaceUpdate | null;
     message: string;
     updatedAt: string;
 }
@@ -338,6 +370,7 @@ export interface RowNameUpdateResult {
     rowIndex: number;
     name: string;
     transcriptEvents: TranscriptEvent[];
+    workspaceUpdate?: WorkspaceUpdate | null;
     message: string;
     updatedAt: string;
 }
@@ -361,6 +394,7 @@ export interface RowInsertResult {
     name?: string;
     rowCount?: number;
     transcriptEvents: TranscriptEvent[];
+    workspaceUpdate?: WorkspaceUpdate | null;
     message: string;
     updatedAt: string;
 }
@@ -381,6 +415,7 @@ export interface RowRemoveResult {
     rowIndex: number;
     rowCount?: number;
     transcriptEvents: TranscriptEvent[];
+    workspaceUpdate?: WorkspaceUpdate | null;
     message: string;
     updatedAt: string;
 }
@@ -406,6 +441,7 @@ export interface RowSortResult {
     rowCount?: number;
     command?: string;
     transcriptEvents: TranscriptEvent[];
+    workspaceUpdate?: WorkspaceUpdate | null;
     message: string;
     updatedAt: string;
 }
@@ -436,6 +472,7 @@ export interface VariableMetadataSnapshot {
         measure?: string;
         numeric?: boolean;
         factor?: boolean;
+        declared?: boolean;
         calibrated?: boolean;
         binary?: boolean;
         character?: boolean;
@@ -479,6 +516,7 @@ export interface VariableMetadataUpdateResult {
     value: string;
     label: string;
     transcriptEvents: TranscriptEvent[];
+    workspaceUpdate?: WorkspaceUpdate | null;
     message: string;
     updatedAt: string;
 }
@@ -522,6 +560,7 @@ export interface ValueLabelUpdateResult {
         label: string;
     }>;
     transcriptEvents: TranscriptEvent[];
+    workspaceUpdate?: WorkspaceUpdate | null;
     message: string;
     updatedAt: string;
 }
@@ -565,6 +604,7 @@ export interface DeclaredMissingUpdateResult {
         label: string;
     }>;
     transcriptEvents: TranscriptEvent[];
+    workspaceUpdate?: WorkspaceUpdate | null;
     message: string;
     updatedAt: string;
 }
@@ -606,6 +646,7 @@ export interface ImportResult {
     targetName: string;
     overwrite: boolean;
     transcriptEvents: TranscriptEvent[];
+    workspaceUpdate?: WorkspaceUpdate | null;
     message: string;
     importedAt: string;
 }
@@ -857,6 +898,7 @@ export interface RuntimeExtensionMethodResult {
     providerId: string;
     method: string;
     value: unknown;
+    workspaceUpdate?: WorkspaceUpdate;
     message: string;
     executedAt: string;
 }
@@ -924,7 +966,16 @@ export interface RuntimeLifecycleController {
 
 
 export interface RuntimeCommandController {
-    executeVisibleCommand: (request: VisibleCommandRequest, snapshot: RuntimeSessionSnapshot) => Promise<TranscriptEvent[]>;
+    executeVisibleCommand: (
+        request: VisibleCommandRequest,
+        snapshot: RuntimeSessionSnapshot
+    ) => Promise<RuntimeCommandExecutionResult>;
+}
+
+
+export interface RuntimeCommandExecutionResult {
+    transcriptEvents: TranscriptEvent[];
+    workspaceUpdate: WorkspaceUpdate | null;
 }
 
 
@@ -951,6 +1002,13 @@ export interface RuntimeWorkspaceController {
     removeWorkspaceObjects?: (objectNames: string[], snapshot: RuntimeSessionSnapshot) => Promise<WorkspaceObjectSnapshot[]>;
     renameWorkspaceObject?: (request: WorkspaceRenameRequest, snapshot: RuntimeSessionSnapshot) => Promise<WorkspaceObjectSnapshot[]>;
     clearWorkspace?: (snapshot: RuntimeSessionSnapshot) => Promise<WorkspaceObjectSnapshot[]>;
+    completeVisibleCommand?: (
+        request: VisibleCommandRequest,
+        snapshot: RuntimeSessionSnapshot
+    ) => Promise<WorkspaceUpdate | null>;
+    commitWorkspaceMutation?: (
+        snapshot: RuntimeSessionSnapshot
+    ) => Promise<WorkspaceUpdate | null>;
 }
 
 
@@ -1026,6 +1084,9 @@ export interface RuntimeSessionManager {
     start: () => Promise<RuntimeSessionSnapshot>;
     stop: () => Promise<RuntimeSessionSnapshot>;
     executeVisibleCommand: (request: VisibleCommandRequest) => Promise<TranscriptEvent[]>;
+    executeVisibleCommandWithEffects: (
+        request: VisibleCommandRequest
+    ) => Promise<RuntimeCommandExecutionResult>;
     getWorkspaceSnapshot: () => WorkspaceSnapshot;
     listWorkspaceObjects: (
         options?: WorkspaceListOptions

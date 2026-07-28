@@ -122,7 +122,7 @@
         </div>
     </div>
     <script>
-        (function() {
+        (function loadDeveloperDiagnostics() {
             const write = function(id, value) {
                 document.getElementById(id).textContent = JSON.stringify(value, null, 4);
             };
@@ -136,17 +136,39 @@
                 write("composition", await window.dialogForge.getComposition());
             };
 
-            document.getElementById("refresh").addEventListener("click", refresh);
-            window.dialogForge.onRuntimeSession(function(snapshot) {
-                write("runtimeSession", snapshot);
-            });
-            window.dialogForge.onRuntimeEvents(function(snapshot) {
-                write("runtimeEvents", snapshot);
-            });
-            window.dialogForge.onWorkspace(function(snapshot) {
-                write("workspace", snapshot);
-            });
-            refresh();
+            const start = function() {
+                document.getElementById("refresh").addEventListener("click", refresh);
+                window.dialogForge.onRuntimeSession(function(snapshot) {
+                    write("runtimeSession", snapshot);
+                });
+                window.dialogForge.onRuntimeEvents(function(snapshot) {
+                    write("runtimeEvents", snapshot);
+                });
+                window.dialogForge.onWorkspace(function(snapshot) {
+                    write("workspace", snapshot);
+                });
+                refresh();
+            };
+
+            if (window.dialogForge) {
+                start();
+                return;
+            }
+
+            if (window.parent === window) {
+                throw new Error(
+                    "Developer Diagnostics requires a DialogForge host bridge."
+                );
+            }
+
+            import("/browser-esm/src/shell-web/browserPreloadBridge.js")
+                .then(start)
+                .catch(function(error) {
+                    console.error(
+                        "DEV-DIAGNOSTICS-ERR browser loader failed:",
+                        error
+                    );
+                });
         })();
     </script>
 </body>

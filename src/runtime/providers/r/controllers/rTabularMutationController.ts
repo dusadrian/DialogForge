@@ -25,6 +25,7 @@ import type {
     RowRemoveResult,
     RowSortRequest,
     RowSortResult,
+    RuntimeCommandExecutionResult,
     RuntimeSessionSnapshot,
     RuntimeTabularController,
     TranscriptEvent
@@ -39,7 +40,9 @@ import {
     createVisibleRowRemoveCommand,
     createVisibleRowSortCommand
 } from "../commands/datasetVisibleCommands";
-import { createRuntimeControlClient } from "../protocol/runtimeControlClient";
+import type {
+    RRuntimeControlClient
+} from "../protocol/runtimeControlClient";
 import { asRuntimeControlObject } from "../protocol/runtimeControlEvents";
 
 
@@ -57,13 +60,13 @@ type MutationTabularController = Pick<
 
 
 export interface RTabularMutationControllerOptions {
-    getClient(): ReturnType<typeof createRuntimeControlClient> | null;
+    getClient(): RRuntimeControlClient | null;
     createRequestId(prefix: string): string;
     executeVisibleCommand(
         commandText: string,
         source: string,
         snapshot: RuntimeSessionSnapshot
-    ): Promise<TranscriptEvent[]>;
+    ): Promise<RuntimeCommandExecutionResult>;
     transcriptHasFailure(transcriptEvents: TranscriptEvent[]): boolean;
 }
 
@@ -102,11 +105,12 @@ export const createRTabularMutationController = function(
             const commandText = String(
                 request.visibleCommandText || ""
             ).trim() || createVisibleColumnRenameCommand(request);
-            const transcriptEvents = await options.executeVisibleCommand(
+            const commandResult = await options.executeVisibleCommand(
                 commandText,
                 "ui.dataset.renameColumn",
                 snapshot
             );
+            const transcriptEvents = commandResult.transcriptEvents;
             const failed = options.transcriptHasFailure(transcriptEvents);
 
             return createColumnRenameResult({
@@ -116,6 +120,7 @@ export const createRTabularMutationController = function(
                 fromName: request.fromName,
                 toName: request.toName,
                 transcriptEvents,
+                workspaceUpdate: commandResult.workspaceUpdate,
                 message: failed
                     ? "R visible column rename command failed."
                     : "R visible column rename command updated the column."
@@ -151,11 +156,12 @@ export const createRTabularMutationController = function(
             const commandText = String(
                 request.visibleCommandText || ""
             ).trim() || createVisibleColumnInsertCommand(request);
-            const transcriptEvents = await options.executeVisibleCommand(
+            const commandResult = await options.executeVisibleCommand(
                 commandText,
                 "ui.dataset.insertColumn",
                 snapshot
             );
+            const transcriptEvents = commandResult.transcriptEvents;
             const failed = options.transcriptHasFailure(transcriptEvents);
 
             return createColumnInsertResult({
@@ -164,6 +170,7 @@ export const createRTabularMutationController = function(
                 objectName: request.objectName,
                 columnName: request.newName,
                 transcriptEvents,
+                workspaceUpdate: commandResult.workspaceUpdate,
                 message: failed
                     ? "R visible column insert command failed."
                     : "R visible column insert command inserted the column."
@@ -204,11 +211,12 @@ export const createRTabularMutationController = function(
             const commandText = String(
                 request.visibleCommandText || ""
             ).trim() || createVisibleColumnRemoveCommand(request);
-            const transcriptEvents = await options.executeVisibleCommand(
+            const commandResult = await options.executeVisibleCommand(
                 commandText,
                 "ui.dataset.removeColumn",
                 snapshot
             );
+            const transcriptEvents = commandResult.transcriptEvents;
             const failed = options.transcriptHasFailure(transcriptEvents);
 
             return createColumnRemoveResult({
@@ -217,6 +225,7 @@ export const createRTabularMutationController = function(
                 objectName: request.objectName,
                 columnName: request.columnName,
                 transcriptEvents,
+                workspaceUpdate: commandResult.workspaceUpdate,
                 message: failed
                     ? "R visible column remove command failed."
                     : "R visible column remove command removed the column."
@@ -254,11 +263,12 @@ export const createRTabularMutationController = function(
             const commandText = String(
                 request.visibleCommandText || ""
             ).trim() || createVisibleRowInsertCommand(request);
-            const transcriptEvents = await options.executeVisibleCommand(
+            const commandResult = await options.executeVisibleCommand(
                 commandText,
                 "ui.dataset.insertRow",
                 snapshot
             );
+            const transcriptEvents = commandResult.transcriptEvents;
             const failed = options.transcriptHasFailure(transcriptEvents);
 
             return createRowInsertResult({
@@ -269,6 +279,7 @@ export const createRTabularMutationController = function(
                     ? request.rowIndex + 1
                     : request.rowIndex,
                 transcriptEvents,
+                workspaceUpdate: commandResult.workspaceUpdate,
                 message: failed
                     ? "R visible row insert command failed."
                     : "R visible row insert command inserted the row."
@@ -315,11 +326,12 @@ export const createRTabularMutationController = function(
             const commandText = String(
                 request.visibleCommandText || ""
             ).trim() || createVisibleRowRemoveCommand(request);
-            const transcriptEvents = await options.executeVisibleCommand(
+            const commandResult = await options.executeVisibleCommand(
                 commandText,
                 "ui.dataset.removeRow",
                 snapshot
             );
+            const transcriptEvents = commandResult.transcriptEvents;
             const failed = options.transcriptHasFailure(transcriptEvents);
 
             return createRowRemoveResult({
@@ -328,6 +340,7 @@ export const createRTabularMutationController = function(
                 objectName: request.objectName,
                 rowIndex: request.rowIndex,
                 transcriptEvents,
+                workspaceUpdate: commandResult.workspaceUpdate,
                 message: failed
                     ? "R visible row remove command failed."
                     : "R visible row remove command removed the row."
@@ -365,11 +378,12 @@ export const createRTabularMutationController = function(
             const commandText = String(
                 request.visibleCommandText || ""
             ).trim() || createVisibleRowSortCommand(request);
-            const transcriptEvents = await options.executeVisibleCommand(
+            const commandResult = await options.executeVisibleCommand(
                 commandText,
                 "ui.dataset.sortRows",
                 snapshot
             );
+            const transcriptEvents = commandResult.transcriptEvents;
             const failed = options.transcriptHasFailure(transcriptEvents);
 
             return createRowSortResult({
@@ -379,6 +393,7 @@ export const createRTabularMutationController = function(
                 columnName: request.columnName,
                 direction: request.direction,
                 transcriptEvents,
+                workspaceUpdate: commandResult.workspaceUpdate,
                 message: failed
                     ? "R visible row sort command failed."
                     : "R visible row sort command sorted the rows."
@@ -425,11 +440,12 @@ export const createRTabularMutationController = function(
             const commandText = String(
                 request.visibleCommandText || ""
             ).trim() || createVisibleRowNameUpdateCommand(request);
-            const transcriptEvents = await options.executeVisibleCommand(
+            const commandResult = await options.executeVisibleCommand(
                 commandText,
                 "ui.dataset.updateRowName",
                 snapshot
             );
+            const transcriptEvents = commandResult.transcriptEvents;
             const failed = options.transcriptHasFailure(transcriptEvents);
 
             return createRowNameUpdateResult({
@@ -439,6 +455,7 @@ export const createRTabularMutationController = function(
                 rowIndex: request.rowIndex,
                 name: request.name,
                 transcriptEvents,
+                workspaceUpdate: commandResult.workspaceUpdate,
                 message: failed
                     ? "R visible row-name update command failed."
                     : "R visible row-name update command updated the row name."
@@ -474,11 +491,12 @@ export const createRTabularMutationController = function(
             const commandText = String(
                 request.visibleCommandText || ""
             ).trim() || createVisibleCellUpdateCommand(request);
-            const transcriptEvents = await options.executeVisibleCommand(
+            const commandResult = await options.executeVisibleCommand(
                 commandText,
                 "ui.dataset.writeCell",
                 snapshot
             );
+            const transcriptEvents = commandResult.transcriptEvents;
             const failed = options.transcriptHasFailure(transcriptEvents);
 
             return createCellUpdateResult({
@@ -489,6 +507,7 @@ export const createRTabularMutationController = function(
                 columnName: request.columnName,
                 value: request.value,
                 transcriptEvents,
+                workspaceUpdate: commandResult.workspaceUpdate,
                 message: failed
                     ? "R visible cell update command failed."
                     : "R visible cell update command updated the cell."

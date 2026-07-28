@@ -28,7 +28,10 @@ interface DialogRuntimeBuildControllerOptions {
   parseDependencies(value: unknown): string[];
   resetEventHandlers(): void;
   buildElement(spec: RuntimeElementSpec): unknown;
-  setupCustomJS(dialogSpec: RuntimeDialogSchema, runtime: DialogRuntimeBuildState): void;
+  setupCustomJS(
+    dialogSpec: RuntimeDialogSchema,
+    runtime: DialogRuntimeBuildState
+  ): Promise<void>;
   logBuildError(message: string): void;
 }
 
@@ -74,7 +77,10 @@ export function createDialogRuntimeBuildController(options: DialogRuntimeBuildCo
   } = options;
 
   return {
-    build(dialogID: string, dialogSpec: RuntimeDialogSchema): void {
+    async build(
+      dialogID: string,
+      dialogSpec: RuntimeDialogSchema
+    ): Promise<void> {
       resetEventHandlers();
 
       runtime.dialogID = dialogID;
@@ -109,7 +115,7 @@ export function createDialogRuntimeBuildController(options: DialogRuntimeBuildCo
 
       applyGroupStateAfterBuild(runtime);
       runtime.makeCommand();
-      setupCustomJS(dialogSpec, runtime);
+      await setupCustomJS(dialogSpec, runtime);
     }
   };
 }

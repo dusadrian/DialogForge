@@ -14,6 +14,28 @@ safe <- function(expression) {
 }
 
 
+if (!exists("workspace_index", inherits = FALSE) || !is.list(workspace_index)) {
+    workspace_index <- list(last_snapshot = NULL, last_state = NULL)
+}
+
+
+workspace_index_get <- function(key, default = NULL) {
+    index <- workspace_index %||% list()
+    value <- index[[as.character(key %||% "")]]
+
+    if (is.null(value)) default else value
+}
+
+
+workspace_index_set <- function(key, value) {
+    index <- workspace_index %||% list()
+    index[[as.character(key %||% "")]] <- value
+    workspace_index <<- index
+
+    invisible(value)
+}
+
+
 meta_path <- as.character(opts$meta_path %||% "")
 events_path <- as.character(opts$events_path %||% "")
 trace_path <- as.character(opts$trace_path %||% "")
@@ -101,13 +123,22 @@ json_boolv <- function(values) {
 json_dataframe_field <- function(entry, field_name) {
     values <- entry[[field_name]]
 
-    if (!is.logical(values)) return("")
+    if (is.logical(values)) {
+        return(paste0(json_str(field_name), ":", json_boolv(values)))
+    }
 
-    paste0(json_str(field_name), ":", json_boolv(values))
+    if (
+        is.numeric(values) &&
+        length(values) == 1L
+    ) {
+        return(paste0(json_str(field_name), ":", json_num(values)))
+    }
+
+    ""
 }
 
 
-json_dataframe_entry <- function(name, entry) {
+json_dataframe_value <- function(entry) {
     entry <- entry %||% list(colnames = character(0))
     fields <- names(entry) %||% character(0)
     extra_fields <- fields[fields != "colnames"]
@@ -124,7 +155,12 @@ json_dataframe_entry <- function(name, entry) {
         parts <- c(parts, extras)
     }
 
-    paste0(json_str(name), ":{", paste(parts, collapse = ","), "}")
+    paste0("{", paste(parts, collapse = ","), "}")
+}
+
+
+json_dataframe_entry <- function(name, entry) {
+    paste0(json_str(name), ":", json_dataframe_value(entry))
 }
 
 
@@ -198,7 +234,13 @@ json_variable <- function(variable) {
         "\"has_children\":", json_bool(variable$has_children), ",",
         "\"has_viewer\":", json_bool(variable$has_viewer), ",",
         "\"is_truncated\":", json_bool(variable$is_truncated), ",",
-        "\"updated_time\":", json_num(variable$updated_time %||% 0),
+        "\"updated_time\":", json_num(variable$updated_time %||% 0), ",",
+        "\"dataframe\":",
+        if (is.null(variable$dataframe)) {
+            "null"
+        } else {
+            json_dataframe_value(variable$dataframe)
+        },
         "}"
     )
 }

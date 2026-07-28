@@ -54,7 +54,7 @@ const quoteRString = function(value: string): string {
 };
 
 const normalizeMountpoint = function(value: unknown): string {
-    const mountpoint = String(value || "/.dialogr-library").trim();
+    const mountpoint = String(value || "/.dialogforge-library").trim();
 
     return mountpoint.length > 1 && mountpoint.endsWith("/")
         ? mountpoint.slice(0, -1)

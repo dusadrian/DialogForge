@@ -15,8 +15,14 @@ const resolveProfileCustomJSModulePath = function(): string {
     const path = require("path");
 
     const product = String(process.env.DIALOGFORGE_PRODUCT || "").trim();
+    const productRoot = String(
+        process.env.DIALOGFORGE_PRODUCT_COMPILED_ROOT || ""
+    ).trim();
     const rootDir = String(process.env.DIALOGFORGE_ROOT || process.cwd()).trim();
     const candidates = [
+        productRoot
+            ? path.join(productRoot, "dialogs", "customJSRuntime.js")
+            : "",
         product
             ? path.join(rootDir, "dist", "products", product, "dialogs", "customJSRuntime.js")
             : "",

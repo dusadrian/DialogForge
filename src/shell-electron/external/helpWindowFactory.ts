@@ -7,6 +7,9 @@ import {
     applySavedWindowState,
     wireWindowStatePersistence
 } from "../windows/windowState";
+import {
+    rHelpTitle
+} from "../../runtime/providers/r/help/rHelpPresentation";
 
 
 export interface HelpWindowFactoryOptions {
@@ -32,7 +35,7 @@ export const createHelpWindowFactory = function(
                 minHeight: 480,
                 autoHideMenuBar: true,
                 show: false,
-                title: "R Help",
+                title: rHelpTitle,
                 icon: options.nativeWindowIconPath || undefined,
                 webPreferences: {
                     preload: path.join(

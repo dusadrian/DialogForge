@@ -41,6 +41,10 @@ import {
 import {
     normalizeConsoleEditorSettings
 } from "../../console/consoleTypography";
+import {
+    mergeApplicationSettings,
+    synchronizeApplicationSettingsLocale
+} from "../../base-app/features/settings/applicationSettingsPolicy";
 
 
 type MenuCustomizationNode = {
@@ -83,56 +87,6 @@ export interface ApplicationSettingsIpcControllerOptions {
 
 const isRecord = function(value: unknown): value is Record<string, unknown> {
     return !!value && typeof value === "object" && !Array.isArray(value);
-};
-
-
-const mergeTerminalSettings = function(
-    current: ApplicationSettings,
-    patch: ApplicationSettings
-): ApplicationSettings {
-    return Object.assign({}, current, patch, {
-        terminalSettings: Object.assign(
-            {},
-            isRecord(current.terminalSettings) ? current.terminalSettings : {},
-            isRecord(patch.terminalSettings) ? patch.terminalSettings : {}
-        )
-    });
-};
-
-
-const mergeRuntimeStartup = function(
-    current: ApplicationSettings,
-    patch: ApplicationSettings,
-    visibleRuntimeProviderIds: string[],
-    defaultRuntimeProvider: string
-): ApplicationSettings {
-    if (!isRecord(patch.runtimeStartup)) {
-        return patch;
-    }
-
-    const currentStartup = isRecord(current.runtimeStartup)
-        ? current.runtimeStartup
-        : {};
-    const visibleProviders = visibleRuntimeProviderIds.map((providerId) => {
-        return String(providerId || "").trim();
-    }).filter(Boolean);
-    const defaultProvider = String(defaultRuntimeProvider || "").trim();
-    const requestedProvider = String(patch.runtimeStartup.providerId || "").trim();
-    const currentProvider = String(currentStartup.providerId || "").trim();
-    const providerId = visibleProviders.includes(requestedProvider)
-        ? requestedProvider
-        : visibleProviders.includes(currentProvider)
-            ? currentProvider
-            : visibleProviders[0] || defaultProvider;
-
-    return Object.assign({}, patch, {
-        runtimeStartup: Object.assign(
-            {},
-            currentStartup,
-            patch.runtimeStartup,
-            { providerId }
-        )
-    });
 };
 
 
@@ -318,15 +272,11 @@ export const createApplicationSettingsIpcController = function(
         input: ApplicationSettings
     ) => {
         const current = options.readSettings();
-        const patch = isRecord(input) ? input : {};
-        const next = mergeTerminalSettings(
+        const next = mergeApplicationSettings(
             current,
-            mergeRuntimeStartup(
-                current,
-                patch,
-                options.visibleRuntimeProviderIds,
-                options.defaultRuntimeProvider
-            )
+            input,
+            options.visibleRuntimeProviderIds,
+            options.defaultRuntimeProvider
         );
 
         options.setSettingsPreview(next);
@@ -342,15 +292,15 @@ export const createApplicationSettingsIpcController = function(
         input: ApplicationSettings
     ) => {
         const current = options.readSettings();
-        const patch = isRecord(input) ? input : {};
-        const next = mergeTerminalSettings(
+        const next = synchronizeApplicationSettingsLocale(
             current,
-            mergeRuntimeStartup(
+            mergeApplicationSettings(
                 current,
-                patch,
+                input,
                 options.visibleRuntimeProviderIds,
                 options.defaultRuntimeProvider
-            )
+            ),
+            input
         );
         const currentLocale = String(
             current.defaultLanguage || current.languageNS || "en_US"
@@ -358,10 +308,6 @@ export const createApplicationSettingsIpcController = function(
         const nextLocale = String(
             next.defaultLanguage || next.languageNS || currentLocale
         );
-
-        if (Object.prototype.hasOwnProperty.call(patch, "defaultLanguage")) {
-            next.languageNS = nextLocale;
-        }
 
         options.setSettingsPreview(null);
         options.writeSettings(next);

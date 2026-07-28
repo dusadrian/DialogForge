@@ -8,11 +8,17 @@ const url = require("url");
 const childProcess = require("child_process");
 
 
-const productWebRLibraryReleaseRepository = "dusadrian/binaries";
 const productWebRLibraryAssets = [
     "library.data.gz",
     "library.js.metadata"
 ];
+
+
+const readStringArray = function(value) {
+    return Array.isArray(value)
+        ? value.map(String).map((entry) => entry.trim()).filter(Boolean)
+        : [];
+};
 
 
 const readArgs = function(argv) {
@@ -208,28 +214,55 @@ const readProductWebRLibraryRelease = function(productPath) {
         readObject(product.webRPackageLibrary),
         readObject(settings.webRPackageLibrary)
     );
+    const releaseTags = readObject(product.releaseTags);
+    const repository = String(
+        configuration.releaseRepository
+            || configuration.githubRepository
+            || ""
+    ).trim();
     const releaseTag = String(
         configuration.releaseTag
             || configuration.githubReleaseTag
+            || releaseTags.webrVFS
             || ""
     ).trim();
 
-    if (!releaseTag) {
+    if (!repository || !releaseTag) {
         return {
+            repository,
             releaseTag: "",
             baseUrl: "",
-            apiUrl: ""
+            apiUrl: "",
+            mountpoint: String(
+                configuration.mountpoint || "/.dialogforge-library"
+            ).trim(),
+            recommendedPackages: readStringArray(
+                configuration.recommendedPackages
+            ),
+            requiredForNativeHelpExamples: readStringArray(
+                configuration.requiredForNativeHelpExamples
+            )
         };
     }
 
     const encodedTag = encodeURIComponent(releaseTag);
 
     return {
+        repository,
         releaseTag,
+        mountpoint: String(
+            configuration.mountpoint || "/.dialogforge-library"
+        ).trim(),
+        recommendedPackages: readStringArray(
+            configuration.recommendedPackages
+        ),
+        requiredForNativeHelpExamples: readStringArray(
+            configuration.requiredForNativeHelpExamples
+        ),
         baseUrl:
-            `https://github.com/${productWebRLibraryReleaseRepository}/releases/download/${encodedTag}`,
+            `https://github.com/${repository}/releases/download/${encodedTag}`,
         apiUrl:
-            `https://api.github.com/repos/${productWebRLibraryReleaseRepository}/releases/tags/${encodedTag}`
+            `https://api.github.com/repos/${repository}/releases/tags/${encodedTag}`
     };
 };
 
@@ -570,20 +603,6 @@ const readProductWebLaunchPolicy = function(productPath) {
 };
 
 
-const dialogRuntimePackages = function(productPath, dialogId) {
-    const settings = readProductSettings(productPath);
-    const requirements = settings.dialogRuntimeRequirements || {};
-    const entry = requirements[String(dialogId || "")] || {};
-    const packages = Array.isArray(entry.rPackages)
-        ? entry.rPackages
-        : String(entry.rPackages || "").split(/[;,\n]/g);
-
-    return Array.from(new Set(packages.map((item) => {
-        return String(item || "").trim();
-    }).filter(Boolean)));
-};
-
-
 const contentTypes = {
     ".css": "text/css; charset=utf-8",
     ".html": "text/html; charset=utf-8",
@@ -613,6 +632,14 @@ const findRootDir = function() {
 
 
 const findSourceRootDir = function(rootDir) {
+    const configuredSourceRoot = String(
+        process.env.DIALOGFORGE_SOURCE_ROOT || ""
+    ).trim();
+
+    if (configuredSourceRoot) {
+        return path.resolve(configuredSourceRoot);
+    }
+
     return path.basename(rootDir) === "dist"
         ? path.resolve(rootDir, "..")
         : rootDir;
@@ -631,6 +658,7 @@ const findRuntimeDependencyRoot = function(rootDir, sourceRoot, packageName, pac
 
 
 const requiredWebRuntimeFiles = [
+    path.join("node_modules", "@jaames", "iro", "dist", "iro.min.js"),
     path.join("node_modules", "preact", "dist", "preact.module.js"),
     path.join("node_modules", "preact", "hooks", "dist", "hooks.module.js"),
     path.join("node_modules", "webr", "dist", "webr.js"),
@@ -760,6 +788,8 @@ const serializeComposition = function(rootDir, productPath, options = {}) {
         runtimeProviderSelection: composition.runtimeProviderSelection,
         runtimeSession: composition.runtimeSession,
         productSettings: composition.productSettings,
+        productCapabilities: composition.productCapabilities,
+        startupTasks: composition.startupTasks,
         sharedDialogs: composition.sharedDialogs,
         productDialogs: composition.productDialogs,
         menu: composition.menu,
@@ -772,14 +802,20 @@ const serializeComposition = function(rootDir, productPath, options = {}) {
 };
 
 
-const createWebRPackageLibraryApiManifest = function(rootDir, available) {
+const createWebRPackageLibraryApiManifest = function(
+    rootDir,
+    productPath,
+    available
+) {
     const {
         createAvailableWebRPackageLibraryManifest,
         createUnavailableWebRPackageLibraryManifest
     } = require(path.join(rootDir, "src/runtime/providers/webr/webRPackageLibraryPolicy"));
 
+    const configuration = readProductWebRLibraryRelease(productPath);
+
     return available
-        ? createAvailableWebRPackageLibraryManifest()
+        ? createAvailableWebRPackageLibraryManifest(configuration)
         : createUnavailableWebRPackageLibraryManifest();
 };
 
@@ -810,6 +846,9 @@ const createBuildManifest = function(rootDir, productPath) {
             runtime: composition.runtime,
             runtimeProviderSelection: composition.runtimeProviderSelection,
             runtimeSession: composition.runtimeSession,
+            productSettings: composition.productSettings,
+            productCapabilities: composition.productCapabilities,
+            startupTasks: composition.startupTasks,
             sharedDialogs: composition.sharedDialogs,
             productDialogs: composition.productDialogs,
             menu: composition.menu,
@@ -1084,6 +1123,7 @@ const createWebProductDevServer = function(options) {
     const webrRoot = findRuntimeDependencyRoot(rootDir, sourceRoot, "webr", "dist");
     const monacoRoot = findRuntimeDependencyRoot(rootDir, sourceRoot, "monaco-editor", "min");
     const preactRoot = findRuntimeDependencyRoot(rootDir, sourceRoot, "preact");
+    const iroRoot = findRuntimeDependencyRoot(rootDir, sourceRoot, "@jaames/iro", "dist");
     const productWebRLibraryDir = findProductWebRLibraryDir(productPath);
     const webEntryPaths = readProductWebEntryPaths(productPath);
     const launchPolicy = readProductWebLaunchPolicy(productPath);
@@ -1126,6 +1166,68 @@ const createWebProductDevServer = function(options) {
                 return;
             }
 
+            if (pathname === "/api/product-dialog-runtime.js") {
+                const runtimePath = path.join(
+                    rootDir,
+                    "browser-product",
+                    "dialogs",
+                    "customJSRuntime.js"
+                );
+
+                if (fs.existsSync(runtimePath)) {
+                    serveFile(response, runtimePath);
+                    return;
+                }
+
+                send(response, 200, {
+                    "Content-Type": "text/javascript; charset=utf-8",
+                    "Cross-Origin-Resource-Policy": "same-origin"
+                }, "export default {};\n");
+                return;
+            }
+
+            if (pathname === "/api/product-contribution.js") {
+                const contributionPath = path.join(
+                    rootDir,
+                    "browser-product",
+                    "bootstrap",
+                    "productContribution.js"
+                );
+
+                if (fs.existsSync(contributionPath)) {
+                    serveFile(response, contributionPath);
+                    return;
+                }
+
+                send(response, 200, {
+                    "Content-Type": "text/javascript; charset=utf-8",
+                    "Cross-Origin-Resource-Policy": "same-origin"
+                }, "export const productContribution = null;\nexport default productContribution;\n");
+                return;
+            }
+
+            if (pathname === "/api/product-runtime-profile.R") {
+                const runtimeProfilePath = path.join(
+                    rootDir,
+                    "browser-product",
+                    "runtime",
+                    "runtimeControlProfile.R"
+                );
+
+                if (fs.existsSync(runtimeProfilePath)) {
+                    serveFile(response, runtimeProfilePath, {
+                        "Content-Type": "text/plain; charset=utf-8"
+                    });
+                    return;
+                }
+
+                send(response, 200, {
+                    "Content-Type": "text/plain; charset=utf-8",
+                    "Cross-Origin-Resource-Policy": "same-origin"
+                }, "");
+                return;
+            }
+
             const launchRoute = readLaunchRoute(launchPolicy, pathname);
 
             if (launchRoute) {
@@ -1157,7 +1259,11 @@ const createWebProductDevServer = function(options) {
             if (pathname === "/api/webr-package-library") {
                 sendJson(
                     response,
-                    createWebRPackageLibraryApiManifest(rootDir, Boolean(productWebRLibraryDir))
+                    createWebRPackageLibraryApiManifest(
+                        rootDir,
+                        productPath,
+                        Boolean(productWebRLibraryDir)
+                    )
                 );
                 return;
             }
@@ -1189,12 +1295,24 @@ const createWebProductDevServer = function(options) {
                     : path.join(rootDir, "src/base-app/dialogs");
                 const dialogFile = path.join(ownerRoot, activeDialog.sourceFile || "");
                 const actionFile = path.join(path.dirname(dialogFile), "actions.js");
+                const evaluatedComposition = serializeComposition(
+                    rootDir,
+                    productPath
+                );
+                const composedDialogs = dialog
+                    ? evaluatedComposition.productDialogs
+                    : evaluatedComposition.sharedDialogs;
+                const composedDialog = composedDialogs.find((entry) => {
+                    return entry.id === dialogId;
+                });
 
                 sendJson(response, {
                     definition: activeDialog,
                     source: readJson(dialogFile, {}),
                     runtimeRequirements: {
-                        rPackages: dialog ? dialogRuntimePackages(productPath, dialog.id) : []
+                        rPackages: Array.isArray(composedDialog?.rPackages)
+                            ? composedDialog.rPackages
+                            : []
                     },
                     actions: fs.existsSync(actionFile) ? readText(actionFile) : ""
                 });
@@ -1267,6 +1385,11 @@ const createWebProductDevServer = function(options) {
                     preactRoot,
                     "hooks/dist/hooks.module.js"
                 ));
+                return;
+            }
+
+            if (pathname === "/vendor/iro/iro.min.js") {
+                serveFile(response, path.join(iroRoot, "iro.min.js"));
                 return;
             }
 

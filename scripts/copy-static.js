@@ -23,6 +23,7 @@ const rootDir = path.resolve(
 );
 const includeWebRuntime = process.argv.includes("--include-web-runtime");
 const webRuntimeDependencies = [
+    "@jaames/iro",
     "monaco-editor",
     "preact",
     "webr"
@@ -94,6 +95,7 @@ const cleanGeneratedAssetDirectories = function () {
     removeGeneratedDirectory(path.join(rootDir, "build/output"));
     removeGeneratedDirectory(path.join(rootDir, "tests"));
     removeGeneratedDirectory(path.join(rootDir, "artifacts"));
+    removeGeneratedDirectory(path.join(rootDir, "browser-product"));
     removeGeneratedDirectory(path.join(rootDir, "product"));
     removeGeneratedDirectory(path.join(rootDir, "products"));
     removeGeneratedDirectory(path.join(rootDir, "scripts"));

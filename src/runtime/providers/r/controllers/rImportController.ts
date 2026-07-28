@@ -2,6 +2,7 @@ import { createTranscriptEvent } from "../../../commands/commandProtocol";
 import { createImportResult } from "../../../tabular-data/importProtocol";
 import type {
     ImportRequest,
+    RuntimeCommandExecutionResult,
     RuntimeImportController,
     RuntimeSessionSnapshot,
     TranscriptEvent
@@ -10,20 +11,19 @@ import {
     createVisibleImportCommand,
     supportsRImportFormat
 } from "../import/rImportCommand";
-import { createRuntimeControlClient } from "../protocol/runtimeControlClient";
-
-
-type RuntimeControlClient = ReturnType<typeof createRuntimeControlClient>;
+import type {
+    RRuntimeControlClient
+} from "../protocol/runtimeControlClient";
 
 
 export interface RImportControllerOptions {
-    getClient(): RuntimeControlClient | null;
+    getClient(): RRuntimeControlClient | null;
     createRequestId(prefix: string): string;
     executeVisibleCommand(
         commandText: string,
         source: string,
         snapshot: RuntimeSessionSnapshot
-    ): Promise<TranscriptEvent[]>;
+    ): Promise<RuntimeCommandExecutionResult>;
     transcriptHasFailure(events: TranscriptEvent[]): boolean;
 }
 
@@ -58,11 +58,12 @@ export const createRImportController = function(
                     String(request.visibleCommandText || "").trim()
                     || createVisibleImportCommand(request, targetName)
                 );
-                const transcriptEvents = await options.executeVisibleCommand(
+                const commandResult = await options.executeVisibleCommand(
                     commandText,
                     "ui.data.import",
                     snapshot
                 );
+                const transcriptEvents = commandResult.transcriptEvents;
                 const failed = options.transcriptHasFailure(transcriptEvents);
 
                 return createImportResult({
@@ -73,6 +74,7 @@ export const createRImportController = function(
                     targetName,
                     overwrite: request.overwrite,
                     transcriptEvents,
+                    workspaceUpdate: commandResult.workspaceUpdate,
                     message: failed
                         ? "R visible import command failed."
                         : "R visible import command imported the file."
@@ -97,9 +99,10 @@ export const createRImportController = function(
             const targetExists = String(result.error || "").includes(
                 "import-target-exists"
             );
+            const imported = result.ok;
 
             return createImportResult({
-                status: result.ok
+                status: imported
                     ? "imported"
                     : (targetExists ? "conflict" : "failed"),
                 providerId: snapshot.providerId,
@@ -110,18 +113,24 @@ export const createRImportController = function(
                 transcriptEvents: [
                     createTranscriptEvent("submitted", transcriptRequest),
                     createTranscriptEvent(
-                        result.ok ? "completed" : "failed",
+                        imported ? "completed" : "failed",
                         transcriptRequest,
                         {
-                            message: result.ok
+                            message: imported
                                 ? `Imported ${targetName}.`
-                                : String(result.error || "R import failed.")
+                                : String(
+                                    result.error
+                                    || "R import failed."
+                                )
                         }
                     )
                 ],
-                message: result.ok
+                message: imported
                     ? "R runtime-control imported the file."
-                    : String(result.error || "R import failed.")
+                    : String(
+                        result.error
+                        || "R import failed."
+                    )
             });
         }
     };

@@ -7,68 +7,83 @@ import {
     createObjectInspectionResult,
     createWorkspaceObject
 } from "../../../workspace/workspaceProtocol";
+import {
+    normalizeWorkspaceUpdateObject,
+    workspaceUpdateHasChanges
+} from "../../../workspace/workspaceUpdate";
 import type {
-    RuntimeCapability,
     RuntimeSessionSnapshot,
     RuntimeWorkspaceController,
     WorkspaceListOptions,
     TabularPreviewRequest,
     TabularPreviewSnapshot,
+    VisibleCommandRequest,
+    WorkspaceUpdate,
     WorkspaceObjectSnapshot
 } from "../../../provider-contract/runtimeProvider";
+import {
+    createRWorkspaceUpdate
+} from "./rWorkspaceUpdate";
+import {
+    rWorkspaceObjectCapabilities
+} from "../rRuntimeCapabilities";
 import {
     asRuntimeControlArray,
     asRuntimeControlObject,
     parseRuntimeControlResultObject
 } from "../protocol/runtimeControlEvents";
-import {
-    createRuntimeControlClient
+import type {
+    RRuntimeControlClient
 } from "../protocol/runtimeControlClient";
 import { coerceRuntimeCellValue } from "../tabular/runtimeTabularValues";
-
-
-type RuntimeControlClient = ReturnType<typeof createRuntimeControlClient>;
+import {
+    rCodeMayMutateWorkspace
+} from "../commands/rCommandIntents";
 
 
 export interface RWorkspaceControllerOptions {
-    getClient(): RuntimeControlClient | null;
+    getClient(): RRuntimeControlClient | null;
     createRequestId(prefix: string): string;
+    onVisibleWorkspaceRefresh?(): void;
 }
-
-
-const tabularCapabilities = function(): RuntimeCapability[] {
-    return [
-        "tabular.schema",
-        "tabular.read",
-        "tabular.writeCells",
-        "tabular.writeColumns",
-        "tabular.writeRows",
-        "tabular.rowNames",
-        "tabular.columnNames",
-        "tabular.variableMetadata",
-        "tabular.variableMetadata.write"
-    ];
-};
-
-
-const workspaceCapabilities = function(
-    kind: string,
-    hasViewer: boolean
-): RuntimeCapability[] {
-    const capabilities = hasViewer || kind === "table"
-        ? tabularCapabilities()
-        : [];
-
-    return capabilities.concat([
-        "workspace.remove",
-        "workspace.rename"
-    ]);
-};
 
 
 export const createRWorkspaceController = function(
     options: RWorkspaceControllerOptions
 ): RuntimeWorkspaceController {
+    const completeVisibleCommand = async function(
+        request: VisibleCommandRequest
+    ): Promise<WorkspaceUpdate | null> {
+        if (!rCodeMayMutateWorkspace(request.text)) {
+            return null;
+        }
+
+        options.onVisibleWorkspaceRefresh?.();
+
+        const client = options.getClient();
+
+        if (!client) {
+            return null;
+        }
+
+        const result = await client.execute({
+            id: options.createRequestId("workspace-command-complete"),
+            method: "workspace.complete_visible_command",
+            params: {
+                code: request.text,
+                timeoutMs: 10000
+            }
+        });
+
+        if (!result.ok) {
+            return null;
+        }
+
+        const update = createRWorkspaceUpdate(result.result);
+
+        return workspaceUpdateHasChanges(update) ? update : null;
+    };
+
     const readWorkspaceObjects = async function(
         listOptions?: WorkspaceListOptions
     ): Promise<WorkspaceObjectSnapshot[]> {
@@ -76,6 +91,19 @@ export const createRWorkspaceController = function(
 
         if (!client) {
             return [];
+        }
+
+        if (
+            listOptions?.detectChanges === true
+            && listOptions.forceRefresh !== true
+        ) {
+            await client.execute({
+                id: options.createRequestId("workspace-update"),
+                method: "workspace.update",
+                params: {
+                    timeoutMs: 10000
+                }
+            });
         }
 
         const result = await client.execute({
@@ -92,34 +120,35 @@ export const createRWorkspaceController = function(
         }
 
         const payload = parseRuntimeControlResultObject(result.result);
+        const dataframes = asRuntimeControlObject(payload.dataframe);
 
         return asRuntimeControlArray(payload.variables).map((entry) => {
             const variable = asRuntimeControlObject(entry);
-            const kind = String(
-                variable.kind
-                || variable.display_type
-                || "object"
+            const name = String(
+                variable.access_key
+                || variable.display_name
+                || ""
             );
-            const hasViewer = variable.has_viewer === true;
+            const object = normalizeWorkspaceUpdateObject({
+                ...variable,
+                dataframe: variable.dataframe
+                    || dataframes[name]
+                    || null
+            });
+
+            if (!object) {
+                return null;
+            }
 
             return createWorkspaceObject({
-                name: String(
-                    variable.access_key
-                    || variable.display_name
-                    || ""
-                ),
-                kind,
-                detail: String(
-                    variable.display_value
-                    || variable.display_type
-                    || kind
-                ),
-                hasViewer,
-                capabilities: workspaceCapabilities(kind, hasViewer)
+                ...object,
+                capabilities: rWorkspaceObjectCapabilities(
+                    object.hasViewer || object.kind === "table"
+                )
             });
-        }).filter((object) => {
-            return object.name.length > 0;
-        });
+        }).filter(
+            (object): object is WorkspaceObjectSnapshot => Boolean(object)
+        );
     };
 
     const readTabularSchema = async function(
@@ -353,7 +382,9 @@ export const createRWorkspaceController = function(
                 objectName: String(payload.name || objectName),
                 kind,
                 detail: String(payload.preview || payload.type || kind),
-                capabilities: workspaceCapabilities(kind, hasViewer),
+                capabilities: rWorkspaceObjectCapabilities(
+                    hasViewer || kind === "table"
+                ),
                 summary,
                 message: "R runtime-control returned object inspection."
             });
@@ -417,6 +448,26 @@ export const createRWorkspaceController = function(
             });
 
             return readWorkspaceObjects();
+        },
+        completeVisibleCommand,
+        commitWorkspaceMutation: async function() {
+            const client = options.getClient();
+
+            if (!client) {
+                return null;
+            }
+
+            const result = await client.execute({
+                id: options.createRequestId("workspace-mutation-update"),
+                method: "workspace.update",
+                params: {
+                    timeoutMs: 5000
+                }
+            });
+
+            return result.ok
+                ? createRWorkspaceUpdate(result.result)
+                : null;
         }
     };
 };

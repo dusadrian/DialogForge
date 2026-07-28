@@ -13,6 +13,9 @@ import {
 import {
     createInvisibleQueryRequest
 } from "../../runtime/queries/invisibleQueryProtocol";
+import type {
+    ImportPreviewRequest
+} from "../../runtime/tabular-data/importPreview";
 import {
     createProductDialogRuntimeIpcController
 } from "./productDialogRuntimeIpcController";
@@ -22,6 +25,10 @@ export interface ProductDialogRuntimeCompositionOptions {
     ipcMain: IpcMain;
     runtimeSessionManager: RuntimeSessionManager;
     productId: string;
+    openImportFile(): Promise<unknown>;
+    previewImportFile(
+        input: Partial<ImportPreviewRequest>
+    ): Promise<unknown>;
     getUiCommandVisibility(): "hidden" | "visible";
     executeVisibleCommandAndBroadcast(
         request: VisibleCommandRequest
@@ -186,6 +193,8 @@ export const registerProductDialogRuntimeComposition = function(
         getProductId: function(): string {
             return options.productId;
         },
+        openImportFile: options.openImportFile,
+        previewImportFile: options.previewImportFile,
         ensureDependencies,
         executeVisibleCommand: executeUiActionCommand,
         broadcastRuntimeEvents: options.broadcastRuntimeEvents,

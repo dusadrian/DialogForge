@@ -1,14 +1,10 @@
 import {
-    createRuntimeExtensionMethodRequest,
     createRuntimeExtensionMethodResult
 } from "../../extensions/runtimeExtensionProtocol";
 import type {
-    RuntimeProvider,
+    RuntimeExtensionController,
     RuntimeSessionSnapshot
 } from "../../provider-contract/runtimeProvider";
-import {
-    createRuntimeSessionManager
-} from "../../session/runtimeSessionManager";
 import {
     createBrowserWebRSessionSnapshot
 } from "./webRBrowserStartup";
@@ -29,17 +25,11 @@ export interface WebRRuntimeMethodRouterBindings {
     getPromptCoordinator?(): WebRPromptCoordinator | null | undefined;
 }
 
-export interface WebRRuntimeMethodResponse {
-    value: unknown;
-}
-
-
 const isRuntimeBusyMethodAllowed = function(method: string): boolean {
     return method === "runtime.interrupt"
         || method === "check_completeness"
         || method === "reply_prompt";
 };
-
 
 const executeWebRRuntimeMethodDirect = async function(
     method: string,
@@ -84,9 +74,9 @@ const executeWebRRuntimeMethodDirect = async function(
 };
 
 
-const createBrowserWebRRuntimeMethodProvider = function(
+export const createBrowserWebRRuntimeExtensionController = function(
     bindings: WebRRuntimeMethodRouterBindings
-): RuntimeProvider {
+): RuntimeExtensionController {
     const snapshot: RuntimeSessionSnapshot = createBrowserWebRSessionSnapshot(
         "ready",
         "Browser WebR runtime is ready for extension methods.",
@@ -94,69 +84,31 @@ const createBrowserWebRRuntimeMethodProvider = function(
     );
 
     return {
-        manifest: {
-            id: "webr",
-            label: "WebR",
-            language: "r",
-            status: "experimental",
-            capabilities: []
-        },
-        createSession: function() {
-            return snapshot;
-        },
-        extensionController: {
-            executeRuntimeMethod: async function(request) {
-                if (
-                    bindings.isRuntimeBusy?.() === true
-                    && !isRuntimeBusyMethodAllowed(request.method)
-                ) {
-                    return createRuntimeExtensionMethodResult({
-                        status: "busy",
-                        providerId: snapshot.providerId,
-                        method: request.method,
-                        value: null,
-                        message: "WebR is busy running a visible command."
-                    });
-                }
-
+        executeRuntimeMethod: async function(request) {
+            if (
+                bindings.isRuntimeBusy?.() === true
+                && !isRuntimeBusyMethodAllowed(request.method)
+            ) {
                 return createRuntimeExtensionMethodResult({
-                    status: "ready",
+                    status: "busy",
                     providerId: snapshot.providerId,
                     method: request.method,
-                    value: await executeWebRRuntimeMethodDirect(
-                        request.method,
-                        request.params,
-                        bindings
-                    ),
-                    message: "WebR runtime method handled through the shared session manager."
+                    value: null,
+                    message: "WebR is busy running a visible command."
                 });
             }
+
+            return createRuntimeExtensionMethodResult({
+                status: "ready",
+                providerId: snapshot.providerId,
+                method: request.method,
+                value: await executeWebRRuntimeMethodDirect(
+                    request.method,
+                    request.params,
+                    bindings
+                ),
+                message: "WebR runtime method handled through the shared session manager."
+            });
         }
-    };
-};
-
-
-export const executeWebRRuntimeMethod = async function(
-    input: unknown,
-    bindings: WebRRuntimeMethodRouterBindings
-): Promise<WebRRuntimeMethodResponse> {
-    const record = input && typeof input === "object"
-        ? input as Record<string, unknown>
-        : {};
-    const manager = createRuntimeSessionManager(
-        createBrowserWebRRuntimeMethodProvider(bindings)
-    );
-    const result = await manager.executeRuntimeMethod(
-        createRuntimeExtensionMethodRequest({
-            method: String(record.method || ""),
-            params: record.params && typeof record.params === "object"
-                ? record.params as Record<string, unknown>
-                : {},
-            source: "browser.webr.runtime-method"
-        })
-    );
-
-    return {
-        value: result.value
     };
 };

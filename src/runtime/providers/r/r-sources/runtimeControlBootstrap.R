@@ -110,26 +110,6 @@ install_runtime_console_bindings <- function() {
 
 install_runtime_console_bindings()
 
-if (is.null(app_env$workspace_index) || !is.list(app_env$workspace_index)) {
-    app_env$workspace_index <- list(last_snapshot = NULL, last_state = NULL)
-}
-
-workspace_index_get <- function(key, default = NULL) {
-    index <- app_env$workspace_index %||% list()
-    value <- index[[as.character(key %||% "")]]
-
-    if (is.null(value)) default else value
-}
-
-
-workspace_index_set <- function(key, value) {
-    index <- app_env$workspace_index %||% list()
-    index[[as.character(key %||% "")]] <- value
-    app_env$workspace_index <- index
-
-    invisible(value)
-}
-
 
 trace <- function(message) {
     if (!isTRUE(trace_enabled) || !nzchar(trace_path)) {

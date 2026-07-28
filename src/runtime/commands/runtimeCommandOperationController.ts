@@ -1,9 +1,10 @@
 import type {
     ProductCommandRequest,
     ProductCommandResult,
+    RuntimeCommandExecutionResult,
     RuntimeSessionSnapshot,
-    TranscriptEvent,
-    VisibleCommandRequest
+    VisibleCommandRequest,
+    WorkspaceUpdate
 } from "../provider-contract/runtimeProvider";
 import {
     createTranscriptEvent
@@ -25,11 +26,17 @@ export interface RuntimeCommandOperationControllerOptions {
         detail: string,
         payload: Record<string, unknown>
     ): void;
+    completeVisibleCommand?(
+        request: VisibleCommandRequest
+    ): Promise<WorkspaceUpdate | null>;
+    applyWorkspaceUpdate(update: WorkspaceUpdate): void;
 }
 
 
 export interface RuntimeCommandOperationController {
-    executeVisibleCommand(request: VisibleCommandRequest): Promise<TranscriptEvent[]>;
+    executeVisibleCommand(
+        request: VisibleCommandRequest
+    ): Promise<RuntimeCommandExecutionResult>;
     executeProductCommand(request: ProductCommandRequest): Promise<ProductCommandResult>;
 }
 
@@ -38,22 +45,48 @@ export const createRuntimeCommandOperationController = function(
     options: RuntimeCommandOperationControllerOptions
 ): RuntimeCommandOperationController {
     return {
-        executeVisibleCommand: async function(request): Promise<TranscriptEvent[]> {
+        executeVisibleCommand: async function(
+            request
+        ): Promise<RuntimeCommandExecutionResult> {
             const snapshot = options.getSnapshot();
 
             if (snapshot.status !== "ready") {
-                return [
-                    createTranscriptEvent(
-                        "rejected",
-                        request,
-                        {
-                            message: "Runtime session is not ready."
-                        }
-                    )
-                ];
+                return {
+                    transcriptEvents: [
+                        createTranscriptEvent(
+                            "rejected",
+                            request,
+                            {
+                                message: "Runtime session is not ready."
+                            }
+                        )
+                    ],
+                    workspaceUpdate: null
+                };
             }
 
-            return options.commandExecutionController.executeVisibleCommand(request);
+            const result = await options.commandExecutionController
+                .executeVisibleCommand(request);
+            const workspaceUpdate = result.workspaceUpdate
+                || await options.completeVisibleCommand?.(request)
+                || null;
+
+            if (workspaceUpdate) {
+                options.applyWorkspaceUpdate(workspaceUpdate);
+                options.recordRuntimeEvent(
+                    "workspace.update",
+                    "",
+                    `Workspace update: ${workspaceUpdate.added.length} added, ${
+                        workspaceUpdate.updated.length
+                    } updated, ${workspaceUpdate.removed.length} removed.`,
+                    { ...workspaceUpdate }
+                );
+            }
+
+            return {
+                ...result,
+                workspaceUpdate
+            };
         },
         executeProductCommand: async function(request): Promise<ProductCommandResult> {
             const snapshot = options.getSnapshot();

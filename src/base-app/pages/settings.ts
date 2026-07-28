@@ -38,8 +38,24 @@ type IroModule = {
     };
 };
 
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const iro = require("@jaames/iro") as IroModule;
+const readIroModule = function(): IroModule {
+    if (typeof require === "function") {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        return require("@jaames/iro") as IroModule;
+    }
+
+    const browserIro = (globalThis as typeof globalThis & {
+        iro?: IroModule;
+    }).iro;
+
+    if (!browserIro) {
+        throw new Error("SETTINGS-ERR color picker runtime is unavailable.");
+    }
+
+    return browserIro;
+};
+
+const iro = readIroModule();
 
 
 const consoleFontFamily = '"Dialog Mono", monospace';
@@ -62,6 +78,16 @@ const fontOptions = [
 ];
 
 const cursorOptions = ["bar", "block", "underline"];
+
+
+const closeSettingsWindow = function(): void {
+    if (typeof window.dialogForge.settings.close === "function") {
+        window.dialogForge.settings.close();
+        return;
+    }
+
+    window.close();
+};
 
 
 const isRecord = function(value: unknown): value is Record<string, unknown> {
@@ -818,7 +844,7 @@ const renderSettings = function(payload: SettingsPayload): void {
     cancelButton.onclick = function(): void {
         window.dialogForge.settings.cancelPreview();
         previewRollbackRequired = false;
-        window.close();
+        closeSettingsWindow();
     };
 };
 
@@ -846,5 +872,5 @@ window.dialogForge.settings.onSaved(function(): void {
             console.error("SETTINGS-ERR runtime restart failed:", error);
         });
     }
-    window.close();
+    closeSettingsWindow();
 });

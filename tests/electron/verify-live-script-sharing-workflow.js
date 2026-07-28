@@ -397,9 +397,13 @@ const run = async function() {
             state: "visible",
             timeout: 30000
         });
-        const joinLink = await hostEditor.locator(
-            ".dm-live-panel__ticket"
-        ).inputValue();
+        await hostEditor.getByRole("dialog").getByRole("button", {
+            name: "Copy link",
+            exact: true
+        }).click();
+        const joinLink = await hostEditor.evaluate(() => {
+            return navigator.clipboard.readText();
+        });
 
         if (!joinLink.startsWith("dialogforge://live-script/join#ticket=")) {
             throw new Error("Share panel did not expose a live-script join link.");
@@ -501,7 +505,7 @@ const run = async function() {
                 const badge = document.querySelector(".dm-script-tab-live");
                 const notice = document.querySelector(".dm-script-live-notice");
                 const join = document.querySelector(".dm-script-btn-join-live");
-                return badge?.textContent === "Session ended · read-only"
+                return badge?.textContent === "Session ended · editable"
                     && notice instanceof HTMLElement
                     && !notice.hidden
                     && notice.textContent?.includes("presenter ended")
@@ -585,7 +589,7 @@ const run = async function() {
             const badge = document.querySelector(".dm-script-tab-live");
             const notice = document.querySelector(".dm-script-live-notice");
             const join = document.querySelector(".dm-script-btn-join-live");
-            return badge?.textContent === "Session ended · read-only"
+            return badge?.textContent === "Session ended · editable"
                 && notice instanceof HTMLElement
                 && !notice.hidden
                 && notice.textContent?.includes("presenter ended")
@@ -616,19 +620,16 @@ const run = async function() {
             exact: true
         }).click();
 
-        await participantEditor.locator(".dm-script-btn-share-live").click();
-        await participantEditor.getByRole("button", {
-            name: "Make editable copy",
-            exact: true
-        }).click();
-        await participantEditor.waitForFunction(() => {
-            return document.querySelectorAll(".dm-script-tab").length >= 3
-                && !document.querySelector(".dm-script-tab.active")
-                    ?.classList.contains("dm-script-tab--live");
-        }, undefined, { timeout: 10000 });
+        const localContent = "participant_local_copy <- TRUE";
+        await participantInput.click({ force: true });
+        await participantEditor.keyboard.insertText(`\n${localContent}`);
+        await participantEditor.waitForFunction((expectedIdentifier) => {
+            return document.querySelector(".view-lines")
+                ?.textContent?.includes(expectedIdentifier);
+        }, "participant_local_copy", { timeout: 10000 });
 
         process.stdout.write(
-            "installed live-script share, join, sync, local execution, detach, and stop: ok\n"
+            "installed live-script share, join, sync, local execution, editable transfer, and stop: ok\n"
         );
     }
     finally {

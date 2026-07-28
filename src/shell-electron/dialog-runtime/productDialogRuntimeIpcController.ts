@@ -14,7 +14,14 @@ import type {
     TranscriptEvent,
     VisibleCommandRequest
 } from "../../runtime/provider-contract/runtimeProvider";
+import type {
+    ImportPreviewRequest
+} from "../../runtime/tabular-data/importPreview";
 import {
+    createDialogVariableValuesResult
+} from "../../runtime/tabular-data/dialogVariableValues";
+import {
+    createDialogImportFileResult,
     dialogRuntimeEventChannels,
     dialogRuntimeIpcChannels,
     type ProductDialogCommandPayload
@@ -39,6 +46,10 @@ export interface ProductDialogRuntimeIpcControllerOptions {
         "executeDialog" | "executeInvisibleQuery" | "executeRuntimeMethod"
     >;
     getProductId(): string;
+    openImportFile(): Promise<unknown>;
+    previewImportFile(
+        input: Partial<ImportPreviewRequest>
+    ): Promise<unknown>;
     ensureDependencies(
         dependencies: unknown,
         source: string
@@ -60,26 +71,6 @@ interface ProductDialogCreatedPayload {
     dialogID?: string;
     dependencies?: unknown;
 }
-
-
-const parseRuntimePayload = function(value: unknown): unknown {
-    if (typeof value !== "string") {
-        return value;
-    }
-
-    try {
-        return JSON.parse(value);
-    } catch {
-        return value;
-    }
-};
-
-
-const asRecord = function(value: unknown): Record<string, unknown> {
-    return value && typeof value === "object" && !Array.isArray(value)
-        ? value as Record<string, unknown>
-        : {};
-};
 
 
 const createDialogSource = function(
@@ -127,6 +118,19 @@ export const createProductDialogRuntimeIpcController = function(
         }
 
         return result;
+    });
+
+    options.ipcMain.handle(dialogRuntimeIpcChannels.openImportFile, async () => {
+        return createDialogImportFileResult(
+            await options.openImportFile()
+        );
+    });
+
+    options.ipcMain.handle(dialogRuntimeIpcChannels.previewImportFile, async (
+        _event: IpcMainInvokeEvent,
+        input: Partial<ImportPreviewRequest>
+    ) => {
+        return options.previewImportFile(input || {});
     });
 
     options.ipcMain.on(dialogRuntimeEventChannels.runCommand, (
@@ -221,11 +225,10 @@ export const createProductDialogRuntimeIpcController = function(
         const variable = String(payload?.variableName || "").trim();
 
         if (!dataset || !variable) {
-            return {
-                isNumeric: false,
-                values: [],
-                rowNames: []
-            };
+            return createDialogVariableValuesResult(null, {
+                name: dataset,
+                variableName: variable
+            });
         }
 
         const productId = options.getProductId();
@@ -241,14 +244,16 @@ export const createProductDialogRuntimeIpcController = function(
         );
 
         if (result.status !== "ready") {
-            return {
-                isNumeric: false,
-                values: [],
-                rowNames: [],
+            return createDialogVariableValuesResult(null, {
+                name: dataset,
+                variableName: variable,
                 error: result.message || "Unable to read variable values."
-            };
+            });
         }
 
-        return asRecord(parseRuntimePayload(result.value));
+        return createDialogVariableValuesResult(result.value, {
+            name: dataset,
+            variableName: variable
+        });
     });
 };

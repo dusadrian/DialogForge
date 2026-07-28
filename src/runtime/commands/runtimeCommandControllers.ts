@@ -3,7 +3,8 @@ import type {
     DependencyCheckResult,
     RuntimeCommandController,
     RuntimeProductCommandController,
-    RuntimeSessionSnapshot
+    RuntimeSessionSnapshot,
+    WorkspaceUpdate
 } from "../provider-contract/runtimeProvider";
 import {
     createRuntimeFallbackProductCommandController
@@ -37,6 +38,12 @@ export interface RuntimeCommandControllersOptions {
         detail: string,
         payload: Record<string, unknown>
     ): void;
+    completeVisibleCommand?(
+        request: Parameters<
+            RuntimeCommandExecutionController["executeVisibleCommand"]
+        >[0]
+    ): Promise<WorkspaceUpdate | null>;
+    applyWorkspaceUpdate(update: WorkspaceUpdate): void;
 }
 
 
@@ -65,7 +72,9 @@ export const createRuntimeCommandControllers = function(
     const operationController = createRuntimeCommandOperationController({
         commandExecutionController: executionController,
         getSnapshot: options.getSnapshot,
-        recordRuntimeEvent: options.recordRuntimeEvent
+        recordRuntimeEvent: options.recordRuntimeEvent,
+        completeVisibleCommand: options.completeVisibleCommand,
+        applyWorkspaceUpdate: options.applyWorkspaceUpdate
     });
 
     return {

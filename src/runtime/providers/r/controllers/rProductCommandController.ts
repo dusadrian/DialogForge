@@ -9,14 +9,13 @@ import {
     normalizePackageNames,
     selectRUniversePackages
 } from "../dependencies/packageInstallPlan";
-import { createRuntimeControlClient } from "../protocol/runtimeControlClient";
-
-
-type RuntimeControlClient = ReturnType<typeof createRuntimeControlClient>;
+import type {
+    RRuntimeControlClient
+} from "../protocol/runtimeControlClient";
 
 
 export interface RProductCommandControllerOptions {
-    getClient(): RuntimeControlClient | null;
+    getClient(): RRuntimeControlClient | null;
     checkPackageVersion(packageName: string): Promise<string>;
 }
 

@@ -742,14 +742,14 @@ const initializeLiveScriptUi = async function(): Promise<void> {
     try {
       if (liveCanHost) {
         const rendezvous = await import(
-          '../collaboration/liveScriptRendezvous'
+          '../collaboration/liveScriptRendezvous.js'
         );
         liveRendezvous = rendezvous.createHttpLiveScriptRendezvous({
           baseUrl: capability.rendezvousUrl
         });
       } else {
         const rendezvous = await import(
-          '../collaboration/liveScriptParticipantRendezvous'
+          '../collaboration/liveScriptParticipantRendezvous.js'
         );
         liveRendezvous = rendezvous.createHttpLiveScriptParticipantRendezvous({
           baseUrl: capability.rendezvousUrl

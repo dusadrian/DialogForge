@@ -61,6 +61,32 @@ export const createConsoleEditorSessionController = function(
         catch {}
     };
 
+    const readSessionPhase = function(): string {
+        try {
+            sessionPhase = String(
+                bindings.getSessionPhase?.()
+                || sessionPhase
+                || "starting"
+            );
+        }
+        catch {}
+
+        return sessionPhase;
+    };
+
+    const readRuntimeBusy = function(): boolean {
+        if (!bindings.getRuntimeBusy) {
+            return runtimeBusy;
+        }
+
+        try {
+            runtimeBusy = Boolean(bindings.getRuntimeBusy());
+        }
+        catch {}
+
+        return runtimeBusy;
+    };
+
     const bind = function(): void {
         if (bound) {
             return;
@@ -117,19 +143,8 @@ export const createConsoleEditorSessionController = function(
 
         // Close the race where ready/busy changes between construction and
         // listener attachment.
-        try {
-            sessionPhase = String(
-                bindings.getSessionPhase?.()
-                || sessionPhase
-                || "starting"
-            );
-        }
-        catch {}
-
-        try {
-            runtimeBusy = Boolean(bindings.getRuntimeBusy?.());
-        }
-        catch {}
+        readSessionPhase();
+        readRuntimeBusy();
 
         bindings.onSessionStateChanged();
     };
@@ -149,16 +164,16 @@ export const createConsoleEditorSessionController = function(
             return normalizePromptState(bindings.getPromptState?.());
         },
         getSessionPhase: function(): string {
-            return sessionPhase;
+            return readSessionPhase();
         },
         getRuntimeBusy: function(): boolean {
-            return runtimeBusy;
+            return readRuntimeBusy();
         },
         isInteractive: function(): boolean {
-            return sessionPhase === "ready";
+            return readSessionPhase() === "ready";
         },
         shouldShowPrompt: function(): boolean {
-            return sessionPhase === "ready" && !runtimeBusy;
+            return readSessionPhase() === "ready" && !readRuntimeBusy();
         },
         dispose: function(): void {
             disposeSubscription(unsubscribePrompt);

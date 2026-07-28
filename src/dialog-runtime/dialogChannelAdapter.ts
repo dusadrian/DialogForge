@@ -4,6 +4,10 @@ import {
     readProductDialogCommandText
 } from "./dialogCommandResult";
 import {
+    createDialogImportFileResult,
+    type DialogImportFileResult
+} from "./dialogRuntimeIpc";
+import {
     createDialogStateExternalCallResult,
     createEmptyDialogExternalCallResult,
     isDialogStateExternalCall
@@ -12,7 +16,13 @@ import {
 
 export interface DialogChannelAdapterBindings {
     getWorkingDirectory(): string;
+    openImportFile(): Promise<unknown>;
+    previewImportFile(input: unknown): Promise<unknown>;
     readVariableValues(input: unknown): Promise<unknown>;
+    runActivity?<Result>(
+        message: string,
+        action: () => Promise<Result>
+    ): Promise<Result>;
     loadRuntimePackages(packages: unknown): Promise<void>;
     executeVisibleCommand(command: string): Promise<{ ok?: boolean } | null | undefined>;
     callExternal?(name: string, parameters: Record<string, unknown>): unknown;
@@ -22,6 +32,8 @@ export interface DialogChannelAdapterBindings {
 
 export interface DialogChannelAdapter {
     getWorkingDirectory(): string;
+    openImportFile(): Promise<DialogImportFileResult>;
+    previewImportFile(input: unknown): Promise<unknown>;
     readVariableValues(input: unknown): Promise<unknown>;
     executeDialog(input: unknown): Promise<unknown>;
     callExternal(input: unknown, args: unknown[]): unknown;
@@ -40,6 +52,27 @@ export const createDialogChannelAdapter = function(
             return bindings.getWorkingDirectory();
         },
 
+        async openImportFile() {
+            return createDialogImportFileResult(
+                await bindings.openImportFile()
+            );
+        },
+
+        async previewImportFile(input) {
+            const readPreview = function(): Promise<unknown> {
+                return bindings.previewImportFile(input);
+            };
+
+            if (typeof bindings.runActivity === "function") {
+                return bindings.runActivity(
+                    "Preparing import preview...",
+                    readPreview
+                );
+            }
+
+            return readPreview();
+        },
+
         readVariableValues(input) {
             return bindings.readVariableValues(input);
         },
@@ -52,8 +85,16 @@ export const createDialogChannelAdapter = function(
                 return createEmptyProductDialogCommandResult(command);
             }
 
-            await bindings.loadRuntimePackages(input.dependencies || []);
-            const result = await bindings.executeVisibleCommand(command);
+            const execute = async function(): Promise<{
+                ok?: boolean;
+            } | null | undefined> {
+                await bindings.loadRuntimePackages(input.dependencies || []);
+
+                return bindings.executeVisibleCommand(command);
+            };
+            const result = typeof bindings.runActivity === "function"
+                ? await bindings.runActivity("Running dialog command...", execute)
+                : await execute();
 
             return createProductDialogCommandResultFromStatus(command, result);
         },

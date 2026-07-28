@@ -13,7 +13,27 @@
         return;
       }
 
-      console.error('SETTINGS-ERR loader failed: Electron page loader is unavailable.');
+      if (window.parent === window) {
+        console.error('SETTINGS-ERR loader failed: no supported host bridge is available.');
+        return;
+      }
+
+      const colorPickerScript = document.createElement('script');
+
+      colorPickerScript.src = '/vendor/iro/iro.min.js';
+      colorPickerScript.onload = function() {
+        import('/browser-esm/src/shell-web/browserPreloadBridge.js')
+          .then(function() {
+            return import('/browser-esm/src/base-app/pages/settings.js');
+          })
+          .catch(function(error) {
+            console.error('SETTINGS-ERR browser loader failed:', error);
+          });
+      };
+      colorPickerScript.onerror = function() {
+        console.error('SETTINGS-ERR color picker runtime failed to load.');
+      };
+      document.head.appendChild(colorPickerScript);
     })();
   </script>
   <style>

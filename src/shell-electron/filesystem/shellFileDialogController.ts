@@ -15,6 +15,9 @@ import {
 import {
     rScriptFilePolicy
 } from "../../runtime/providers/r/script/rScriptFilePolicy";
+import {
+    rWorkspaceFilePolicy
+} from "../../runtime/providers/r/workspace/rWorkspaceFilePolicy";
 
 
 export interface ShellFileDialogControllerOptions {
@@ -23,17 +26,9 @@ export interface ShellFileDialogControllerOptions {
 }
 
 
-export interface LegacyImportOpenFileResult {
-    ok: boolean;
-    filePath?: string;
-    cancelled?: boolean;
-}
-
-
 export interface ShellFileDialogController {
     inspectPath(filePath: unknown): PathInfoResult;
     openImportFile(): Promise<OpenFileResult>;
-    openImportFileLegacy(): Promise<LegacyImportOpenFileResult>;
     selectWorkingDirectory(): Promise<OpenFileResult>;
     selectWorkspaceOpenFile(): Promise<OpenFileResult>;
     selectWorkspaceSaveFile(): Promise<OpenFileResult>;
@@ -42,7 +37,10 @@ export interface ShellFileDialogController {
 
 
 const WORKSPACE_FILE_FILTERS = [
-    { name: "R workspace", extensions: ["RData", "rdata", "rda"] },
+    {
+        name: rWorkspaceFilePolicy.openDialogLabel,
+        extensions: rWorkspaceFilePolicy.fileExtensions
+    },
     { name: "All files", extensions: ["*"] }
 ];
 
@@ -112,24 +110,6 @@ export const createShellFileDialogController = function(
                 filters: importFileFilters
             }));
         },
-        openImportFileLegacy: async function(): Promise<LegacyImportOpenFileResult> {
-            const result = await options.dialog.showOpenDialog({
-                title: options.translate("Import data from file"),
-                properties: ["openFile"],
-                filters: importFileFilters
-            });
-            const filePath = result.filePaths[0] || "";
-
-            return filePath
-                ? {
-                    ok: true,
-                    filePath
-                }
-                : {
-                    ok: false,
-                    cancelled: true
-                };
-        },
         selectWorkingDirectory: async function(): Promise<OpenFileResult> {
             return createOpenDirectoryResult(await options.dialog.showOpenDialog({
                 properties: ["openDirectory", "createDirectory"]
@@ -143,7 +123,7 @@ export const createShellFileDialogController = function(
         },
         selectWorkspaceSaveFile: async function(): Promise<OpenFileResult> {
             const result = await options.dialog.showSaveDialog({
-                defaultPath: "workspace.RData",
+                defaultPath: rWorkspaceFilePolicy.defaultFileName,
                 filters: WORKSPACE_FILE_FILTERS
             });
 

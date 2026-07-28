@@ -145,6 +145,7 @@ runtime_transport_dedicated_params <- function(raw) {
         prefix = runtime_transport_value(raw, "requestPrefix"),
         cursorColumn = runtime_transport_integer(raw, "cursorColumn"),
         includeInternals = runtime_transport_flag(raw, "includeInternals"),
+        forceRefresh = runtime_transport_flag(raw, "forceRefresh"),
         path = runtime_transport_value(raw, "path"),
         reader = runtime_transport_value(raw, "reader"),
         nrows = runtime_transport_number(raw, "nrows"),
@@ -348,7 +349,10 @@ runtime_transport_result_json <- function(method, output) {
         return(runtime_transport_workspace_json(output$result))
     }
 
-    if (identical(method, "workspace.update")) {
+    if (is.element(method, c(
+        "workspace.update",
+        "workspace.complete_visible_command"
+    ))) {
         return(json_workspace_update(output$result %||% list()))
     }
 

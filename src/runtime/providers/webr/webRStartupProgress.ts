@@ -13,7 +13,7 @@ export interface WebRStartupProgressStatusUpdate {
 }
 
 
-export const defaultWebRStartupProgressMessage = "Loading DialogR web runtime...";
+export const defaultWebRStartupProgressMessage = "Loading web runtime...";
 
 
 const webRStartupProgressStages: Record<string, WebRStartupProgressStage> = {
@@ -28,8 +28,10 @@ const webRStartupProgressStages: Record<string, WebRStartupProgressStage> = {
     "Caching WebR package library...": { start: 66, end: 70 },
     "Mounting WebR package library...": { start: 70, end: 78 },
     "Preparing WebR workspace...": { start: 78, end: 86 },
-    "Reading WebR workspace...": { start: 86, end: 92 },
-    "Loading launch dataset...": { start: 92, end: 98 },
+    "Loading shared R runtime services...": { start: 86, end: 94 },
+    "Running application startup tasks...": { start: 94, end: 96 },
+    "Reading WebR workspace...": { start: 96, end: 98 },
+    "Loading launch dataset...": { start: 98, end: 99 },
     "WebR ready": { start: 100, end: 100 }
 };
 
@@ -68,8 +70,8 @@ export const createWebRStartupProgressStatusUpdate = function(
     currentProgress: number
 ): WebRStartupProgressStatusUpdate {
     const message = String(text || "").trim();
-    const visible = Boolean(message) && message !== "WebR ready";
     const stage = readWebRStartupProgressStage(message);
+    const visible = Boolean(stage) && message !== "WebR ready";
     const progressValue = clampWebRStartupProgress(
         progress ?? stage?.start ?? (visible ? currentProgress : 100)
     );

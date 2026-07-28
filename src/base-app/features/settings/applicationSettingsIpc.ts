@@ -23,6 +23,7 @@ export interface RuntimeLocationResult {
 
 export const applicationSettingsIpcChannels = {
     read: "base-app:readSettings",
+    readWindowPayload: "base-app:readSettingsWindowPayload",
     write: "base-app:writeSettings",
     openSettings: "base-app:openSettingsWindow",
     openMenuCustomization: "base-app:openMenuCustomizationWindow",
@@ -37,6 +38,7 @@ export const applicationSettingsEventChannels = {
     previewSettings: "base-app:settings-preview",
     cancelSettingsPreview: "base-app:settings-preview-cancel",
     saveSettings: "base-app:settings-save",
+    closeSettingsWindow: "base-app:settings-close-window",
     settingsLoaded: "base-app:settings-loaded",
     settingsSaved: "base-app:settings-saved",
     settingsUpdated: "base-app:settings-updated",
@@ -69,6 +71,10 @@ interface ApplicationSettingsCommands {
 
 interface ApplicationSettingsIpcRoutes {
     "base-app:readSettings": { input: []; result: ApplicationSettings };
+    "base-app:readSettingsWindowPayload": {
+        input: [];
+        result: Record<string, unknown>;
+    };
     "base-app:writeSettings": {
         input: [ApplicationSettings];
         result: ApplicationSettings;

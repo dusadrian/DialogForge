@@ -182,7 +182,7 @@ export const createConsoleSurface = function(
         const inputHost = flow?.getInputHost?.() as HTMLElement | null;
 
         if (!inputHost) {
-            throw new Error("DialogR console editor input view is not loaded.");
+            throw new Error("Console editor input view is not loaded.");
         }
 
         commandInput = createTerminalConsoleEditorInputView({

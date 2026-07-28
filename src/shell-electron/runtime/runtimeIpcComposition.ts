@@ -35,6 +35,13 @@ import {
 import {
     createRuntimeBroadcastBridge
 } from "./runtimeBroadcastBridge";
+import {
+    createWorkspaceDatasetCacheEffects,
+    workspaceUpdateChangesDialogVariables
+} from "../../runtime/workspace/workspaceUpdateEffects";
+import {
+    workspaceUpdateHasChanges
+} from "../../runtime/workspace/workspaceUpdate";
 
 
 export interface RuntimeIpcCompositionOptions {
@@ -110,15 +117,54 @@ export const createRuntimeIpcComposition = function(
     const executeVisibleCommandAndBroadcast = async function(
         request: VisibleCommandRequest
     ): Promise<TranscriptEvent[]> {
-        const events = await options.runtimeSessionManager
-            .executeVisibleCommand(request);
+        const result = await options.runtimeSessionManager
+            .executeVisibleCommandWithEffects(request);
 
-        warmCache.invalidate();
-        bridge.sendTranscriptEvents(events);
-        await bridge.refreshWorkspaceAndBroadcast();
+        bridge.sendTranscriptEvents(result.transcriptEvents);
+
+        if (workspaceUpdateHasChanges(result.workspaceUpdate)) {
+            const effects = createWorkspaceDatasetCacheEffects(
+                result.workspaceUpdate
+            );
+            const activeDataset = options.runtimeSessionManager
+                .getActiveDataset()
+                .objectName;
+
+            effects.forEach(function(effect) {
+                if (effect.preview) {
+                    warmCache.invalidatePreview(effect.name);
+                }
+
+                if (effect.variableMetadata) {
+                    warmCache.invalidateVariableMetadata(effect.name);
+                }
+            });
+
+            bridge.sendWorkspaceSnapshot(
+                options.runtimeSessionManager.getWorkspaceSnapshot(),
+                {
+                    warmActiveDataset: false,
+                    refreshProductDialogs:
+                        workspaceUpdateChangesDialogVariables(effects)
+                }
+            );
+
+            const activeEffect = effects.find(function(effect) {
+                return effect.name === activeDataset && !effect.removed;
+            });
+
+            if (activeEffect?.preview) {
+                warmCache.warmPreview(activeDataset);
+            }
+
+            if (activeEffect?.variableMetadata) {
+                warmCache.warmVariableMetadata(activeDataset);
+            }
+        }
+
         void bridge.broadcastRuntimeEvents().catch(options.reportError);
 
-        return events;
+        return result.transcriptEvents;
     };
 
     createRuntimeSessionIpcController({

@@ -24,10 +24,6 @@ export const createShellFileDialogIpcController = function(
         return options.fileDialogController.openImportFile();
     });
 
-    options.ipcMain.handle(shellFileDialogIpcChannels.legacyOpenImportFile, async () => {
-        return options.fileDialogController.openImportFileLegacy();
-    });
-
     options.ipcMain.handle(shellFileDialogIpcChannels.selectWorkingDirectory, async () => {
         return options.fileDialogController.selectWorkingDirectory();
     });

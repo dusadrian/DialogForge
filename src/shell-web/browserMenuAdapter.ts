@@ -7,6 +7,7 @@ export interface BrowserMenuAdapterOptions {
     menuBar: HTMLElement;
     isRootDisabled?(item: EvaluatedMenuItem): boolean;
     rootDisabledReason?(item: EvaluatedMenuItem): string;
+    onMenuOpening?(): void;
     isActionSupported(item: EvaluatedMenuItem): boolean;
     execute(item: EvaluatedMenuItem): Promise<void> | void;
     onError?(error: unknown): void;
@@ -148,6 +149,9 @@ export const createBrowserMenuAdapter = function(
             }
 
             button.setAttribute("aria-haspopup", "menu");
+            button.addEventListener("pointerdown", () => {
+                options.onMenuOpening?.();
+            });
             button.addEventListener("click", (event) => {
                 event.stopPropagation();
                 const open = root.classList.contains("is-open");

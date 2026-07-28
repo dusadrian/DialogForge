@@ -170,10 +170,6 @@ export const createProductDialogWindowController = function<WorkspaceSource>(
             lastState: options.sessions.getState(dialogId),
             workspaceData: currentWorkspaceData
         });
-        window.webContents.send(
-            dialogRuntimeEventChannels.incomingData,
-            currentWorkspaceData
-        );
     };
     const open = function(dialogId: string): BrowserWindow {
         const existing = options.windows.focusExisting(dialogId);

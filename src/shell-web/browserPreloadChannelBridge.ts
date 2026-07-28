@@ -2,6 +2,13 @@ import {
     applicationEventChannels
 } from "../base-app/bootstrap/applicationEvents";
 import {
+    applicationCompositionIpcChannels
+} from "../base-app/bootstrap/applicationCompositionIpc";
+import {
+    applicationSettingsEventChannels,
+    applicationSettingsIpcChannels
+} from "../base-app/features/settings/applicationSettingsIpc";
+import {
     shellClipboardIpcChannels
 } from "../base-app/clipboard/shellClipboardIpc";
 import {
@@ -21,6 +28,12 @@ import {
 import {
     liveScriptIpcChannels
 } from "../script-editor/collaboration/liveScriptIpc";
+import {
+    runtimeSessionIpcChannels
+} from "../core/ipc/runtimeSessionIpc";
+import {
+    workspaceIpcChannels
+} from "../core/ipc/workspaceIpc";
 
 
 interface BrowserPreloadWorkspaceChannels {
@@ -48,13 +61,18 @@ interface BrowserPreloadDatasetChannels {
     sortRows(input: unknown): Promise<unknown>;
     writeCells(input: unknown): Promise<unknown>;
     updateVariable(input: unknown): Promise<unknown>;
+    readVariableMetadata(input: unknown): Promise<unknown>;
+    writeVariableMetadata(input: unknown): Promise<unknown>;
+    readValueLabels(input: unknown): Promise<unknown>;
+    writeValueLabels(input: unknown): Promise<unknown>;
+    readDeclaredMissing(input: unknown): Promise<unknown>;
+    writeDeclaredMissing(input: unknown): Promise<unknown>;
 }
 
 
 interface BrowserPreloadGeneralChannels {
     readClipboardText(): Promise<unknown>;
     copyPayload(input: unknown): Promise<unknown>;
-    unsupported(): unknown;
 }
 
 
@@ -80,6 +98,8 @@ interface BrowserPreloadLiveScriptChannels {
 
 interface BrowserPreloadDialogChannels {
     getWorkingDirectory(): unknown;
+    openImportFile(): Promise<unknown>;
+    previewImportFile(input: unknown): Promise<unknown>;
     readVariableValues(input: unknown): Promise<unknown>;
     executeDialog(input: unknown): Promise<unknown>;
     callExternal(input: unknown, args: unknown[]): unknown;
@@ -111,6 +131,23 @@ export interface BrowserPreloadChannelBridgeOptions {
     updateScriptDirtyState(input: Record<string, unknown>): void;
     handleScriptBrowserReady(): void;
     resolveScriptCloseRequest(input: Record<string, unknown>): void;
+    readSettingsPayload(): Promise<unknown> | unknown;
+    readApplicationSettings(): Promise<unknown> | unknown;
+    readComposition(): Promise<unknown> | unknown;
+    readRuntimeSession(): Promise<unknown> | unknown;
+    listRuntimeEvents(): Promise<unknown> | unknown;
+    listRuntimePrompts(): Promise<unknown> | unknown;
+    refreshWorkspace(): Promise<unknown> | unknown;
+    chooseRuntimeLocation(input: Record<string, unknown>): Promise<unknown> | unknown;
+    discoverRuntimeLocation(input: Record<string, unknown>): Promise<unknown> | unknown;
+    previewSettings(input: Record<string, unknown>): Promise<void> | void;
+    cancelSettingsPreview(): Promise<void> | void;
+    saveSettings(
+        input: Record<string, unknown>,
+        sourceWindow: Window | null
+    ): Promise<void> | void;
+    closeSettingsWindow(): void;
+    restartRuntime(action: "clean" | "restore"): Promise<unknown>;
 }
 
 
@@ -232,14 +269,25 @@ export const createBrowserPreloadChannelBridge = function(
             if (channel === tabularIpcChannels.writeCells) {
                 return options.datasetChannels().writeCells(input);
             }
-            if (
-                channel === tabularIpcChannels.writeValueLabels
-                || channel === tabularIpcChannels.writeDeclaredMissing
-            ) {
-                return options.generalChannels().unsupported();
+            if (channel === tabularIpcChannels.readVariableMetadata) {
+                return options.datasetChannels().readVariableMetadata(
+                    args[0]
+                );
             }
             if (channel === tabularIpcChannels.writeVariableMetadata) {
-                return options.datasetChannels().updateVariable(input);
+                return options.datasetChannels().writeVariableMetadata(input);
+            }
+            if (channel === tabularIpcChannels.readValueLabels) {
+                return options.datasetChannels().readValueLabels(args[0]);
+            }
+            if (channel === tabularIpcChannels.writeValueLabels) {
+                return options.datasetChannels().writeValueLabels(input);
+            }
+            if (channel === tabularIpcChannels.readDeclaredMissing) {
+                return options.datasetChannels().readDeclaredMissing(args[0]);
+            }
+            if (channel === tabularIpcChannels.writeDeclaredMissing) {
+                return options.datasetChannels().writeDeclaredMissing(input);
             }
             if (channel === scriptEditorIpcChannels.checkFragment) {
                 return options.scriptChannels().checkFragment(input);
@@ -286,6 +334,12 @@ export const createBrowserPreloadChannelBridge = function(
             if (channel === liveScriptIpcChannels.close) {
                 return options.liveScriptChannels().close(String(input.sessionId || ""));
             }
+            if (channel === dialogRuntimeIpcChannels.openImportFile) {
+                return options.dialogChannels().openImportFile();
+            }
+            if (channel === dialogRuntimeIpcChannels.previewImportFile) {
+                return options.dialogChannels().previewImportFile(input);
+            }
             if (channel === dialogRuntimeIpcChannels.getWorkingDirectory) {
                 return options.dialogChannels().getWorkingDirectory();
             }
@@ -303,6 +357,38 @@ export const createBrowserPreloadChannelBridge = function(
             }
             if (channel === dialogRuntimeIpcChannels.readConsoleStateChips) {
                 return options.dialogChannels().readConsoleStateChips(input);
+            }
+            if (channel === applicationSettingsIpcChannels.readWindowPayload) {
+                return options.readSettingsPayload();
+            }
+            if (channel === applicationSettingsIpcChannels.read) {
+                return options.readApplicationSettings();
+            }
+            if (channel === applicationCompositionIpcChannels.get) {
+                return options.readComposition();
+            }
+            if (channel === runtimeSessionIpcChannels.get) {
+                return options.readRuntimeSession();
+            }
+            if (channel === runtimeSessionIpcChannels.listEvents) {
+                return options.listRuntimeEvents();
+            }
+            if (channel === runtimeSessionIpcChannels.listPrompts) {
+                return options.listRuntimePrompts();
+            }
+            if (channel === workspaceIpcChannels.refresh) {
+                return options.refreshWorkspace();
+            }
+            if (channel === applicationSettingsIpcChannels.chooseRuntimeLocation) {
+                return options.chooseRuntimeLocation(input);
+            }
+            if (channel === applicationSettingsIpcChannels.discoverRuntimeLocation) {
+                return options.discoverRuntimeLocation(input);
+            }
+            if (channel === runtimeSessionIpcChannels.restart) {
+                const action = input.action === "clean" ? "clean" : "restore";
+
+                return options.restartRuntime(action);
             }
 
             return null;
@@ -384,6 +470,35 @@ export const createBrowserPreloadChannelBridge = function(
 
             if (channel === scriptEditorEventChannels.closeSaveResult) {
                 options.resolveScriptCloseRequest(input);
+                return;
+            }
+
+            if (channel === applicationSettingsEventChannels.previewSettings) {
+                reportAsyncError(
+                    Promise.resolve(options.previewSettings(input)),
+                    options
+                );
+                return;
+            }
+
+            if (channel === applicationSettingsEventChannels.cancelSettingsPreview) {
+                reportAsyncError(
+                    Promise.resolve(options.cancelSettingsPreview()),
+                    options
+                );
+                return;
+            }
+
+            if (channel === applicationSettingsEventChannels.saveSettings) {
+                reportAsyncError(
+                    Promise.resolve(options.saveSettings(input, sourceWindow)),
+                    options
+                );
+                return;
+            }
+
+            if (channel === applicationSettingsEventChannels.closeSettingsWindow) {
+                options.closeSettingsWindow();
             }
         }
     };

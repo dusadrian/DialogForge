@@ -2,9 +2,9 @@ import type {
     ProductCommandRequest,
     ProductCommandResult,
     RuntimeCommandController,
+    RuntimeCommandExecutionResult,
     RuntimeProductCommandController,
     RuntimeSessionSnapshot,
-    TranscriptEvent,
     VisibleCommandRequest
 } from "../provider-contract/runtimeProvider";
 
@@ -21,7 +21,7 @@ export interface RuntimeCommandExecutionControllerOptions {
 export interface RuntimeCommandExecutionController {
     executeVisibleCommand(
         request: VisibleCommandRequest
-    ): Promise<TranscriptEvent[]>;
+    ): Promise<RuntimeCommandExecutionResult>;
     executeProductCommand(
         request: ProductCommandRequest
     ): Promise<ProductCommandResult>;

@@ -2,7 +2,6 @@ import {
     ensureWebRDirectory
 } from "../runtime/providers/webr/webRFileSystem";
 import {
-    createRMoodleLaunchDatasetCommand,
     createRMoodleLaunchDatasetPath,
     rMoodleLaunchScriptEditorCode
 } from "../runtime/providers/r/launch/rMoodleLaunchPolicy";
@@ -14,7 +13,6 @@ interface BrowserMoodleLaunchRuntime {
         writeFile(path: string, bytes: Uint8Array): Promise<void> | void;
         mkdir(path: string): Promise<void> | void;
     };
-    evalRVoid(command: string): Promise<void> | void;
 }
 
 export interface BrowserMoodleLaunchDatasetResult {
@@ -45,7 +43,11 @@ export const readBrowserMoodleLaunchCode = function(
 
 export const loadBrowserMoodleLaunchDataset = async function(
     runtime: BrowserMoodleLaunchRuntime,
-    launchCode: unknown
+    launchCode: unknown,
+    loadDataset: (
+        path: string,
+        objectName: string
+    ) => Promise<void>
 ): Promise<BrowserMoodleLaunchDatasetResult> {
     const cleanCode = String(launchCode || "").trim();
 
@@ -69,7 +71,7 @@ export const loadBrowserMoodleLaunchDataset = async function(
 
     await ensureWebRDirectory(runtime, "/launch");
     await runtime.FS.writeFile(launchDatasetPath, bytes);
-    await runtime.evalRVoid(createRMoodleLaunchDatasetCommand(launchDatasetPath));
+    await loadDataset(launchDatasetPath, "dataset");
 
     return {
         loaded: true,

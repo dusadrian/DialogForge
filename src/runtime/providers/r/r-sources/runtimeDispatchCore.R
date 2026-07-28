@@ -15,6 +15,7 @@ runtime_capture_input <- function(code, parent_id, output_width = NULL) {
     output <- character(0)
     stderr <- character(0)
     output_connection <- NULL
+    stderr_connection <- NULL
     output_sink_active <- FALSE
     message_sink_active <- FALSE
     previous_width <- NULL
@@ -27,9 +28,10 @@ runtime_capture_input <- function(code, parent_id, output_width = NULL) {
     }
 
     output_connection <- textConnection("output", "w", local = TRUE)
+    stderr_connection <- textConnection("stderr", "w", local = TRUE)
     sink(output_connection, type = "output")
     output_sink_active <- TRUE
-    sink(output_connection, type = "message")
+    sink(stderr_connection, type = "message")
     message_sink_active <- TRUE
     on.exit({
         if (isTRUE(message_sink_active)) {
@@ -42,6 +44,10 @@ runtime_capture_input <- function(code, parent_id, output_width = NULL) {
 
         if (!is.null(output_connection)) {
             close(output_connection)
+        }
+
+        if (!is.null(stderr_connection)) {
+            close(stderr_connection)
         }
     }, add = TRUE)
 
@@ -70,6 +76,15 @@ runtime_capture_input <- function(code, parent_id, output_width = NULL) {
     }, error = function(error) {
         list(ok = FALSE, error = conditionMessage(error))
     })
+
+    sink(type = "message")
+    message_sink_active <- FALSE
+    sink(type = "output")
+    output_sink_active <- FALSE
+    close(output_connection)
+    output_connection <- NULL
+    close(stderr_connection)
+    stderr_connection <- NULL
 
     list(
         ok = isTRUE(result$ok),
@@ -156,12 +171,17 @@ runtime_emit_input_result <- function(result, code, parent_id, visible) {
 }
 
 
-runtime_finish_input <- function(state, parent_id, visible, workspace = FALSE) {
+runtime_finish_input <- function(
+    state,
+    parent_id,
+    visible,
+    workspace_code = ""
+) {
     queue_completion_event(
         state,
         parent_id,
         emit_prompt_state = isTRUE(visible),
-        emit_workspace = isTRUE(workspace),
+        workspace_code = workspace_code,
         emit_plot = FALSE
     )
     current_activity_id <<- ""
@@ -218,7 +238,7 @@ runtime_execute_input <- function(params) {
         "idle",
         parent_id,
         visible,
-        code_may_mutate_workspace(code)
+        code
     )
 
     if (visible) {
@@ -548,7 +568,9 @@ runtime_workspace_remove <- function(params) {
         }
     }
 
-    list(ok = TRUE, result = runtime_refresh_workspace_index())
+    runtime_workspace_delta()
+
+    list(ok = TRUE, result = runtime_cached_workspace_snapshot())
 }
 
 
@@ -580,7 +602,9 @@ runtime_workspace_rename <- function(params) {
         return(list(ok = FALSE, error = conditionMessage(renamed)))
     }
 
-    list(ok = TRUE, result = runtime_refresh_workspace_index())
+    runtime_workspace_delta()
+
+    list(ok = TRUE, result = runtime_cached_workspace_snapshot())
 }
 
 
@@ -601,7 +625,9 @@ runtime_workspace_clear <- function() {
         }
     }
 
-    list(ok = TRUE, result = runtime_refresh_workspace_index())
+    runtime_workspace_delta()
+
+    list(ok = TRUE, result = runtime_cached_workspace_snapshot())
 }
 
 
@@ -622,6 +648,45 @@ runtime_workspace_delta <- function() {
             updatedAt = 0
         )
     )
+}
+
+
+runtime_commit_workspace_mutation <- function() {
+    runtime_workspace_delta()
+
+    list(ok = TRUE, result = TRUE)
+}
+
+
+runtime_complete_visible_workspace <- function(params) {
+    change <- runtime_workspace_change_for_code(params$code %||% "")
+
+    if (is.null(change)) {
+        return(list(
+            ok = TRUE,
+            result = list(
+                added = list(),
+                updated = list(),
+                removed = character(0),
+                datasets = list(
+                    added = character(0),
+                    removed = character(0),
+                    changed = list()
+                ),
+                objectCount = as.integer(
+                    workspace_index_get("last_state")$objectCount %||% 0L
+                ),
+                updatedAt = 0
+            )
+        ))
+    }
+
+    workspace_index_set(
+        "last_state",
+        change$state %||% workspace_index_get("last_state")
+    )
+
+    list(ok = TRUE, result = change$update %||% list())
 }
 
 
@@ -778,12 +843,25 @@ runtime_workspace_object_names <- function() {
 }
 
 
-runtime_workspace_file_result <- function(path, objects) {
+runtime_workspace_file_result <- function(path, objects, workspace_update = NULL) {
     result <- list(path = path, objects = as.character(objects))
     result_json <- paste0(
         "{",
         "\"path\":", json_str(path),
-        ",\"objects\":", json_strv(objects),
+        ",\"objects\":", json_strv(objects)
+    )
+
+    if (!is.null(workspace_update)) {
+        result$workspaceUpdate <- workspace_update
+        result_json <- paste0(
+            result_json,
+            ",\"workspaceUpdate\":",
+            json_workspace_update(workspace_update)
+        )
+    }
+
+    result_json <- paste0(
+        result_json,
         "}"
     )
 
@@ -840,13 +918,21 @@ runtime_run_script_file <- function(params) {
         return(list(ok = FALSE, error = conditionMessage(sourced)))
     }
 
-    runtime_refresh_workspace_index()
-    result <- list(path = path)
+    workspace_update <- runtime_workspace_delta()$result %||% list()
+    result <- list(
+        path = path,
+        workspaceUpdate = workspace_update
+    )
 
     list(
         ok = TRUE,
         result = result,
-        result_json = paste0("{\"path\":", json_str(path), "}")
+        result_json = paste0(
+            "{\"path\":", json_str(path),
+            ",\"workspaceUpdate\":",
+            json_workspace_update(workspace_update),
+            "}"
+        )
     )
 }
 
@@ -931,8 +1017,56 @@ runtime_load_workspace_file <- function(params) {
         return(list(ok = FALSE, error = conditionMessage(loaded)))
     }
 
-    runtime_refresh_workspace_index()
-    runtime_workspace_file_result(path, as.character(loaded))
+    workspace_update <- runtime_workspace_delta()$result %||% list()
+    runtime_workspace_file_result(
+        path,
+        as.character(loaded),
+        workspace_update
+    )
+}
+
+
+runtime_load_serialized_object <- function(params) {
+    target <- as.character(params$path %||% "")
+    name <- as.character(params$name %||% "")
+
+    if (!nzchar(target)) return(list(ok = FALSE, error = "missing-object-file"))
+    if (!file.exists(target)) return(list(ok = FALSE, error = "object-file-not-found"))
+    if (
+        !nzchar(name) ||
+        !identical(make.names(name), name)
+    ) {
+        return(list(ok = FALSE, error = "invalid-workspace-object-name"))
+    }
+
+    value <- tryCatch(
+        readRDS(target),
+        error = function(error) error
+    )
+
+    if (inherits(value, "error")) {
+        return(list(ok = FALSE, error = conditionMessage(value)))
+    }
+
+    assign(name, value, envir = .GlobalEnv)
+    workspace_update <- runtime_workspace_delta()$result %||% list()
+    path <- normalizePath(target, winslash = "/", mustWork = TRUE)
+
+    list(
+        ok = TRUE,
+        result = list(
+            path = path,
+            name = name,
+            workspaceUpdate = workspace_update
+        ),
+        result_json = paste0(
+            "{\"path\":", json_str(path),
+            ",\"name\":", json_str(name),
+            ",\"workspaceUpdate\":",
+            json_workspace_update(workspace_update),
+            "}"
+        )
+    )
 }
 
 
@@ -1000,6 +1134,13 @@ runtime_dispatch_service <- function(method, params) {
             ok = TRUE,
             result = list(path = normalizePath(getwd(), winslash = "/", mustWork = FALSE))
         ),
+        "runtime.version" = list(
+            ok = TRUE,
+            result = paste(R.version$major, R.version$minor, sep = "."),
+            result_json = json_str(
+                paste(R.version$major, R.version$minor, sep = ".")
+            )
+        ),
         "load_workspace" = runtime_load_workspace_file(params),
         "show_help_topic" = list(
             ok = TRUE,
@@ -1025,16 +1166,21 @@ runtime_dispatch_service <- function(method, params) {
                 runtime_cached_workspace_snapshot()
             }
         ),
+        "workspace.complete_visible_command" =
+            runtime_complete_visible_workspace(params),
         "workspace.remove" = runtime_workspace_remove(params),
         "workspace.rename" = runtime_workspace_rename(params),
         "workspace.clear" = runtime_workspace_clear(),
         "workspace.update" = runtime_workspace_delta(),
+        "workspace.commit_mutation" = runtime_commit_workspace_mutation(),
         "workspace.inspect" = workspace_inspect(params$name %||% ""),
         "runtime.set_working_directory" = runtime_set_working_directory(params),
         "runtime.run_script_file" = runtime_run_script_file(params),
         "runtime.workspace_fingerprint" = runtime_workspace_fingerprint(),
         "runtime.save_workspace_file" = runtime_save_workspace_file(params),
         "runtime.load_workspace_file" = runtime_load_workspace_file(params),
+        "runtime.load_serialized_object" =
+            runtime_load_serialized_object(params),
         "workspace.truth_tables" = runtime_qca_truth_tables(),
         NULL
     )

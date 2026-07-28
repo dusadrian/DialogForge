@@ -374,7 +374,13 @@ workspace_signature_current <- function(value, value_hash = NULL) {
 }
 
 
-workspace_variable <- function(name, value, updated_ms, signature = NULL) {
+workspace_variable <- function(
+    name,
+    value,
+    updated_ms,
+    signature = NULL,
+    dataset_state = NULL
+) {
     display <- workspace_truncate_text(
         workspace_display_value(value),
         60L
@@ -404,7 +410,13 @@ workspace_variable <- function(name, value, updated_ms, signature = NULL) {
         has_viewer = isTRUE(workspace_is_tabular(value)),
         is_truncated = display$truncated,
         signature = signature,
-        updated_time = as.numeric(updated_ms %||% 0)
+        updated_time = as.numeric(updated_ms %||% 0),
+        dataframe = if (is.data.frame(value)) {
+            workspace_dataset_summary(value, dataset_state)
+        }
+        else {
+            NULL
+        }
     )
 }
 

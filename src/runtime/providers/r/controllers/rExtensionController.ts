@@ -2,14 +2,16 @@ import { createRuntimeExtensionMethodResult } from "../../../extensions/runtimeE
 import type {
     RuntimeExtensionController
 } from "../../../provider-contract/runtimeProvider";
-import { createRuntimeControlClient } from "../protocol/runtimeControlClient";
-
-
-type RuntimeControlClient = ReturnType<typeof createRuntimeControlClient>;
+import {
+    createRWorkspaceUpdate
+} from "./rWorkspaceUpdate";
+import type {
+    RRuntimeControlClient
+} from "../protocol/runtimeControlClient";
 
 
 export interface RExtensionControllerOptions {
-    getClient(): RuntimeControlClient | null;
+    getClient(): RRuntimeControlClient | null;
     createRequestId(prefix: string): string;
     interrupt(): boolean | null;
 }
@@ -61,12 +63,24 @@ export const createRExtensionController = function(
                     timeoutMs: Number(request.params.timeoutMs || 10000)
                 })
             });
+            const value = result.ok ? result.result : null;
+            const record = value
+                && typeof value === "object"
+                && !Array.isArray(value)
+                ? value as Record<string, unknown>
+                : {};
+            const rawWorkspaceUpdate =
+                record.workspaceUpdate
+                || record.workspace_update;
 
             return createRuntimeExtensionMethodResult({
                 status: result.ok ? "ready" : "failed",
                 providerId: snapshot.providerId,
                 method: request.method,
-                value: result.ok ? result.result : null,
+                value,
+                workspaceUpdate: rawWorkspaceUpdate
+                    ? createRWorkspaceUpdate(rawWorkspaceUpdate)
+                    : undefined,
                 message: result.ok
                     ? "R runtime-control resolved the runtime extension method."
                     : String(

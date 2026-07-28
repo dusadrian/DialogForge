@@ -42,7 +42,8 @@ export const createDatasetEditorWarmCache = function(runtime: DatasetEditorWarmC
     const previewWarmups = new Map<string, InitialDatasetPreviewWarmup>();
     const variableMetadataCache = new Map<string, VariableMetadataBatchResult>();
     const variableMetadataWarmups = new Map<string, InitialVariableMetadataWarmup>();
-    let cacheGeneration = 0;
+    let previewGeneration = 0;
+    let variableMetadataGeneration = 0;
 
     const wait = function(milliseconds: number): Promise<void> {
         return new Promise((resolve) => {
@@ -175,23 +176,39 @@ export const createDatasetEditorWarmCache = function(runtime: DatasetEditorWarmC
         return batchStart <= requestedStart && batchEnd >= requestedEnd;
     };
 
-    const invalidate = function(objectName?: string): void {
+    const invalidatePreview = function(objectName?: string): void {
         const targetName = String(objectName || "").trim();
 
-        cacheGeneration += 1;
+        previewGeneration += 1;
 
         if (!targetName) {
             previewCache.clear();
             previewWarmups.clear();
-            variableMetadataCache.clear();
-            variableMetadataWarmups.clear();
             return;
         }
 
         previewCache.delete(targetName);
         previewWarmups.delete(targetName);
+    };
+
+    const invalidateVariableMetadata = function(objectName?: string): void {
+        const targetName = String(objectName || "").trim();
+
+        variableMetadataGeneration += 1;
+
+        if (!targetName) {
+            variableMetadataCache.clear();
+            variableMetadataWarmups.clear();
+            return;
+        }
+
         variableMetadataCache.delete(targetName);
         variableMetadataWarmups.delete(targetName);
+    };
+
+    const invalidate = function(objectName?: string): void {
+        invalidatePreview(objectName);
+        invalidateVariableMetadata(objectName);
     };
 
     const warmPreview = function(objectNameInput: unknown, columnCountInput?: number): void {
@@ -224,7 +241,7 @@ export const createDatasetEditorWarmCache = function(runtime: DatasetEditorWarmC
         }
 
         let promise: Promise<TabularPreviewSnapshot | null>;
-        const warmupGeneration = cacheGeneration;
+        const warmupGeneration = previewGeneration;
 
         promise = runtime.readTabularPreview({
             objectName,
@@ -236,7 +253,7 @@ export const createDatasetEditorWarmCache = function(runtime: DatasetEditorWarmC
 
             if (
                 currentWarmup?.promise === promise
-                && warmupGeneration === cacheGeneration
+                && warmupGeneration === previewGeneration
                 && preview
                 && preview.status === "ready"
             ) {
@@ -278,12 +295,17 @@ export const createDatasetEditorWarmCache = function(runtime: DatasetEditorWarmC
         const warmup = previewWarmups.get(objectName);
 
         if (warmup && warmup.columnCount >= requestedColumns) {
+            const readGeneration = previewGeneration;
             const firstResult = await Promise.race([
                 warmup.promise,
                 wait(initialDatasetPreviewWaitMs).then(() => {
                     return null;
                 })
             ]);
+
+            if (readGeneration !== previewGeneration) {
+                return runtime.readTabularPreview(request);
+            }
 
             const warmed = previewCache.get(objectName);
 
@@ -298,6 +320,11 @@ export const createDatasetEditorWarmCache = function(runtime: DatasetEditorWarmC
             }
 
             const completed = await warmup.promise;
+
+            if (readGeneration !== previewGeneration) {
+                return runtime.readTabularPreview(request);
+            }
+
             const readyCompleted = completed || undefined;
 
             if (previewCoversRequest(readyCompleted, request)) {
@@ -331,14 +358,14 @@ export const createDatasetEditorWarmCache = function(runtime: DatasetEditorWarmC
         }
 
         let promise: Promise<VariableMetadataBatchResult | null>;
-        const warmupGeneration = cacheGeneration;
+        const warmupGeneration = variableMetadataGeneration;
 
         promise = readVariableMetadataBatch(objectName, 1, count).then((batch) => {
             const currentWarmup = variableMetadataWarmups.get(objectName);
 
             if (
                 currentWarmup?.promise === promise
-                && warmupGeneration === cacheGeneration
+                && warmupGeneration === variableMetadataGeneration
             ) {
                 variableMetadataCache.set(objectName, batch);
             }
@@ -377,12 +404,21 @@ export const createDatasetEditorWarmCache = function(runtime: DatasetEditorWarmC
         const warmup = variableMetadataWarmups.get(objectName);
 
         if (warmup && warmup.count >= count) {
+            const readGeneration = variableMetadataGeneration;
             const firstResult = await Promise.race([
                 warmup.promise,
                 wait(initialVariableMetadataWaitMs).then(() => {
                     return null;
                 })
             ]);
+
+            if (readGeneration !== variableMetadataGeneration) {
+                return readVariableMetadataBatch(
+                    objectName,
+                    start,
+                    count
+                );
+            }
 
             const warmed = variableMetadataCache.get(objectName);
 
@@ -397,6 +433,15 @@ export const createDatasetEditorWarmCache = function(runtime: DatasetEditorWarmC
             }
 
             const completed = await warmup.promise;
+
+            if (readGeneration !== variableMetadataGeneration) {
+                return readVariableMetadataBatch(
+                    objectName,
+                    start,
+                    count
+                );
+            }
+
             const readyCompleted = completed || undefined;
 
             if (variableMetadataCoversRequest(readyCompleted, start, count)) {
@@ -409,6 +454,8 @@ export const createDatasetEditorWarmCache = function(runtime: DatasetEditorWarmC
 
     return {
         invalidate,
+        invalidatePreview,
+        invalidateVariableMetadata,
         readPreview,
         readVariableMetadata,
         warmPreview,

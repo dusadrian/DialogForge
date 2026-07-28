@@ -8,6 +8,7 @@ import type {
     RuntimeImportController,
     RuntimeLifecycleController,
     RuntimeEventController,
+    RuntimeCommandExecutionResult,
     RuntimeProductCommandController,
     RuntimeQueryController,
     RuntimeTabularController,
@@ -23,19 +24,20 @@ import {
 } from "../protocol/runtimeControlClient";
 import {
     asRuntimeControlArray,
+    asRuntimeControlObject,
     createProviderRuntimeEvent,
     createTranscriptEventsFromRuntimeControl
 } from "../protocol/runtimeControlEvents";
-import { rString } from "../commands/rLiteral";
+import {
+    workspaceUpdateHasChanges
+} from "../../../workspace/workspaceUpdate";
+import {
+    createRWorkspaceUpdate
+} from "../controllers/rWorkspaceUpdate";
 import { createRRuntimeProcessHost } from "./runtimeProcessHost";
-import { createRWorkspaceController } from "../controllers/rWorkspaceController";
-import { createRQueryController } from "../controllers/rQueryController";
-import { createRImportController } from "../controllers/rImportController";
-import { createRProductCommandController } from "../controllers/rProductCommandController";
-import { createRExtensionController } from "../controllers/rExtensionController";
-import { createRToolController } from "../controllers/rToolController";
-import { createRTabularMetadataController } from "../controllers/rTabularMetadataController";
-import { createRTabularMutationController } from "../controllers/rTabularMutationController";
+import {
+    createRRuntimeControllerSet
+} from "../controllers/rRuntimeControllerSet";
 import type { RRuntimeLaunchPlan } from "./runtimeLaunchPlan";
 
 
@@ -110,7 +112,10 @@ export const createRRuntimeProcessController = function(
         asRuntimeControlArray(events).forEach((event) => {
             const runtimeEvent = createProviderRuntimeEvent(event, snapshot);
 
-            if (runtimeEvent) {
+            if (
+                runtimeEvent
+                && runtimeEvent.type !== "workspace.update"
+            ) {
                 providerRuntimeEvents.unshift(runtimeEvent);
             }
         });
@@ -136,12 +141,31 @@ export const createRRuntimeProcessController = function(
         }
     };
 
-    const executeVisibleRCommand = async function(
+    const workspaceUpdateFromEvents = function(
+        events: unknown[] | undefined
+    ) {
+        const workspaceEvent = asRuntimeControlArray(events).find((event) => {
+            return String(asRuntimeControlObject(event).type || "") ===
+                "workspace_update";
+        });
+
+        if (!workspaceEvent) {
+            return null;
+        }
+
+        const update = createRWorkspaceUpdate(
+            asRuntimeControlObject(workspaceEvent).update
+        );
+
+        return workspaceUpdateHasChanges(update) ? update : null;
+    };
+
+    const executeVisibleRCommandWithEffects = async function(
         commandText: string,
         source: string,
         snapshot: RuntimeSessionSnapshot,
         outputWidth?: number
-    ): Promise<TranscriptEvent[]> {
+    ): Promise<RuntimeCommandExecutionResult> {
         const request = createVisibleCommandRequest({
             text: commandText,
             source,
@@ -149,20 +173,26 @@ export const createRRuntimeProcessController = function(
         });
 
         if (isCommentOnlyRInput(request.text)) {
-            return [
-                createTranscriptEvent("submitted", request),
-                createTranscriptEvent("completed", request, {
-                    state: "idle"
-                })
-            ];
+            return {
+                transcriptEvents: [
+                    createTranscriptEvent("submitted", request),
+                    createTranscriptEvent("completed", request, {
+                        state: "idle"
+                    })
+                ],
+                workspaceUpdate: null
+            };
         }
 
         if (!client) {
-            return [
-                createTranscriptEvent("rejected", request, {
-                    message: "R runtime-control session is not attached."
-                })
-            ];
+            return {
+                transcriptEvents: [
+                    createTranscriptEvent("rejected", request, {
+                        message: "R runtime-control session is not attached."
+                    })
+                ],
+                workspaceUpdate: null
+            };
         }
 
         const parentId = createRequestId("visible-command-activity");
@@ -189,33 +219,21 @@ export const createRRuntimeProcessController = function(
         const liveTranscript = createTranscriptEventsFromRuntimeControl(result.events, request, parentId);
 
         if (result.ok && liveTranscript.length > 0) {
-            return liveTranscript;
+            return {
+                transcriptEvents: liveTranscript,
+                workspaceUpdate: workspaceUpdateFromEvents(result.events)
+            };
         }
 
-        return [
-            createTranscriptEvent("submitted", request),
-            createTranscriptEvent("failed", request, {
-                message: String(result.error || "R command execution failed.")
-            })
-        ];
-    };
-
-    const checkPackageVersion = async function(packageName: string): Promise<string> {
-        if (!client) {
-            return "";
-        }
-
-        const result = await client.execute({
-            id: createRequestId("package-status"),
-            method: "evaluate_code",
-            params: {
-                code: `cat(if (requireNamespace(${rString(packageName)}, quietly = TRUE)) as.character(utils::packageVersion(${rString(packageName)})) else "")`,
-                mode: "silent",
-                timeoutMs: 5000
-            }
-        });
-
-        return result.ok ? String(result.result || "").trim() : "";
+        return {
+            transcriptEvents: [
+                createTranscriptEvent("submitted", request),
+                createTranscriptEvent("failed", request, {
+                    message: String(result.error || "R command execution failed.")
+                })
+            ],
+            workspaceUpdate: null
+        };
     };
 
     const processHost = createRRuntimeProcessHost({
@@ -228,45 +246,14 @@ export const createRRuntimeProcessController = function(
         onUnexpectedExit: options.onUnexpectedExit
     });
 
-    const workspaceController = createRWorkspaceController({
-        getClient: () => client,
-        createRequestId
-    });
-    const queryController = createRQueryController({
-        getClient: () => client,
-        createRequestId
-    });
-    const importController = createRImportController({
-        getClient: () => client,
+    const runtimeControllers = createRRuntimeControllerSet({
+        getClient: function() {
+            return client;
+        },
         createRequestId,
-        executeVisibleCommand: executeVisibleRCommand,
-        transcriptHasFailure
-    });
-    const productCommandController = createRProductCommandController({
-        getClient: () => client,
-        checkPackageVersion
-    });
-    const extensionController = createRExtensionController({
-        getClient: () => client,
-        createRequestId,
+        executeVisibleCommand: executeVisibleRCommandWithEffects,
+        transcriptHasFailure,
         interrupt: processHost.interrupt
-    });
-    const toolController = createRToolController({
-        getClient: () => client,
-        createRequestId,
-        checkPackageVersion
-    });
-    const tabularMetadataController = createRTabularMetadataController({
-        getClient: () => client,
-        createRequestId,
-        executeVisibleCommand: executeVisibleRCommand,
-        transcriptHasFailure
-    });
-    const tabularMutationController = createRTabularMutationController({
-        getClient: () => client,
-        createRequestId,
-        executeVisibleCommand: executeVisibleRCommand,
-        transcriptHasFailure
     });
 
     return {
@@ -274,16 +261,7 @@ export const createRRuntimeProcessController = function(
             start: processHost.start,
             stop: processHost.stop
         },
-        workspaceController,
-        tabularController: {
-            ...tabularMetadataController,
-            ...tabularMutationController
-        },
-        queryController,
-        productCommandController,
-        extensionController,
-        importController,
-        toolController,
+        ...runtimeControllers,
         eventController: {
             listRuntimeEvents: async function(): Promise<RuntimeEventRecord[]> {
                 return providerRuntimeEvents.slice(0);
@@ -293,8 +271,8 @@ export const createRRuntimeProcessController = function(
             executeVisibleCommand: async function(
                 request: VisibleCommandRequest,
                 snapshot: RuntimeSessionSnapshot
-            ): Promise<TranscriptEvent[]> {
-                return executeVisibleRCommand(
+            ): Promise<RuntimeCommandExecutionResult> {
+                return executeVisibleRCommandWithEffects(
                     request.text,
                     request.source,
                     snapshot,

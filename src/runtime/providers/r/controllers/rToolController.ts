@@ -15,18 +15,17 @@ import {
     asRuntimeControlObject,
     parseRuntimeControlResultObject
 } from "../protocol/runtimeControlEvents";
-import { createRuntimeControlClient } from "../protocol/runtimeControlClient";
+import type {
+    RRuntimeControlClient
+} from "../protocol/runtimeControlClient";
 import {
     filterRInternalCompletionSymbols,
     isRInternalCompletionSymbol
 } from "../completions/rInternalCompletionSymbols";
 
 
-type RuntimeControlClient = ReturnType<typeof createRuntimeControlClient>;
-
-
 export interface RToolControllerOptions {
-    getClient(): RuntimeControlClient | null;
+    getClient(): RRuntimeControlClient | null;
     createRequestId(prefix: string): string;
     checkPackageVersion(packageName: string): Promise<string>;
 }
@@ -308,13 +307,20 @@ export const createRToolController = function(
             const missingCount = items.filter((item) => {
                 return item.status !== "available";
             }).length;
+            const missingPackages = items.filter((item) => {
+                return item.status !== "available";
+            }).map((item) => {
+                return item.name;
+            });
 
             return createDependencyCheckResult({
                 status: missingCount === 0 ? "ready" : "partial",
                 providerId: snapshot.providerId,
                 kind: request.kind,
                 items,
-                message: "R runtime-control checked package dependencies."
+                message: missingCount === 0
+                    ? "All requested R packages are available."
+                    : `Missing R package(s): ${missingPackages.join(", ")}.`
             });
         }
     };

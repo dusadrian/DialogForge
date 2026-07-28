@@ -26,6 +26,7 @@ import type {
     TranscriptEvent,
     ValueLabelSnapshot,
     VariableMetadataSnapshot,
+    WorkspaceListOptions,
     WorkspaceSnapshot
 } from "../../runtime/provider-contract/runtimeProvider";
 
@@ -33,10 +34,16 @@ import type {
 export interface RuntimeBroadcastBridge {
     sendRuntimeSession(snapshot: RuntimeSessionSnapshot): void;
     sendTranscriptEvents(events: TranscriptEvent[]): void;
-    sendWorkspaceSnapshot(snapshot: WorkspaceSnapshot): void;
-    refreshWorkspaceAndBroadcast(options?: {
-        forceRefresh?: boolean;
-    }): Promise<WorkspaceSnapshot>;
+    sendWorkspaceSnapshot(
+        snapshot: WorkspaceSnapshot,
+        options?: {
+            warmActiveDataset?: boolean;
+            refreshProductDialogs?: boolean;
+        }
+    ): void;
+    refreshWorkspaceAndBroadcast(
+        options?: WorkspaceListOptions
+    ): Promise<WorkspaceSnapshot>;
     sendRuntimeEvents(snapshot: RuntimeEventSnapshot): void;
     sendActiveDataset(snapshot: ActiveDatasetSnapshot): void;
     sendTabularPreview(preview: TabularPreviewSnapshot): void;
@@ -284,7 +291,13 @@ export const createRuntimeBroadcastBridge = function(
         sendToAllWindows(applicationEventChannels.runtimeTranscript, events);
     };
 
-    const sendWorkspaceSnapshot = function(snapshot: WorkspaceSnapshot): void {
+    const sendWorkspaceSnapshot = function(
+        snapshot: WorkspaceSnapshot,
+        sendOptions: {
+            warmActiveDataset?: boolean;
+            refreshProductDialogs?: boolean;
+        } = {}
+    ): void {
         const datasetNames = snapshot.objects.filter((object) => {
             return object.capabilities.includes("tabular.read");
         }).map((object) => {
@@ -293,6 +306,8 @@ export const createRuntimeBroadcastBridge = function(
         const activeDataset = options.runtimeSessionManager.getActiveDataset();
 
         if (
+            sendOptions.warmActiveDataset !== false
+            &&
             activeDataset.status === "selected" &&
             datasetNames.includes(activeDataset.objectName)
         ) {
@@ -301,12 +316,15 @@ export const createRuntimeBroadcastBridge = function(
         }
 
         sendToAllWindows(applicationEventChannels.workspace, snapshot);
-        void options.refreshProductDialogWorkspaceData(snapshot).catch((error) => {
-            console.error(
-                "Unable to refresh product dialog workspace data.",
-                error
-            );
-        });
+
+        if (sendOptions.refreshProductDialogs !== false) {
+            void options.refreshProductDialogWorkspaceData(snapshot).catch((error) => {
+                console.error(
+                    "Unable to refresh product dialog workspace data.",
+                    error
+                );
+            });
+        }
 
         options.sendDatasetEditor(
             datasetEditorEventChannels.setDatasetList,
@@ -318,9 +336,9 @@ export const createRuntimeBroadcastBridge = function(
         sendToAllWindows(applicationEventChannels.activeDataset, snapshot);
     };
 
-    const refreshWorkspaceAndBroadcast = async function(refreshOptions?: {
-        forceRefresh?: boolean;
-    }): Promise<WorkspaceSnapshot> {
+    const refreshWorkspaceAndBroadcast = async function(
+        refreshOptions?: WorkspaceListOptions
+    ): Promise<WorkspaceSnapshot> {
         const snapshot = await options.runtimeSessionManager.listWorkspaceObjects(
             refreshOptions
         );

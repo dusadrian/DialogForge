@@ -389,11 +389,31 @@ emit_prompt_state_event <- function() {
 }
 
 
+runtime_workspace_change_for_code <- function(code = "") {
+    if (!isTRUE(code_may_mutate_workspace(code))) return(NULL)
+
+    collect_workspace_update(workspace_index_get("last_state"))
+}
+
+
+runtime_workspace_update_has_changes <- function(update = NULL) {
+    update <- update %||% list()
+    datasets <- update$datasets %||% list()
+
+    length(update$added %||% list()) > 0L ||
+        length(update$updated %||% list()) > 0L ||
+        length(update$removed %||% character(0)) > 0L ||
+        length(datasets$added %||% character(0)) > 0L ||
+        length(datasets$removed %||% character(0)) > 0L ||
+        length(datasets$changed %||% list()) > 0L
+}
+
+
 queue_completion_event <- function(
     state,
     parent_id = "",
     emit_prompt_state = TRUE,
-    emit_workspace = FALSE,
+    workspace_code = "",
     emit_plot = FALSE
 ) {
     state <- as.character(state %||% "")
@@ -401,13 +421,10 @@ queue_completion_event <- function(
 
     if (!nzchar(state) || !nzchar(parent_id)) return(invisible(NULL))
 
-    workspace_change <- NULL
-
-    if (isTRUE(emit_workspace)) {
-        workspace_change <- collect_workspace_update(
-            workspace_index_get("last_state")
-        )
-    }
+    workspace_change <- runtime_workspace_change_for_code(workspace_code)
+    emit_workspace <- runtime_workspace_update_has_changes(
+        workspace_change$update %||% NULL
+    )
 
     completion_queue[[length(completion_queue) + 1L]] <<- list(
         state = state,
@@ -423,15 +440,17 @@ queue_completion_event <- function(
 
 
 runtime_emit_queued_workspace_update <- function(item, parent_id) {
-    if (!isTRUE(item$emit_workspace)) return(invisible(NULL))
+    workspace_change <- item$workspace_update
 
-    workspace_change <- item$workspace_update %||%
-        collect_workspace_update(workspace_index_get("last_state"))
+    if (is.null(workspace_change)) return(invisible(NULL))
 
-    emit_workspace_update_event(
-        workspace_change$update %||% list(),
-        parent_id
-    )
+    if (isTRUE(item$emit_workspace)) {
+        emit_workspace_update_event(
+            workspace_change$update %||% list(),
+            parent_id
+        )
+    }
+
     workspace_index_set(
         "last_state",
         workspace_change$state %||% workspace_index_get("last_state")

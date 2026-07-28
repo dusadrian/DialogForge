@@ -8,6 +8,20 @@ export interface RuntimeFileExecutionResult {
     status: string;
 }
 
+export type RuntimeFileOperation =
+    | "set-working-directory"
+    | "run-script"
+    | "open-workspace"
+    | "save-workspace";
+
+
+export interface RuntimeFileExecutionContext<
+    Selection extends RuntimeFileSelection
+> {
+    operation: RuntimeFileOperation;
+    selection: Selection;
+}
+
 
 export interface RuntimeFileWorkflowBindings<
     Selection extends RuntimeFileSelection,
@@ -25,9 +39,12 @@ export interface RuntimeFileWorkflowBindings<
         source: string;
     }): Promise<Result>;
     selectionCanceled(selection: Selection): void;
-    executionFinished(result: Result): void;
-    refreshWorkingDirectory(): Promise<void>;
-    refreshWorkspace(): Promise<void> | void;
+    executionFinished(
+        result: Result,
+        context: RuntimeFileExecutionContext<Selection>
+    ): Promise<void> | void;
+    refreshWorkingDirectory?(): Promise<void>;
+    refreshWorkspace?(): Promise<void> | void;
 }
 
 
@@ -68,8 +85,11 @@ export const createRuntimeFileWorkflow = function<
             source: "base-app.working-directory"
         });
 
-        bindings.executionFinished(result);
-        await bindings.refreshWorkingDirectory();
+        await bindings.executionFinished(result, {
+            operation: "set-working-directory",
+            selection
+        });
+        await bindings.refreshWorkingDirectory?.();
     };
 
     const runScriptFile = async function(): Promise<void> {
@@ -89,10 +109,13 @@ export const createRuntimeFileWorkflow = function<
             source: "base-app.script-file"
         });
 
-        bindings.executionFinished(result);
+        await bindings.executionFinished(result, {
+            operation: "run-script",
+            selection
+        });
 
         if (result.status === "ready") {
-            await bindings.refreshWorkspace();
+            await bindings.refreshWorkspace?.();
         }
     };
 
@@ -113,10 +136,13 @@ export const createRuntimeFileWorkflow = function<
             source: "base-app.workspace-open"
         });
 
-        bindings.executionFinished(result);
+        await bindings.executionFinished(result, {
+            operation: "open-workspace",
+            selection
+        });
 
         if (result.status === "ready") {
-            await bindings.refreshWorkspace();
+            await bindings.refreshWorkspace?.();
         }
     };
 
@@ -137,10 +163,13 @@ export const createRuntimeFileWorkflow = function<
             source: "base-app.workspace-save"
         });
 
-        bindings.executionFinished(result);
+        await bindings.executionFinished(result, {
+            operation: "save-workspace",
+            selection
+        });
 
         if (result.status === "ready") {
-            await bindings.refreshWorkspace();
+            await bindings.refreshWorkspace?.();
         }
     };
 

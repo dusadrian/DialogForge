@@ -582,6 +582,11 @@ export const createDialogContainerBuilder = function(
             setOptions(options);
         };
         control.setValue = function(value: unknown): void {
+            const previousValue = Array.isArray(control.value)
+                ? control.value.map(function(entry): string {
+                    return String(entry);
+                })
+                : [];
             const desired = new Set(
                 asStringArray(value)
             );
@@ -624,7 +629,13 @@ export const createDialogContainerBuilder = function(
                     : [];
             synchronizeSelection();
 
-            if (!control.initialize) {
+            const selectionChanged =
+                previousValue.length !== control.value.length
+                || previousValue.some(function(entry, index): boolean {
+                    return entry !== String(control.value[index]);
+                });
+
+            if (!control.initialize && selectionChanged) {
                 runtime.events.emit("iSpeak", {
                     name: control.name,
                     status: "value"

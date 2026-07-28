@@ -21,6 +21,10 @@ import {
     buildHelpChooserDocument
 } from "../../runtime/help/helpChooserDocument";
 import {
+    createRHelpTopicTitle,
+    rHelpTitle
+} from "../../runtime/providers/r/help/rHelpPresentation";
+import {
     createHelpIpcController
 } from "./helpIpcController";
 import {
@@ -72,7 +76,7 @@ export const createExternalWindowComposition = function(
     options: ExternalWindowCompositionOptions
 ) {
     let helpDocumentState = {
-        title: "R Help",
+        title: rHelpTitle,
         body: ""
     };
     const createPlotViewerWindow = createPlotViewerWindowFactory({
@@ -120,11 +124,11 @@ export const createExternalWindowComposition = function(
             ? createHelpTopicResult({
                 status: "ready",
                 kind: "home",
-                title: "R Help",
+                title: rHelpTitle,
                 path: "/doc/html/index.html"
             })
             : await options.runtimeSessionManager.readHelpTopic(request);
-        const title = result.title || result.topic || "R Help";
+        const title = result.title || result.topic || rHelpTitle;
         const hasBody = result.status === "ready" && result.body;
         const hasChooser = result.status === "ready"
             && Array.isArray(result.matches)
@@ -151,7 +155,7 @@ export const createExternalWindowComposition = function(
             }
 
             helpDocumentState = {
-                title: "R Help - " + title,
+                title: createRHelpTopicTitle(title, " - "),
                 body: hasBody ? result.body : chooserBody
             };
 
@@ -178,7 +182,7 @@ export const createExternalWindowComposition = function(
                 );
             }
 
-            helpPageUrl.searchParams.set("title", "R Help");
+            helpPageUrl.searchParams.set("title", rHelpTitle);
             helpPageUrl.searchParams.set("topic", result.topic || request.topic);
             if (request.package) {
                 helpPageUrl.searchParams.set("package", request.package);
@@ -186,7 +190,7 @@ export const createExternalWindowComposition = function(
 
             const openedInExistingWindow = await helpWindowController.openEntry({
                 id: "app-help-open",
-                title: "R Help",
+                title: rHelpTitle,
                 url: sourceUrl,
                 html: hasBody
                     ? result.body

@@ -43,14 +43,13 @@
           });
           document.head.appendChild(importMap);
 
-          const bridge = document.createElement('script');
-          bridge.type = 'module';
-          bridge.src = '/browser-esm/src/shell-web/browserPreloadBridge.js';
-          document.body.appendChild(bridge);
-
           const script = document.createElement('script');
           script.type = 'module';
-          script.src = '/browser-esm/src/dialog-runtime/renderer/modules/dialogBuilderInterface.js';
+          script.textContent = [
+            "await import('/browser-esm/src/shell-web/browserPreloadBridge.js');",
+            "await import('/api/product-dialog-runtime.js');",
+            "await import('/browser-esm/src/dialog-runtime/renderer/modules/dialogBuilderInterface.js');"
+          ].join('\n');
           document.body.appendChild(script);
           return;
         }

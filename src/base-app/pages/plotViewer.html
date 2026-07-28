@@ -761,10 +761,10 @@
         </div>
       </div>
       <div class="body">
-        <div id="empty" class="empty">Plots created in R will appear here when the `httpgd` graphics device is active.</div>
+        <div id="empty" class="empty">Plots created by the runtime will appear here.</div>
         <div id="viewer" class="plot-viewer" style="display:none;">
           <div id="plotMain" class="plot-main">
-            <img id="frame" class="plot-frame" alt="Latest R plot" />
+            <img id="frame" class="plot-frame" alt="Latest plot" />
           </div>
         </div>
         <div id="sidebar" class="plot-sidebar">
@@ -972,11 +972,11 @@
           setElementAriaLabel(historyToggleEl, 'Hide plot history pane', 'Hide plot history pane');
 
           if (resetParButtonEl) resetParButtonEl.textContent = translatePlotText('Reset', 'Reset');
-          if (frameEl) frameEl.setAttribute('alt', translatePlotText('Latest R plot', 'Latest R plot'));
+          if (frameEl) frameEl.setAttribute('alt', translatePlotText('Latest plot', 'Latest plot'));
           if (emptyEl && emptyEl.style.display !== 'none') {
             emptyEl.textContent = translatePlotText(
               emptyEl.textContent,
-              'Plots created in R will appear here when the `httpgd` graphics device is active.'
+              'Plots created by the runtime will appear here.'
             );
           }
         };
@@ -1677,8 +1677,8 @@
             emptyEl.textContent = message
               ? translatePlotText(message, message)
               : translatePlotText(
-                'Plots created in R will appear here when the httpgd graphics device is active.',
-                'Plots created in R will appear here when the httpgd graphics device is active.'
+                'Plots created by the runtime will appear here.',
+                'Plots created by the runtime will appear here.'
               );
             emptyEl.style.display = 'block';
           }

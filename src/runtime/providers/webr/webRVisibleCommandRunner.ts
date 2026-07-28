@@ -1,16 +1,12 @@
 import {
-    createTranscriptEvent,
-    createVisibleCommandRequest
+    createTranscriptEvent
 } from "../../commands/commandProtocol";
 import type {
-    RuntimeProvider,
+    RuntimeCommandController,
     RuntimeSessionSnapshot,
-    TranscriptEvent,
-    VisibleCommandRequest
+    VisibleCommandRequest,
+    WorkspaceUpdate
 } from "../../provider-contract/runtimeProvider";
-import {
-    createRuntimeSessionManager
-} from "../../session/runtimeSessionManager";
 import {
     buildRCapturedVisibleCommand,
     buildRSourceVisibleCommand
@@ -29,9 +25,6 @@ import {
 import {
     collectWebRInstallProgress
 } from "./webRInstallProgressAdapter";
-import {
-    createBrowserWebRSessionSnapshot
-} from "./webRBrowserStartup";
 import type {
     WebROutputMessage
 } from "./webROutputMessages";
@@ -52,7 +45,6 @@ export interface WebRVisibleCommandOptions {
     activityId?: string;
     preRecorded?: boolean;
     manageRuntimeBusy?: boolean;
-    deferWorkspaceRefresh?: boolean;
 }
 
 export interface WebRVisibleCommandTranscript {
@@ -92,8 +84,9 @@ export interface WebRVisibleCommandRunnerBindings {
     renderToolbar(): void;
     openHelpTopic(topic: string, packageName: string): Promise<void>;
     maybeOpenPlotViewer(commandText: string): void;
-    refreshWorkspace(options?: WebRVisibleCommandOptions): Promise<void>;
+    setWorkspaceMetadataStatus?(): void;
     updatePlotImages(images: unknown[]): Promise<void>;
+    runRuntimeOperation?<T>(action: () => Promise<T>): Promise<T>;
     requestPrompt?(input: WebRVisibleCommandPromptRequest): Promise<{
         id?: string;
         parentId?: string;
@@ -102,11 +95,6 @@ export interface WebRVisibleCommandRunnerBindings {
         createdAt?: string;
     } | null>;
 }
-
-export interface WebRVisibleCommandRunner {
-    execute(text: string, options?: WebRVisibleCommandOptions): Promise<{ ok: boolean }>;
-}
-
 
 const randomId = function(): string {
     return Math.random().toString(36).slice(2, 8);
@@ -127,7 +115,6 @@ const recordStream = function(
         text: text instanceof Error ? text.message : String(text)
     });
 };
-
 
 const recordState = function(
     transcript: WebRVisibleCommandTranscript | null | undefined,
@@ -152,6 +139,16 @@ const setBusy = function(
 
     bindings.setRuntimeBusy(busy);
     bindings.renderToolbar();
+};
+
+
+const runRuntimeOperation = function<T>(
+    bindings: WebRVisibleCommandRunnerBindings,
+    action: () => Promise<T>
+): Promise<T> {
+    return bindings.runRuntimeOperation
+        ? bindings.runRuntimeOperation(action)
+        : action();
 };
 
 
@@ -267,7 +264,10 @@ const executeWebRVisibleCommandDirect = async function(
     bindings: WebRVisibleCommandRunnerBindings,
     text: string,
     options: WebRVisibleCommandOptions
-): Promise<{ ok: boolean }> {
+): Promise<{
+    ok: boolean;
+    workspaceUpdate: WorkspaceUpdate | null;
+}> {
     const activity = bindings.createActivity(text, options);
     const activityId = activity.id;
     const commandText = activity.commandText;
@@ -285,7 +285,7 @@ const executeWebRVisibleCommandDirect = async function(
         recordRuntimeError(consoleTranscript, activityId, "startup_error", error);
         setBusy(bindings, false, manageRuntimeBusy);
 
-        return { ok: false };
+        return { ok: false, workspaceUpdate: null };
     }
 
     const packageNames = hasRInstallPackagesArgument(commandText, "dependencies")
@@ -300,13 +300,13 @@ const executeWebRVisibleCommandDirect = async function(
             recordState(consoleTranscript, activityId, "idle");
             setBusy(bindings, false, manageRuntimeBusy);
 
-            return { ok: true };
+            return { ok: true, workspaceUpdate: null };
         }
         catch (error) {
             recordRuntimeError(consoleTranscript, activityId, "help_error", error);
             setBusy(bindings, false, manageRuntimeBusy);
 
-            return { ok: false };
+            return { ok: false, workspaceUpdate: null };
         }
     }
 
@@ -318,20 +318,22 @@ const executeWebRVisibleCommandDirect = async function(
         };
 
         try {
-            const progress = collectWebRInstallProgress(
-                runtime,
-                consoleTranscript,
-                activityId,
-                installDone
-            );
+            await runRuntimeOperation(bindings, async function() {
+                const progress = collectWebRInstallProgress(
+                    runtime,
+                    consoleTranscript,
+                    activityId,
+                    installDone
+                );
 
-            if (!runtime.installPackages) {
-                throw new Error("WebR package installation is not available.");
-            }
+                if (!runtime.installPackages) {
+                    throw new Error("WebR package installation is not available.");
+                }
 
-            await runtime.installPackages(packageNames, { quiet: false });
-            installDone.finished = true;
-            await progress;
+                await runtime.installPackages(packageNames, { quiet: false });
+                installDone.finished = true;
+                await progress;
+            });
             recordStream(
                 consoleTranscript,
                 activityId,
@@ -340,29 +342,30 @@ const executeWebRVisibleCommandDirect = async function(
                 `Installed WebR package${packageNames.length === 1 ? "" : "s"}: ${packageNames.join(", ")}`
             );
             recordState(consoleTranscript, activityId, "idle");
-            await bindings.refreshWorkspace(options);
             setBusy(bindings, false, manageRuntimeBusy);
 
-            return { ok: true };
+            return { ok: true, workspaceUpdate: null };
         }
         catch (error) {
             installDone.finished = true;
             recordRuntimeError(consoleTranscript, activityId, "install_error", error);
             setBusy(bindings, false, manageRuntimeBusy);
 
-            return { ok: false };
+            return { ok: false, workspaceUpdate: null };
         }
     }
 
     if (!runtime.Shelter || isLikelyInteractiveWebRCommand(commandText)) {
         try {
-            await executeWebRInteractiveVisibleCommand(
-                runtime,
-                commandText,
-                bindings,
-                consoleTranscript,
-                activityId
-            );
+            await runRuntimeOperation(bindings, function() {
+                return executeWebRInteractiveVisibleCommand(
+                    runtime,
+                    commandText,
+                    bindings,
+                    consoleTranscript,
+                    activityId
+                );
+            });
 
             if (libraryPackages) {
                 for (const packageName of libraryPackages) {
@@ -371,10 +374,9 @@ const executeWebRVisibleCommandDirect = async function(
             }
 
             recordState(consoleTranscript, activityId, "idle");
-            await bindings.refreshWorkspace(options);
             setBusy(bindings, false, manageRuntimeBusy);
 
-            return { ok: true };
+            return { ok: true, workspaceUpdate: null };
         }
         catch (error) {
             const suffix = libraryPackages ? "library_error" : "error";
@@ -382,24 +384,26 @@ const executeWebRVisibleCommandDirect = async function(
             recordRuntimeError(consoleTranscript, activityId, suffix, error);
             setBusy(bindings, false, manageRuntimeBusy);
 
-            return { ok: false };
+            return { ok: false, workspaceUpdate: null };
         }
     }
 
     try {
         const isPlot = isRPlotCommand(commandText);
-        const captured = await captureWebRVisibleCommand(
-            runtime,
-            buildRCapturedVisibleCommand(
-                commandText,
-                bindings.readConsoleOutputWidth()
-            ),
-            {
-                captureGraphics: isPlot,
-                width: 720,
-                height: 576
-            }
-        );
+        const captured = await runRuntimeOperation(bindings, function() {
+            return captureWebRVisibleCommand(
+                runtime,
+                buildRCapturedVisibleCommand(
+                    commandText,
+                    bindings.readConsoleOutputWidth()
+                ),
+                {
+                    captureGraphics: isPlot,
+                    width: 720,
+                    height: 576
+                }
+            );
+        });
 
         for (const output of captured.streams) {
             recordStream(
@@ -410,6 +414,9 @@ const executeWebRVisibleCommandDirect = async function(
                 output.text
             );
         }
+        const commandError = captured.streams.find((output) => {
+            return output.name === "stderr";
+        });
 
         if (libraryPackages) {
             for (const packageName of libraryPackages) {
@@ -417,105 +424,59 @@ const executeWebRVisibleCommandDirect = async function(
             }
         }
 
-        recordState(consoleTranscript, activityId, "idle");
-        await bindings.refreshWorkspace(options);
-
         if (isPlot) {
             await bindings.updatePlotImages(captured.images);
         }
 
+        if (commandError) {
+            recordState(consoleTranscript, activityId, "error");
+            setBusy(bindings, false, manageRuntimeBusy);
+
+            return { ok: false, workspaceUpdate: null };
+        }
+
+        recordState(consoleTranscript, activityId, "idle");
         setBusy(bindings, false, manageRuntimeBusy);
 
-        return { ok: true };
+        return { ok: true, workspaceUpdate: null };
     }
     catch (error) {
         recordRuntimeError(consoleTranscript, activityId, "error", error);
         setBusy(bindings, false, manageRuntimeBusy);
 
-        return { ok: false };
+        return { ok: false, workspaceUpdate: null };
     }
 };
 
 
-const createBrowserWebRVisibleCommandProvider = function(
+export const createBrowserWebRVisibleCommandController = function(
     bindings: WebRVisibleCommandRunnerBindings,
-    options: WebRVisibleCommandOptions
-): RuntimeProvider {
-    const snapshot: RuntimeSessionSnapshot = createBrowserWebRSessionSnapshot(
-        "ready",
-        "Browser WebR runtime is ready for visible commands.",
-        "connected"
-    );
-
+    readOptions: (
+        request: VisibleCommandRequest
+    ) => WebRVisibleCommandOptions
+): RuntimeCommandController {
     return {
-        manifest: {
-            id: "webr",
-            label: "WebR",
-            language: "r",
-            status: "experimental",
-            capabilities: []
-        },
-        createSession: function() {
-            return snapshot;
-        },
-        commandController: {
-            executeVisibleCommand: async function(
-                request: VisibleCommandRequest,
-                _snapshot: RuntimeSessionSnapshot
-            ): Promise<TranscriptEvent[]> {
-                const result = await executeWebRVisibleCommandDirect(
-                    bindings,
-                    request.text,
-                    options
-                );
-                const eventType = result.ok ? "completed" : "rejected";
+        executeVisibleCommand: async function(
+            request: VisibleCommandRequest,
+            _snapshot: RuntimeSessionSnapshot
+        ) {
+            const result = await executeWebRVisibleCommandDirect(
+                bindings,
+                request.text,
+                readOptions(request)
+            );
+            const eventType = result.ok ? "completed" : "rejected";
 
-                return [
+            return {
+                transcriptEvents: [
                     createTranscriptEvent(eventType, request, {
                         message: result.ok
                             ? "WebR command completed."
                             : "WebR command failed."
                     })
-                ];
-            }
-        }
-    };
-};
-
-
-const executeWebRVisibleCommandThroughSessionManager = async function(
-    bindings: WebRVisibleCommandRunnerBindings,
-    text: string,
-    options: WebRVisibleCommandOptions
-): Promise<{ ok: boolean }> {
-    const manager = createRuntimeSessionManager(
-        createBrowserWebRVisibleCommandProvider(bindings, options)
-    );
-    const events = await manager.executeVisibleCommand(
-        createVisibleCommandRequest({
-            text,
-            source: "browser.webr.visible-command",
-            outputWidth: bindings.readConsoleOutputWidth()
-        })
-    );
-    const rejected = events.some((event) => event.type === "rejected");
-
-    return {
-        ok: !rejected
-    };
-};
-
-
-export const createWebRVisibleCommandRunner = function(
-    bindings: WebRVisibleCommandRunnerBindings
-): WebRVisibleCommandRunner {
-    return {
-        async execute(text, options = {}) {
-            return executeWebRVisibleCommandThroughSessionManager(
-                bindings,
-                text,
-                options
-            );
+                ],
+                workspaceUpdate: result.workspaceUpdate
+            };
         }
     };
 };

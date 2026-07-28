@@ -25,7 +25,7 @@
         <main class="web-desktop" id="webDesktop">
             <section class="web-workbench-window" id="webWorkbenchWindow" role="dialog" aria-label="Runtime console and workspace">
                 <header class="web-workbench-window__titlebar">
-                    <div class="web-workbench-window__title">WebR console</div>
+                    <div class="web-workbench-window__title">Runtime console</div>
                 </header>
                 <div class="web-workbench-window__body">
                     <section class="web-console">
@@ -95,19 +95,6 @@
                                 </div>
                             </div>
                             <div class="consoleTerminal" id="consoleTerminal" aria-live="polite"></div>
-                            <div id="consoleCover" aria-live="polite">
-                                <div id="consoleCoverPanel">
-                                    <div id="consoleCoverMessage">Loading web runtime...</div>
-                                    <div
-                                        class="console-cover-progress"
-                                        id="consoleCoverProgress"
-                                        role="progressbar"
-                                        aria-valuemin="0"
-                                        aria-valuemax="100"
-                                        aria-valuenow="4"
-                                    ></div>
-                                </div>
-                            </div>
                             <div
                                 class="commandInput"
                                 id="visibleCommandInput"
@@ -127,6 +114,19 @@
                 <span class="web-workbench-resize-handle" data-resize-direction="corner" aria-hidden="true"></span>
             </section>
         </main>
+    </div>
+    <div id="consoleCover" aria-live="polite">
+        <div id="consoleCoverPanel">
+            <div id="consoleCoverMessage">Loading web runtime...</div>
+            <div
+                class="console-cover-progress"
+                id="consoleCoverProgress"
+                role="progressbar"
+                aria-valuemin="0"
+                aria-valuemax="100"
+                aria-valuenow="4"
+            ></div>
+        </div>
     </div>
     <script type="module" src="/src/shell-web/pages/shell.js"></script>
 </body>

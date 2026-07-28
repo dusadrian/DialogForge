@@ -8,16 +8,9 @@ import {
 import type {
     PromptAnswerRequest,
     PromptResult,
-    RuntimeProvider,
-    RuntimeSessionSnapshot,
+    RuntimeSessionManager,
     TranscriptEvent
 } from "../../provider-contract/runtimeProvider";
-import {
-    createRuntimeSessionManager
-} from "../../session/runtimeSessionManager";
-import {
-    createBrowserWebRSessionSnapshot
-} from "./webRBrowserStartup";
 
 
 export interface WebRPromptRuntime {
@@ -46,29 +39,8 @@ export interface WebRPromptCoordinator {
 
 export interface WebRPromptCoordinatorBindings {
     getRuntime(): WebRPromptRuntime | null | undefined;
+    runtimeSessionManager: RuntimeSessionManager;
 }
-
-
-const createBrowserWebRPromptProvider = function(): RuntimeProvider {
-    const snapshot: RuntimeSessionSnapshot = createBrowserWebRSessionSnapshot(
-        "ready",
-        "Browser WebR runtime is ready for prompts.",
-        "connected"
-    );
-
-    return {
-        manifest: {
-            id: "webr",
-            label: "WebR",
-            language: "r",
-            status: "experimental",
-            capabilities: []
-        },
-        createSession: function() {
-            return snapshot;
-        }
-    };
-};
 
 
 export const createWebRPromptAnswerRequest = function(
@@ -119,9 +91,7 @@ export const sendWebRPromptReply = function(
 export const createWebRPromptCoordinator = function(
     bindings: WebRPromptCoordinatorBindings
 ): WebRPromptCoordinator {
-    const manager = createRuntimeSessionManager(
-        createBrowserWebRPromptProvider()
-    );
+    const manager = bindings.runtimeSessionManager;
 
     return {
         requestPrompt: async function(input) {

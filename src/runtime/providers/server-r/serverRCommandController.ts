@@ -20,7 +20,7 @@ export const createServerRCommandController = function(
         executeVisibleCommand: async function(
             request: VisibleCommandRequest,
             _snapshot: RuntimeSessionSnapshot
-        ): Promise<TranscriptEvent[]> {
+        ) {
             const response = await sendServerRRequest(
                 transport,
                 serverRTransportMethods.visibleCommand,
@@ -28,12 +28,15 @@ export const createServerRCommandController = function(
             );
 
             if (!response.status || response.status === "error") {
-                return [
-                    createTranscriptEvent("submitted", request),
-                    createTranscriptEvent("rejected", request, {
-                        message: response.message || "Server R command was rejected."
-                    })
-                ];
+                return {
+                    transcriptEvents: [
+                        createTranscriptEvent("submitted", request),
+                        createTranscriptEvent("rejected", request, {
+                            message: response.message || "Server R command was rejected."
+                        })
+                    ],
+                    workspaceUpdate: null
+                };
             }
 
             const payload = readResponseObject(response);
@@ -42,15 +45,21 @@ export const createServerRCommandController = function(
                 : [];
 
             if (events.length > 0) {
-                return events;
+                return {
+                    transcriptEvents: events,
+                    workspaceUpdate: null
+                };
             }
 
-            return [
-                createTranscriptEvent("submitted", request),
-                createTranscriptEvent("completed", request, {
-                    message: response.message || "Server R command completed."
-                })
-            ];
+            return {
+                transcriptEvents: [
+                    createTranscriptEvent("submitted", request),
+                    createTranscriptEvent("completed", request, {
+                        message: response.message || "Server R command completed."
+                    })
+                ],
+                workspaceUpdate: null
+            };
         }
     };
 };

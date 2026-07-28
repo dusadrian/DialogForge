@@ -45,6 +45,9 @@ import {
     createApplicationSettingsIpcController
 } from "../settings/applicationSettingsIpcController";
 import {
+    createFactoryApplicationSettings
+} from "../../base-app/features/settings/applicationSettingsPolicy";
+import {
     createDialogRuntimeRequirementsPayload
 } from "../../dialog-runtime/requirements/dialogRuntimeRequirements";
 import {
@@ -100,23 +103,9 @@ export const createApplicationSupportWindowComposition = function(
     };
     const defaultRuntimeProvider = options.composition.product.defaultRuntimeProvider
         || options.composition.runtime.id;
-    const factorySettings = {
-        defaultLanguage: "en_US",
-        terminalSettings: {
-            fontFamily: "\"Dialog Mono\", monospace",
-            cursorStyle: "bar",
-            cursorBlink: true,
-            selectionBackground: "#BBD8FF",
-            startQuiet: false,
-            inputMode: "console",
-            showFullErrorContext: false
-        },
-        runtimeStartup: {
-            providerId: defaultRuntimeProvider
-        },
-        enableAuthoringFeatures: false,
-        notifyUpdates: true
-    };
+    const factorySettings = createFactoryApplicationSettings(
+        defaultRuntimeProvider
+    );
     const getParentWindow = function(): BrowserWindow | null {
         const win = options.getMainWindow();
 

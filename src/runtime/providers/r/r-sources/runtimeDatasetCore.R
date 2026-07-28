@@ -1752,6 +1752,24 @@ workspace_dataset_likely_measure <- function(column) {
 }
 
 
+workspace_dataset_normalize_measure <- function(value) {
+    text <- trimws(tolower(as.character(value %||% "")))
+
+    if (!nzchar(text)) {
+        return("")
+    }
+
+    tokens <- trimws(strsplit(text, ",", fixed = TRUE)[[1]])
+    measure <- tokens[[length(tokens)]]
+
+    if (is.element(measure, c("nominal", "ordinal", "interval", "ratio"))) {
+        return(measure)
+    }
+
+    text
+}
+
+
 workspace_dataset_measure <- function(
     column,
     measure_attribute = NULL,
@@ -1760,7 +1778,7 @@ workspace_dataset_measure <- function(
     explicit_measure <- workspace_dataset_attribute_text(measure_attribute)
 
     if (!is.null(explicit_measure) && nzchar(trimws(explicit_measure))) {
-        return(trimws(explicit_measure))
+        return(workspace_dataset_normalize_measure(explicit_measure))
     }
 
     category_count <- workspace_dataset_category_count(
@@ -1938,6 +1956,30 @@ workspace_dataset_category_state <- function(column, labels, na_values) {
 }
 
 
+workspace_dataset_variable_values_summary <- function(categories, na_range) {
+    parts <- character(0)
+    category_summary <- trimws(as.character(categories$summary %||% ""))
+
+    if (nzchar(category_summary)) {
+        parts <- c(parts, category_summary)
+    }
+
+    if (!is.null(na_range) && length(na_range) >= 2L) {
+        parts <- c(
+            parts,
+            paste0(
+                "range ",
+                as.character(na_range[[1]]),
+                ":",
+                as.character(na_range[[2]])
+            )
+        )
+    }
+
+    paste(parts, collapse = ", ")
+}
+
+
 workspace_dataset_category_is_missing <- function(
     value,
     na_values,
@@ -2100,7 +2142,12 @@ workspace_dataset_variable_json <- function(name, column) {
             workspace_dataset_variable_type(column)
         ), ",",
         "\"label\":", json_str(label), ",",
-        "\"values\":", json_str(categories$summary), ",",
+        "\"values\":", json_str(
+            workspace_dataset_variable_values_summary(
+                categories,
+                attributes$na_range
+            )
+        ), ",",
         "\"width\":", json_num(width), ",",
         "\"decimals\":", json_num(
             workspace_dataset_variable_decimals(column, width)
@@ -2155,9 +2202,13 @@ workspace_dataset_item_flags <- function(column) {
         category_count >= 7L
     nominal_non_numeric <- identical(measure, "nominal") &&
         category_count > 0L
+    ordinal_non_numeric <- identical(measure, "ordinal") &&
+        category_count > 0L &&
+        category_count < 7L
     is_numeric <- (
         isTRUE(intrinsic_numeric) &&
-            !isTRUE(nominal_non_numeric)
+            !isTRUE(nominal_non_numeric) &&
+            !isTRUE(ordinal_non_numeric)
     ) || isTRUE(ordinal_numeric)
 
     if (isTRUE(calibration$calibrated)) {

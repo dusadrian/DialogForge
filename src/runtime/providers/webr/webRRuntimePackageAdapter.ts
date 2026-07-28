@@ -14,10 +14,6 @@ import {
 } from "../r/dependencies/packageInstallPlan";
 
 
-interface WebRRuntimePackageRuntime {
-    evalRVoid(command: string): Promise<void>;
-}
-
 interface WebRRuntimePackageActivity {
     id: string;
 }
@@ -29,7 +25,7 @@ export interface WebRRuntimePackageLoadOptions {
 
 export interface WebRRuntimePackageAdapterBindings {
     loadedPackages: Set<string>;
-    packageRequirementsByDialogId: Record<string, unknown>;
+    packageRequirementsByDialogId?: Record<string, unknown>;
     createActivity(command: string): WebRRuntimePackageActivity;
     finishActivity(activityId: string, stateName: string): void;
     recordRuntimeMessageStream(message: {
@@ -40,8 +36,8 @@ export interface WebRRuntimePackageAdapterBindings {
     }): void;
     setRuntimeBusy(busy: boolean): void;
     renderToolbar(): void;
-    ensureRuntime(): Promise<WebRRuntimePackageRuntime>;
-    captureHiddenText(runtime: WebRRuntimePackageRuntime, command: string): Promise<string>;
+    ensureRuntime(): Promise<unknown>;
+    evaluateHiddenText(command: string): Promise<string>;
     executeVisibleCommand(
         command: string,
         options?: Record<string, unknown>
@@ -57,11 +53,9 @@ export interface WebRRuntimePackageAdapter {
 
 const readRuntimePackageStatus = async function(
     bindings: WebRRuntimePackageAdapterBindings,
-    runtime: WebRRuntimePackageRuntime,
     packages: string[]
 ): Promise<ReturnType<typeof parseRRuntimePackageStatus>> {
-    const result = await bindings.captureHiddenText(
-        runtime,
+    const result = await bindings.evaluateHiddenText(
         createRRuntimePackageStatusCommand(packages)
     );
 
@@ -74,7 +68,7 @@ export const createWebRRuntimePackageAdapter = function(
     const readRequirements = function(dialogPayload: unknown): string[] {
         return readRDialogPackageRequirements(
             dialogPayload,
-            bindings.packageRequirementsByDialogId
+            bindings.packageRequirementsByDialogId || {}
         );
     };
 
@@ -108,10 +102,8 @@ export const createWebRRuntimePackageAdapter = function(
             bindings.renderToolbar();
         }
 
-        let runtime: WebRRuntimePackageRuntime | null = null;
-
         try {
-            runtime = await bindings.ensureRuntime();
+            await bindings.ensureRuntime();
         }
         catch (error) {
             for (const activity of activitiesByPackage.values()) {
@@ -133,7 +125,7 @@ export const createWebRRuntimePackageAdapter = function(
         }
 
         try {
-            const status = await readRuntimePackageStatus(bindings, runtime, pending);
+            const status = await readRuntimePackageStatus(bindings, pending);
 
             if (status.missing.length) {
                 const message = createRMissingPackageMessage(status.missing);
@@ -168,12 +160,10 @@ export const createWebRRuntimePackageAdapter = function(
                         ? {
                             activityId: activity.id,
                             preRecorded: true,
-                            manageRuntimeBusy: false,
-                            deferWorkspaceRefresh: true
+                            manageRuntimeBusy: false
                         }
                         : {
-                            manageRuntimeBusy: false,
-                            deferWorkspaceRefresh: true
+                            manageRuntimeBusy: false
                         }
                 );
 

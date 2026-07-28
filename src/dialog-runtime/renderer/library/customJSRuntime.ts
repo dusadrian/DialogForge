@@ -77,7 +77,11 @@ const extendApiFromProfile = async (
 };
 
 const customJSRuntime = {
-  setup(dialogSpec: DialogScriptValue, objects: DialogScriptValue, coms: DialogScriptValue) {
+  async setup(
+    dialogSpec: DialogScriptValue,
+    objects: DialogScriptValue,
+    coms: DialogScriptValue
+  ): Promise<void> {
     const code = (dialogSpec && dialogSpec.customJS) ? String(dialogSpec.customJS) : '';
     if (!code.trim()) return;
     const localizedMessages = (() => {
@@ -132,11 +136,77 @@ const customJSRuntime = {
     const activeDatasetOptOut = new Set<string>();
     const activeDatasetChangedHandlers = new Set<(name: string) => void>();
     const externalCalls = new Map<string, (parameters?: unknown) => unknown | Promise<unknown>>();
+    const initializationTasks = new Set<Promise<unknown>>();
+    const initializationTaskLabels = new Map<Promise<unknown>, string>();
+    let initializationOpen = true;
     const objectSources = new Map<string, {
       listNames: () => string[];
       getObjects?: () => unknown[] | Promise<unknown[]>;
       emitSelectionChange?: boolean;
     }>();
+
+    const trackInitializationTask = function<Value>(
+      value: Value | Promise<Value>,
+      label = 'task'
+    ): Value | Promise<Value> {
+      if (!value || typeof (value as Promise<Value>).then !== 'function') {
+        return value;
+      }
+
+      const task = Promise.resolve(value);
+      const waitForTask = initializationOpen;
+
+      if (waitForTask) {
+        initializationTasks.add(task);
+        initializationTaskLabels.set(task, label);
+      }
+
+      void task.catch((error) => {
+        console.error('[customJS async error]', error);
+      }).finally(() => {
+        if (waitForTask) {
+          initializationTasks.delete(task);
+          initializationTaskLabels.delete(task);
+        }
+      });
+
+      return value;
+    };
+
+    const waitForInitializationTasks = async function(): Promise<void> {
+      while (initializationTasks.size > 0) {
+        const pending = Array.from(initializationTasks);
+        const settled = Promise.allSettled(pending);
+        const completed = await Promise.race([
+          settled.then(() => true),
+          new Promise<boolean>((resolve) => {
+            setTimeout(() => resolve(false), 5000);
+          })
+        ]);
+
+        if (!completed) {
+          const labels = pending.reduce<Record<string, number>>(
+            (counts, task) => {
+              const label = initializationTaskLabels.get(task) || 'task';
+
+              counts[label] = (counts[label] || 0) + 1;
+              return counts;
+            },
+            {}
+          );
+
+          console.warn(
+            '[customJS initialization pending]',
+            JSON.stringify({
+              pending: pending.length,
+              tracked: initializationTasks.size,
+              labelled: initializationTaskLabels.size,
+              labels
+            })
+          );
+        }
+      }
+    };
 
     const asWorkspaceVariables = () => {
       return Array.isArray(objects.workspaceVariables) ? objects.workspaceVariables : [];
@@ -266,7 +336,11 @@ const customJSRuntime = {
       activeEmits.add(emitKey);
       try {
         byEvent[ev].forEach((fn) => {
-          try { fn(); } catch (err) { console.error('[customJS handler error]', key, ev, err); }
+          try {
+            trackInitializationTask(fn(), `handler:${key}:${ev}`);
+          } catch (err) {
+            console.error('[customJS handler error]', key, ev, err);
+          }
         });
       } finally {
         activeEmits.delete(emitKey);
@@ -1122,7 +1196,9 @@ const customJSRuntime = {
       return Array.from(new Set(out));
     };
 
-    const objectBindings = new Map<string, { refresh: () => void }>();
+    const objectBindings = new Map<string, {
+      refresh: () => void | Promise<void>
+    }>();
 
     const normalizeObjectBindingRequest = (request: DialogScriptValue) => {
       if (!request || typeof request !== 'object' || Array.isArray(request)) {
@@ -1154,7 +1230,10 @@ const customJSRuntime = {
       const existing = objectBindings.get(bindingKey);
 
       if (existing) {
-        existing.refresh();
+        trackInitializationTask(
+          existing.refresh(),
+          `binding:${datasetControl}:refresh`
+        );
         return existing;
       }
 
@@ -1188,10 +1267,6 @@ const customJSRuntime = {
         }
       };
 
-      if (autoRefresh) {
-        void refresh();
-      }
-
       if (variableContainers.length > 0) {
         onChange(datasetControl, refreshVariables);
       }
@@ -1200,8 +1275,15 @@ const customJSRuntime = {
       objectBindings.set(bindingKey, binding);
 
       if (autoRefresh) {
+        trackInitializationTask(
+          Promise.resolve().then(refresh),
+          `binding:${datasetControl}:refresh`
+        );
         workspaceDataUpdatedHandlers.add(() => {
-          void refresh();
+          trackInitializationTask(
+            refresh(),
+            `binding:${datasetControl}:workspace-refresh`
+          );
         });
       }
 
@@ -1253,7 +1335,7 @@ const customJSRuntime = {
     const openImportFile = async () => {
       try {
         if (!coms || typeof coms.invoke !== 'function') throw new TypeError('coms.invoke is not a function');
-        return await coms.invoke('importFromFile:openFile');
+        return await coms.invoke(dialogRuntimeIpcChannels.openImportFile);
       } catch (error) {
         console.error('[customJS openImportFile error]', error);
         return null;
@@ -1263,7 +1345,10 @@ const customJSRuntime = {
     const getImportPreview = async (payload: DialogScriptValue) => {
       try {
         if (!coms || typeof coms.invoke !== 'function') throw new TypeError('coms.invoke is not a function');
-        return await coms.invoke('importFromFile:getPreview', payload || {});
+        return await coms.invoke(
+          dialogRuntimeIpcChannels.previewImportFile,
+          payload || {}
+        );
       } catch (error) {
         console.error('[customJS getImportPreview error]', error);
         return null;
@@ -1523,6 +1608,15 @@ const customJSRuntime = {
         const obj = objects.objList[name];
         if (!obj || !obj.element || registeredRawClicks.has(name)) return;
         registeredRawClicks.add(name);
+        const coverNode = obj.element.cover?.node;
+        const controlType = coverNode instanceof HTMLElement
+          ? coverNode.closest<HTMLElement>('[data-control-type]')?.dataset.controlType
+          : '';
+
+        if (controlType === 'button') {
+          return;
+        }
+
         let wired = false;
         const orderedKeys = ['cover', 'txt', ...Object.keys(obj.element)];
         for (let i = 0; i < orderedKeys.length; i++) {
@@ -1547,6 +1641,9 @@ const customJSRuntime = {
 
       if (status === 'input') {
         emit(name, 'input');
+      }
+      if (status === 'click') {
+        emit(name, 'click');
       }
       if (status === 'value' || status === 'check' || status === 'uncheck' || status === 'select' || status === 'deselect') {
         if (status === 'value') syncActiveDatasetFromControl(name);
@@ -1613,10 +1710,16 @@ const customJSRuntime = {
         }
         const handler = externalCalls.get(callName);
         if (typeof handler === 'function') {
-          return await handler(parameters);
+          return await trackInitializationTask(
+            handler(parameters),
+            `external:${callName}`
+          );
         }
 
-        return await callMainExternal(callName, parameters);
+        return await trackInitializationTask(
+          callMainExternal(callName, parameters),
+          `external:${callName}`
+        );
       },
       isChecked,
       check,
@@ -1699,7 +1802,9 @@ const customJSRuntime = {
     api.getElementNode = getElementNode;
     api.renderPlot = renderPlot;
 
-    void extendApiFromProfile(api, { dialogSpec, objects, coms }).then(() => {
+    await extendApiFromProfile(api, { dialogSpec, objects, coms });
+
+    {
       const identifiers = new Set();
       Object.keys(objects.objList || {}).forEach((n) => identifiers.add(n));
       Object.keys(objects.radios || {}).forEach((n) => identifiers.add(n));
@@ -1742,7 +1847,10 @@ const customJSRuntime = {
       } catch (err) {
         console.error('[customJS runtime error]', err);
       }
-    });
+
+      await waitForInitializationTasks();
+      initializationOpen = false;
+    }
   }
 };
 

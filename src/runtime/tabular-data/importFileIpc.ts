@@ -14,8 +14,7 @@ import {
 
 export const importFileIpcChannels = {
     plan: "base-app:planImportFile",
-    preview: "base-app:previewImportFile",
-    legacyPreview: "importFromFile:getPreview"
+    preview: "base-app:previewImportFile"
 } as const;
 
 
@@ -25,10 +24,6 @@ interface ImportFileIpcRoutes {
         result: ImportPlanResult;
     };
     "base-app:previewImportFile": {
-        input: [Partial<ImportPreviewRequest>];
-        result: ImportPreviewResult;
-    };
-    "importFromFile:getPreview": {
         input: [Partial<ImportPreviewRequest>];
         result: ImportPreviewResult;
     };

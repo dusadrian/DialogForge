@@ -1,21 +1,15 @@
 import {
-    createMainConsoleCoordinator
-} from "../console/renderer/mainConsoleCoordinator";
+    createConsoleServices
+} from "../console/renderer/consoleServices";
 import {
     createConsoleToolbarController
 } from "../console/renderer/consoleToolbarController";
-import {
-    createConsoleCommandHistory
-} from "../console/services/consoleCommandHistory";
 import type {
     ConsoleHistoryScope
 } from "../console/services/consoleCommandHistory";
 import {
     createConsoleSessionState
 } from "../console/services/consoleSessionState";
-import {
-    createCompletionModel
-} from "../console/terminal/completionModel";
 import type {
     CompletionModelOptions
 } from "../console/terminal/completionTypes";
@@ -25,6 +19,9 @@ import type {
 import type {
     RuntimeSessionSnapshot
 } from "../runtime/provider-contract/runtimeProvider";
+import {
+    createRuntimeRestartMessage
+} from "../runtime/lifecycle/runtimeRestartMessages";
 
 
 export interface BrowserConsoleBootstrapOptions {
@@ -48,8 +45,8 @@ export interface BrowserConsoleBootstrapOptions {
         source: string;
         outputWidth?: number;
     }): Promise<unknown>;
-    buildContextualHelpRequest?: Parameters<typeof createMainConsoleCoordinator>[0]["buildContextualHelpRequest"];
-    parseHelpCommand?: Parameters<typeof createMainConsoleCoordinator>[0]["parseHelpCommand"];
+    buildContextualHelpRequest?: Parameters<typeof createConsoleServices>[0]["coordinator"]["buildContextualHelpRequest"];
+    parseHelpCommand?: Parameters<typeof createConsoleServices>[0]["coordinator"]["parseHelpCommand"];
     openHelpTopic(input: {
         topic: string;
         package?: string;
@@ -59,6 +56,7 @@ export interface BrowserConsoleBootstrapOptions {
     }): void;
     writeClipboardText(text: string): Promise<void> | void;
     appendMessage(text: string, className?: string): void;
+    runtimeRestartName: string;
     readRestartVersion?(): Promise<string>;
     getWorkingDirectoryPath(): string;
     getHomeDirectoryPath(): string;
@@ -73,9 +71,9 @@ export interface BrowserConsoleBootstrapOptions {
 
 export interface BrowserConsoleBootstrapResult {
     session: ReturnType<typeof createConsoleSessionState>;
-    completionModel: ReturnType<typeof createCompletionModel>;
-    commandHistory: ReturnType<typeof createConsoleCommandHistory>;
-    coordinator: ReturnType<typeof createMainConsoleCoordinator>;
+    completionModel: ReturnType<typeof createConsoleServices>["completionModel"];
+    commandHistory: ReturnType<typeof createConsoleServices>["commandHistory"];
+    coordinator: ReturnType<typeof createConsoleServices>["coordinator"];
     toolbar: ReturnType<typeof createConsoleToolbarController>;
 }
 
@@ -94,46 +92,44 @@ export const createBrowserConsoleBootstrap = async function(
     options: BrowserConsoleBootstrapOptions
 ): Promise<BrowserConsoleBootstrapResult> {
     const session = createConsoleSessionState(options.readRuntimeStatus);
-    const commandHistory = createConsoleCommandHistory({
-        maximumItems: 500,
-        readHistory: options.readHistory,
-        writeHistory: options.writeHistory,
-        excludeFromHistory: function(command) {
-            return String(command || "").includes("__DIALOGFORGE_DATASET_READY_");
+    const services = createConsoleServices({
+        document: options.document,
+        session,
+        completion: options.completionOptions,
+        history: {
+            maximumItems: 500,
+            readHistory: options.readHistory,
+            writeHistory: options.writeHistory,
+            excludeFromHistory: function(command) {
+                return String(command || "").includes(
+                    "__DIALOGFORGE_DATASET_READY_"
+                );
+            }
+        },
+        coordinator: {
+            getRuntimeSession: options.readRuntimeSnapshot,
+            startRuntimeSession: options.startRuntimeSession,
+            renderStatus: options.renderStatus,
+            navigateFallbackHistory: function() {
+                return;
+            },
+            executeRuntimeMethod: options.executeRuntimeMethod,
+            executeVisibleCommand: options.executeVisibleCommand,
+            buildContextualHelpRequest: options.buildContextualHelpRequest,
+            parseHelpCommand: options.parseHelpCommand,
+            openHelpTopic: options.openHelpTopic,
+            writeClipboardText: options.writeClipboardText
         }
     });
-    const completionModel = createCompletionModel(options.completionOptions);
+    const {
+        completionModel,
+        commandHistory,
+        coordinator
+    } = services;
 
     await commandHistory.load({
         productId: String(options.productId || "base"),
         runtimeId: String(options.runtimeId || "webr")
-    });
-
-    const coordinator = createMainConsoleCoordinator({
-        document: options.document,
-        session,
-        completionModel,
-        getHistory: function() {
-            return commandHistory.getInputHistory();
-        },
-        getRuntimeSession: options.readRuntimeSnapshot,
-        startRuntimeSession: options.startRuntimeSession,
-        renderStatus: options.renderStatus,
-        recordHistory: function(text) {
-            commandHistory.record(text);
-        },
-        registerCompletionInput: function(text) {
-            completionModel.registerCommandInput(text);
-        },
-        navigateFallbackHistory: function() {
-            return;
-        },
-        executeRuntimeMethod: options.executeRuntimeMethod,
-        executeVisibleCommand: options.executeVisibleCommand,
-        buildContextualHelpRequest: options.buildContextualHelpRequest,
-        parseHelpCommand: options.parseHelpCommand,
-        openHelpTopic: options.openHelpTopic,
-        writeClipboardText: options.writeClipboardText
     });
     const toolbar = createConsoleToolbarController({
         document: options.document,
@@ -166,30 +162,22 @@ export const createBrowserConsoleBootstrap = async function(
         },
         restartRuntime: options.restartRuntime,
         appendRestartMessage: async function(action, phase, message): Promise<void> {
-            if (phase === "starting") {
-                options.appendMessage("Restarting R...");
-                return;
-            }
-
-            if (phase === "completed") {
-                const version = String(await options.readRestartVersion?.() || "").trim();
-
-                options.appendMessage(version
-                    ? action === "restore"
-                        ? `R ${version} restarted and workspace restored.`
-                        : `R ${version} restarted.`
-                    : message || (
-                        action === "restore"
-                            ? "R restarted and workspace restored."
-                            : "R restarted."
-                    )
-                );
-                return;
-            }
+            const version = phase === "completed"
+                ? await options.readRestartVersion?.()
+                : "";
+            const restartMessage = createRuntimeRestartMessage({
+                runtimeName: options.runtimeRestartName,
+                action,
+                phase,
+                message,
+                version
+            });
 
             options.appendMessage(
-                message || "R restart failed.",
-                "web-transcript__line--stderr"
+                restartMessage.text,
+                restartMessage.stream === "stderr"
+                    ? "web-transcript__line--stderr"
+                    : undefined
             );
         },
         applyRuntimeSession: function() {

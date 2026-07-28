@@ -148,12 +148,19 @@ const readCapturedStreamName = function(
     output: WebRCapturedOutput
 ): WebRCapturedStream["name"] {
     const type = String(output?.type || "").toLowerCase();
+    const text = readCapturedOutputText(output).trimStart();
 
-    if (type.includes("warning")) {
+    if (
+        type.includes("warning")
+        || (
+            type.includes("stderr")
+            && /^warning:/i.test(text)
+        )
+    ) {
         return "warning";
     }
 
-    if (type.includes("error")) {
+    if (type.includes("error") || type.includes("stderr")) {
         return "stderr";
     }
 
@@ -200,8 +207,16 @@ export const captureWebRHiddenText = async function(
 
         try {
             const captured = await shelter.captureR(command);
+            const streams = collectWebRCapturedStreams(captured.output || []);
+            const error = streams.find((entry) => {
+                return entry.name === "stderr";
+            });
 
-            return collectWebRCapturedStreams(captured.output || []).map((entry) => {
+            if (error) {
+                throw new Error(error.text || "WebR command failed.");
+            }
+
+            return streams.map((entry) => {
                 return entry.text;
             }).join("\n");
         }

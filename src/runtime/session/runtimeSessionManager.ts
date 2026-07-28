@@ -52,6 +52,9 @@ import {
     createRuntimeWorkspaceControllers
 } from "../workspace/runtimeWorkspaceControllers";
 import {
+    workspaceUpdateHasChanges
+} from "../workspace/workspaceUpdate";
+import {
     createRuntimeStartupTaskExecutionController
 } from "../startup/runtimeStartupTaskExecutionController";
 import type {
@@ -61,11 +64,12 @@ import type {
     RuntimeExtensionMethodResult,
     RuntimeProvider,
     RuntimeSessionManager,
-    RuntimeSessionSnapshot
+    RuntimeSessionSnapshot,
+    WorkspaceUpdate
 } from "../provider-contract/runtimeProvider";
 
 
-interface RuntimeSessionManagerOptions {
+export interface RuntimeSessionManagerOptions {
     rootDir?: string;
     dialogs?: DialogDefinition[];
     startupTasks?: EvaluatedStartupTask[];
@@ -127,7 +131,29 @@ export const createRuntimeSessionManager = function(
         checkDependencies: function(request) {
             return checkDependencies(request);
         },
-        recordRuntimeEvent
+        recordRuntimeEvent,
+        completeVisibleCommand:
+            provider.workspaceController?.completeVisibleCommand
+                ? function(request) {
+                    return provider.workspaceController!
+                        .completeVisibleCommand!(
+                            request,
+                            lifecycleState.getSnapshot()
+                        );
+                }
+                : undefined,
+        applyWorkspaceUpdate: function(update) {
+            if (!workspaceUpdateHasChanges(update)) {
+                return;
+            }
+
+            const objects = runtimeWorkspaceState.applyUpdate(update);
+
+            activeDatasetController.reconcileAfterWorkspaceRefresh(
+                objects,
+                "workspace-update"
+            );
+        }
     });
     const commandOperationController = commandControllers.operationController;
 
@@ -276,9 +302,19 @@ export const createRuntimeSessionManager = function(
         return lifecycleExecutionController.stop();
     };
 
-    const executeVisibleCommand: RuntimeSessionManager["executeVisibleCommand"] = async function(request) {
-        return commandOperationController.executeVisibleCommand(request);
-    };
+    const executeVisibleCommandWithEffects:
+        RuntimeSessionManager["executeVisibleCommandWithEffects"] =
+        async function(request) {
+            return commandOperationController.executeVisibleCommand(request);
+        };
+
+    const executeVisibleCommand:
+        RuntimeSessionManager["executeVisibleCommand"] =
+        async function(request) {
+            const result = await executeVisibleCommandWithEffects(request);
+
+            return result.transcriptEvents;
+        };
 
     const executeProductCommand: RuntimeSessionManager["executeProductCommand"] = async function(request) {
         return commandOperationController.executeProductCommand(request);
@@ -286,6 +322,59 @@ export const createRuntimeSessionManager = function(
 
     const listWorkspaceObjects: RuntimeSessionManager["listWorkspaceObjects"] = async function(options) {
         return workspaceOperationController.listWorkspaceObjects(options);
+    };
+
+    const refreshWorkspaceAfterMutation = async function<T extends {
+        status: string;
+        workspaceUpdate?: WorkspaceUpdate | null;
+        results?: Array<{
+            workspaceUpdate?: WorkspaceUpdate | null;
+        }>;
+    }>(
+        result: T,
+        successfulStatuses: string[] = ["updated"]
+    ): Promise<T> {
+        if (!successfulStatuses.includes(result.status)) {
+            return result;
+        }
+
+        let appliedUpdate = false;
+        const updates = [
+            result.workspaceUpdate,
+            ...(result.results || []).map((entry) => entry.workspaceUpdate)
+        ];
+
+        updates.forEach(function(update) {
+            if (!workspaceUpdateHasChanges(update)) {
+                return;
+            }
+
+            const objects = runtimeWorkspaceState.applyUpdate(update);
+            activeDatasetController.reconcileAfterWorkspaceRefresh(
+                objects,
+                "tabular-mutation-workspace-update"
+            );
+            appliedUpdate = true;
+        });
+
+        if (provider.workspaceController?.commitWorkspaceMutation) {
+            const update = await provider.workspaceController
+                .commitWorkspaceMutation(getSnapshot());
+
+            if (workspaceUpdateHasChanges(update)) {
+                const objects = runtimeWorkspaceState.applyUpdate(update);
+                activeDatasetController.reconcileAfterWorkspaceRefresh(
+                    objects,
+                    "tabular-mutation-workspace-commit"
+                );
+                appliedUpdate = true;
+            }
+        }
+        else if (!appliedUpdate) {
+            await listWorkspaceObjects();
+        }
+
+        return result;
     };
 
     const getWorkspaceSnapshot: RuntimeSessionManager["getWorkspaceSnapshot"] = function() {
@@ -345,39 +434,58 @@ export const createRuntimeSessionManager = function(
     };
 
     const writeCell: RuntimeSessionManager["writeCell"] = async function(request) {
-        return cellMutationExecutionController.writeCell(request);
+        return refreshWorkspaceAfterMutation(
+            await cellMutationExecutionController.writeCell(request)
+        );
     };
 
     const writeCells: RuntimeSessionManager["writeCells"] = async function(requests) {
-        return cellMutationExecutionController.writeCells(requests);
+        return refreshWorkspaceAfterMutation(
+            await cellMutationExecutionController.writeCells(requests),
+            ["updated", "partial"]
+        );
     };
 
     const renameColumn: RuntimeSessionManager["renameColumn"] = async function(request) {
-        return columnMutationOperationController.renameColumn(request);
+        return refreshWorkspaceAfterMutation(
+            await columnMutationOperationController.renameColumn(request)
+        );
     };
 
     const insertColumn: RuntimeSessionManager["insertColumn"] = async function(request) {
-        return columnMutationOperationController.insertColumn(request);
+        return refreshWorkspaceAfterMutation(
+            await columnMutationOperationController.insertColumn(request)
+        );
     };
 
     const removeColumn: RuntimeSessionManager["removeColumn"] = async function(request) {
-        return columnMutationOperationController.removeColumn(request);
+        return refreshWorkspaceAfterMutation(
+            await columnMutationOperationController.removeColumn(request)
+        );
     };
 
     const insertRow: RuntimeSessionManager["insertRow"] = async function(request) {
-        return rowMutationOperationController.insertRow(request);
+        return refreshWorkspaceAfterMutation(
+            await rowMutationOperationController.insertRow(request)
+        );
     };
 
     const removeRow: RuntimeSessionManager["removeRow"] = async function(request) {
-        return rowMutationOperationController.removeRow(request);
+        return refreshWorkspaceAfterMutation(
+            await rowMutationOperationController.removeRow(request)
+        );
     };
 
     const sortRows: RuntimeSessionManager["sortRows"] = async function(request: RowSortRequest) {
-        return rowMutationOperationController.sortRows(request);
+        return refreshWorkspaceAfterMutation(
+            await rowMutationOperationController.sortRows(request)
+        );
     };
 
     const updateRowName: RuntimeSessionManager["updateRowName"] = async function(request) {
-        return rowMutationOperationController.updateRowName(request);
+        return refreshWorkspaceAfterMutation(
+            await rowMutationOperationController.updateRowName(request)
+        );
     };
 
     const readVariableMetadata: RuntimeSessionManager["readVariableMetadata"] = async function(objectName) {
@@ -385,7 +493,9 @@ export const createRuntimeSessionManager = function(
     };
 
     const writeVariableMetadata: RuntimeSessionManager["writeVariableMetadata"] = async function(request) {
-        return variableMetadataOperationController.writeVariableMetadata(request);
+        return refreshWorkspaceAfterMutation(
+            await variableMetadataOperationController.writeVariableMetadata(request)
+        );
     };
 
     const readValueLabels: RuntimeSessionManager["readValueLabels"] = async function(objectName) {
@@ -393,7 +503,9 @@ export const createRuntimeSessionManager = function(
     };
 
     const writeValueLabels: RuntimeSessionManager["writeValueLabels"] = async function(request) {
-        return labelStateOperationController.writeValueLabels(request);
+        return refreshWorkspaceAfterMutation(
+            await labelStateOperationController.writeValueLabels(request)
+        );
     };
 
     const readDeclaredMissing: RuntimeSessionManager["readDeclaredMissing"] = async function(objectName) {
@@ -401,11 +513,16 @@ export const createRuntimeSessionManager = function(
     };
 
     const writeDeclaredMissing: RuntimeSessionManager["writeDeclaredMissing"] = async function(request) {
-        return labelStateOperationController.writeDeclaredMissing(request);
+        return refreshWorkspaceAfterMutation(
+            await labelStateOperationController.writeDeclaredMissing(request)
+        );
     };
 
     const importData: RuntimeSessionManager["importData"] = async function(request) {
-        return importOperationController.importData(request);
+        return refreshWorkspaceAfterMutation(
+            await importOperationController.importData(request),
+            ["imported"]
+        );
     };
 
     const readHelpTopic: RuntimeSessionManager["readHelpTopic"] = async function(request) {
@@ -425,7 +542,9 @@ export const createRuntimeSessionManager = function(
     };
 
     const executeInvisibleMutation: RuntimeSessionManager["executeInvisibleMutation"] = async function(request) {
-        return capabilityRequestController.executeInvisibleMutation(request);
+        return refreshWorkspaceAfterMutation(
+            await capabilityRequestController.executeInvisibleMutation(request)
+        );
     };
 
     const executeDialog: RuntimeSessionManager["executeDialog"] = async function(request) {
@@ -435,10 +554,23 @@ export const createRuntimeSessionManager = function(
     const executeRuntimeMethod = async function(
         request: RuntimeExtensionMethodRequest
     ): Promise<RuntimeExtensionMethodResult> {
-        return runtimeExtensionExecutionController.execute(
+        const result = await runtimeExtensionExecutionController.execute(
             request,
             getSnapshot()
         );
+
+        if (workspaceUpdateHasChanges(result.workspaceUpdate)) {
+            const objects = runtimeWorkspaceState.applyUpdate(
+                result.workspaceUpdate
+            );
+
+            activeDatasetController.reconcileAfterWorkspaceRefresh(
+                objects,
+                "runtime-extension-workspace-update"
+            );
+        }
+
+        return result;
     };
 
     const executeStartupTask: RuntimeSessionManager["executeStartupTask"] = async function(request) {
@@ -450,6 +582,7 @@ export const createRuntimeSessionManager = function(
         start,
         stop,
         executeVisibleCommand,
+        executeVisibleCommandWithEffects,
         executeProductCommand,
         getWorkspaceSnapshot,
         listWorkspaceObjects,

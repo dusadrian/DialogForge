@@ -169,6 +169,23 @@ export const isRPlotCommand = function(text: unknown): boolean {
     return /\b(?:plot|hist|boxplot|barplot|pairs|qqplot|curve|image|contour|persp)\s*\(/.test(command);
 };
 
+export const rCodeMayMutateWorkspace = function(text: unknown): boolean {
+    const command = String(text || "");
+
+    if (!command.trim()) {
+        return false;
+    }
+
+    return [
+        /(^|[^A-Za-z0-9_.])(?:<<-|<-)([^A-Za-z0-9_]|$)/,
+        /(^|[^A-Za-z0-9_.]):=([^A-Za-z0-9_]|$)/,
+        /(^|[^A-Za-z0-9_.])(?:assign|delayedAssign|rm|remove|load|source|sys\.source|set|setattr|setnames|setcolorder|setorderv|setkey|setDT|unlockBinding|lockBinding)\s*\(/,
+        /(^|[^A-Za-z0-9_.])(?:data|data\.|read\.[A-Za-z0-9_.]+|write\.[A-Za-z0-9_.]+)\s*\(/
+    ].some((pattern) => {
+        return pattern.test(command);
+    });
+};
+
 export const parseRPackageList = function(value: unknown): string[] {
     const entries = Array.isArray(value)
         ? value

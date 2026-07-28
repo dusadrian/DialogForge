@@ -3,15 +3,14 @@ import { createInvisibleQueryResult } from "../../../queries/invisibleQueryProto
 import type {
     RuntimeQueryController
 } from "../../../provider-contract/runtimeProvider";
-import { createRuntimeControlClient } from "../protocol/runtimeControlClient";
+import type {
+    RRuntimeControlClient
+} from "../protocol/runtimeControlClient";
 import { rLiteral, rName, rString } from "../commands/rLiteral";
 
 
-type RuntimeControlClient = ReturnType<typeof createRuntimeControlClient>;
-
-
 export interface RQueryControllerOptions {
-    getClient(): RuntimeControlClient | null;
+    getClient(): RRuntimeControlClient | null;
     createRequestId(prefix: string): string;
 }
 
@@ -86,15 +85,19 @@ export const createRQueryController = function(
                     timeoutMs: 10000
                 }
             });
+            const updated = result.ok;
 
             return createInvisibleMutationResult({
-                status: result.ok ? "updated" : "failed",
+                status: updated ? "updated" : "failed",
                 providerId: snapshot.providerId,
                 mutation: request.mutation,
                 value: request.value,
-                message: result.ok
+                message: updated
                     ? "R runtime-control applied the invisible mutation without visible transcript history."
-                    : String(result.error || "R invisible mutation failed.")
+                    : String(
+                        result.error
+                        || "R invisible mutation failed."
+                    )
             });
         }
     };

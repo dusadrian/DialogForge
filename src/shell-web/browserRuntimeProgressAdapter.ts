@@ -14,6 +14,12 @@ export interface BrowserRuntimeProgressControllerOptions {
 export interface BrowserRuntimeProgressController {
     setStatus(text: unknown, progress?: number): void;
     progressFromStage(message: unknown, fraction?: number): number | null;
+    beginActivity(message: unknown): () => void;
+    runActivity<Result>(
+        message: unknown,
+        action: () => Promise<Result>
+    ): Promise<Result>;
+    setActivityMessage(message: unknown): void;
 }
 
 export const createBrowserRuntimeProgressController = function(
@@ -21,6 +27,24 @@ export const createBrowserRuntimeProgressController = function(
 ): BrowserRuntimeProgressController {
     let runtimeProgressValue = 4;
     let runtimeProgressTrickleTimer = 0;
+    let activityCount = 0;
+
+    const setIndeterminateProgress = function(indeterminate: boolean): void {
+        const coverProgress = options.document.getElementById("consoleCoverProgress");
+
+        if (!coverProgress) {
+            return;
+        }
+
+        coverProgress.classList.toggle("is-indeterminate", indeterminate);
+
+        if (indeterminate) {
+            coverProgress.removeAttribute("aria-valuenow");
+            return;
+        }
+
+        coverProgress.setAttribute("aria-valuenow", String(runtimeProgressValue));
+    };
 
     const writeRuntimeProgress = function(value: unknown): void {
         const progressValue = clampWebRStartupProgress(value);
@@ -75,6 +99,10 @@ export const createBrowserRuntimeProgressController = function(
             runtimeProgressValue
         );
 
+        if (activityCount > 0) {
+            return;
+        }
+
         if (coverMessage) {
             coverMessage.textContent = status.message || defaultWebRStartupProgressMessage;
         }
@@ -83,6 +111,7 @@ export const createBrowserRuntimeProgressController = function(
             runtimeProgressValue = 0;
         }
 
+        setIndeterminateProgress(false);
         writeRuntimeProgress(status.progressValue);
 
         if (status.visible) {
@@ -96,8 +125,66 @@ export const createBrowserRuntimeProgressController = function(
         options.onStatusChange?.();
     };
 
+    const setActivityMessage = function(message: unknown): void {
+        if (activityCount < 1) {
+            return;
+        }
+
+        const coverMessage = options.document.getElementById("consoleCoverMessage");
+
+        if (coverMessage) {
+            coverMessage.textContent = String(message || "Working...").trim() || "Working...";
+        }
+    };
+
+    const beginActivity = function(message: unknown): () => void {
+        activityCount += 1;
+        runtimeProgressValue = 4;
+        setActivityMessage(message);
+        writeRuntimeProgress(runtimeProgressValue);
+        stopRuntimeProgressTrickle();
+        setIndeterminateProgress(true);
+        options.document.body.classList.add("console-cover-visible");
+        options.onStatusChange?.();
+
+        let finished = false;
+
+        return function(): void {
+            if (finished) {
+                return;
+            }
+
+            finished = true;
+            activityCount = Math.max(0, activityCount - 1);
+
+            if (activityCount === 0) {
+                stopRuntimeProgressTrickle();
+                setIndeterminateProgress(false);
+                options.document.body.classList.remove("console-cover-visible");
+                options.onStatusChange?.();
+            }
+        };
+    };
+
+    const runActivity = async function<Result>(
+        message: unknown,
+        action: () => Promise<Result>
+    ): Promise<Result> {
+        const endActivity = beginActivity(message);
+
+        try {
+            return await action();
+        }
+        finally {
+            endActivity();
+        }
+    };
+
     return {
         setStatus,
-        progressFromStage
+        progressFromStage,
+        beginActivity,
+        runActivity,
+        setActivityMessage
     };
 };

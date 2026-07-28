@@ -7,17 +7,20 @@ import type {
 export const createRuntimeFallbackCommandController = function(): RuntimeCommandController {
     return {
         executeVisibleCommand: async function(request) {
-            return [
-                createTranscriptEvent("submitted", request),
-                createTranscriptEvent(
-                    "output",
-                    request,
-                    {
-                        message: "Placeholder runtime accepted the visible command. No language process was started."
-                    }
-                ),
-                createTranscriptEvent("completed", request)
-            ];
+            return {
+                transcriptEvents: [
+                    createTranscriptEvent("submitted", request),
+                    createTranscriptEvent(
+                        "output",
+                        request,
+                        {
+                            message: "Placeholder runtime accepted the visible command. No language process was started."
+                        }
+                    ),
+                    createTranscriptEvent("completed", request)
+                ],
+                workspaceUpdate: null
+            };
         }
     };
 };

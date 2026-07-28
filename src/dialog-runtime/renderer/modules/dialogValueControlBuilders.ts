@@ -59,6 +59,8 @@ export const createDialogValueControlBuilders = function(
     ): void {
         const wrap = document.createElement("div");
         wrap.className = "dm-el dm-plot";
+        wrap.dataset.controlName = asText(spec.name);
+        wrap.dataset.controlType = "plot";
         lifecycle.applyPosition(wrap, spec);
         wrap.style.width = toCssPx(spec.width, 250);
         wrap.style.height = toCssPx(spec.height, 220);

@@ -150,7 +150,7 @@ export const createEmptyPlotViewerPayload = function(
 
     if (!entries.length) {
         return Object.assign({}, createWaitingPlotViewerState(), {
-            message: "No WebR plot image was captured for the last command.",
+            message: "No plot image was captured for the last command.",
             urls: entries
         });
     }

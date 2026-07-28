@@ -6,8 +6,12 @@ import type {
     ActiveDatasetSnapshot,
     RuntimeSessionSnapshot,
     WorkspaceObjectSnapshot,
-    WorkspaceSnapshot
+    WorkspaceSnapshot,
+    WorkspaceUpdate
 } from "../provider-contract/runtimeProvider";
+import {
+    applyWorkspaceUpdateToObjects
+} from "../workspace/workspaceUpdate";
 
 
 export interface RuntimeWorkspaceSelection {
@@ -19,6 +23,7 @@ export interface RuntimeWorkspaceSelection {
 export interface RuntimeWorkspaceState {
     invalidate(): void;
     remember(objects: WorkspaceObjectSnapshot[]): WorkspaceObjectSnapshot[];
+    applyUpdate(update: WorkspaceUpdate): WorkspaceObjectSnapshot[];
     getObjects(): WorkspaceObjectSnapshot[] | null;
     createSnapshot(session: RuntimeSessionSnapshot): WorkspaceSnapshot;
     getActiveDataset(): ActiveDatasetSnapshot;
@@ -150,6 +155,11 @@ export const createRuntimeWorkspaceState = function(
             objects = cloneWorkspaceObjects(nextObjects);
 
             return nextObjects;
+        },
+        applyUpdate: function(update) {
+            objects = applyWorkspaceUpdateToObjects(objects || [], update);
+
+            return cloneWorkspaceObjects(objects);
         },
         getObjects: function() {
             return objects === null ? null : cloneWorkspaceObjects(objects);

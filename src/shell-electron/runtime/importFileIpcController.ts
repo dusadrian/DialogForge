@@ -41,5 +41,4 @@ export const createImportFileIpcController = function(
     };
 
     options.ipcMain.handle(importFileIpcChannels.preview, previewFile);
-    options.ipcMain.handle(importFileIpcChannels.legacyPreview, previewFile);
 };

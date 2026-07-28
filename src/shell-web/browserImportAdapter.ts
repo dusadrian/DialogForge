@@ -1,27 +1,33 @@
 import type {
-    ImportPreviewRequest
-} from "../runtime/tabular-data/importPreview";
+    RuntimeExtensionMethodRequest,
+    RuntimeExtensionMethodResult
+} from "../runtime/provider-contract/runtimeProvider";
 import {
+    createImportPreviewNotFoundResult,
     type ImportPreviewResult
 } from "../runtime/tabular-data/importPreviewResult";
+import type {
+    ImportPreviewRequest
+} from "../runtime/tabular-data/importPreviewRequest";
+import {
+    createImportPreviewRequestForFormat
+} from "../runtime/tabular-data/importPreviewRequest";
+import {
+    previewImportFileThroughRuntime
+} from "../runtime/tabular-data/runtimeImportPreview";
 import {
     ensureWebRDirectory
 } from "../runtime/providers/webr/webRFileSystem";
-import {
-    createRImportPreviewCommand,
-    resolveRImportPreviewReader
-} from "../runtime/providers/r/import/rImportPreviewCommand";
-import {
-    createVisibleImportCommand
-} from "../runtime/providers/r/import/rImportCommand";
 import {
     createImportFileAcceptList,
     createSafeImportFileName
 } from "../runtime/tabular-data/importFilePolicy";
 import {
+    inferImportFormat
+} from "../runtime/tabular-data/importFormat";
+import {
     createStagedImportPlanResult,
-    createStagedImportRequest,
-    previewStagedImportFile
+    createStagedImportRequest
 } from "../runtime/tabular-data/stagedImportWorkflow";
 
 
@@ -66,14 +72,12 @@ export interface BrowserImportStagePayload {
 export interface BrowserImportAdapterBindings {
     getWorkingDirectoryPath(): string;
     ensureRuntime(): Promise<BrowserImportRuntime>;
-    captureHiddenRText(
-        runtime: BrowserImportRuntime,
-        command: string
-    ): Promise<string>;
-    executeHiddenImport(command: string): Promise<void>;
-    executeVisibleImport(command: string): Promise<{ ok?: boolean } | void>;
-    refreshWorkspace(): Promise<void>;
-    setActiveDataset(name: string): void;
+    executeRuntimeMethod(
+        request: RuntimeExtensionMethodRequest
+    ): Promise<RuntimeExtensionMethodResult>;
+    importThroughRuntime(
+        request: BrowserImportRequest
+    ): Promise<BrowserImportResult>;
 }
 
 
@@ -299,36 +303,36 @@ export const createBrowserImportAdapter = function(
 
             return addRecord(file, String(payload?.virtualPath || ""));
         },
-        readPreview: function(
+        readPreview: async function(
             payload: Partial<ImportPreviewRequest>
         ): Promise<ImportPreviewResult> {
             const request = payload || {};
             const record = readRecord(request.file);
 
-            return previewStagedImportFile(
-                record
-                    ? {
-                        filePath: record.virtualPath,
-                        sizeBytes: record.file.size,
-                        readText: function(): Promise<string> {
-                            return record.file.text();
-                        },
-                        prepareRuntimePreview: function(): Promise<void> {
-                            return writeFileToWebR(record);
-                        }
-                    }
-                    : null,
-                request,
-                {
-                    resolveRuntimePreviewReader: resolveRImportPreviewReader,
-                    createRuntimePreviewCommand: createRImportPreviewCommand,
-                    readRuntimePreviewText: async function(command: string): Promise<string> {
-                        const runtime = await bindings.ensureRuntime();
+            if (!record) {
+                return createImportPreviewNotFoundResult();
+            }
 
-                        return String(await bindings.captureHiddenRText(runtime, command) || "");
-                    }
-                }
-            );
+            await writeFileToWebR(record);
+            const requestedFormat = String(
+                (request as Record<string, unknown>).format || ""
+            ).trim();
+            const runtimeRequest = String(request.command || "").trim()
+                ? request
+                : {
+                    ...createImportPreviewRequestForFormat({
+                        file: record.virtualPath,
+                        format: requestedFormat
+                            || inferImportFormat(record.virtualPath),
+                        nrows: request.nrows
+                    }),
+                    ...request
+                };
+
+            return previewImportFileThroughRuntime({
+                ...runtimeRequest,
+                file: record.virtualPath
+            }, bindings.executeRuntimeMethod);
         },
         restoreFilesToWebR,
         planFile: function(
@@ -344,36 +348,11 @@ export const createBrowserImportAdapter = function(
             input: Partial<BrowserImportRequest>
         ): Promise<BrowserImportResult> {
             const request = readImportRequest(input || {});
-            const commandText = String(request.visibleCommandText || "").trim()
-                || createVisibleImportCommand(request, request.targetName);
 
             try {
                 await restoreFilesToWebR();
 
-                if (request.uiCommandVisibility === "visible") {
-                    const result = await bindings.executeVisibleImport(commandText);
-
-                    if (result && result.ok === false) {
-                        throw new Error("R visible import command failed.");
-                    }
-                }
-                else {
-                    await bindings.executeHiddenImport(commandText);
-                    await bindings.refreshWorkspace();
-                }
-
-                bindings.setActiveDataset(request.targetName);
-                return {
-                    status: "imported",
-                    providerId: "webr",
-                    source: request.source,
-                    format: request.format,
-                    targetName: request.targetName,
-                    overwrite: request.overwrite,
-                    transcriptEvents: [],
-                    message: "Browser WebR import completed.",
-                    importedAt: new Date().toISOString()
-                };
+                return await bindings.importThroughRuntime(request);
             }
             catch (error) {
                 return {

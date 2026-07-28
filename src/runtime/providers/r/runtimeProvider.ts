@@ -17,6 +17,9 @@ import {
 } from "./session/rBinaryDiscovery";
 import { createRRuntimeProcessController } from "./session/runtimeProcessController";
 import {
+    implementedRRuntimeCapabilities
+} from "./rRuntimeCapabilities";
+import {
     createColumn,
     createDeclaredMissingSet,
     createDeclaredMissingSnapshot,
@@ -34,31 +37,7 @@ const manifest: RuntimeProviderManifest = {
     label: "R",
     language: "r",
     status: "implemented",
-    capabilities: [
-        "commands.visible",
-        "commands.invisible",
-        "data.import",
-        "workspace.objects",
-        "workspace.activeDataset",
-        "workspace.rename",
-        "tabular.schema",
-        "tabular.read",
-        "tabular.writeCells",
-        "tabular.writeColumns",
-        "tabular.writeRows",
-        "tabular.rowNames",
-        "tabular.columnNames",
-        "tabular.variableMetadata",
-        "tabular.variableMetadata.write",
-        "tabular.valueLabels",
-        "tabular.valueLabels.write",
-        "tabular.declaredMissing",
-        "tabular.declaredMissing.write",
-        "help.topics",
-        "completions.symbols",
-        "dependencies.packages",
-        "plots"
-    ]
+    capabilities: implementedRRuntimeCapabilities
 };
 
 

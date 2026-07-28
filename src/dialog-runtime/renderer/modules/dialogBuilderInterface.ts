@@ -23,7 +23,7 @@ const asDialogState = function(value: unknown): Record<string, Record<string, un
     return state;
 };
 
-coms.on("dialogCreated", (value: unknown) => {
+coms.on("dialogCreated", async (value: unknown) => {
     const args = asRecord(value);
     const rawData = asRecord(args.data);
     const data = isRuntimeDialogSchema(rawData)
@@ -35,7 +35,7 @@ coms.on("dialogCreated", (value: unknown) => {
         throw new Error("Dialog payload does not contain a normalized runtime schema.");
     }
 
-    runtime.build(String(args.dialogID || ""), data);
+    const build = runtime.build(String(args.dialogID || ""), data);
 
     if (args.workspaceData && typeof args.workspaceData === "object") {
         runtime.incommingDataFromR(asRecord(args.workspaceData));
@@ -44,6 +44,8 @@ coms.on("dialogCreated", (value: unknown) => {
     if (args.lastState) {
         runtime.restoreDialogState(asDialogState(args.lastState));
     }
+
+    await build;
 
     coms.sendTo("main", "dialogCreated", {
         name: String(args.dialogID || ""),

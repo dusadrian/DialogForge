@@ -71,7 +71,7 @@ export const createScriptEditorLocalizationController = function(
             try {
                 apply(language, nextAppPath, directTranslations);
             } catch {
-                // DialogR treats renderer localization as best effort.
+                // Renderer localization is best effort.
             }
         },
         changeLanguage: function(

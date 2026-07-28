@@ -8,9 +8,6 @@ import type {
     UiCommandVisibility
 } from "../../runtime/provider-contract/runtimeProvider";
 import {
-    createRuntimeExtensionMethodRequest
-} from "../../runtime/extensions/runtimeExtensionProtocol";
-import {
     createCellUpdateRequest,
     createColumnInsertRequest,
     createColumnRemoveRequest,
@@ -24,7 +21,6 @@ import {
     datasetEditorIpcChannels
 } from "../../dataset-editor/datasetEditorIpc";
 import {
-    collectDatasetViewerVariablePatchParams,
     createDatasetViewerCellUpdateResult,
     createDatasetViewerColumnInsertResult,
     createDatasetViewerColumnRemoveResult,
@@ -37,6 +33,9 @@ import {
     providerRowIndexFromDatasetViewerPayload,
     stringFromDatasetViewerPayload
 } from "../../base-app/modules/datasetViewerMutationResults";
+import {
+    applyRuntimeDatasetVariablePatch
+} from "../../runtime/tabular-data/runtimeDatasetVariablePatch";
 
 
 export interface DatasetViewerMutationIpcControllerOptions {
@@ -399,40 +398,27 @@ export const createDatasetViewerMutationIpcController = function(
                 };
             }
         ) => {
-            const input = (payload || {}) as Record<string, unknown>;
-            const objectName = String(input.name || "").trim();
-            const variableName = String(input.variableName || "").trim();
-
-            if (!objectName || !variableName) {
-                return null;
-            }
-
-            const result = await options.runtimeSessionManager.executeRuntimeMethod(
-                createRuntimeExtensionMethodRequest({
-                    method: "workspace.dataset_update_variable",
-                    params: collectDatasetViewerVariablePatchParams(input),
-                    source: "base-app.dataset-editor"
-                })
+            const result = await applyRuntimeDatasetVariablePatch(
+                options.runtimeSessionManager,
+                payload
             );
 
-            if (result.status !== "ready") {
+            if (!result) {
                 return null;
             }
 
             await notifyMutation(
                 options,
-                objectName,
+                result.objectName,
                 [{
-                    name: objectName,
+                    name: result.objectName,
                     kind: "dataset_variable_meta_changed",
-                    columns: [variableName]
+                    columns: [result.variableName]
                 }],
                 false
             );
 
-            return result.value && typeof result.value === "object"
-                ? result.value
-                : null;
+            return result.value;
         }
     );
 };

@@ -2,6 +2,13 @@ import {
     applicationEventChannels
 } from "../base-app/bootstrap/applicationEvents";
 import {
+    applicationCompositionIpcChannels
+} from "../base-app/bootstrap/applicationCompositionIpc";
+import {
+    applicationSettingsEventChannels,
+    applicationSettingsIpcChannels
+} from "../base-app/features/settings/applicationSettingsIpc";
+import {
     shellClipboardIpcChannels
 } from "../base-app/clipboard/shellClipboardIpc";
 import {
@@ -23,6 +30,12 @@ import {
     liveScriptEventChannels,
     liveScriptIpcChannels
 } from "../script-editor/collaboration/liveScriptIpc";
+import {
+    runtimeSessionIpcChannels
+} from "../core/ipc/runtimeSessionIpc";
+import {
+    workspaceIpcChannels
+} from "../core/ipc/workspaceIpc";
 
 type Listener = (...args: unknown[]) => void;
 
@@ -351,6 +364,43 @@ const dialogRuntime = {
     }
 };
 
+const settings = {
+    onLoaded: function(callback: Listener): void {
+        void invokeHost(applicationSettingsIpcChannels.readWindowPayload)
+            .then(callback)
+            .catch((error) => {
+                console.error("SETTINGS-ERR initial payload failed:", error);
+            });
+    },
+    onSaved: function(callback: Listener): void {
+        addListener(applicationSettingsEventChannels.settingsSaved, callback);
+    },
+    chooseRuntimeLocation: function(input: unknown): Promise<unknown> {
+        return invokeHost(
+            applicationSettingsIpcChannels.chooseRuntimeLocation,
+            input
+        );
+    },
+    discoverRuntimeLocation: function(input: unknown): Promise<unknown> {
+        return invokeHost(
+            applicationSettingsIpcChannels.discoverRuntimeLocation,
+            input
+        );
+    },
+    preview: function(input: unknown): void {
+        sendHost(applicationSettingsEventChannels.previewSettings, input);
+    },
+    cancelPreview: function(): void {
+        sendHost(applicationSettingsEventChannels.cancelSettingsPreview);
+    },
+    save: function(input: unknown): void {
+        sendHost(applicationSettingsEventChannels.saveSettings, input);
+    },
+    close: function(): void {
+        sendHost(applicationSettingsEventChannels.closeSettingsWindow);
+    }
+};
+
 const createDialogForgeApi = function(): BrowserDialogForgeApi {
     return {
         datasetViewer,
@@ -389,7 +439,38 @@ const createDialogForgeApi = function(): BrowserDialogForgeApi {
             })
         },
         scriptEditor,
+        settings,
         dialogRuntime,
+        restartRuntime: function(action: "clean" | "restore"): Promise<unknown> {
+            return invokeHost(runtimeSessionIpcChannels.restart, { action });
+        },
+        getComposition: function(): Promise<unknown> {
+            return invokeHost(applicationCompositionIpcChannels.get);
+        },
+        readSettings: function(): Promise<unknown> {
+            return invokeHost(applicationSettingsIpcChannels.read);
+        },
+        getRuntimeSession: function(): Promise<unknown> {
+            return invokeHost(runtimeSessionIpcChannels.get);
+        },
+        listRuntimeEvents: function(): Promise<unknown> {
+            return invokeHost(runtimeSessionIpcChannels.listEvents);
+        },
+        listPrompts: function(): Promise<unknown> {
+            return invokeHost(runtimeSessionIpcChannels.listPrompts);
+        },
+        refreshWorkspace: function(): Promise<unknown> {
+            return invokeHost(workspaceIpcChannels.refresh);
+        },
+        onRuntimeSession: function(callback: Listener): void {
+            addListener(applicationEventChannels.runtimeSession, callback);
+        },
+        onRuntimeEvents: function(callback: Listener): void {
+            addListener(applicationEventChannels.runtimeEvents, callback);
+        },
+        onWorkspace: function(callback: Listener): void {
+            addListener(applicationEventChannels.workspace, callback);
+        },
         onMainZoomFactor: (callback: Listener): void => addListener(applicationEventChannels.mainZoomFactor, callback),
         readDroppedFilePath: function(file: File): string {
             return file.name || "";
@@ -397,8 +478,20 @@ const createDialogForgeApi = function(): BrowserDialogForgeApi {
         copyPayloadToClipboard: (payload: unknown): Promise<unknown> => invokeHost(shellClipboardIpcChannels.copyPayload, payload),
         readClipboardText: (): Promise<unknown> => invokeHost(shellClipboardIpcChannels.readText),
         writeCells: (input: unknown): Promise<unknown> => invokeHost(tabularIpcChannels.writeCells, input),
+        readVariableMetadata: (objectName: string): Promise<unknown> => invokeHost(
+            tabularIpcChannels.readVariableMetadata,
+            objectName
+        ),
         writeValueLabels: (input: unknown): Promise<unknown> => invokeHost(tabularIpcChannels.writeValueLabels, input),
+        readValueLabels: (objectName: string): Promise<unknown> => invokeHost(
+            tabularIpcChannels.readValueLabels,
+            objectName
+        ),
         writeDeclaredMissing: (input: unknown): Promise<unknown> => invokeHost(tabularIpcChannels.writeDeclaredMissing, input),
+        readDeclaredMissing: (objectName: string): Promise<unknown> => invokeHost(
+            tabularIpcChannels.readDeclaredMissing,
+            objectName
+        ),
         writeVariableMetadata: (input: unknown): Promise<unknown> => invokeHost(tabularIpcChannels.writeVariableMetadata, input),
         saveScriptFile: (input: unknown): Promise<unknown> => invokeHost(scriptEditorIpcChannels.saveFile, input),
         saveScriptFileAs: (input: unknown): Promise<unknown> => invokeHost(scriptEditorIpcChannels.saveFileAs, input),

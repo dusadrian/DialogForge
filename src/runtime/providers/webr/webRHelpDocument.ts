@@ -144,6 +144,8 @@ export const fetchWebRHelpTopicDocument = async function(
     const pathValue = String(await captureHiddenText(command) || "").trim();
     const pathMatch = pathValue.match(/\/library\/([^/]+)\/html\/([^/]+)\.html$/)
         || pathValue.match(/\/library\/([^/]+)\/help\/([^/]+)$/)
+        || pathValue.match(/\/\.?dialogforge-library\/([^/]+)\/html\/([^/]+)\.html$/)
+        || pathValue.match(/\/\.?dialogforge-library\/([^/]+)\/help\/([^/]+)$/)
         || pathValue.match(/\/\.?dialogr-library\/([^/]+)\/html\/([^/]+)\.html$/)
         || pathValue.match(/\/\.?dialogr-library\/([^/]+)\/help\/([^/]+)$/);
     const resolvedPackage = String(packageName || pathMatch?.[1] || "").trim();

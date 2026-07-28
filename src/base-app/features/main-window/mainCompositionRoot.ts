@@ -32,8 +32,14 @@ import { datasetEditorStateApi } from "../../../dataset-editor/state/datasetEdit
 import { keyboardCommandsApi } from "../../../dataset-editor/commands/keyboardCommands";
 import { importFormatApi } from "../../../runtime/tabular-data/importFormat";
 import {
-    createRImportPreviewRequest
-} from "../../../runtime/providers/r/import/rImportPreviewCommand";
+    createImportPreviewRequestForFormat
+} from "../../../runtime/tabular-data/importPreviewRequest";
+import {
+    readRuntimeVersion
+} from "../../../runtime/lifecycle/runtimeVersion";
+import {
+    createRuntimeRestartMessage
+} from "../../../runtime/lifecycle/runtimeRestartMessages";
 import { createConsoleSessionState } from "../../../console/services/consoleSessionState";
 import {
     createConsoleToolbarController
@@ -191,9 +197,11 @@ let startupTasksSnapshot: EvaluatedStartupTask[] = [];
 let productCapabilitiesSnapshot: EvaluatedProductCapability[] = [];
 let productDialogsSnapshot: DialogDefinition[] = [];
 let productId = "base";
+let productDisplayName = "DialogForge";
 let packageSourcePolicy: ProductPackageSourcePolicy = {};
 let applicationI18n: Record<string, string> = {};
 let runtimeProviderId = "none";
+let runtimeDisplayName = "Runtime";
 let uiActionCommandVisibility: "hidden" | "visible" = "hidden";
 let consoleWorkingDirectoryPath = "";
 let consoleHomeDirectoryPath = "";
@@ -381,13 +389,12 @@ const renderConsoleStatus = function(session: RuntimeSessionSnapshot): void {
     const coverMessage = byId("consoleCoverMessage");
     const runtimeStatus = String(session.status || "unknown");
     const failure = String(session.message || "").trim();
-    const normalizedFailure = failure.toLowerCase();
     const message = runtimeStatus === "starting"
-        ? "Starting R runtime..."
+        ? `Starting ${runtimeDisplayName}...`
         : runtimeStatus === "failed"
-            ? normalizedFailure.includes("unable to find r")
-                ? `R was not found on this system. ${failure}`
-                : `R runtime failed to start: ${failure || "Unknown startup error."}`
+            ? `${runtimeDisplayName} failed to start: ${
+                failure || "Unknown startup error."
+            }`
             : "";
 
     status.textContent = [
@@ -412,7 +419,7 @@ const renderUpdateDownloadProgress = function(state: {
     const updateTrack = byId("updateDownloadTrack");
     const updateBar = byId("updateDownloadBar");
     const updatePercent = byId("updateDownloadPercent");
-    const productName = String(state.productName || "DialogR");
+    const productName = String(state.productName || productDisplayName);
 
     document.body.classList.toggle("update-download-visible", active);
     updateOverlay.hidden = !active;
@@ -435,22 +442,11 @@ interface RuntimeStartupOptions {
     showStartupMessages: boolean;
 }
 
-const readRuntimeRVersion = async function(): Promise<string> {
-    try {
-        const result = await dialogForge.executeInvisibleQuery({
-            query: "paste(R.version$major, R.version$minor, sep = \".\")",
-            source: "base-app.runtime-restart"
-        });
-
-        if (result.status === "ready" && typeof result.value === "string") {
-            return result.value.trim();
-        }
-    }
-    catch {
-        return "";
-    }
-
-    return "";
+const readActiveRuntimeVersion = async function(): Promise<string> {
+    return readRuntimeVersion(
+        dialogForge,
+        "base-app.runtime-restart"
+    );
 };
 
 const appendConsoleRestartMessage = async function(
@@ -461,38 +457,26 @@ const appendConsoleRestartMessage = async function(
     const activityId = `restart_${phase}_${Date.now()}_${Math.random()
         .toString(36)
         .slice(2, 8)}`;
-    let text = "";
-    let streamName = "stdout";
+    const version = phase === "completed"
+        ? await readActiveRuntimeVersion()
+        : "";
+    const restartMessage = createRuntimeRestartMessage({
+        runtimeName: runtimeDisplayName,
+        action,
+        phase,
+        version,
+        message
+    });
 
-    if (phase === "starting") {
-        text = "Restarting R...";
-    }
-    else if (phase === "completed") {
-        const version = await readRuntimeRVersion();
-
-        if (version) {
-            text = action === "restore"
-                ? `R ${version} restarted and workspace restored.`
-                : `R ${version} restarted.`;
-        }
-        else {
-            text = message;
-        }
-    }
-    else {
-        streamName = "stderr";
-        text = message || "R restart failed.";
-    }
-
-    if (!text) {
+    if (!restartMessage.text) {
         return;
     }
 
     mainConsoleCoordinator.getTranscript()?.recordRuntimeMessageStream?.({
         id: `${activityId}_stream`,
         parent_id: activityId,
-        name: streamName,
-        text
+        name: restartMessage.stream,
+        text: restartMessage.text
     });
 };
 
@@ -1033,7 +1017,7 @@ const importControls = {
 const mainImportController = createMainImportController({
     controls: importControls,
     inferFormat: inferImportFormat,
-    createPreviewRequest: createRImportPreviewRequest,
+    createPreviewRequest: createImportPreviewRequestForFormat,
     applyPlan: function(result): void {
         applyImportPlanToControls(importControls, result);
     },
@@ -1333,6 +1317,9 @@ const mainCompositionBootstrapController =
         setProductId: function(value): void {
             productId = value;
         },
+        setProductDisplayName: function(value): void {
+            productDisplayName = value;
+        },
         setPackageSourcePolicy: function(value): void {
             packageSourcePolicy = value;
         },
@@ -1347,6 +1334,9 @@ const mainCompositionBootstrapController =
         },
         setRuntimeProviderId: function(value): void {
             runtimeProviderId = value;
+        },
+        setRuntimeDisplayName: function(value): void {
+            runtimeDisplayName = value;
         },
         setMainWindowTitle: function(title): Promise<void> {
             return dialogForge.setMainWindowTitle(title);

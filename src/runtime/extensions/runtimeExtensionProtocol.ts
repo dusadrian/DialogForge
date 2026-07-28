@@ -25,6 +25,7 @@ export const createRuntimeExtensionMethodResult = function(
         providerId: input.providerId || "",
         method: input.method || "",
         value: input.value === undefined ? null : input.value,
+        workspaceUpdate: input.workspaceUpdate,
         message: input.message || "",
         executedAt: new Date().toISOString()
     };

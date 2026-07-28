@@ -4,6 +4,9 @@ import * as path from "path";
 import type {
     DialogDefinition
 } from "../core/contracts/applicationComposition";
+import {
+    readDialogCustomJSSource
+} from "./dialogCustomJSSource";
 
 
 export interface DialogSourceSummary {
@@ -183,7 +186,7 @@ export const readDialogSourceSummary = function(rootDir: string, dialog: DialogD
         const parsed = JSON.parse(fs.readFileSync(sourcePath, "utf8"));
         const properties = parsed && typeof parsed === "object" ? parsed.properties || {} : {};
         const syntax = parsed && typeof parsed === "object" ? parsed.syntax || {} : {};
-        const customJS = typeof parsed.customJS === "string" ? parsed.customJS : "";
+        const customJS = readDialogCustomJSSource(sourcePath, parsed);
         const dependencies = parseDependencies(properties.dependencies).concat(dialog.rPackages || []);
         const externalCalls = listExternalCalls(customJS);
         const productExternalCalls = externalCalls.filter((name) => {

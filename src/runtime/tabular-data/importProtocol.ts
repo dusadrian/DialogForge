@@ -48,6 +48,7 @@ export const createImportResult = function(input: Partial<ImportResult>): Import
         targetName: input.targetName || "",
         overwrite: Boolean(input.overwrite),
         transcriptEvents: input.transcriptEvents || [],
+        workspaceUpdate: input.workspaceUpdate,
         message: input.message || "",
         importedAt: new Date().toISOString()
     };

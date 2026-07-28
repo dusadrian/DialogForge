@@ -62,17 +62,7 @@ export const webRPackageLibraryBrowserCachePolicy = {
 } as const;
 
 
-const defaultLibraryMountpoint = "/.dialogr-library";
-const recommendedWebRPackageLibraryPackages = [
-    "admisc",
-    "declared",
-    "DDIwR",
-    "knitr",
-    "evaluate",
-    "highr",
-    "xfun",
-    "yaml"
-];
+const defaultLibraryMountpoint = "/.dialogforge-library";
 const webRPackageLibraryHelpExamplePackages = [
     "knitr",
     "evaluate",
@@ -181,7 +171,8 @@ export const createAvailableWebRPackageLibraryManifest = function(
     return {
         available: true,
         mountpoint: normalizeMountpoint(input.mountpoint),
-        recommendedPackages: input.recommendedPackages || recommendedWebRPackageLibraryPackages,
+        recommendedPackages:
+            input.recommendedPackages || webRPackageLibraryHelpExamplePackages,
         requiredForNativeHelpExamples:
             input.requiredForNativeHelpExamples || webRPackageLibraryHelpExamplePackages,
         metadataUrl: input.metadataUrl || "/webr-library/library.js.metadata",

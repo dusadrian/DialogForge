@@ -1,6 +1,7 @@
 import type {
     ActiveDatasetSnapshot,
     VariableMetadataSnapshot,
+    WorkspaceObjectSnapshot,
     WorkspaceSnapshot
 } from "../../runtime/provider-contract/runtimeProvider";
 
@@ -59,6 +60,7 @@ export interface ProductDialogWorkspaceData {
 export interface ProductDialogWorkspaceEntry {
     name?: string;
     kind?: string;
+    capabilities?: string[];
     columns?: string[];
     columnEntries?: unknown[];
     rows?: number;
@@ -106,6 +108,24 @@ export interface ProductDialogVariableFlagRecord extends Record<string, unknown>
     categorical: boolean;
     date: boolean;
 }
+
+
+const isProductDialogTabularEntry = function(
+    entry: ProductDialogWorkspaceEntry
+): boolean {
+    const kind = String(entry?.kind || "").trim().toLowerCase();
+    const capabilities = Array.isArray(entry?.capabilities)
+        ? entry.capabilities
+        : [];
+
+    return (
+        kind === "data.frame"
+        || kind === "table"
+        || kind === "tibble"
+        || capabilities.includes("tabular.schema")
+        || capabilities.includes("tabular.read")
+    );
+};
 
 
 export interface ProductDialogVariableEntryOptions {
@@ -322,7 +342,7 @@ export const createProductDialogWorkspaceDataFromEntries = function(
     (Array.isArray(entries) ? entries : []).forEach(function(entry): void {
         const name = String(entry?.name || "").trim();
 
-        if (!name || entry?.kind !== "data.frame") {
+        if (!name || !isProductDialogTabularEntry(entry)) {
             return;
         }
 
@@ -407,7 +427,7 @@ export const readProductDialogDatasetDescriptors = async function(
     for (const entry of Array.isArray(entries) ? entries : []) {
         const name = String(entry?.name || "").trim();
 
-        if (!name || entry?.kind !== "data.frame") {
+        if (!name || !isProductDialogTabularEntry(entry)) {
             continue;
         }
 
@@ -599,6 +619,24 @@ const readSchemaFrame = async function(
 };
 
 
+const cachedWorkspaceFrame = function(
+    object: WorkspaceObjectSnapshot
+): ProductDialogWorkspaceData["dataframe"][string] | null {
+    const columns = Array.isArray(object.columnEntries)
+        && object.columnEntries.length > 0
+        ? object.columnEntries
+        : Array.isArray(object.columns)
+            ? object.columns.map(function(name) {
+                return { name };
+            })
+            : [];
+
+    return columns.length > 0
+        ? dataframeFromSchema({ columns })
+        : null;
+};
+
+
 export const createProductDialogWorkspaceDataReader = function(
     source: ProductDialogWorkspaceSource,
     options: ProductDialogWorkspaceDataReaderOptions = {}
@@ -621,9 +659,12 @@ export const createProductDialogWorkspaceDataReader = function(
             }
 
             if (isTabularWorkspaceObject(object)) {
-                const schemaFrame = options.schemaFirst
-                    ? await readSchemaFrame(source, name)
-                    : null;
+                const preparedFrame = cachedWorkspaceFrame(object);
+                const schemaFrame = preparedFrame || (
+                    options.schemaFirst
+                        ? await readSchemaFrame(source, name)
+                        : null
+                );
                 const metadataFrame = schemaFrame
                     ? null
                     : await readVariableMetadataFrame(source, name);

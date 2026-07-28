@@ -17,6 +17,7 @@ export interface MainCompositionBootstrapBindings {
     output: HTMLElement;
     loadConsoleHistory(scope: ConsoleHistoryScope): Promise<void>;
     setProductId(productId: string): void;
+    setProductDisplayName(productName: string): void;
     setPackageSourcePolicy(
         policy: ProductPackageSourcePolicy
     ): void;
@@ -24,6 +25,7 @@ export interface MainCompositionBootstrapBindings {
     setProductDialogs(dialogs: DialogDefinition[]): void;
     setApplicationI18n(i18n: Record<string, string>): void;
     setRuntimeProviderId(runtimeProviderId: string): void;
+    setRuntimeDisplayName(runtimeName: string): void;
     setMainWindowTitle(title: string): Promise<void>;
 }
 
@@ -45,6 +47,9 @@ export const createMainCompositionBootstrapController = function(
             }
             await bindings.setMainWindowTitle(title);
             bindings.setProductId(productId);
+            bindings.setProductDisplayName(
+                composition.product.name || productId
+            );
             bindings.setPackageSourcePolicy(
                 composition.productSettings.packageSources || {}
             );
@@ -52,6 +57,9 @@ export const createMainCompositionBootstrapController = function(
             bindings.setProductDialogs(composition.productDialogs || []);
             bindings.setApplicationI18n(composition.i18n || {});
             bindings.setRuntimeProviderId(runtimeProviderId);
+            bindings.setRuntimeDisplayName(
+                composition.runtime.label || runtimeProviderId || "Runtime"
+            );
             await bindings.loadConsoleHistory({
                 productId,
                 runtimeId: runtimeProviderId

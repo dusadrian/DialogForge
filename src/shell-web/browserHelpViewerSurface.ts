@@ -1,6 +1,9 @@
 import {
     encodeHelpDocumentHtml
 } from "../runtime/help/helpDocumentEncoding";
+import {
+    createRHelpTopicTitle
+} from "../runtime/providers/r/help/rHelpPresentation";
 import type {
     BrowserFrameSurfaceController
 } from "./browserFrameSurface";
@@ -23,13 +26,6 @@ export interface BrowserHelpViewerSurface {
 export interface BrowserHelpViewerSurfaceOptions {
     frameSurfaces: BrowserFrameSurfaceController;
 }
-
-
-const helpTitle = function(topic?: string): string {
-    const cleanTopic = String(topic || "").trim();
-
-    return cleanTopic ? `R Help: ${cleanTopic}` : "R Help";
-};
 
 
 const setSurfaceTitle = function(
@@ -84,7 +80,7 @@ export const createBrowserHelpViewerSurface = function(
     let frame: HTMLIFrameElement | null = null;
 
     const open = function(document: BrowserHelpViewerDocument): void {
-        const title = helpTitle(document.topic);
+        const title = createRHelpTopicTitle(document.topic);
 
         if (frame?.contentWindow) {
             try {
@@ -131,8 +127,7 @@ export const createBrowserHelpViewerSurface = function(
             return;
         }
 
-        const title = String(data.title || "").trim();
-        const displayTitle = title ? `R Help - ${title}` : "R Help";
+        const displayTitle = createRHelpTopicTitle(data.title, " - ");
 
         setSurfaceTitle(layer, frame, displayTitle);
     };

@@ -602,14 +602,26 @@ collect_workspace_update <- function(previous_state = NULL) {
         previous_signature <- previous_signatures[[name]]
 
         if (is.null(previous_signature)) {
-            entry <- workspace_variable(name, value, updated_at, signature)
+            entry <- workspace_variable(
+                name,
+                value,
+                updated_at,
+                signature,
+                dataset_states[[name]]
+            )
             variables[[name]] <- entry
             added[[length(added) + 1L]] <- entry
             next
         }
 
         if (!identical(previous_signature, signature)) {
-            entry <- workspace_variable(name, value, updated_at, signature)
+            entry <- workspace_variable(
+                name,
+                value,
+                updated_at,
+                signature,
+                dataset_states[[name]]
+            )
             variables[[name]] <- entry
             updated[[length(updated) + 1L]] <- entry
         }
@@ -673,7 +685,17 @@ workspace_dataset_summary <- function(value, dataset_state = NULL) {
     else {
         as.character(dataset_state$columns %||% character(0))
     }
-    summary <- list(colnames = columns)
+    row_count <- if (is.null(dataset_state)) {
+        tryCatch(nrow(value), error = function(error) 0L)
+    }
+    else {
+        dataset_state$rowCount %||% 0L
+    }
+    summary <- list(
+        colnames = columns,
+        rowCount = as.integer(row_count %||% 0L),
+        columnCount = as.integer(length(columns))
+    )
 
     if (!length(columns)) {
         return(summary)
@@ -779,7 +801,13 @@ workspace_snapshot <- function() {
             previous_variable
         }
         else {
-            workspace_variable(name, value, updated_at, signature)
+            workspace_variable(
+                name,
+                value,
+                updated_at,
+                signature,
+                dataset_states[[name]]
+            )
         }
     }
 
