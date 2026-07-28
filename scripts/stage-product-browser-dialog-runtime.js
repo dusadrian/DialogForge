@@ -106,12 +106,30 @@ const buildBrowserModule = function(options) {
         format: "esm",
         platform: "browser",
         target: "es2022",
-        sourcemap: false
+        sourcemap: false,
+        alias: {
+            "@dialogforge/core": options.coreSdkEntryPath
+        }
     });
 };
 
 
 const stageProductBrowserDialogRuntime = function(options) {
+    const coreSdkEntryPath = path.join(
+        options.outputDir,
+        "node_modules",
+        "@dialogforge",
+        "core",
+        "index.js"
+    );
+
+    if (!fs.existsSync(coreSdkEntryPath)) {
+        throw new Error(
+            "The generated @dialogforge/core SDK is missing from the web "
+            + `runtime output: ${coreSdkEntryPath}`
+        );
+    }
+
     const sourcePath = path.join(
         options.productPath,
         "dialogs",
@@ -129,7 +147,8 @@ const stageProductBrowserDialogRuntime = function(options) {
         outputPath,
         entrySource: customJSRuntimeEntrySource,
         sourceFileName: "dialogforge-product-browser-runtime.ts",
-        fallbackSource: "export default {};\n"
+        fallbackSource: "export default {};\n",
+        coreSdkEntryPath
     });
     buildBrowserModule({
         sourcePath: path.join(
@@ -151,7 +170,8 @@ const stageProductBrowserDialogRuntime = function(options) {
             "export { productContribution };",
             "export default productContribution;",
             ""
-        ].join("\n")
+        ].join("\n"),
+        coreSdkEntryPath
     });
 
     const runtimeProfileSource = path.join(
