@@ -35,6 +35,7 @@ const projectRoot = path.resolve(distDir, "..");
  * @typedef {Object} ProductPackageSelection
  * @property {string} productPath
  * @property {string} platform
+ * @property {string=} arch
  * @property {string=} outputDir
  * @property {boolean=} sign
  * @property {boolean=} stageOnly
@@ -58,6 +59,10 @@ const parseArgs = function () {
         }
         else if (current === "--platform" && next) {
             selection.platform = next;
+            index += 1;
+        }
+        else if (current === "--arch" && next) {
+            selection.arch = next;
             index += 1;
         }
         else if (current === "--output-dir" && next) {
@@ -207,7 +212,7 @@ const readProductDescription = function (productManifest, manifestPath) {
     }
     return description;
 };
-const readProductAutoUpdatePolicy = function (productManifest) {
+const readEnvironmentAutoUpdatePolicy = function () {
     const releaseRepository = String(
         process.env.DIALOGFORGE_RELEASE_REPOSITORY || ""
     ).trim();
@@ -221,6 +226,9 @@ const readProductAutoUpdatePolicy = function (productManifest) {
         };
     }
 
+    return null;
+};
+const readProductAutoUpdatePolicy = function (productManifest) {
     const policy = readObject(productManifest.autoUpdate);
     const explicitUrl = String(policy.url || "").trim();
     if (explicitUrl) {
@@ -240,6 +248,16 @@ const readProductAutoUpdatePolicy = function (productManifest) {
     }
 
     return null;
+};
+const writeStagedAutoUpdatePolicy = function (packagePath, policy) {
+    if (!policy) {
+        return;
+    }
+
+    const packageJson = JSON.parse(fs.readFileSync(packagePath, "utf8"));
+    packageJson.product = readObject(packageJson.product);
+    packageJson.product.autoUpdate = policy;
+    fs.writeFileSync(packagePath, JSON.stringify(packageJson, null, 4) + "\n");
 };
 const readProductBuildConfig = function (packagePath) {
     const packageJson = JSON.parse(fs.readFileSync(packagePath, "utf8"));
@@ -273,10 +291,12 @@ const readTargetArchitectures = function (buildConfig, platform) {
 const defaultArchitectureForPlatform = function (platform) {
     return platform === "macos" ? "arm64" : "x64";
 };
-const selectPlatformArchitecture = function (platform, buildConfig) {
+const selectPlatformArchitecture = function (platform, buildConfig, explicitArch) {
     const configuredArchitectures = readTargetArchitectures(buildConfig, platform);
     const configuredArch = configuredArchitectures[0] || "";
-    const requestedArch = configuredArch || defaultArchitectureForPlatform(platform);
+    const requestedArch = String(explicitArch || "").trim()
+        || configuredArch
+        || defaultArchitectureForPlatform(platform);
 
     if (requestedArch !== "x64"
         && requestedArch !== "arm64") {
@@ -552,13 +572,17 @@ const main = function () {
     const selection = parseArgs();
     const location = resolveProductLocation(projectRoot, "base", selection.productPath);
     const stagedProductPath = stageProductForPackaging(location);
-    const productManifest = readProductManifest(path.join(stagedProductPath, "package.json"));
-    const productBuildConfig = readProductBuildConfig(path.join(stagedProductPath, "package.json"));
+    const stagedPackagePath = path.join(stagedProductPath, "package.json");
+    const productManifest = readProductManifest(stagedPackagePath);
+    const productBuildConfig = readProductBuildConfig(stagedPackagePath);
     const runtimeProviders = readProductRuntimeProviders(productManifest);
     const defaultRuntimeProvider = readProductDefaultRuntimeProvider(productManifest, runtimeProviders);
     const productVersion = String(productManifest.version || "").trim();
     const productDescription = readProductDescription(productManifest, location.manifestPath);
-    const autoUpdatePolicy = readProductAutoUpdatePolicy(productManifest);
+    const environmentAutoUpdatePolicy = readEnvironmentAutoUpdatePolicy();
+    const autoUpdatePolicy = environmentAutoUpdatePolicy
+        || readProductAutoUpdatePolicy(productManifest);
+    writeStagedAutoUpdatePolicy(stagedPackagePath, environmentAutoUpdatePolicy);
     const outputDir = selectedOutputDir(selection);
     const outputRoot = outputRootForDirectory(outputDir);
     const sign = Boolean(selection.sign);
@@ -569,7 +593,11 @@ const main = function () {
     const appId = String(productManifest.appId || "").trim()
         || defaultAppId(location.id);
     const iconBasePath = path.join(stagedProductPath, "assets/icons/icon");
-    selection.arch = selectPlatformArchitecture(selection.platform, productBuildConfig);
+    selection.arch = selectPlatformArchitecture(
+        selection.platform,
+        productBuildConfig,
+        selection.arch
+    );
     const buildConfigPath = createBuildConfigPath(
         productBuildConfig,
         stagedProductPath,
