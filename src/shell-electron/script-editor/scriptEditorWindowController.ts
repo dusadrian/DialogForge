@@ -90,6 +90,20 @@ export const createScriptEditorWindowController = function(
                 options.createInitPayload()
             );
         });
+        nextWindow.webContents.on("render-process-gone", (_event, details) => {
+            if (win !== nextWindow) {
+                return;
+            }
+
+            // A gone renderer answers no IPC. Drop the ready flag so closing the
+            // window never waits on a save handshake that cannot arrive.
+            pageLoaded = false;
+            options.pendingWork.resetRenderer();
+            console.error(
+                "SCRIPT-EDITOR-ERR renderer process gone:",
+                JSON.stringify(details)
+            );
+        });
         nextWindow.on("close", (event) => {
             if (!options.shouldPreventClose()) {
                 return;
@@ -138,11 +152,18 @@ export const createScriptEditorWindowController = function(
         return true;
     };
     const send = function(channel: string, payload: unknown): boolean {
-        if (!win || win.isDestroyed()) {
+        if (!win || win.isDestroyed() || win.webContents.isCrashed()) {
             return false;
         }
 
-        win.webContents.send(channel, payload);
+        try {
+            win.webContents.send(channel, payload);
+        }
+        catch {
+            // The render frame can be disposed between the checks above and the
+            // send; a publisher must never fail because of that.
+            return false;
+        }
 
         return true;
     };

@@ -114,6 +114,14 @@ import {
   sanitizeLiveScriptDisplayName,
   type LiveScriptSessionTicket
 } from '../collaboration/index.js';
+// Static imports only: the Electron renderer runs this module as CommonJS and
+// cannot service a dynamic import() (see scriptEditorHostModules).
+import {
+  createHttpLiveScriptRendezvous
+} from '../collaboration/liveScriptRendezvous';
+import {
+  createHttpLiveScriptParticipantRendezvous
+} from '../collaboration/liveScriptParticipantRendezvous';
 import type {
   LiveScriptRendezvousProvider,
   LiveScriptRendezvousPublication
@@ -741,17 +749,11 @@ const initializeLiveScriptUi = async function(): Promise<void> {
   if (capability.rendezvousUrl) {
     try {
       if (liveCanHost) {
-        const rendezvous = await import(
-          '../collaboration/liveScriptRendezvous.js'
-        );
-        liveRendezvous = rendezvous.createHttpLiveScriptRendezvous({
+        liveRendezvous = createHttpLiveScriptRendezvous({
           baseUrl: capability.rendezvousUrl
         });
       } else {
-        const rendezvous = await import(
-          '../collaboration/liveScriptParticipantRendezvous.js'
-        );
-        liveRendezvous = rendezvous.createHttpLiveScriptParticipantRendezvous({
+        liveRendezvous = createHttpLiveScriptParticipantRendezvous({
           baseUrl: capability.rendezvousUrl
         });
       }

@@ -200,9 +200,19 @@ export const createScriptEditorComposition = function(
 
         closeConfirming = true;
         try {
-            const saved = pendingWork.isRendererReady()
-                ? await requestSaveForClose(win)
-                : await saveDirtyContent(win);
+            // A crashed renderer never answers the save handshake, so fall back
+            // to the content the main process already holds -- and to closing
+            // outright when that content has nothing left to save.
+            const canAskRenderer = pendingWork.isRendererReady()
+                && !win.webContents.isCrashed();
+            let saved = true;
+
+            if (canAskRenderer) {
+                saved = await requestSaveForClose(win);
+            }
+            else if (dirtyState.dirty) {
+                saved = await saveDirtyContent(win);
+            }
 
             if (!saved) {
                 return;

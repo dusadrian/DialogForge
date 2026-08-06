@@ -3,6 +3,17 @@ import type {
     LiveScriptParticipantState,
     LiveScriptTransportStateEvent
 } from "../collaboration/index.js";
+import {
+    loadScriptEditorHostModule
+} from "./scriptEditorHostModules";
+
+
+interface QrcodeModule {
+    toDataURL(
+        text: string,
+        options: Record<string, unknown>
+    ): Promise<string>;
+}
 
 
 export interface LiveScriptPanelLabels {
@@ -160,15 +171,13 @@ export const createLiveScriptPanelController = function(
     ): Promise<void> {
         const labels = options.getLabels();
         clear("host", `${labels.shareLive}: ${displayName}`);
-        const webHosted = location.protocol === "http:"
-            || location.protocol === "https:";
-        const qrcodeModule = webHosted
-            ? "/vendor/qrcode/qrcode.mjs"
-            : "qrcode";
-        const qrcode = await import(qrcodeModule);
+        const qrcode = await loadScriptEditorHostModule({
+            commonJsSpecifier: "qrcode",
+            browserModuleUrl: "/vendor/qrcode/qrcode.mjs"
+        }) as QrcodeModule;
         const qrImage = createElement("img", "dm-live-panel__qr");
         qrImage.alt = labels.sessionLink;
-        qrImage.src = await qrcode.default.toDataURL(link, {
+        qrImage.src = await qrcode.toDataURL(link, {
             errorCorrectionLevel: "M",
             margin: 1,
             width: 196

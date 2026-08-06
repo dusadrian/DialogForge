@@ -787,6 +787,10 @@ electronApplicationLifecycle.bindElectronApplicationLifecycle({
             target: electronSmokeTarget,
             getHelpWindow: externalWindowComposition.getHelpWindow,
             openHelpTopic: externalWindowComposition.openHelpTopic,
+            getScriptEditorWindow: scriptEditorComposition.windowController.getWindow,
+            insertScriptEditorCode: function (code) {
+                return scriptEditorComposition.insertCode(code);
+            },
             startRuntimeSession: async function () {
                 if (runtimeSessionManager.getSnapshot().status !== "ready") {
                     await runtimeSessionManager.start();

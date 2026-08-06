@@ -11,6 +11,8 @@ export interface ElectronSmokeRunnerOptions {
         source: string;
     }): Promise<unknown>;
     startRuntimeSession?(): Promise<unknown>;
+    getScriptEditorWindow?(): BrowserWindow | null;
+    insertScriptEditorCode?(code: string): Promise<unknown>;
 }
 
 interface ElectronSmokeContext {
@@ -218,6 +220,139 @@ const runConsoleHistorySmoke = async function(
 };
 
 
+const runScriptEditorSmoke = async function(
+    messages: string[],
+    context: ElectronSmokeContext,
+    getScriptEditorWindow: () => BrowserWindow | null,
+    insertScriptEditorCode: (code: string) => Promise<unknown>
+): Promise<void> {
+    const code = "1 + 1";
+    const watched = new WeakSet<BrowserWindow>();
+    const watchRenderer = function(editorWindow: BrowserWindow): void {
+        if (watched.has(editorWindow)) {
+            return;
+        }
+
+        watched.add(editorWindow);
+        editorWindow.webContents.on("console-message", (
+            _event,
+            level,
+            message,
+            line,
+            sourceId
+        ) => {
+            messages.push(
+                `script-editor:${level}:${sourceId}:${line}:${message}`
+            );
+        });
+        editorWindow.webContents.on("render-process-gone", (_event, details) => {
+            messages.push("render-process-gone:" + JSON.stringify(details));
+        });
+    };
+
+    await insertScriptEditorCode(code);
+
+    const started = Date.now();
+    let result: unknown = null;
+    let diagnostic: unknown = {
+        scriptEditorWindow: "not-created"
+    };
+
+    while (Date.now() - started < 20000) {
+        const editorWindow = getScriptEditorWindow();
+
+        if (editorWindow && !editorWindow.isDestroyed()) {
+            watchRenderer(editorWindow);
+        }
+
+        if (
+            editorWindow
+            && !editorWindow.isDestroyed()
+            && !editorWindow.webContents.isLoading()
+        ) {
+            if (editorWindow.webContents.isCrashed()) {
+                throw new Error(
+                    "Electron script editor smoke lost the renderer process: "
+                    + JSON.stringify({ messages }, null, 4)
+                );
+            }
+
+            diagnostic = await editorWindow.webContents.executeJavaScript(
+                `(() => {
+                    const toolbar = document.querySelector(".dm-script-toolbar");
+                    const editor = document.querySelector(".monaco-editor");
+                    // Monaco renders leading and repeated spaces as
+                    // non-breaking spaces, so compare on normalized text.
+                    const text = (document.body?.innerText || "")
+                        .replace(/\\u00a0/g, " ");
+                    return {
+                        ok: Boolean(toolbar && editor && text.includes(${
+                            JSON.stringify(code)
+                        })),
+                        hasToolbar: Boolean(toolbar),
+                        hasEditor: Boolean(editor),
+                        title: document.title,
+                        bodyText: text.slice(0, 240)
+                    };
+                })()`,
+                true
+            );
+
+            result = diagnostic && (diagnostic as { ok?: boolean }).ok
+                ? diagnostic
+                : null;
+
+            if (result) {
+                break;
+            }
+        }
+
+        await new Promise((resolve) => {
+            setTimeout(resolve, 100);
+        });
+    }
+
+    if (!result) {
+        throw new Error(
+            "Electron script editor smoke did not receive the sent code: "
+            + JSON.stringify({ diagnostic, messages }, null, 4)
+        );
+    }
+
+    // The editor renders before its live-sharing setup finishes, and a renderer
+    // that dies during that tail leaves a blank window behind. Let the tail run
+    // out before declaring the window healthy.
+    await new Promise((resolve) => {
+        setTimeout(resolve, 3000);
+    });
+
+    const settledWindow = getScriptEditorWindow();
+
+    if (
+        !settledWindow
+        || settledWindow.isDestroyed()
+        || settledWindow.webContents.isCrashed()
+        || messages.some((message) => {
+            return message.startsWith("render-process-gone:");
+        })
+    ) {
+        throw new Error(
+            "Electron script editor smoke lost the renderer after boot: "
+            + JSON.stringify({ result, messages }, null, 4)
+        );
+    }
+
+    console.log(JSON.stringify({
+        ok: true,
+        smoke: "electron-script-editor",
+        product: context.product,
+        runtime: context.runtime,
+        result,
+        messages
+    }, null, 4));
+};
+
+
 const runHelpSmoke = async function(
     win: BrowserWindow,
     messages: string[],
@@ -335,6 +470,21 @@ export const runElectronSmoke = async function(options: ElectronSmokeRunnerOptio
             product,
             runtime
         });
+        return;
+    }
+
+    if (electronSmokeTarget === "script-editor") {
+        if (!options.getScriptEditorWindow || !options.insertScriptEditorCode) {
+            throw new Error(
+                "Electron script editor smoke requires a window reader and a"
+                + " code sender."
+            );
+        }
+
+        await runScriptEditorSmoke(messages, {
+            product,
+            runtime
+        }, options.getScriptEditorWindow, options.insertScriptEditorCode);
         return;
     }
 
