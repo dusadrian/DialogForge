@@ -23,6 +23,12 @@ export interface ProfileCustomJSApi {
     getObjects?: () => unknown[] | Promise<unknown[]>;
     emitSelectionChange?: boolean;
   }) => void;
+  // Resolve how a selected object should be referred to in a generated
+  // command, for example replacing a filtered dataset with a subset() call.
+  // The runtime caches the results so getReference() can stay synchronous.
+  registerObjectReferenceResolver?: (
+    resolver: (objectName: string) => string | Promise<string>
+  ) => void;
   bindObjects?: (request: {
     dialog?: string;
     datasets: string;

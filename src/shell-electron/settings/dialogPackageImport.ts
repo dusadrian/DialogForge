@@ -116,7 +116,10 @@ const readZip = function(buffer: Buffer): Map<string, Buffer> {
 };
 
 
-const safePackageFiles = function(files: Map<string, Buffer>): DialogPackageFile[] {
+const safePackageFiles = function(
+    files: Map<string, Buffer>,
+    scriptEntry: string
+): DialogPackageFile[] {
     const out: DialogPackageFile[] = [];
 
     files.forEach((data, fileName) => {
@@ -127,6 +130,7 @@ const safePackageFiles = function(files: Map<string, Buffer>): DialogPackageFile
             || name === DIALOG_JSON
             || name === ACTIONS_JS
             || name === LEGACY_CUSTOM_JS
+            || name === scriptEntry
             || path.isAbsolute(name)
             || name.split("/").some((part) => part === "..")
         ) {
@@ -143,16 +147,91 @@ const safePackageFiles = function(files: Map<string, Buffer>): DialogPackageFile
 };
 
 
+// A dialog folder is what unzipping a .dc.zip produces: dialog.json next to the
+// script entry. Dialog Creator loads either form, and so does this importer.
+const isDialogDirectory = function(sourcePath: string): boolean {
+    try {
+        return fs.statSync(sourcePath).isDirectory()
+            && fs.existsSync(path.join(sourcePath, DIALOG_JSON));
+    }
+    catch {
+        return false;
+    }
+};
+
+
+const readDirectoryFiles = function(rootDirectory: string): Map<string, Buffer> {
+    const files = new Map<string, Buffer>();
+    const walk = function(current: string, prefix: string): void {
+        const entries = fs.readdirSync(current, {
+            withFileTypes: true
+        });
+
+        entries.forEach((entry) => {
+            // Never follow links: a dialog folder must not reach outside itself.
+            if (entry.isSymbolicLink()) {
+                return;
+            }
+
+            const name = prefix
+                ? `${prefix}/${entry.name}`
+                : entry.name;
+            const fullPath = path.join(current, entry.name);
+
+            if (entry.isDirectory()) {
+                walk(fullPath, name);
+                return;
+            }
+
+            if (entry.isFile()) {
+                files.set(name, fs.readFileSync(fullPath));
+            }
+        });
+    };
+
+    walk(rootDirectory, "");
+
+    return files;
+};
+
+
+const readSourceFiles = function(sourcePath: string): Map<string, Buffer> {
+    if (isDialogDirectory(sourcePath)) {
+        return readDirectoryFiles(sourcePath);
+    }
+
+    let isDirectory = false;
+
+    try {
+        isDirectory = fs.statSync(sourcePath).isDirectory();
+    }
+    catch {
+        isDirectory = false;
+    }
+
+    if (isDirectory) {
+        throw new Error(
+            `Invalid DialogCreator folder: missing ${DIALOG_JSON}.`
+        );
+    }
+
+    if (!sourcePath.toLowerCase().endsWith(PACKAGE_SUFFIX)) {
+        throw new Error(
+            "Unsupported dialog source. Choose a .dc.zip package or a dialog"
+            + ` folder containing ${DIALOG_JSON}.`
+        );
+    }
+
+    return readZip(fs.readFileSync(sourcePath));
+};
+
+
 const readPackageDialog = function(packagePath: string): {
     dialogJson: string;
     actionsJs: string;
     supportFiles: DialogPackageFile[];
 } {
-    if (!packagePath.toLowerCase().endsWith(PACKAGE_SUFFIX)) {
-        throw new Error("Unsupported dialog package. Choose a .dc.zip file.");
-    }
-
-    const files = readZip(fs.readFileSync(packagePath));
+    const files = readSourceFiles(packagePath);
     const dialogFile = files.get(DIALOG_JSON);
 
     if (!dialogFile) {
@@ -180,7 +259,7 @@ const readPackageDialog = function(packagePath: string): {
     return {
         dialogJson: JSON.stringify(dialog, null, 4) + "\n",
         actionsJs: customFile.toString("utf8"),
-        supportFiles: safePackageFiles(files)
+        supportFiles: safePackageFiles(files, entry)
     };
 };
 
@@ -304,7 +383,6 @@ export const planDialogPackageImport = function(
             label,
             owner,
             targetHome,
-            sourceReference: packagePath,
             sourceFile,
             status: "source-imported",
             replacement: "Run through the DialogCreator-compatible DialogForge dialog runtime."

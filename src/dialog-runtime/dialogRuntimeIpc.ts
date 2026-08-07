@@ -80,6 +80,8 @@ export const dialogRuntimeEventChannels = {
     commandUpdate: "dialogCommandUpdate",
     stateUpdate: "dialogCurrentStateUpdate",
     closeWindow: "dialogCloseWindow",
+    // Wire name kept as "showMessageBox": the browser shell already routes it.
+    showMessage: "showMessageBox",
     created: "dialogCreated",
     incomingData: "dialogIncomingData",
     requirementsLoaded: "base-app:dialog-runtime-requirements-loaded",

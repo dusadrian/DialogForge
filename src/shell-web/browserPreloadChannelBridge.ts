@@ -438,8 +438,17 @@ export const createBrowserPreloadChannelBridge = function(
                 return;
             }
 
-            if (channel === "showMessageBox") {
-                options.appendMessage(String(args?.[2] || args?.[1] || args?.[0] || ""), "web-transcript__line");
+            if (channel === dialogRuntimeEventChannels.showMessage) {
+                // (type, message, detail): keep both parts, the browser shell
+                // has no native message box to separate them.
+                const parts = [args?.[1], args?.[2]]
+                    .map((part) => String(part ?? "").trim())
+                    .filter(Boolean);
+
+                options.appendMessage(
+                    parts.join(" — ") || String(args?.[0] || ""),
+                    "web-transcript__line"
+                );
                 return;
             }
 

@@ -1,6 +1,12 @@
 import type { DialogControlModel } from "./dialogControlModel";
 import type { DialogControlState } from "./dialogControlModel";
 import { createDialogScriptApi } from "./dialogScriptApi";
+import {
+    renderDialogSyntaxBlock,
+    renderDialogSyntaxCall,
+    renderDialogSyntaxIndent,
+    type DialogSyntaxPart
+} from "./dialogSyntaxBuilders";
 import type { DialogRuntimeHarness } from "./dialogRuntimeHarness";
 
 
@@ -289,6 +295,8 @@ export const createDialogScriptRunner = function(options: DialogScriptRunnerOpti
         "addError",
         "addValue",
         "bindObjects",
+        "block",
+        "call",
         "callExternal",
         "check",
         "clearContent",
@@ -302,12 +310,14 @@ export const createDialogScriptRunner = function(options: DialogScriptRunnerOpti
         "enableSearch",
         "getDatasetEditorState",
         "getImportPreview",
+        "getReference",
         "getSelected",
         "getValue",
         "getWorkingDirectory",
         "gotoDatasetEditorCase",
         "gotoDatasetEditorVariable",
         "hide",
+        "indent",
         "isChecked",
         "listColumns",
         "listObjects",
@@ -328,6 +338,12 @@ export const createDialogScriptRunner = function(options: DialogScriptRunnerOpti
         api.addError,
         api.addValue,
         bindObjects,
+        function(...statements: unknown[]) {
+            return renderDialogSyntaxBlock(statements as DialogSyntaxPart[]);
+        },
+        function(name: unknown, ...args: unknown[]) {
+            return renderDialogSyntaxCall(name, args as DialogSyntaxPart[]);
+        },
         callExternal,
         api.check,
         api.clearContent,
@@ -357,6 +373,11 @@ export const createDialogScriptRunner = function(options: DialogScriptRunnerOpti
         async function(payload: unknown) {
             return options.getImportPreview ? options.getImportPreview(payload) : null;
         },
+        // This runner has no product data environment, so an object is always
+        // referred to by its plain name.
+        function(controlName: unknown) {
+            return String(api.getSelected(String(controlName ?? ""))[0] ?? "").trim();
+        },
         api.getSelected,
         api.getValue,
         async function() {
@@ -377,6 +398,9 @@ export const createDialogScriptRunner = function(options: DialogScriptRunnerOpti
             return null;
         },
         api.hide,
+        function(text: unknown, levels: unknown) {
+            return renderDialogSyntaxIndent(text, levels);
+        },
         api.isChecked,
         function(objectName: unknown) {
             return options.listColumns ? options.listColumns(String(objectName || "")) : [];

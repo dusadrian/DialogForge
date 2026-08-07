@@ -327,7 +327,9 @@ const renderSelectedCommand = function(
     }
     if (command.target) {
         helpers.appendField(panel, "target", command.target.targetHome);
-        if (command.target.sourceReference) {
+        // Only feature entrypoints record where they were composed from;
+        // dialog definitions are located through their own sourceFile.
+        if ("sourceReference" in command.target && command.target.sourceReference) {
             helpers.appendField(panel, "source", command.target.sourceReference);
         }
         helpers.appendField(panel, "status", command.target.status);

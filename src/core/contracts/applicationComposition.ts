@@ -74,7 +74,6 @@ export interface DialogDefinition {
     status?: string;
     targetHome?: string;
     replacement?: string;
-    sourceReference?: string;
     sourceFile?: string;
     rPackages?: string[];
 }

@@ -4,7 +4,6 @@
         "label": "Import data",
         "owner": "src/base-app",
         "targetHome": "src/base-app/dialogs/import",
-        "sourceReference": "../DialogQCA/src/dialogs/import.json",
         "sourceFile": "source/import/dialog.json",
         "status": "source-imported",
         "replacement": "Rebuilt as a shared import dialog backed by runtime import capabilities.",

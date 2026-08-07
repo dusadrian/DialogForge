@@ -20,11 +20,33 @@ export interface ProductDialogIpcWindowController {
 }
 
 
+export interface ProductDialogMessageRequest {
+    type: "info" | "warning" | "error" | "question";
+    message: string;
+    detail: string;
+}
+
+
 export interface ProductDialogIpcControllerOptions {
     ipcMain: IpcMain;
     windowController: ProductDialogIpcWindowController;
     eventController: ProductDialogEventController;
+    showMessage(request: ProductDialogMessageRequest, sender: unknown): void;
 }
+
+
+const messageTypes = new Set(["info", "warning", "error", "question"]);
+
+
+const readMessageType = function(
+    value: unknown
+): ProductDialogMessageRequest["type"] {
+    const type = String(value ?? "").trim().toLowerCase();
+
+    return messageTypes.has(type)
+        ? type as ProductDialogMessageRequest["type"]
+        : "info";
+};
 
 
 export const createProductDialogIpcController = function(
@@ -56,6 +78,25 @@ export const createProductDialogIpcController = function(
         command: unknown
     ) => {
         options.eventController.updateCommand(event.sender.id, command);
+    });
+
+    options.ipcMain.on(dialogRuntimeEventChannels.showMessage, (
+        event: IpcMainEvent,
+        type: unknown,
+        message: unknown,
+        detail: unknown
+    ) => {
+        const text = String(message ?? "").trim();
+
+        if (!text) {
+            return;
+        }
+
+        options.showMessage({
+            type: readMessageType(type),
+            message: text,
+            detail: String(detail ?? "")
+        }, event.sender);
     });
 
     options.ipcMain.on(dialogRuntimeEventChannels.stateUpdate, (

@@ -11,6 +11,11 @@ import {
 import {
   scriptEditorEventChannels
 } from "../../../script-editor/scriptEditorIpc";
+import {
+  renderDialogSyntaxBlock,
+  renderDialogSyntaxCall,
+  renderDialogSyntaxIndent
+} from "../../custom-js/dialogSyntaxBuilders";
 
 // Imported dialog scripts are user-authored JavaScript. Values crossing this
 // compatibility boundary remain dynamic; host-owned APIs are typed separately.
@@ -920,6 +925,37 @@ const customJSRuntime = {
       }
     };
 
+    const changeValue = (
+      el: DialogScriptValue,
+      oldValue: DialogScriptValue,
+      newValue: DialogScriptValue
+    ) => {
+      const name = coerceName(el);
+      const obj = findOrNull(el);
+      if (!obj) {
+        throw new SyntaxError(`Element not found: ${name}`);
+      }
+      if (inferType(obj) !== 'container') {
+        throw new SyntaxError('changeValue() can only be applied to Container elements');
+      }
+
+      const from = String(oldValue ?? '').trim();
+      const to = String(newValue ?? '').trim();
+      if (!from || !to || from === to) return;
+
+      const existing = Array.isArray(obj.__scriptItems) ? obj.__scriptItems.slice() : [];
+      const index = existing.findIndex((item: DialogScriptValue) => String(item) === from);
+      if (index < 0) return;
+
+      existing[index] = to;
+      setContainerItems(obj, existing);
+
+      // Keep the selection mirror pointing at the renamed row.
+      const selected = (Array.isArray(obj.value) ? obj.value : [])
+        .map((item: DialogScriptValue) => (String(item) === from ? to : item));
+      if (typeof obj.setValue === 'function') obj.setValue(selected);
+    };
+
     const clearContent = (...els: DialogScriptValue[]) => {
       els.forEach((el) => {
         const obj = findOrNull(el);
@@ -1200,6 +1236,54 @@ const customJSRuntime = {
       refresh: () => void | Promise<void>
     }>();
 
+    // How a selected object should be written into a generated command. A
+    // product registers a resolver — DialogR substitutes an active filter with
+    // the matching subset() call. Resolved values are cached and kept warm by
+    // the object binding, so getReference() stays synchronous for dialogs.
+    const objectReferences = new Map<string, string>();
+    let objectReferenceResolver: ((objectName: string) => unknown) | null = null;
+
+    const registerObjectReferenceResolver = (resolver: DialogScriptValue) => {
+      objectReferenceResolver = typeof resolver === 'function'
+        ? resolver as (objectName: string) => unknown
+        : null;
+      objectReferences.clear();
+    };
+
+    const refreshObjectReference = async (objectName: DialogScriptValue) => {
+      const name = String(objectName ?? '').trim();
+
+      if (!name || !objectReferenceResolver) return;
+
+      try {
+        const resolved = await objectReferenceResolver(name);
+        const reference = String(resolved ?? '').trim();
+
+        if (reference && reference !== name) {
+          objectReferences.set(name, reference);
+        } else {
+          objectReferences.delete(name);
+        }
+      } catch {
+        // A product that cannot resolve a reference just keeps the plain name.
+        objectReferences.delete(name);
+      }
+    };
+
+    const refreshObjectReferences = async (objectNames: string[]) => {
+      if (!objectReferenceResolver) return;
+
+      await Promise.all(objectNames.map(refreshObjectReference));
+    };
+
+    const getReference = (el: DialogScriptValue) => {
+      const selected = String(getSelected(el)[0] ?? '').trim();
+
+      if (!selected) return '';
+
+      return objectReferences.get(selected) || selected;
+    };
+
     const normalizeObjectBindingRequest = (request: DialogScriptValue) => {
       if (!request || typeof request !== 'object' || Array.isArray(request)) {
         throw new SyntaxError('bindObjects() expects a binding object');
@@ -1265,11 +1349,24 @@ const customJSRuntime = {
           // local object sources above. Full hosts may provide a fresher
           // workspace snapshot through the generic bindObjects route.
         }
+
+        // Resolve every listed object, not just the selected one, so that
+        // getReference() can answer synchronously as soon as the user picks.
+        await refreshObjectReferences(listObjects('datasets'));
       };
 
       if (variableContainers.length > 0) {
         onChange(datasetControl, refreshVariables);
       }
+
+      // A filter can be changed by another dialog while this one is open, so
+      // re-resolve the object that was just selected.
+      onChange(datasetControl, () => {
+        trackInitializationTask(
+          refreshObjectReference(getSelected(datasetControl)[0]),
+          `binding:${datasetControl}:reference`
+        );
+      });
 
       const binding = { refresh };
       objectBindings.set(bindingKey, binding);
@@ -1700,7 +1797,25 @@ const customJSRuntime = {
     };
 
     const api: ProfileCustomJSApi = {
-      showMessage: (msg: DialogScriptValue, detail: DialogScriptValue) => console.log('[Dialog message]', msg, detail || ''),
+      // (message, detail?, type?) — the strings are translated with the active
+      // dialog locale, like addError()/clearError().
+      showMessage: (
+        msg: DialogScriptValue,
+        detail: DialogScriptValue,
+        type: DialogScriptValue
+      ) => {
+        const message = translateMessage(msg);
+        if (!String(message ?? '').trim()) return;
+        const allowed = new Set(['info', 'warning', 'error', 'question']);
+        const requested = String(type ?? '').trim().toLowerCase();
+        coms.sendTo(
+          'main',
+          dialogRuntimeEventChannels.showMessage,
+          allowed.has(requested) ? requested : 'info',
+          message,
+          translateMessage(detail)
+        );
+      },
       getValue,
       setValue,
       callExternal: async (name: DialogScriptValue, parameters: DialogScriptValue) => {
@@ -1781,7 +1896,9 @@ const customJSRuntime = {
       resetDialog,
       registerExternalCall,
       registerObjectSource,
+      registerObjectReferenceResolver,
       bindObjects,
+      getReference,
       listObjects,
       getObjects,
       listColumns,
@@ -1796,7 +1913,15 @@ const customJSRuntime = {
       gotoDatasetEditorVariable,
       addError,
       clearError,
-      changeValue: () => {}
+      changeValue,
+      // Syntax-building helpers: they only arrange whitespace, so they behave
+      // the same whatever the dialog's runtime provider is.
+      call: (name: DialogScriptValue, ...args: DialogScriptValue[]) =>
+        renderDialogSyntaxCall(name, args),
+      block: (...statements: DialogScriptValue[]) =>
+        renderDialogSyntaxBlock(statements),
+      indent: (text: DialogScriptValue, levels: DialogScriptValue) =>
+        renderDialogSyntaxIndent(text, levels)
     };
 
     api.getElementNode = getElementNode;

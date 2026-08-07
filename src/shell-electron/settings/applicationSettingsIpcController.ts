@@ -382,19 +382,62 @@ export const createApplicationSettingsIpcController = function(
             return;
         }
 
-        const picked = await options.dialog.showOpenDialog(
-            menuCustomizationWindow,
+        // A dialog source is either a .dc.zip package or the folder that
+        // unzipping it produces. macOS can offer both in one panel; Windows and
+        // Linux cannot, so there the kind is chosen first.
+        const packageFilters = [
             {
-                title: options.translate("Choose DialogCreator package"),
-                properties: ["openFile"],
-                filters: [
-                    {
-                        name: "DialogCreator package",
-                        extensions: ["dc.zip"]
-                    }
-                ]
+                name: "DialogCreator package",
+                extensions: ["dc.zip"]
             }
-        );
+        ];
+        const pickSource = async function() {
+            if (process.platform === "darwin") {
+                return options.dialog.showOpenDialog(menuCustomizationWindow, {
+                    title: options.translate(
+                        "Choose DialogCreator package or folder"
+                    ),
+                    properties: ["openFile", "openDirectory"],
+                    filters: packageFilters
+                });
+            }
+
+            const kind = await options.dialog.showMessageBox(
+                menuCustomizationWindow,
+                {
+                    type: "question",
+                    title: options.translate("Import dialog"),
+                    message: options.translate(
+                        "Import a DialogCreator package file or a dialog folder?"
+                    ),
+                    buttons: [
+                        options.translate("Cancel"),
+                        options.translate("Package file"),
+                        options.translate("Folder")
+                    ],
+                    defaultId: 1,
+                    cancelId: 0
+                }
+            );
+
+            if (kind.response === 0) {
+                return {
+                    canceled: true,
+                    filePaths: [] as string[]
+                };
+            }
+
+            return options.dialog.showOpenDialog(menuCustomizationWindow, {
+                title: kind.response === 2
+                    ? options.translate("Choose dialog folder")
+                    : options.translate("Choose DialogCreator package"),
+                properties: kind.response === 2
+                    ? ["openDirectory"]
+                    : ["openFile"],
+                ...(kind.response === 2 ? {} : { filters: packageFilters })
+            });
+        };
+        const picked = await pickSource();
 
         if (picked.canceled || picked.filePaths.length === 0) {
             return;
@@ -443,7 +486,7 @@ export const createApplicationSettingsIpcController = function(
                 type: "error",
                 title: options.translate("Error"),
                 message: options.translate(
-                    "Selected file is not a valid DialogCreator package."
+                    "Selected item is not a valid DialogCreator package or dialog folder."
                 ),
                 detail: error instanceof Error ? error.message : String(error),
                 buttons: [

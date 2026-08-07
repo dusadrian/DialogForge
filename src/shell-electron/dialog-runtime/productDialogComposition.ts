@@ -1,6 +1,11 @@
+import {
+    BrowserWindow as BrowserWindowValue,
+    dialog
+} from "electron";
 import type {
     BrowserWindow,
-    IpcMain
+    IpcMain,
+    WebContents
 } from "electron";
 
 import type {
@@ -94,7 +99,28 @@ export const createProductDialogComposition = function(
     createProductDialogIpcController({
         ipcMain: options.ipcMain,
         windowController,
-        eventController: events
+        eventController: events,
+        showMessage: function(request, sender): void {
+            // Parent the message box on the dialog that raised it, so it stays
+            // attached to the window the user is looking at.
+            const senderWindow = sender
+                ? BrowserWindowValue.fromWebContents(sender as WebContents)
+                : null;
+            const parent = senderWindow && !senderWindow.isDestroyed()
+                ? senderWindow
+                : options.getParentWindow();
+            const messageOptions = {
+                type: request.type,
+                buttons: ["OK"],
+                defaultId: 0,
+                message: request.message,
+                ...(request.detail ? { detail: request.detail } : {})
+            };
+
+            void (parent && !parent.isDestroyed()
+                ? dialog.showMessageBox(parent, messageOptions)
+                : dialog.showMessageBox(messageOptions));
+        }
     });
 
     return {
