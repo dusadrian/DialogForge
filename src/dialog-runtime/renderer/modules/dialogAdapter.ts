@@ -271,6 +271,7 @@ function mapPlot(el: DialogCreatorElement): Record<string, unknown> {
     borderColor: toStringOr(el.borderColor, defaultSettings.plot.borderColor || '#c9c9c9'),
     isVisible: toBoolString(el.isVisible, true),
     isEnabled: toBoolString(el.isEnabled, true),
+    resizeWithDialog: toBoolString(el.resizeWithDialog, false),
     elementIds: toArray(el.elementIds),
     conditions: toStringOr(el.conditions, '')
   };
@@ -500,6 +501,12 @@ export function normalizeNewDialogForRuntime(source: DialogCreatorSchema): Runti
     } else {
       mapped = mapperByType[type](rawElement);
     }
+    // applyPosition honours this for every element type, so it is carried here
+    // rather than repeated in each per-type mapper. The raw value is kept
+    // because it may name per-axis fractions rather than a plain boolean.
+    mapped.moveWithDialog = rawElement.moveWithDialog === undefined
+      ? 'false'
+      : String(rawElement.moveWithDialog);
     runtimeElements[`${index}_${name}`] = mapped;
   });
 
@@ -514,7 +521,12 @@ export function normalizeNewDialogForRuntime(source: DialogCreatorSchema): Runti
       height: toNumber(source.properties.height, 480),
       fontSize: toNumber(source.properties.fontSize, 12),
       background: toStringOr(source.properties.background, '#ffffff'),
-      dependencies: toStringOr(source.properties.dependencies, '')
+      dependencies: toStringOr(source.properties.dependencies, ''),
+      resizable: toBoolString(source.properties.resizable, false) === 'true',
+      preserveAspectRatio: toBoolString(
+        source.properties.preserveAspectRatio,
+        false
+      ) === 'true'
     },
     syntax: {
       command: toStringOr(source.syntax?.command, ''),

@@ -9,7 +9,8 @@ import type {
 } from "./dialogRuntimeTypes";
 import {
     asBoolean,
-    asText
+    asText,
+    ensureNumber
 } from "../library/utils";
 import {
     toCssPx
@@ -76,6 +77,34 @@ export interface DialogControlLifecycle {
     ) => void;
 }
 
+/**
+ * moveWithDialog is either a boolean, meaning the element keeps its authored
+ * distance from the lower-right corner, or an "x,y" pair of fractions for
+ * elements that track something other than the corner. An axis caption
+ * centred under a growing plot, for example, travels half the added width and
+ * all of the added height, so it is written as "0.5,1".
+ */
+const readMoveFactors = function(
+    value: unknown
+): { x: number; y: number } | null {
+    const text = asText(value, "").trim();
+
+    if (text.includes(",")) {
+        const [rawX, rawY] = text.split(",");
+        const x = ensureNumber(rawX, Number.NaN);
+        const y = ensureNumber(rawY, Number.NaN);
+
+        if (Number.isFinite(x) && Number.isFinite(y)) {
+            return { x, y };
+        }
+
+        return null;
+    }
+
+    return asBoolean(value) ? { x: 1, y: 1 } : null;
+};
+
+
 export const createDialogControlLifecycle = function(
     runtime: DialogControlLifecycleRuntime
 ): DialogControlLifecycle {
@@ -86,6 +115,20 @@ export const createDialogControlLifecycle = function(
         element.style.position = "absolute";
         element.style.left = toCssPx(spec.left, 10);
         element.style.top = toCssPx(spec.top, 10);
+
+        const moveFactors = readMoveFactors(spec.moveWithDialog);
+
+        if (moveFactors) {
+            element.dataset.moveWithDialog = "true";
+            element.dataset.authoredLeft = String(
+                ensureNumber(spec.left, 10)
+            );
+            element.dataset.authoredTop = String(
+                ensureNumber(spec.top, 10)
+            );
+            element.dataset.moveFactorX = String(moveFactors.x);
+            element.dataset.moveFactorY = String(moveFactors.y);
+        }
     };
 
     const wireConditions = function(

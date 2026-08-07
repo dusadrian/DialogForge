@@ -1,6 +1,10 @@
 import { RuntimeDialogSchema, RuntimeElementSpec } from './dialog.types';
 import { RuntimeControl } from './dialogRuntimeTypes';
-import { asText, ensureNumber } from '../library/utils';
+import {
+  createDialogCanvasResizeController,
+  type DialogCanvasResizeController
+} from './dialogCanvasResizeController';
+import { asBoolean, asText, ensureNumber } from '../library/utils';
 
 export interface DialogRuntimeBuildState {
   dialogID: string;
@@ -40,11 +44,16 @@ function applyDialogCanvasStyle(root: HTMLElement, dialogSpec: RuntimeDialogSche
   const height = ensureNumber(dialogSpec?.properties?.height, 480);
   const fontSize = ensureNumber(dialogSpec?.properties?.fontSize, 12);
   const background = asText(dialogSpec?.properties?.background, '#ffffff');
+  const resizable = asBoolean(dialogSpec?.properties?.resizable);
 
   root.innerHTML = '';
   root.className = 'dialog-root preview-canvas';
-  root.style.width = `${width}px`;
-  root.style.height = `${height}px`;
+  // A resizable dialog keeps its authored size as the floor and follows the
+  // window from there; a fixed dialog stays pinned to the authored size.
+  root.style.width = resizable ? '100%' : `${width}px`;
+  root.style.height = resizable ? '100%' : `${height}px`;
+  root.style.minWidth = resizable ? `${width}px` : '';
+  root.style.minHeight = resizable ? `${height}px` : '';
   root.style.fontSize = `${fontSize}px`;
   root.style.backgroundColor = background;
 }
@@ -76,6 +85,8 @@ export function createDialogRuntimeBuildController(options: DialogRuntimeBuildCo
     logBuildError
   } = options;
 
+  let canvasResize: DialogCanvasResizeController | null = null;
+
   return {
     async build(
       dialogID: string,
@@ -100,6 +111,9 @@ export function createDialogRuntimeBuildController(options: DialogRuntimeBuildCo
         defaultElements: (dialogSpec?.syntax?.defaultElements || {}) as Record<string, unknown>
       };
 
+      canvasResize?.dispose();
+      canvasResize = null;
+
       applyDialogCanvasStyle(root, dialogSpec);
 
       const values = Object.values(dialogSpec?.elements || {}) as RuntimeElementSpec[];
@@ -114,6 +128,15 @@ export function createDialogRuntimeBuildController(options: DialogRuntimeBuildCo
       });
 
       applyGroupStateAfterBuild(runtime);
+
+      if (asBoolean(dialogSpec?.properties?.resizable)) {
+        canvasResize = createDialogCanvasResizeController(
+          root,
+          ensureNumber(dialogSpec?.properties?.width, 640),
+          ensureNumber(dialogSpec?.properties?.height, 480)
+        );
+      }
+
       runtime.makeCommand();
       await setupCustomJS(dialogSpec, runtime);
     }

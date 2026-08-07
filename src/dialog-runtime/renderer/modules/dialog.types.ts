@@ -7,6 +7,11 @@ export interface DialogCreatorProperties {
   dependencies?: string;
   language?: string;
   background?: string;
+  // When true the dialog window may be resized past its authored size, which
+  // stays the minimum. Elements marked resizeWithDialog absorb the growth.
+  resizable?: boolean | string;
+  // Keep a resizable native dialog at its authored width-to-height ratio.
+  preserveAspectRatio?: boolean | string;
 }
 
 export interface DialogCreatorSyntax {
@@ -50,6 +55,8 @@ export interface RuntimeDialogSchema {
     fontSize?: number | string;
     background?: string;
     dependencies: string;
+    resizable?: boolean;
+    preserveAspectRatio?: boolean;
   };
   syntax: {
     command: string;

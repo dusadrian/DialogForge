@@ -46,6 +46,51 @@ export interface ProductDialogWindowController<WorkspaceSource> {
 }
 
 
+/**
+ * Size of the element that absorbs the growth, when the dialog declares one.
+ * Preserving the window's own width-to-height ratio is not enough for a plot:
+ * the fixed controls around it mean the two axes gain different amounts of
+ * space, so the drawing keeps its shape while an ever wider gutter opens up
+ * beside it. Feeding this size to setAspectRatio as the ratio, with the rest
+ * of the layout declared as extra size, keeps the growing element itself at
+ * its authored proportions instead.
+ */
+const readGrowingElementSize = function(
+    runtimeDialog: ProductDialogDefinition
+): { width: number; height: number } | null {
+    const elements =
+        runtimeDialog.elements
+        && typeof runtimeDialog.elements === "object"
+            ? runtimeDialog.elements
+            : {};
+    const growing = Object.values(elements).find(function(spec): boolean {
+        return String(
+            (spec as Record<string, unknown>)?.resizeWithDialog
+        ) === "true";
+    }) as Record<string, unknown> | undefined;
+
+    if (!growing) {
+        return null;
+    }
+
+    const width = Math.round(Number(growing.width));
+    const height = Math.round(Number(growing.height));
+
+    if (!Number.isFinite(width) || !Number.isFinite(height)) {
+        return null;
+    }
+
+    if (width <= 0 || height <= 0) {
+        return null;
+    }
+
+    return {
+        width,
+        height
+    };
+};
+
+
 export const createProductDialogWindowController = function<WorkspaceSource>(
     options: ProductDialogWindowControllerOptions<WorkspaceSource>
 ): ProductDialogWindowController<WorkspaceSource> {
@@ -192,6 +237,8 @@ export const createProductDialogWindowController = function<WorkspaceSource>(
             120,
             Math.round(Number(properties.height) || 480)
         );
+        const resizable = properties.resizable === true;
+        const preserveAspectRatio = properties.preserveAspectRatio === true;
         const settingsPath = path.join(
             options.rootDir,
             "products",
@@ -205,7 +252,7 @@ export const createProductDialogWindowController = function<WorkspaceSource>(
             width,
             height,
             useContentSize: true,
-            resizable: false,
+            resizable,
             show: false,
             title: String(properties.title || dialogId),
             parent: parent && !parent.isDestroyed()
@@ -231,6 +278,28 @@ export const createProductDialogWindowController = function<WorkspaceSource>(
             }
         );
         const window = new BrowserWindow(windowOptions);
+
+        if (resizable) {
+            // The authored size is the floor. Reading it back from the window
+            // keeps the frame decorations out of the useContentSize maths.
+            const [openedWidth, openedHeight] = window.getSize();
+
+            window.setMinimumSize(openedWidth, openedHeight);
+
+            if (preserveAspectRatio) {
+                const growing = readGrowingElementSize(runtimeDialog);
+
+                if (growing) {
+                    window.setAspectRatio(growing.width / growing.height, {
+                        width: width - growing.width,
+                        height: height - growing.height
+                    });
+                }
+                else {
+                    window.setAspectRatio(width / height);
+                }
+            }
+        }
 
         options.windows.register(dialogId, window);
         wireWindowStatePersistence(

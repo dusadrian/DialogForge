@@ -64,6 +64,13 @@ export const createDialogValueControlBuilders = function(
         lifecycle.applyPosition(wrap, spec);
         wrap.style.width = toCssPx(spec.width, 250);
         wrap.style.height = toCssPx(spec.height, 220);
+
+        if (asBoolean(spec.resizeWithDialog)) {
+            wrap.dataset.resizeWithDialog = "true";
+            wrap.dataset.authoredWidth = String(ensureNumber(spec.width, 250));
+            wrap.dataset.authoredHeight = String(ensureNumber(spec.height, 220));
+        }
+
         wrap.style.backgroundColor = asText(
             spec.backgroundColor,
             "#ffffff"

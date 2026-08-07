@@ -23,7 +23,7 @@ const defaultSettings = {
 
     label: { parentId: '', type: 'Label', name: 'label1', text: 'My label', icon: 'none', iconSize: 0, left: '10', top: '10', fontSize: 13, maxWidth: 200, lineClamp: 1, align: 'left', valign: 'top', rotate: 0, fontWeight: '400', fontColor: '#000000', isVisible: 'true', elementIds: [], conditions: ''},
 
-    plot: { parentId: '', type: 'Plot', name: 'plot1', width: 250, height: 220, left: '15', top: '15', backgroundColor: '#ffffff', borderColor: '#c9c9c9', isVisible: 'true', isEnabled: 'true', elementIds: [], conditions: ''},
+    plot: { parentId: '', type: 'Plot', name: 'plot1', width: 250, height: 220, left: '15', top: '15', backgroundColor: '#ffffff', borderColor: '#c9c9c9', isVisible: 'true', isEnabled: 'true', resizeWithDialog: 'false', elementIds: [], conditions: ''},
 
     radio: { parentId: '', type: 'Radio', name: 'radio1', radioGroup: 'radiogroup1', label: 'My radiobox', left: '10', top: '10', size: 14, color: '#5b855b', disabledColor: '#dedede', isSelected: 'false', isEnabled: 'true', isVisible: 'true', elementIds: [], conditions: ''},
 

@@ -5,6 +5,9 @@ import type {
     DialogDefinition,
     EvaluatedMenuItem
 } from "../../core/contracts/applicationComposition";
+import {
+    readMenuCustomizationSetting
+} from "./menuCustomizationSettings";
 
 
 export interface MenuCustomizationNode {
@@ -25,6 +28,8 @@ export interface MenuCustomizationNode {
 
 export interface MenuCustomizationModelOptions {
     menu: EvaluatedMenuItem[];
+    productId: string;
+    isPackagedApp: boolean;
     readMenu?(): EvaluatedMenuItem[];
     readProductDialogs?(): DialogDefinition[];
     readSharedDialogs?(): DialogDefinition[];
@@ -219,8 +224,16 @@ export const createMenuCustomizationModel = function(
         };
     };
 
+    const readCustomization = function(): unknown {
+        return readMenuCustomizationSetting({
+            settings: options.readSettings(),
+            productId: options.productId,
+            isPackaged: options.isPackagedApp
+        });
+    };
+
     const effectiveMenu = function(): EvaluatedMenuItem[] {
-        const customization = options.readSettings().menuCustomization;
+        const customization = readCustomization();
 
         if (!Array.isArray(customization)) {
             return readMenu();
@@ -234,7 +247,7 @@ export const createMenuCustomizationModel = function(
     };
 
     const currentTree = function(): MenuCustomizationNode[] {
-        const customization = options.readSettings().menuCustomization;
+        const customization = readCustomization();
 
         if (Array.isArray(customization)) {
             return customization as MenuCustomizationNode[];

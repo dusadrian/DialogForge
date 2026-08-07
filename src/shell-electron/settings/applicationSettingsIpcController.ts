@@ -21,6 +21,9 @@ import {
     normalizeRuntimeProvider
 } from "../../base-app/features/menu-commands/menuRuntimeProvider";
 import {
+    menuCustomizationSettingsKey
+} from "../menus/menuCustomizationSettings";
+import {
     canWriteProductMenu,
     writeProductMenu
 } from "../menus/productMenuWriter";
@@ -376,7 +379,10 @@ export const createApplicationSettingsIpcController = function(
         const current = options.readSettings();
 
         options.writeSettings(Object.assign({}, current, {
-            menuCustomization: menu,
+            // Scoped per product: in development every product shares one
+            // settings file, so an unscoped arrangement leaked into the next
+            // product that started.
+            [menuCustomizationSettingsKey(options.productLocation.id)]: menu,
             dialogRuntimeRequirements: Object.assign(
                 {},
                 isRecord(current.dialogRuntimeRequirements)

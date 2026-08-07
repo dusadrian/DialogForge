@@ -120,7 +120,20 @@ export const resolveProductRuntimeControlPath = function(
     const normalizedRoot = normalizeRootDir(rootDir);
     const packaged = normalizedRoot.endsWith(`${path.sep}app.asar`)
         || normalizedRoot.includes(`${path.sep}app.asar${path.sep}`);
+    // The product is staged at a single location that carries no product id in
+    // its path, so the compiled root has to be asked first; the product-id
+    // layouts below only cover checkouts that keep products next to the app.
+    const compiledRoot = String(
+        process.env.DIALOGFORGE_PRODUCT_COMPILED_ROOT || ""
+    ).trim();
     const sourceCandidates = [
+        compiledRoot
+            ? path.join(
+                compiledRoot,
+                "runtime",
+                "runtimeControlProfile.R"
+            )
+            : "",
         path.join(
             normalizedRoot,
             "dist",
@@ -137,7 +150,7 @@ export const resolveProductRuntimeControlPath = function(
             "runtimeControlProfile.R"
         )
     ];
-    const candidates = sourceCandidates.flatMap((candidate) => {
+    const candidates = sourceCandidates.filter(Boolean).flatMap((candidate) => {
         const unpackedCandidate = toUnpackedAsarPath(candidate);
 
         if (packaged && unpackedCandidate !== candidate) {

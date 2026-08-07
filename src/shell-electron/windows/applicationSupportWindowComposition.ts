@@ -137,6 +137,8 @@ export const createApplicationSupportWindowComposition = function(
     };
     const menuCustomizationModel = createMenuCustomizationModel({
         menu: options.composition.menu,
+        productId: options.productId,
+        isPackagedApp: options.app.isPackaged === true,
         readMenu: function() {
             return options.composition.menu;
         },

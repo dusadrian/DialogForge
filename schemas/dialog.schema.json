@@ -33,6 +33,14 @@
                     "type": ["string", "number"],
                     "description": "Dialog height."
                 },
+                "resizable": {
+                    "type": "boolean",
+                    "description": "When true the dialog window can be resized past its authored width and height, which become the minimum size. Elements marked resizeWithDialog absorb the extra space, elements marked moveWithDialog keep their authored distance from the lower-right edge, and every other element keeps its authored position."
+                },
+                "preserveAspectRatio": {
+                    "type": "boolean",
+                    "description": "When true on a resizable dialog, the native window keeps the resizeWithDialog element at its authored width-to-height ratio, treating the rest of the layout as fixed extra size. This matters for a square plot: constraining the window's own ratio instead would feed the two axes different amounts of space and open an ever wider gutter beside the drawing. Falls back to the window's own ratio when no element declares resizeWithDialog."
+                },
                 "language": {
                     "type": "string",
                     "description": "Base locale for the dialog."
@@ -132,6 +140,14 @@
                     },
                     "isVisible": {
                         "type": "boolean"
+                    },
+                    "resizeWithDialog": {
+                        "type": "boolean",
+                        "description": "Plot elements only. When true the element grows by the same amount the dialog window grows past its authored size. Requires properties.resizable."
+                    },
+                    "moveWithDialog": {
+                        "type": ["boolean", "string"],
+                        "description": "When true the element moves right and down by the full amount the dialog grows past its authored size, keeping its authored distance from the lower-right corner. An \"x,y\" string instead gives the fraction of the growth applied on each axis, for elements that track something other than the corner: an axis caption centred under a growing plot is \"0.5,1\". Requires properties.resizable."
                     }
                 }
             }
