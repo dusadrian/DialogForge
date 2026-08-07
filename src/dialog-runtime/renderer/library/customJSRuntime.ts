@@ -1626,6 +1626,33 @@ const customJSRuntime = {
       }
     };
 
+    // The dataset editor is a host feature, not part of the DialogCreator
+    // scripting API, so dialogs reach it through callExternal(). The globals
+    // above stay for dialogs written before this was available.
+    registerExternalCall('getDatasetEditorState', async () => {
+      return await getDatasetEditorState();
+    });
+
+    registerExternalCall('consumeGoToContext', async () => {
+      return await consumeGoToContext();
+    });
+
+    registerExternalCall('gotoDatasetEditorCase', async (parameters: DialogScriptValue) => {
+      const payload = parameters && typeof parameters === 'object'
+        ? parameters as Record<string, unknown>
+        : {};
+
+      return await gotoDatasetEditorCase(payload.caseNumber);
+    });
+
+    registerExternalCall('gotoDatasetEditorVariable', async (parameters: DialogScriptValue) => {
+      const payload = parameters && typeof parameters === 'object'
+        ? parameters as Record<string, unknown>
+        : {};
+
+      return await gotoDatasetEditorVariable(payload.variableName);
+    });
+
     const addError = (el: DialogScriptValue, message: DialogScriptValue) => {
       const key = coerceName(el);
       const text = translateMessage(message);
@@ -1907,10 +1934,9 @@ const customJSRuntime = {
       getImportPreview,
       getWorkingDirectory,
       getDatasetVariables,
-      getDatasetEditorState,
-      consumeGoToContext,
-      gotoDatasetEditorCase,
-      gotoDatasetEditorVariable,
+      // The dataset editor functions are deliberately absent here. They are a
+      // host feature, not part of the DialogCreator scripting API, so dialogs
+      // reach them through callExternal() (registered further above).
       addError,
       clearError,
       changeValue,

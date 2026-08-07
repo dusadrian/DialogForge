@@ -17,6 +17,13 @@ import {
     importDialogPackage,
     planDialogPackageImport
 } from "./dialogPackageImport";
+import {
+    normalizeRuntimeProvider
+} from "../../base-app/features/menu-commands/menuRuntimeProvider";
+import {
+    canWriteProductMenu,
+    writeProductMenu
+} from "../menus/productMenuWriter";
 import type {
     DialogRuntimeRequirementsWindowController
 } from "../dialog-runtime/dialogRuntimeRequirementsWindowController";
@@ -78,6 +85,9 @@ export interface ApplicationSettingsIpcControllerOptions {
     userDialogsDirectory(): string;
     rootDir: string;
     productLocation: ResolvedProductLocation;
+    // Running from a checkout rather than a packaged bundle. Menu arrangements
+    // are written back into the product repository only in that case.
+    isPackagedApp: boolean;
     defaultRuntimeProvider: string;
     visibleRuntimeProviderIds: string[];
     discoverRuntimeLocation(providerId: string): Promise<RuntimeLocationResult>;
@@ -97,7 +107,12 @@ const collectMenuRequirements = function(
 ): void {
     items.forEach((item) => {
         if (item.type === "dialog") {
-            const runtimeProvider = String(item.runtimeProvider || defaultRuntimeProvider || "").trim();
+            // Case-insensitive: a menu item imported from DialogCreator can
+            // carry "R" where the product declares "r", and dropping its
+            // dependencies over that would be silent.
+            const runtimeProvider = normalizeRuntimeProvider(
+                item.runtimeProvider || defaultRuntimeProvider
+            );
             const rPackages = Array.from(new Set(
                 runtimeProvider === "r"
                     ? String(item.dependencies || "")
@@ -370,6 +385,26 @@ export const createApplicationSettingsIpcController = function(
                 requirements
             )
         }));
+
+        // Against a checkout the arrangement also belongs in the product
+        // repository, so it can be committed rather than living only in this
+        // machine's settings. Base menu roots are left to DialogForge.
+        if (canWriteProductMenu({
+            location: options.productLocation,
+            isPackaged: options.isPackagedApp
+        })) {
+            try {
+                writeProductMenu({
+                    location: options.productLocation,
+                    nodes: menu
+                });
+            } catch (error) {
+                // A failed write must not lose the arrangement: it is already
+                // saved in settings, so the menu still reflects the change.
+                console.error("[menu customization] product menu write failed", error);
+            }
+        }
+
         options.installApplicationMenu();
         options.menuCustomizationWindowController.notifySaved({ ok: true });
     });

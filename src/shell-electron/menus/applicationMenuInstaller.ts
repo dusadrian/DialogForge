@@ -38,26 +38,69 @@ const addAuthoringMenuItems = function(
         return;
     }
 
-    const fileMenu = template.find((item) => {
-        return item.id === "File";
-    });
+    const appMenu = template.find((item) => {
+        return item.id === "App";
+    }) || template[0];
 
-    if (!fileMenu || !Array.isArray(fileMenu.submenu)) {
+    if (!appMenu || !Array.isArray(appMenu.submenu)) {
         return;
     }
 
-    fileMenu.submenu.push(
-        {
-            type: "separator"
-        },
-        {
-            id: "AppCustomizeMenu",
-            label: options.translate("Customize the menu"),
-            click: () => {
-                options.openMenuCustomization();
-            }
+    const exitIndex = appMenu.submenu.findIndex((item) => {
+        return item.id === "AppExit";
+    });
+
+    const itemToInsert: MenuItemConstructorOptions = {
+        id: "AppCustomizeMenu",
+        label: options.translate("Customize the menu"),
+        click: () => {
+            options.openMenuCustomization();
         }
-    );
+    };
+
+    if (exitIndex >= 0) {
+        appMenu.submenu.splice(exitIndex, 0, itemToInsert);
+    } else {
+        appMenu.submenu.push(itemToInsert);
+    }
+};
+
+
+const normalizeTemplateForPlatform = function(
+    template: MenuItemConstructorOptions[]
+): MenuItemConstructorOptions[] {
+    if (process.platform === "darwin") {
+        return template;
+    }
+
+    const appIndex = template.findIndex((item) => {
+        return item.id === "App";
+    });
+
+    if (appIndex < 0) {
+        return template;
+    }
+
+    const appMenu = template[appIndex];
+    const appSubmenu = Array.isArray(appMenu.submenu) ? appMenu.submenu : [];
+    const result = template.filter((_, idx) => {
+        return idx !== appIndex;
+    });
+
+    const fileMenu = result.find((item) => {
+        return item.id === "File";
+    });
+
+    if (fileMenu && Array.isArray(fileMenu.submenu) && appSubmenu.length > 0) {
+        fileMenu.submenu.push(
+            {
+                type: "separator"
+            },
+            ...appSubmenu
+        );
+    }
+
+    return result;
 };
 
 
@@ -77,7 +120,9 @@ export const createApplicationMenuInstaller = function(
 
         addAuthoringMenuItems(template, options);
 
-        const menu = Menu.buildFromTemplate(template);
+        const normalizedTemplate = normalizeTemplateForPlatform(template);
+
+        const menu = Menu.buildFromTemplate(normalizedTemplate);
 
         Menu.setApplicationMenu(menu);
     };

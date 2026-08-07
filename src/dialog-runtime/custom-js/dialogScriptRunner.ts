@@ -237,10 +237,44 @@ export const createDialogScriptRunner = function(options: DialogScriptRunnerOpti
         });
     };
 
+    // The dataset editor is a host feature rather than part of the scripting
+    // API, so dialogs reach it through callExternal() instead of a global.
+    const datasetEditorCalls: Record<
+        string,
+        (input: Record<string, unknown>) => unknown
+    > = {
+        getDatasetEditorState: function() {
+            return options.getDatasetEditorState
+                ? options.getDatasetEditorState()
+                : null;
+        },
+        consumeGoToContext: function() {
+            return options.consumeGoToContext
+                ? options.consumeGoToContext()
+                : null;
+        },
+        gotoDatasetEditorCase: function(input) {
+            return options.gotoDatasetEditorCase
+                ? options.gotoDatasetEditorCase(Number(input.caseNumber))
+                : null;
+        },
+        gotoDatasetEditorVariable: function(input) {
+            return options.gotoDatasetEditorVariable
+                ? options.gotoDatasetEditorVariable(String(input.variableName || ""))
+                : null;
+        }
+    };
+
     const callExternal = async function(
         name: string,
         parameters: Record<string, unknown> = {}
     ): Promise<unknown> {
+        const datasetEditorCall = datasetEditorCalls[name];
+
+        if (datasetEditorCall) {
+            return await datasetEditorCall(parameters);
+        }
+
         const callParameters = {
             ...parameters,
             __controlSnapshot: createDialogScriptControlSnapshot(options.model)
@@ -303,19 +337,15 @@ export const createDialogScriptRunner = function(options: DialogScriptRunnerOpti
         "clearError",
         "clearValue",
         "closeDialog",
-        "consumeGoToContext",
         "disable",
         "document",
         "enable",
         "enableSearch",
-        "getDatasetEditorState",
         "getImportPreview",
         "getReference",
         "getSelected",
         "getValue",
         "getWorkingDirectory",
-        "gotoDatasetEditorCase",
-        "gotoDatasetEditorVariable",
         "hide",
         "indent",
         "isChecked",
@@ -356,9 +386,6 @@ export const createDialogScriptRunner = function(options: DialogScriptRunnerOpti
                 setValue("__dialogClosed", true);
             }
         },
-        async function() {
-            return options.consumeGoToContext ? options.consumeGoToContext() : null;
-        },
         api.disable,
         options.document || {},
         api.enable,
@@ -366,9 +393,6 @@ export const createDialogScriptRunner = function(options: DialogScriptRunnerOpti
             if (options.enableSearch) {
                 options.enableSearch(...controlNames.map(String));
             }
-        },
-        async function() {
-            return options.getDatasetEditorState ? options.getDatasetEditorState() : null;
         },
         async function(payload: unknown) {
             return options.getImportPreview ? options.getImportPreview(payload) : null;
@@ -382,20 +406,6 @@ export const createDialogScriptRunner = function(options: DialogScriptRunnerOpti
         api.getValue,
         async function() {
             return options.getWorkingDirectory ? options.getWorkingDirectory() : { path: "", home: "" };
-        },
-        async function(caseNumber: unknown) {
-            if (options.gotoDatasetEditorCase) {
-                return options.gotoDatasetEditorCase(Number(caseNumber));
-            }
-
-            return null;
-        },
-        async function(variableName: unknown) {
-            if (options.gotoDatasetEditorVariable) {
-                return options.gotoDatasetEditorVariable(String(variableName || ""));
-            }
-
-            return null;
         },
         api.hide,
         function(text: unknown, levels: unknown) {

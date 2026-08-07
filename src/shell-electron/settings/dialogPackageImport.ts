@@ -264,6 +264,33 @@ const readPackageDialog = function(packagePath: string): {
 };
 
 
+// `npm run dev:watch` restarts the app whenever the product tree changes, which
+// is right for a developer's edit and wrong for a write the app just made
+// itself: importing a dialog would tear down the window that asked for it. The
+// watcher hands us a log outside the product tree; anything reported here is a
+// change it already knows about and must not restart for.
+const reportSelfWrite = function(writtenPaths: string[]): void {
+    const logPath = String(
+        process.env.DIALOGFORGE_PRODUCT_SELF_WRITE_LOG || ""
+    ).trim();
+
+    if (!logPath || writtenPaths.length === 0) {
+        return;
+    }
+
+    try {
+        fs.appendFileSync(
+            logPath,
+            writtenPaths.map((entry) => `${entry}\n`).join(""),
+            "utf8"
+        );
+    }
+    catch {
+        // A missing log only costs a restart; it must never fail the import.
+    }
+};
+
+
 const readRegistry = function(registryPath: string): DialogDefinition[] {
     try {
         const parsed = JSON.parse(fs.readFileSync(registryPath, "utf8"));
@@ -290,6 +317,18 @@ const dialogProperties = function(dialogJson: string): Record<string, unknown> {
         : {};
 
     return properties;
+};
+
+
+const packageDirectoryPaths = function(
+    targetDirectory: string,
+    supportFiles: DialogPackageFile[]
+): string[] {
+    return [
+        path.join(targetDirectory, DIALOG_JSON),
+        path.join(targetDirectory, ACTIONS_JS),
+        ...supportFiles.map((file) => path.join(targetDirectory, file.name))
+    ];
 };
 
 
@@ -398,6 +437,12 @@ export const importDialogPackage = function(
     const files = readPackageDialog(packagePath);
     const plan = planDialogPackageImport(packagePath, target);
 
+    // Claim before writing: the dev watcher polls the tree, so a claim that
+    // arrived after the write could miss the poll that saw it.
+    reportSelfWrite(
+        packageDirectoryPaths(plan.targetDirectory, files.supportFiles)
+            .concat(plan.registryPath)
+    );
     writePackageDirectory(
         plan.targetDirectory,
         files.dialogJson,

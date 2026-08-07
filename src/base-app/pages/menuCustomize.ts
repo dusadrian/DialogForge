@@ -1,4 +1,7 @@
-export {};
+import {
+  normalizeRuntimeProvider,
+  runtimeProvidersMatch
+} from '../features/menu-commands/menuRuntimeProvider';
 
 type MenuNode = {
   id: string;
@@ -493,7 +496,7 @@ const syncPropsFromSelection = () => {
   const runtimeProviderEl = byId<HTMLInputElement>('propRuntimeProvider');
   runtimeProviderEl.disabled = node.type !== 'dialog';
   runtimeProviderEl.value = node.type === 'dialog'
-    ? String(node.runtimeProvider || defaultRuntimeProvider || '')
+    ? normalizeProvider(node.runtimeProvider || defaultRuntimeProvider)
     : '';
   shortcutEl.disabled = locked || node.type === 'submenu';
   labelEl.disabled = locked;
@@ -512,9 +515,9 @@ const applyProps = () => {
 
   if (isLockedNode(node)) {
     if (node.type === 'dialog') {
-      node.runtimeProvider = String(
-        runtimeProviderEl.value || ''
-      ).trim() || undefined;
+      node.runtimeProvider = normalizeProvider(
+        runtimeProviderEl.value
+      ) || undefined;
       node.dependencies = String(depsEl.value || '').trim();
     }
     return;
@@ -524,7 +527,7 @@ const applyProps = () => {
   }
   if (node.type === 'dialog') {
     node.id = String(node.id || '').trim();
-    node.runtimeProvider = String(runtimeProviderEl.value || '').trim() || undefined;
+    node.runtimeProvider = normalizeProvider(runtimeProviderEl.value) || undefined;
     node.dependencies = String(depsEl.value || '').trim();
   } else {
     delete node.runtimeProvider;
@@ -667,6 +670,8 @@ const normalizeIncomingMenuNode = (value: any, fallbackId: string): MenuNode => 
   };
 };
 
+const normalizeProvider = normalizeRuntimeProvider;
+
 const toSerializableMenu = (items: MenuNode[]): any[] => {
   const mapItem = (n: MenuNode, idx: number) => {
     const out: any = {
@@ -679,8 +684,11 @@ const toSerializableMenu = (items: MenuNode[]): any[] => {
     if (n.builtIn) out.builtIn = true;
     if (n.locked) out.locked = true;
     if (n.type === 'dialog') {
-      const runtimeProvider = String(n.runtimeProvider || '').trim();
-      if (runtimeProvider && runtimeProvider !== defaultRuntimeProvider) {
+      const runtimeProvider = normalizeProvider(n.runtimeProvider);
+      if (
+        runtimeProvider &&
+        !runtimeProvidersMatch(runtimeProvider, defaultRuntimeProvider)
+      ) {
         out.runtimeProvider = runtimeProvider;
       }
     }
@@ -707,19 +715,20 @@ const saveMenu = () => {
         continue;
       }
 
+      // An empty Runtime Provider means "use the product default", which is how
+      // the menu is written back: toSerializableMenu() omits the field whenever
+      // it equals the default, so every dialog item in a saved menu comes back
+      // without one. Only a provider that is set *and* different is a mismatch;
+      // the empty-with-no-default case is reported separately below.
       if (node.type === 'dialog') {
-        const runtimeProvider = String(node.runtimeProvider || '').trim();
+        const runtimeProvider = normalizeProvider(node.runtimeProvider);
         if (
           runtimeProvider &&
           defaultRuntimeProvider &&
-          runtimeProvider !== defaultRuntimeProvider
+          !runtimeProvidersMatch(runtimeProvider, defaultRuntimeProvider)
         ) {
           return node;
         }
-      }
-
-      if (node.type === 'dialog' && !String(node.runtimeProvider || '').trim()) {
-        return node;
       }
 
       if (Array.isArray(node.subitems) && node.subitems.length > 0) {
@@ -731,9 +740,16 @@ const saveMenu = () => {
   })();
 
   if (invalidRuntimeProvider) {
+    const itemName = String(
+      invalidRuntimeProvider.name || invalidRuntimeProvider.id || t('Unnamed')
+    );
     window.alert(
-      t('Runtime Provider must match the product runtime provider for dialog items.')
-        + ` ${String(invalidRuntimeProvider.name || invalidRuntimeProvider.id || t('Unnamed'))}`
+      `${t('The menu item')} "${itemName}" ${t('is set to run on')} `
+        + `"${normalizeProvider(invalidRuntimeProvider.runtimeProvider)}", `
+        + `${t('but this application runs')} `
+        + `"${normalizeProvider(defaultRuntimeProvider)}". `
+        + `${t('Set its Runtime Provider to')} `
+        + `"${normalizeProvider(defaultRuntimeProvider)}" ${t('and save again.')}`
     );
     return;
   }
@@ -762,8 +778,9 @@ const saveMenu = () => {
 
   if (missingRuntimeProvider) {
     window.alert(
-      t('Runtime Provider is required for dialog items when the product has no default runtime provider.')
-        + ` ${String(missingRuntimeProvider.name || missingRuntimeProvider.id || t('Unnamed'))}`
+      `${t('The menu item')} "`
+        + `${String(missingRuntimeProvider.name || missingRuntimeProvider.id || t('Unnamed'))}`
+        + `" ${t('needs a Runtime Provider, because this application does not set a default one.')}`
     );
     return;
   }
@@ -873,6 +890,11 @@ window.dialogForge.menuCustomization.onBrowsed((args: unknown) => {
   if (node && node.type === 'dialog') {
     node.id = id;
     node.name = dialogTitleById(id);
+    // The field shows the product default for a node that carries none; store
+    // it too, so what the user reads is what the menu actually holds.
+    node.runtimeProvider = normalizeProvider(
+      node.runtimeProvider || defaultRuntimeProvider
+    ) || undefined;
     byId<HTMLInputElement>('propDialogFile').value = `${id}.dc.zip`;
     byId<HTMLInputElement>('propLabel').value = node.name;
     renderTree();

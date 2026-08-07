@@ -1,7 +1,30 @@
 [
     {
+        "id": "App",
+        "labelKey": "menu.root.app",
+        "label": "App",
+        "type": "submenu",
+        "items": [
+            {
+                "id": "AppSettings",
+                "labelKey": "menu.root.file.appsettings",
+                "label": "Settings",
+                "type": "shell-command",
+                "command": "app.showSettings"
+            },
+            {
+                "id": "AppExit",
+                "labelKey": "menu.root.file.exit",
+                "label": "Exit",
+                "type": "native-role",
+                "role": "quit"
+            }
+        ]
+    },
+    {
         "id": "File",
         "labelKey": "menu.root.file",
+        "label": "File",
         "type": "submenu",
         "items": [
             {
@@ -52,20 +75,6 @@
                 "label": "Save workspace file",
                 "type": "shell-command",
                 "command": "workspace.saveFile"
-            },
-            {
-                "id": "AppSettings",
-                "labelKey": "menu.root.file.appsettings",
-                "label": "Settings",
-                "type": "shell-command",
-                "command": "app.showSettings"
-            },
-            {
-                "id": "AppExit",
-                "labelKey": "menu.root.file.exit",
-                "label": "Exit",
-                "type": "native-role",
-                "role": "quit"
             }
         ]
     },

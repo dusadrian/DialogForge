@@ -1,6 +1,7 @@
 "use strict";
 
 const fs = require("fs");
+const os = require("os");
 const path = require("path");
 const { spawn, spawnSync } = require("child_process");
 
@@ -118,6 +119,80 @@ const snapshotsAreEqual = function(left, right) {
 };
 
 
+// How long a path the app claimed stays adoptable. Long enough to cover a
+// multi-file write spread over a few poll cycles, short enough that a developer
+// editing the same file straight afterwards still gets their restart.
+const SELF_WRITE_CLAIM_MS = 5000;
+
+
+/**
+ * Paths the running app reported writing itself (a dialog import, say). Those
+ * are not developer edits, so they must not cost the user their window. The app
+ * claims a path before writing it, so a claim is always in hand by the time the
+ * change shows up in a snapshot.
+ *
+ * @param {string} logPath
+ * @param {Map<string, number>} claims
+ */
+const drainSelfWrites = function(logPath, claims) {
+    const now = Date.now();
+
+    claims.forEach((expiresAt, filePath) => {
+        if (expiresAt <= now) {
+            claims.delete(filePath);
+        }
+    });
+
+    try {
+        if (!fs.existsSync(logPath)) {
+            return;
+        }
+
+        const contents = fs.readFileSync(logPath, "utf8");
+
+        if (!contents) {
+            return;
+        }
+
+        fs.writeFileSync(logPath, "", "utf8");
+        contents
+            .split("\n")
+            .map((line) => line.trim())
+            .filter(Boolean)
+            .forEach((line) => {
+                claims.set(path.resolve(line), now + SELF_WRITE_CLAIM_MS);
+            });
+    }
+    catch (error) {
+        console.error("[DialogForge] Could not read the self-write log:");
+        console.error(error && error.stack ? error.stack : error);
+    }
+};
+
+
+/**
+ * @param {Map<string, string>} left
+ * @param {Map<string, string>} right
+ * @returns {string[]}
+ */
+const changedPaths = function(left, right) {
+    const changed = [];
+
+    right.forEach((value, filePath) => {
+        if (left.get(filePath) !== value) {
+            changed.push(filePath);
+        }
+    });
+    left.forEach((_value, filePath) => {
+        if (!right.has(filePath)) {
+            changed.push(filePath);
+        }
+    });
+
+    return changed;
+};
+
+
 /**
  * @param {string} productPath
  */
@@ -157,7 +232,7 @@ const electronCommand = function() {
  * @param {string[]} forwardedArgs
  * @returns {import("child_process").ChildProcess}
  */
-const startElectron = function(productPath, forwardedArgs) {
+const startElectron = function(productPath, forwardedArgs, selfWriteLogPath) {
     const child = spawn(electronCommand(), [
         "dist/scripts/electron-main.js",
         "--product-path",
@@ -165,7 +240,9 @@ const startElectron = function(productPath, forwardedArgs) {
         ...forwardedArgs
     ], {
         cwd: rootDir,
-        env: process.env,
+        env: Object.assign({}, process.env, {
+            DIALOGFORGE_PRODUCT_SELF_WRITE_LOG: selfWriteLogPath
+        }),
         stdio: "inherit"
     });
 
@@ -203,6 +280,12 @@ const stopElectron = function(child) {
 
 const main = function() {
     const selection = readArgs();
+    // Kept outside the product tree so writing to it cannot trigger a restart.
+    const selfWriteLogPath = path.join(
+        fs.mkdtempSync(path.join(os.tmpdir(), "dialogforge-watch-")),
+        "self-writes.log"
+    );
+    const selfWriteClaims = new Map();
     let snapshot = readTreeSnapshot(selection.productPath);
     let electronProcess = null;
     let busy = false;
@@ -225,7 +308,8 @@ const main = function() {
             stoppingForRestart = false;
             electronProcess = startElectron(
                 selection.productPath,
-                selection.forwardedArgs
+                selection.forwardedArgs,
+                selfWriteLogPath
             );
             electronProcess.once("exit", (code) => {
                 if (!stoppingForRestart && !busy) {
@@ -253,6 +337,8 @@ const main = function() {
     const pollTimer = setInterval(() => {
         let nextSnapshot;
 
+        drainSelfWrites(selfWriteLogPath, selfWriteClaims);
+
         try {
             nextSnapshot = readTreeSnapshot(selection.productPath);
         }
@@ -266,7 +352,24 @@ const main = function() {
             return;
         }
 
+        const changed = changedPaths(snapshot, nextSnapshot);
+
         snapshot = nextSnapshot;
+
+        if (
+            selfWriteClaims.size > 0
+            && changed.every((filePath) => {
+                return selfWriteClaims.has(path.resolve(filePath));
+            })
+        ) {
+            console.log(
+                "[DialogForge] Adopted "
+                + String(changed.length)
+                + " file(s) written by the running app; not restarting."
+            );
+            return;
+        }
+
         void restartElectron("product file change");
     }, 750);
 

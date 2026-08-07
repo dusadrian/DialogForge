@@ -546,6 +546,7 @@ export const createApplicationSupportWindowComposition = function(
         userDialogsDirectory: options.userDialogsDirectory,
         rootDir: options.composition.rootDir,
         productLocation: options.composition.location,
+        isPackagedApp: options.app.isPackaged === true,
         defaultRuntimeProvider,
         visibleRuntimeProviderIds:
             options.composition.runtimeProviderSelection.visibleProviderIds,
