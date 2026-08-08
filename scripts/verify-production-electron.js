@@ -13,7 +13,7 @@ const readArgs = function() {
     const options = {
         productPath: "",
         outputDir: "",
-        targets: ["console", "help", "script-editor"],
+        targets: ["application-menu", "console", "help", "script-editor"],
         timeoutMs: 120000
     };
     const args = process.argv.slice(2);
@@ -134,7 +134,7 @@ const findPackagedApplication = function(outputDir, productName) {
 };
 
 
-const assertProductionLayout = function(application) {
+const assertProductionLayout = function(application, productPath) {
     const appAsarPath = path.join(application.resourcesPath, "app.asar");
     const unpackedRuntimePath = path.join(
         application.resourcesPath,
@@ -151,6 +151,29 @@ const assertProductionLayout = function(application) {
     }
     if (!fs.existsSync(unpackedRuntimePath)) {
         throw new Error(`Unpacked R runtime sources were not found: ${unpackedRuntimePath}`);
+    }
+
+    const productRuntimeProfile = path.join(
+        productPath,
+        "runtime",
+        "runtimeControlProfile.R"
+    );
+
+    if (fs.existsSync(productRuntimeProfile)) {
+        const unpackedProductRuntimeProfile = path.join(
+            application.resourcesPath,
+            "app.asar.unpacked",
+            "product",
+            "runtime",
+            "runtimeControlProfile.R"
+        );
+
+        if (!fs.existsSync(unpackedProductRuntimeProfile)) {
+            throw new Error(
+                "Product R runtime profile was not unpacked for the external R process: "
+                + unpackedProductRuntimeProfile
+            );
+        }
     }
 };
 
@@ -235,7 +258,7 @@ const main = async function() {
     const product = readProduct(options.productPath);
     const application = findPackagedApplication(options.outputDir, product.productName);
 
-    assertProductionLayout(application);
+    assertProductionLayout(application, options.productPath);
     console.log(`Verifying packaged Electron application: ${application.appPath}`);
 
     for (const target of options.targets) {

@@ -66,16 +66,59 @@ const addAuthoringMenuItems = function(
 };
 
 
-const normalizeTemplateForPlatform = function(
-    template: MenuItemConstructorOptions[]
-): MenuItemConstructorOptions[] {
-    if (process.platform === "darwin") {
-        return template;
-    }
+const applicationMenuItemIds = new Set([
+    "AppSettings",
+    "AppCustomizeMenu",
+    "AppExit"
+]);
 
+
+export const normalizeTemplateForPlatform = function(
+    template: MenuItemConstructorOptions[],
+    platform: NodeJS.Platform = process.platform
+): MenuItemConstructorOptions[] {
     const appIndex = template.findIndex((item) => {
         return item.id === "App";
     });
+
+    if (platform === "darwin") {
+        const result = template.slice();
+
+        if (appIndex >= 0) {
+            const [appMenu] = result.splice(appIndex, 1);
+
+            result.unshift(appMenu);
+            return result;
+        }
+
+        // Arrangements saved before App became a separate root still carry
+        // Settings and Exit in File. Move those entries into a native macOS
+        // application menu so File remains a visible top-level menu after an
+        // upgrade.
+        const fileMenu = result.find((item) => {
+            return item.id === "File";
+        });
+        const fileItems = fileMenu && Array.isArray(fileMenu.submenu)
+            ? fileMenu.submenu
+            : [];
+        const appItems = fileItems.filter((item) => {
+            return applicationMenuItemIds.has(String(item.id || ""));
+        });
+
+        if (fileMenu && Array.isArray(fileMenu.submenu)) {
+            fileMenu.submenu = fileItems.filter((item) => {
+                return !applicationMenuItemIds.has(String(item.id || ""));
+            });
+        }
+
+        result.unshift({
+            id: "App",
+            label: "App",
+            submenu: appItems
+        });
+
+        return result;
+    }
 
     if (appIndex < 0) {
         return template;

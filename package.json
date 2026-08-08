@@ -56,6 +56,7 @@
         "asar": true,
         "asarUnpack": [
             "dist/src/runtime/providers/r/r-sources/**/*",
+            "product/runtime/runtimeControlProfile.R",
             "dist/node_modules/@number0/**/*.node"
         ],
         "extraResources": [

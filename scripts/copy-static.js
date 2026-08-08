@@ -143,6 +143,7 @@ const copyPackageJson = function () {
             ],
             asarUnpack: [
                 "src/runtime/providers/r/r-sources/**/*",
+                "product/runtime/runtimeControlProfile.R",
                 "node_modules/@number0/**/*.node"
             ]
         }

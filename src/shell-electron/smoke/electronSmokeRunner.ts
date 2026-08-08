@@ -1,4 +1,7 @@
-import type { BrowserWindow } from "electron";
+import {
+    Menu,
+    type BrowserWindow
+} from "electron";
 
 export interface ElectronSmokeRunnerOptions {
     win: BrowserWindow;
@@ -428,6 +431,37 @@ const runHelpSmoke = async function(
 };
 
 
+const runApplicationMenuSmoke = function(
+    messages: string[],
+    context: ElectronSmokeContext
+): void {
+    const menu = Menu.getApplicationMenu();
+    const rootIds = (menu?.items || []).map((item) => item.id);
+    const fileMenu = menu?.getMenuItemById("File");
+    const fileItemIds = (fileMenu?.submenu?.items || []).map((item) => item.id);
+    const valid = process.platform === "darwin"
+        ? rootIds[0] === "App" && rootIds.includes("File")
+        : !rootIds.includes("App")
+            && rootIds.includes("File")
+            && fileItemIds.includes("AppSettings")
+            && fileItemIds.includes("AppExit");
+
+    if (!valid) {
+        throw new Error("Electron application menu has the wrong platform layout: "
+            + JSON.stringify({ rootIds, fileItemIds, messages }, null, 4));
+    }
+
+    console.log(JSON.stringify({
+        ok: true,
+        smoke: "electron-application-menu",
+        product: context.product,
+        runtime: context.runtime,
+        result: { rootIds, fileItemIds },
+        messages
+    }, null, 4));
+};
+
+
 export const runElectronSmoke = async function(options: ElectronSmokeRunnerOptions): Promise<void> {
     const { win, product, runtime } = options;
     const electronSmokeTarget = String(options.target || "console").trim();
@@ -503,6 +537,14 @@ export const runElectronSmoke = async function(options: ElectronSmokeRunnerOptio
             product,
             runtime
         }, options.getHelpWindow, options.openHelpTopic, options.startRuntimeSession);
+        return;
+    }
+
+    if (electronSmokeTarget === "application-menu") {
+        runApplicationMenuSmoke(messages, {
+            product,
+            runtime
+        });
         return;
     }
 
