@@ -498,6 +498,17 @@
         display: flex;
         align-items: center;
         justify-content: center;
+        position: relative;
+        touch-action: none;
+      }
+      .plot-selection {
+        position: absolute;
+        display: none;
+        border: 1px dashed #1f4fb8;
+        background: rgba(31, 79, 184, 0.12);
+        box-sizing: border-box;
+        pointer-events: none;
+        z-index: 3;
       }
       .plot-sidebar {
         width: 184px;
@@ -662,6 +673,8 @@
         border: 1px solid rgba(0, 0, 0, 0.08);
         border-radius: 10px;
         box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+        pointer-events: none;
+        user-select: none;
       }
     </style>
   </head>
@@ -765,6 +778,7 @@
         <div id="viewer" class="plot-viewer" style="display:none;">
           <div id="plotMain" class="plot-main">
             <img id="frame" class="plot-frame" alt="Latest plot" />
+            <div id="plotSelection" class="plot-selection" aria-hidden="true"></div>
           </div>
         </div>
         <div id="sidebar" class="plot-sidebar">
@@ -773,12 +787,14 @@
         </div>
       </div>
     </div>
+    <script src="./shared/plotViewportInteractions.js"></script>
     <script>
       (function () {
         if (window.dialogForge) return;
 
         const plotViewerCallbacks = [];
         const zoomCallbacks = [];
+        const plotViewportModifierCallbacks = [];
 
         window.dialogForge = {
           onPlotViewerUpdate: function (callback) {
@@ -789,6 +805,11 @@
           onMainZoomFactor: function (callback) {
             if (typeof callback === 'function') {
               zoomCallbacks.push(callback);
+            }
+          },
+          onPlotViewportModifier: function (callback) {
+            if (typeof callback === 'function') {
+              plotViewportModifierCallbacks.push(callback);
             }
           },
           executeInvisibleMutation: function (request) {
@@ -861,6 +882,12 @@
               try { callback(event.data.value); } catch {}
             });
           }
+
+          if (event.data.type === 'plotViewportModifier') {
+            plotViewportModifierCallbacks.forEach(function (callback) {
+              try { callback(event.data.shiftPressed === true); } catch {}
+            });
+          }
         });
 
         window.parent.postMessage({
@@ -881,6 +908,7 @@
         const bodyEl = document.querySelector('.body');
         const viewerEl = document.getElementById('viewer');
         const plotMainEl = document.getElementById('plotMain');
+        const plotSelectionEl = document.getElementById('plotSelection');
         const sidebarEl = document.getElementById('sidebar');
         const historyListEl = document.getElementById('historyList');
         const sidebarResizeEl = document.getElementById('sidebarResize');
@@ -1473,6 +1501,101 @@
         applyZoomMode(zoomMode);
         applyHistoryVisible(historyVisible);
 
+        let panStartScrollLeft = 0;
+        let panStartScrollTop = 0;
+        const plotViewportApi = window.DialogForgePlotViewport;
+        const plotInteraction = plotViewportApi && plotMainEl
+          ? plotViewportApi.createInteraction({
+            element: plotMainEl,
+            getBounds: function () {
+              return {
+                left: 0,
+                top: 0,
+                right: plotMainEl.clientWidth,
+                bottom: plotMainEl.clientHeight
+              };
+            },
+            onGestureStart: function () {
+              closeSavePopup();
+              closeZoomMenu();
+            },
+            onSelectionChange: function (selection) {
+              if (!plotSelectionEl || !selection) {
+                if (plotSelectionEl) plotSelectionEl.style.display = 'none';
+                return;
+              }
+              plotSelectionEl.style.display = 'block';
+              plotSelectionEl.style.left = `${selection.left}px`;
+              plotSelectionEl.style.top = `${selection.top}px`;
+              plotSelectionEl.style.width = `${selection.width}px`;
+              plotSelectionEl.style.height = `${selection.height}px`;
+            },
+            onRectangleComplete: function (selection) {
+              if (!selection || !viewerEl || !plotMainEl) return;
+              const currentZoom = Math.max(1, Number(zoomMode) || 1);
+              const widthFactor = viewerEl.clientWidth / Math.max(1, selection.width);
+              const heightFactor = viewerEl.clientHeight / Math.max(1, selection.height);
+              const nextZoom = Math.max(
+                1,
+                Math.min(10, currentZoom * Math.min(widthFactor, heightFactor))
+              );
+              const centerX = (
+                selection.normalized.left + selection.normalized.right
+              ) / 2;
+              const centerY = (
+                selection.normalized.top + selection.normalized.bottom
+              ) / 2;
+
+              zoomMode = String(Math.round(nextZoom * 1000) / 1000);
+              writeZoomMode(zoomMode);
+              applyZoomMode(zoomMode);
+              window.requestAnimationFrame(function () {
+                viewerEl.scrollLeft = Math.max(
+                  0,
+                  centerX * plotMainEl.clientWidth - viewerEl.clientWidth / 2
+                );
+                viewerEl.scrollTop = Math.max(
+                  0,
+                  centerY * plotMainEl.clientHeight - viewerEl.clientHeight / 2
+                );
+              });
+            },
+            onPanStart: function () {
+              if (!viewerEl) return;
+              panStartScrollLeft = viewerEl.scrollLeft;
+              panStartScrollTop = viewerEl.scrollTop;
+            },
+            onPan: function (movement) {
+              if (!viewerEl) return;
+              viewerEl.scrollLeft = panStartScrollLeft - movement.totalX;
+              viewerEl.scrollTop = panStartScrollTop - movement.totalY;
+            },
+            onGestureStateChange: function (state) {
+              if (window.parent === window) return;
+              window.parent.postMessage({
+                source: 'dialogforge.browser-plot-viewer',
+                type: 'plotViewportModifierState',
+                shiftPressed: state.shiftPressed === true
+              }, window.location.origin);
+            }
+          })
+          : null;
+        if (
+          plotInteraction
+          && window.dialogForge
+          && typeof window.dialogForge.onPlotViewportModifier === 'function'
+        ) {
+          window.dialogForge.onPlotViewportModifier(function (shiftPressed) {
+            plotInteraction.setShiftPressed(shiftPressed === true);
+          });
+        }
+        if (plotMainEl) {
+          plotMainEl.setAttribute(
+            'aria-label',
+            'Plot. Drag a rectangle to zoom. Hold Shift and drag to pan.'
+          );
+        }
+
         if (squareToggleEl) {
           squareToggleEl.addEventListener('click', function () {
             squareMode = !squareMode;
@@ -1645,6 +1768,7 @@
         });
 
         const render = function (payload) {
+          if (plotInteraction) plotInteraction.cancel();
           latestPayload = payload || {};
           void refreshSaveFormats(latestPayload);
           const status = String((payload && payload.status) || 'waiting');

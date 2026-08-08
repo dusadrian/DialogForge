@@ -224,9 +224,15 @@ export const ensurePlotSaveFileExtension = function(
     format: unknown
 ): string {
     const info = getPlotSaveFormatInfo(format);
+    const normalizedPath = String(filePath || "").toLowerCase();
+
+    if (info.format === "jpeg" && /\.jpe?g$/.test(normalizedPath)) {
+        return filePath;
+    }
+
     const extension = `.${info.format}`;
 
-    return String(filePath || "").toLowerCase().endsWith(extension)
+    return normalizedPath.endsWith(extension)
         ? filePath
         : `${filePath}${extension}`;
 };

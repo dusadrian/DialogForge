@@ -3,6 +3,15 @@ import {
 } from "electron";
 import * as path from "path";
 
+import {
+    invokePlotExternalRoute,
+    plotExternalIpcChannels,
+    type PlotDataSaveRequest
+} from "../../base-app/features/plot-viewer/plotExternalIpc";
+import type {
+    PlotSaveResult
+} from "../../base-app/features/plot-viewer/plotViewerState";
+
 
 interface ProductDialogRuntimeHost {
     sendTo(window: string, channel: string, ...args: unknown[]): void;
@@ -16,6 +25,7 @@ interface ProductDialogGlobal {
     dialogForge?: {
         dialogRuntime?: ProductDialogRuntimeHost;
         loadDialogBuilderPage?: () => void;
+        savePlot?: (input: PlotDataSaveRequest) => Promise<PlotSaveResult>;
     };
 }
 
@@ -105,5 +115,12 @@ const target = globalThis as ProductDialogGlobal;
 target.dialogForge = {
     ...(target.dialogForge || {}),
     dialogRuntime,
-    loadDialogBuilderPage
+    loadDialogBuilderPage,
+    savePlot: function(input: PlotDataSaveRequest): Promise<PlotSaveResult> {
+        return invokePlotExternalRoute(
+            ipcRenderer,
+            plotExternalIpcChannels.savePlot,
+            input
+        );
+    }
 };

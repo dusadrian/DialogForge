@@ -345,7 +345,7 @@ declare global {
         sendScriptEditorCloseSaveResult(input: { requestId?: string; ok?: boolean }): void;
         openExternalUrl(url: string): Promise<ExternalUrlOpenRequest>;
         openPlotViewer(url: string): Promise<PlotViewerState>;
-        savePlot(input: Partial<PlotSaveRequest>): Promise<PlotSaveResult>;
+        savePlot(input: Partial<PlotSaveRequest> & { data?: Uint8Array }): Promise<PlotSaveResult>;
         copyPlot(url: string): Promise<PlotCopyResult>;
         openSettingsWindow(): Promise<{ status: string }>;
         openMenuCustomizationWindow(): Promise<{ status: string }>;

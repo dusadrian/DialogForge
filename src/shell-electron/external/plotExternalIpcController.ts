@@ -81,13 +81,20 @@ export const createPlotExternalIpcController = function(
         _event: IpcMainInvokeEvent,
         input: {
             url?: string;
+            data?: Uint8Array;
+            fileName?: string;
             format?: "png" | "jpeg" | "svg" | "pdf" | "tiff";
         }
     ) => {
         const request = createPlotSaveRequest(input || {});
-        const urlRequest = createExternalUrlOpenRequest(request.url);
+        const suppliedData = input?.data instanceof Uint8Array
+            ? Buffer.from(input.data)
+            : Buffer.alloc(0);
+        const urlRequest = suppliedData.length
+            ? null
+            : createExternalUrlOpenRequest(request.url);
 
-        if (urlRequest.status !== "ready") {
+        if (urlRequest && urlRequest.status !== "ready") {
             return createPlotSaveResult({
                 status: "invalid",
                 message: urlRequest.message
@@ -95,14 +102,21 @@ export const createPlotExternalIpcController = function(
         }
 
         const extension = request.format;
+        const suggestedName = path.basename(String(input?.fileName || "").trim())
+            || createPlotSaveFileName(extension);
         const saveOptions = {
             title: "Save Plot as " + request.format.toUpperCase(),
             defaultPath: path.join(
                 options.downloadsPath,
-                createPlotSaveFileName(extension)
+                suggestedName
             ),
             filters: [
-                { name: plotFormatLabels[request.format], extensions: [extension] }
+                {
+                    name: plotFormatLabels[request.format],
+                    extensions: request.format === "jpeg"
+                        ? ["jpg", "jpeg"]
+                        : [extension]
+                }
             ]
         };
         const plotWindow = options.plotViewerController.getWindow();
@@ -125,7 +139,9 @@ export const createPlotExternalIpcController = function(
         try {
             await fs.promises.writeFile(
                 filePath,
-                await options.plotDownloadController.download(urlRequest.url)
+                suppliedData.length
+                    ? suppliedData
+                    : await options.plotDownloadController.download(urlRequest!.url)
             );
 
             return createPlotSaveResult({

@@ -277,6 +277,36 @@ export const createBrowserPlotViewerHost = function(
         renderWaiters: [],
         payload: Object.assign(defaultPlotViewerPayload(), options.initialPayload || {})
     };
+    let shiftPressed = false;
+
+    const postModifierState = function(): void {
+        state.frame?.contentWindow?.postMessage({
+            source: "dialogforge.browser-plot-host",
+            type: "plotViewportModifier",
+            shiftPressed
+        }, windowRef.location.origin);
+    };
+
+    windowRef.addEventListener("keydown", function(event): void {
+        if (event.key !== "Shift") {
+            return;
+        }
+
+        shiftPressed = true;
+        postModifierState();
+    });
+    windowRef.addEventListener("keyup", function(event): void {
+        if (event.key !== "Shift") {
+            return;
+        }
+
+        shiftPressed = false;
+        postModifierState();
+    });
+    windowRef.addEventListener("blur", function(): void {
+        shiftPressed = false;
+        postModifierState();
+    });
 
     const postUpdate = function(payload = state.payload): void {
         const frameWindow = state.frame?.contentWindow;
@@ -337,6 +367,7 @@ export const createBrowserPlotViewerHost = function(
             },
             onFrameLoad: function(): void {
                 postUpdate();
+                postModifierState();
             },
             onActivate: function(): void {
                 options.activateSurface("plotViewer");
@@ -472,6 +503,14 @@ export const createBrowserPlotViewerHost = function(
         if (message.type === "ready") {
             state.frameReady = true;
             postUpdate();
+            postModifierState();
+            return;
+        }
+
+        if (message.type === "plotViewportModifierState") {
+            if (event.source === state.frame?.contentWindow) {
+                shiftPressed = message.shiftPressed === true;
+            }
             return;
         }
 

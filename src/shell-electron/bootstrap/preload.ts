@@ -952,7 +952,12 @@ const api: DialogForgeApi = {
             url
         );
     },
-    savePlot: function(input: { url?: string; format?: "png" | "jpeg" | "svg" | "pdf" | "tiff" }) {
+    savePlot: function(input: {
+        url?: string;
+        data?: Uint8Array;
+        fileName?: string;
+        format?: "png" | "jpeg" | "svg" | "pdf" | "tiff";
+    }) {
         return invokePlotExternalRoute(
             ipcRenderer,
             plotExternalIpcChannels.savePlot,

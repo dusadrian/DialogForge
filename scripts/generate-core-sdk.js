@@ -55,6 +55,10 @@ const writeJson = function(filePath, value) {
 
 
 const createDeclarationSource = function(contractVersion) {
+    const plotViewportContract = readSource(
+        "src/core/contracts/plotViewport.ts"
+    ).trim();
+
     return `export declare const PRODUCT_CONTRIBUTION_CONTRACT_VERSION: ${contractVersion};
 
 export interface DialogExternalCallResult {
@@ -134,6 +138,8 @@ export declare const readDialogConsoleStateChips: (
     context: Pick<ProductContributionContext, "callSharedDialogExternal">,
     dataset: string
 ) => Promise<ProductConsoleStateChip[]>;
+
+${plotViewportContract}
 `;
 };
 

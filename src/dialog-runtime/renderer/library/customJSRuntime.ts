@@ -262,6 +262,7 @@ const customJSRuntime = {
 
       const needsControlSnapshot =
         name === 'hasSummaryStatisticSelection'
+        || name === 'bindObjects'
         || name === 'refreshSummarySyntax'
         || name === 'syncSummaryStatisticSelection';
       if (needsControlSnapshot && typeof objects.refreshCurrentStateSnapshot === 'function') {

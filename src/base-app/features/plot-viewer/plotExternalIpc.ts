@@ -26,6 +26,12 @@ export const plotExternalEventChannels = {
 } as const;
 
 
+export interface PlotDataSaveRequest extends Partial<PlotSaveRequest> {
+    data?: Uint8Array;
+    fileName?: string;
+}
+
+
 interface PlotExternalIpcRoutes {
     "base-app:openExternalUrl": {
         input: [string];
@@ -36,7 +42,7 @@ interface PlotExternalIpcRoutes {
         result: PlotViewerState;
     };
     "base-app:savePlot": {
-        input: [Partial<PlotSaveRequest>];
+        input: [PlotDataSaveRequest];
         result: PlotSaveResult;
     };
     "base-app:copyPlot": {
