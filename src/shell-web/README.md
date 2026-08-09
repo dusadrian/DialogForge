@@ -1,28 +1,64 @@
 # Web Shell
 
-This directory is reserved for the browser host for DialogForge.
+This directory contains the browser host for the DialogForge application.
+WebR is an R transport used by this host; it is not an application or product
+variant. Electron and the browser must run the same APP behavior.
 
-The web shell should compose the same shared base app, product contribution, and
-runtime-provider contracts used by the Electron shell. It should not fork
-DialogR or DialogQCA product code into a separate web application.
+## Application / host invariant
 
-The first boundary is host capability ownership:
+If behavior can be described without naming a native platform API, browser API,
+local R process, or WebR worker, it belongs in a shared feature owner such as
+`src/base-app`, `src/runtime`, `src/dialog-runtime`, `src/dataset-editor`, or
+`src/script-editor`.
+
+The browser host may adapt shared behavior to browser mechanisms. It may not
+omit that behavior, replace it with browser policy, or silently return a
+placeholder result. In particular, dialog state, command construction,
+close/save rules, dataset-change projection, renderer events, settings
+semantics, transcript event shapes, menu semantics, and product behavior are
+APP concerns.
+
+The legitimate host boundaries are narrow:
 
 - resource loading through `src/core/contracts/hostAdapter`;
-- file access through browser-safe handles, uploads, downloads, or remote
-  workspace storage;
-- clipboard and external-link actions through a web host adapter;
-- dialogs and auxiliary surfaces as browser overlays, panels, or routes;
-- runtime execution through provider-neutral session and transport contracts.
+- native filesystem/dialogs versus browser handles, uploads, and downloads;
+- Electron windows/IPC versus browser overlays, routes, and `postMessage`;
+- native versus browser clipboard and external-link mechanisms;
+- local R transport versus WebR worker and browser stream transport;
+- native settings/files versus browser storage.
 
-The Electron shell remains the production host today. This folder exists so web
-work has a clear owner instead of leaking browser-specific branches into shared
-feature code or product repositories.
+Both transports must convert runtime output into the shared APP transcript
+event contract. There is no separate "WebR output" policy.
+
+## Shared semantic owners
+
+- Product dialog command preview, state restoration, and close cleanup use
+  `ProductDialogSessionController` in both hosts.
+- Data Editor settings and runtime dataset-change projection use the shared
+  `createDatasetEditorSettings` and `createRuntimeDatasetChangeProjector`.
+- Dialog variable containers read the prepared workspace snapshot. The shared
+  Data Editor cache paints from a small first batch, completes rich variable
+  metadata in background pages, and refreshes only named metadata deltas.
+- Script Editor save and live-session close handshakes use the shared
+  `createScriptEditorCloseSaveCoordinator`.
+- Shared renderer pages define their bridge interfaces; Electron and browser
+  preloads must satisfy the same interfaces at compile time.
+- Shared renderer routes use shared IPC/event channel constants, never private
+  browser or Electron names.
+
+`npm run build:web` checks this boundary mechanically. It fails when a browser
+page references a module that was not emitted, when a statically named shared
+renderer route is absent from the browser dispatcher, or when browser page
+JavaScript cannot be parsed. Unsupported browser invokes and sends throw an
+explicit error instead of returning `null` or doing nothing.
+
+Rendered Electron and browser workflows remain required for visible behavior;
+a sentinel or parity point total is not parity certification.
 
 `browserComposition.ts` is the first browser-host entrypoint. It composes the
 selected product through the normal application contract with `hostKind: "web"`
-and installs a browser host adapter. Dialog surfaces, auxiliary windows, and
-durable browser storage are still separate follow-up mappings.
+and installs a browser host adapter. Dialog surfaces, auxiliary work surfaces,
+and durable browser storage are host mappings around shared APP owners.
 
 `browserFileAdapter.ts` and `browserStorageAdapter.ts` define the current
 browser-safe file and storage boundary. Uploaded files are represented by
@@ -45,13 +81,18 @@ from the normal browser composition contract, loads WebR from the maintained
 `webr` package assets when the selected product/runtime uses WebR, and opens
 product dialogs as modal frames.
 
-`dialogBuilder.html` now uses the shared dialog runtime in browser ESM mode.
+`dialogBuilder.html` uses the shared dialog runtime in browser ESM mode.
 When it is loaded without Electron/Node integration, it installs
 `browserPreloadBridge.js` and loads
 `src/dialog-runtime/renderer/modules/dialogBuilderInterface.js`. The parent
-The web host fetches normalized dialog JSON, posts `dialogCreated` and
+web host fetches normalized dialog JSON, posts `dialogCreated` and
 workspace events into the frame, and routes runtime commands and product
 external calls through the shared preload bridge. Parent-side dispatch for
 those iframe messages lives in `browserPreloadChannelBridge.ts` as browser
 transport around shared channel adapters, not as a separate product or runtime
 implementation.
+
+`pages/shell.js` remains a browser-specific composition root. That is not an
+application-policy owner: new semantic work must begin in shared code and reach
+both hosts through narrow bindings. A browser-only semantic branch is a contract
+violation even when a browser-only test passes.

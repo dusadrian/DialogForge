@@ -4,6 +4,9 @@ import {
 import {
     createConsoleToolbarController
 } from "../console/renderer/consoleToolbarController";
+import {
+    createConsoleTranscriptController
+} from "../console/renderer/consoleTranscriptController";
 import type {
     ConsoleHistoryScope
 } from "../console/services/consoleCommandHistory";
@@ -17,7 +20,8 @@ import type {
     ProductConsoleStateChip
 } from "../core/contracts/productContribution";
 import type {
-    RuntimeSessionSnapshot
+    RuntimeSessionSnapshot,
+    TranscriptEvent
 } from "../runtime/provider-contract/runtimeProvider";
 import {
     createRuntimeRestartMessage
@@ -75,6 +79,7 @@ export interface BrowserConsoleBootstrapResult {
     commandHistory: ReturnType<typeof createConsoleServices>["commandHistory"];
     coordinator: ReturnType<typeof createConsoleServices>["coordinator"];
     toolbar: ReturnType<typeof createConsoleToolbarController>;
+    recordTranscriptEvents(events: TranscriptEvent[]): void;
 }
 
 
@@ -126,6 +131,17 @@ export const createBrowserConsoleBootstrap = async function(
         commandHistory,
         coordinator
     } = services;
+    const transcriptController = createConsoleTranscriptController({
+        session,
+        getTranscript: function() {
+            return coordinator.getTranscript();
+        },
+        setPromptState: coordinator.setPromptState,
+        setRuntimeBusy: coordinator.setRuntimeBusy,
+        renderEvents: function() {
+            return;
+        }
+    });
 
     await commandHistory.load({
         productId: String(options.productId || "base"),
@@ -197,6 +213,7 @@ export const createBrowserConsoleBootstrap = async function(
         completionModel,
         commandHistory,
         coordinator,
-        toolbar
+        toolbar,
+        recordTranscriptEvents: transcriptController.record
     };
 };

@@ -1,12 +1,20 @@
 import type {
     DatasetEditorInitMessage,
-    DatasetEditorLanguageMessage
+    DatasetEditorLanguageMessage,
+    DatasetEditorIpcBridge
 } from "../../dataset-editor/renderer/datasetEditorIpcBindings";
+import type {
+    DatasetEditorTransportBridge
+} from "../../dataset-editor/renderer/datasetEditorRendererTransport";
 import type {
     ScriptEditorInitPayload,
     ScriptEditorLanguagePayload,
-    ScriptEditorOpenFilePayload
+    ScriptEditorOpenFilePayload,
+    ScriptEditorIpcBridge
 } from "../../script-editor/renderer/scriptEditorIpcBindings";
+import type {
+    ScriptEditorTransportBridge
+} from "../../script-editor/renderer/scriptEditorRendererTransport";
 import {
     invokeScriptEditorRoute,
     sendScriptEditorCommand,
@@ -24,7 +32,7 @@ import {
     applicationSettingsIpcChannels,
     invokeApplicationSettingsRoute,
     sendApplicationSettingsCommand,
-    type RuntimeLocationResult
+    type ApplicationSettingsRendererBridge
 } from "../../base-app/features/settings/applicationSettingsIpc";
 import {
     datasetEditorEventChannels,
@@ -35,26 +43,16 @@ import {
 import {
     applicationEventChannels
 } from "../../base-app/bootstrap/applicationEvents";
+import type {
+    ProductDialogRuntimeHostBridge
+} from "../../dialog-runtime/dialogRuntimeIpc";
 
 
 export interface DialogForgeHostBridge {
     readDroppedFilePath(file: File): string;
     getDroppedFilePaths(files: File[]): string[];
     writeClipboardText(text: string): void;
-    settings: {
-        onLoaded(callback: (payload: unknown) => void): void;
-        onSaved(callback: () => void): void;
-        chooseRuntimeLocation(input: {
-            providerId?: string;
-            currentPath?: string;
-        }): Promise<{ path: string } | null>;
-        discoverRuntimeLocation(input: {
-            providerId?: string;
-        }): Promise<RuntimeLocationResult>;
-        preview(input: unknown): void;
-        cancelPreview(): void;
-        save(input: unknown): void;
-    };
+    settings: ApplicationSettingsRendererBridge;
     menuCustomization: {
         onLoaded(callback: (payload: unknown) => void): void;
         onSaved(callback: (payload: unknown) => void): void;
@@ -67,45 +65,11 @@ export interface DialogForgeHostBridge {
         onSaved(callback: (payload: unknown) => void): void;
         save(input: unknown): void;
     };
-    dialogRuntime: {
-        sendTo(window: string, channel: string, ...args: unknown[]): void;
-        invoke(channel: string, ...args: unknown[]): Promise<unknown>;
-        on(channel: string, listener: (...args: unknown[]) => void): void;
-        once(channel: string, listener: (...args: unknown[]) => void): void;
-    };
-    scriptEditor: {
-        onInit(callback: (payload: ScriptEditorInitPayload) => void): void;
-        onLanguageChanged(callback: (payload: ScriptEditorLanguagePayload) => void): void;
-        onTerminalSettingsUpdated(callback: (settings: Record<string, unknown>) => void): void;
-        onRequestSaveForClose(callback: (requestId: string) => void): void;
-        onRequestLiveSessionShutdown(callback: (requestId: string) => void): void;
-        onInsertCode(callback: (code: unknown) => void): void;
-        onOpenFile(callback: (payload: ScriptEditorOpenFilePayload) => void): void;
-        onRuntimeExecuted(callback: () => void): void;
-        onCommandBoundary(callback: () => void): void;
-        onSessionState(callback: (phase: string) => void): void;
-        publishDirtyState(state: { dirty: boolean; filePath: string; content: string }): void;
-        publishLiveSessionShutdownResult(input: { requestId: string; ok: boolean }): void;
-        chooseScriptFile(): Promise<{ filePath: string; content: string } | null>;
-        publishReady(): void;
+    dialogRuntime: ProductDialogRuntimeHostBridge;
+    scriptEditor: ScriptEditorIpcBridge & ScriptEditorTransportBridge & {
         live: LiveScriptRendererBridge;
     };
-    datasetEditor: {
-        onInit(callback: (payload: DatasetEditorInitMessage) => void): void;
-        onLanguageChanged(callback: (payload: DatasetEditorLanguageMessage) => void): void;
-        onSetDatasetList(callback: (datasetNames: string[]) => void): void;
-        onOpenDataset(callback: (datasetName: string) => void): void;
-        onRefreshDataset(callback: (datasetName: string) => void): void;
-        onFilterStateChanged(callback: (payload: unknown) => void): void;
-        onApplyChanges(callback: (changes: unknown) => void): void;
-        onGotoCase(callback: (datasetName: string, caseNumber: unknown) => void): void;
-        onGotoVariable(callback: (datasetName: string, variableName: string) => void): void;
-        persistVariableColumnWidths(widths: Record<string, unknown>): Promise<void>;
-        publishDatasetState(datasetName: string): void;
-        writeClipboardText(text: string): Promise<boolean>;
-        readClipboardText(): Promise<string>;
-        runVisibleCommand(command: string, datasetName: string, visible?: boolean): Promise<boolean>;
-    };
+    datasetEditor: DatasetEditorIpcBridge & DatasetEditorTransportBridge;
 }
 
 

@@ -801,6 +801,9 @@ const scriptEditorLifecycle = createScriptEditorLifecycleController({
   },
   publishReady: () => {
     scriptEditorTransport.publishReady();
+  },
+  refreshOpenFiles: () => {
+    return scriptFileController.refreshOpenFiles();
   }
 });
 

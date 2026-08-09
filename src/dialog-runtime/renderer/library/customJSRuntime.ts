@@ -9,6 +9,9 @@ import {
   dialogRuntimeIpcChannels
 } from "../../dialogRuntimeIpc";
 import {
+  datasetEditorIpcChannels
+} from "../../../dataset-editor/datasetEditorIpc";
+import {
   scriptEditorEventChannels
 } from "../../../script-editor/scriptEditorIpc";
 import {
@@ -276,7 +279,7 @@ const customJSRuntime = {
           )
         : (parameters || {});
       const result = await coms.invoke(
-        'base-app:callDialogExternal',
+        dialogRuntimeIpcChannels.callExternal,
         name,
         parametersWithSnapshot
       );
@@ -450,7 +453,7 @@ const customJSRuntime = {
       if (!selected || selected === getCachedActiveDataset()) return;
       setCachedActiveDataset(selected);
       try {
-        void coms.invoke('activeDataset:set', {
+        void coms.invoke(datasetEditorIpcChannels.setActiveDataset, {
           name: selected,
           datasetNames: availableDatasetNames()
         });
@@ -597,6 +600,23 @@ const customJSRuntime = {
       const entries = toContainerEntries(items);
       const list = entries.map((entry) => entry.name);
       const variableType = (containerObj.variableType && String(containerObj.variableType).trim()) ? String(containerObj.variableType) : 'any';
+      const signature = JSON.stringify([
+        variableType,
+        entries.map((entry) => [
+          entry.name,
+          entry.enabled,
+          Object.keys(entry.flags || {}).sort().map((name) => [
+            name,
+            entry.flags[name] === true
+          ])
+        ])
+      ]);
+
+      if (containerObj.__scriptItemSignature === signature) {
+        containerObj.__scriptItems = list.slice();
+        return;
+      }
+
       const flagNames = new Set<string>(['any', 'numeric', 'factor', variableType]);
       entries.forEach((entry) => {
         Object.keys(entry.flags || {}).forEach((key) => {
@@ -644,6 +664,8 @@ const customJSRuntime = {
         list.forEach((name) => { asObj[name] = {}; });
         containerObj.makeDataSetList(asObj);
       }
+
+      containerObj.__scriptItemSignature = signature;
     };
 
     const applyContainerSearchFilter = (containerObj: DialogScriptValue) => {
@@ -1541,7 +1563,7 @@ const customJSRuntime = {
       }
       try {
         if (!coms || typeof coms.invoke !== 'function') throw new TypeError('coms.invoke is not a function');
-        const out = await coms.invoke('datasetViewer:getVariables', { name: ds });
+        const out = await coms.invoke(datasetEditorIpcChannels.getVariables, { name: ds });
         return Array.isArray(out)
           ? out.map((item) => toDialogVariableEntry(item)).filter(Boolean)
           : null;
@@ -1554,7 +1576,7 @@ const customJSRuntime = {
     const getDatasetEditorState = async () => {
       try {
         if (!coms || typeof coms.invoke !== 'function') throw new TypeError('coms.invoke is not a function');
-        return await coms.invoke('datasetEditor:getActiveState');
+        return await coms.invoke(datasetEditorIpcChannels.getActiveState);
       } catch (error) {
         console.error('[customJS getDatasetEditorState error]', error);
         return null;
@@ -1564,7 +1586,7 @@ const customJSRuntime = {
     const getActiveDataset = async () => {
       try {
         if (!coms || typeof coms.invoke !== 'function') return getCachedActiveDataset();
-        const out = await coms.invoke('activeDataset:get');
+        const out = await coms.invoke(datasetEditorIpcChannels.getActiveDataset);
         return setCachedActiveDataset(out);
       } catch {
         return getCachedActiveDataset();
@@ -1576,7 +1598,7 @@ const customJSRuntime = {
       setCachedActiveDataset(next);
       try {
         if (!coms || typeof coms.invoke !== 'function') return next;
-        const out = await coms.invoke('activeDataset:set', {
+        const out = await coms.invoke(datasetEditorIpcChannels.setActiveDataset, {
           name: next,
           datasetNames: availableDatasetNames()
         });
@@ -1590,7 +1612,7 @@ const customJSRuntime = {
       setCachedActiveDataset('');
       try {
         if (!coms || typeof coms.invoke !== 'function') return '';
-        const out = await coms.invoke('activeDataset:clear');
+        const out = await coms.invoke(datasetEditorIpcChannels.clearActiveDataset);
         return setCachedActiveDataset(out);
       } catch {
         return '';
@@ -1600,7 +1622,7 @@ const customJSRuntime = {
     const consumeGoToContext = async () => {
       try {
         if (!coms || typeof coms.invoke !== 'function') throw new TypeError('coms.invoke is not a function');
-        return await coms.invoke('datasetEditor:consumeGoToContext');
+        return await coms.invoke(datasetEditorIpcChannels.consumeGoToContext);
       } catch (error) {
         console.error('[customJS consumeGoToContext error]', error);
         return null;
@@ -1610,7 +1632,7 @@ const customJSRuntime = {
     const gotoDatasetEditorCase = async (caseNumber: DialogScriptValue) => {
       try {
         if (!coms || typeof coms.invoke !== 'function') throw new TypeError('coms.invoke is not a function');
-        return await coms.invoke('datasetEditor:gotoCase', { caseNumber });
+        return await coms.invoke(datasetEditorIpcChannels.gotoCase, { caseNumber });
       } catch (error) {
         console.error('[customJS gotoDatasetEditorCase error]', error);
         return false;
@@ -1620,7 +1642,7 @@ const customJSRuntime = {
     const gotoDatasetEditorVariable = async (variableName: DialogScriptValue) => {
       try {
         if (!coms || typeof coms.invoke !== 'function') throw new TypeError('coms.invoke is not a function');
-        return await coms.invoke('datasetEditor:gotoVariable', { variableName });
+        return await coms.invoke(datasetEditorIpcChannels.gotoVariable, { variableName });
       } catch (error) {
         console.error('[customJS gotoDatasetEditorVariable error]', error);
         return false;
@@ -1852,6 +1874,7 @@ const customJSRuntime = {
           throw new SyntaxError('callExternal() expects a non-empty function name');
         }
         const handler = externalCalls.get(callName);
+
         if (typeof handler === 'function') {
           return await trackInitializationTask(
             handler(parameters),

@@ -1,6 +1,9 @@
 import {
     scriptEditorEventChannels
 } from "../script-editor/scriptEditorIpc";
+import {
+    createScriptEditorCloseSaveCoordinator
+} from "../script-editor/scriptEditorCloseSaveCoordinator";
 import type {
     BrowserFrameSurfaceController,
     BrowserFrameSurfaceResult
@@ -33,6 +36,7 @@ export interface BrowserScriptEditorSurfaceOptions {
     getLocale(): string;
     formatTitle(): string;
     readLiveScriptJoinText?(): string;
+    shutdownLiveSessions?(): Promise<void>;
     onStateChanged?(state: BrowserScriptEditorSurfaceState): void;
     onError?(error: unknown): void;
 }
@@ -43,6 +47,7 @@ export interface BrowserScriptEditorSurface {
     openDocument(document: BrowserScriptEditorDocument): Promise<void>;
     handleBrowserReady(): void;
     resolveCloseRequest(input: unknown): void;
+    resolveLiveSessionShutdownRequest(input: unknown): void;
     state(): BrowserScriptEditorSurfaceState;
 }
 
@@ -70,8 +75,14 @@ export const createBrowserScriptEditorSurface = function(
     let readyFrame: HTMLIFrameElement | null = null;
     let pendingInitialCode = "";
     let pendingDocument: BrowserScriptEditorDocument | null = null;
-    let closeRequestId = "";
-    let closeRequestResolve: ((ok: boolean) => void) | null = null;
+    const closeSaveCoordinator = createScriptEditorCloseSaveCoordinator();
+    const liveSessionShutdownCoordinator = createScriptEditorCloseSaveCoordinator({
+        timeoutMs: 5000,
+        createRequestId: function(): string {
+            return "script-live-shutdown-" + Date.now() + "-" +
+                Math.random().toString(16).slice(2, 8);
+        }
+    });
 
     const publishState = function(): void {
         options.onStateChanged?.({
@@ -158,21 +169,10 @@ export const createBrowserScriptEditorSurface = function(
     };
 
     const resolveCloseRequest = function(input: unknown): void {
-        const requestId = readCloseRequestId(input);
-
-        if (
-            !requestId
-            || requestId !== closeRequestId
-            || typeof closeRequestResolve !== "function"
-        ) {
-            return;
-        }
-
-        const resolve = closeRequestResolve;
-
-        closeRequestId = "";
-        closeRequestResolve = null;
-        resolve(readCloseResult(input));
+        closeSaveCoordinator.resolve(
+            readCloseRequestId(input),
+            readCloseResult(input)
+        );
     };
 
     const requestClose = function(): Promise<boolean> {
@@ -180,14 +180,32 @@ export const createBrowserScriptEditorSurface = function(
             return Promise.resolve(true);
         }
 
-        closeRequestId = `script_close_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-
-        return new Promise((resolve) => {
-            closeRequestResolve = resolve;
+        return closeSaveCoordinator.request((requestId) => {
             options.postEvent(
                 frame?.contentWindow,
                 scriptEditorEventChannels.requestSaveForClose,
-                closeRequestId
+                requestId
+            );
+        });
+    };
+
+    const resolveLiveSessionShutdownRequest = function(input: unknown): void {
+        liveSessionShutdownCoordinator.resolve(
+            readCloseRequestId(input),
+            readCloseResult(input)
+        );
+    };
+
+    const requestLiveSessionShutdown = function(): Promise<boolean> {
+        if (!frame) {
+            return Promise.resolve(true);
+        }
+
+        return liveSessionShutdownCoordinator.request((requestId) => {
+            options.postEvent(
+                frame?.contentWindow,
+                scriptEditorEventChannels.requestLiveSessionShutdown,
+                requestId
             );
         });
     };
@@ -202,10 +220,14 @@ export const createBrowserScriptEditorSurface = function(
             event.preventDefault();
             event.stopImmediatePropagation();
 
-            requestClose().then((ok) => {
-                if (ok) {
-                    options.frameSurfaces.close(surfaceId);
+            requestClose().then(async (ok) => {
+                if (!ok) {
+                    return;
                 }
+
+                await requestLiveSessionShutdown();
+                await options.shutdownLiveSessions?.();
+                options.frameSurfaces.close(surfaceId);
             }).catch((error) => {
                 options.onError?.(error);
             });
@@ -236,8 +258,6 @@ export const createBrowserScriptEditorSurface = function(
                     readyFrame = null;
                     pendingInitialCode = "";
                     pendingDocument = null;
-                    closeRequestId = "";
-                    closeRequestResolve = null;
                     publishState();
                 }
             },
@@ -290,6 +310,7 @@ export const createBrowserScriptEditorSurface = function(
             flushPendingContent(frame);
         },
         resolveCloseRequest,
+        resolveLiveSessionShutdownRequest,
         state: function(): BrowserScriptEditorSurfaceState {
             return {
                 layer,

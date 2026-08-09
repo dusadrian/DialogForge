@@ -974,8 +974,15 @@ workspace_dataset_logical_value <- function(text) {
 }
 
 
+workspace_dataset_missing_value_text <- function(text) {
+    token <- trimws(as.character(text %||% ""))
+
+    !nzchar(token) || identical(token, "NA")
+}
+
+
 workspace_dataset_scalar_value <- function(text, base_class) {
-    if (!nzchar(text)) {
+    if (workspace_dataset_missing_value_text(text)) {
         return(NA)
     }
 
@@ -1081,7 +1088,7 @@ workspace_dataset_update_cell <- function(name, row, column, value = "") {
     next_value <- workspace_dataset_scalar_value(text, base_class)
 
     if (
-        nzchar(text) &&
+        !workspace_dataset_missing_value_text(text) &&
         is.na(next_value) &&
         !identical(base_class, "character")
     ) {
@@ -2642,6 +2649,37 @@ workspace_dataset_variables_batch <- function(
             total = total,
             start = page$start,
             count = loaded
+        ),
+        result_json = result_json
+    )
+}
+
+
+workspace_dataset_variables_named <- function(name, variable_names) {
+    dataset <- workspace_editable_dataset(name)
+
+    if (!isTRUE(dataset$ok)) {
+        return(dataset)
+    }
+
+    requested <- unique(as.character(variable_names %||% character(0)))
+    indices <- match(requested, dataset$columns, nomatch = 0L)
+    indices <- indices[indices > 0L]
+    items_json <- workspace_dataset_variables_json(dataset, indices)
+    result_json <- paste0(
+        "{",
+        "\"name\":", json_str(dataset$name), ",",
+        "\"total\":", json_num(length(dataset$columns)), ",",
+        "\"items\":[", paste(items_json, collapse = ","), "]",
+        "}"
+    )
+
+    list(
+        ok = TRUE,
+        result = list(
+            name = dataset$name,
+            total = length(dataset$columns),
+            count = length(items_json)
         ),
         result_json = result_json
     )

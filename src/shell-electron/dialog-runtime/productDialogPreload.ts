@@ -11,26 +11,21 @@ import {
 import type {
     PlotSaveResult
 } from "../../base-app/features/plot-viewer/plotViewerState";
-
-
-interface ProductDialogRuntimeHost {
-    sendTo(window: string, channel: string, ...args: unknown[]): void;
-    invoke(channel: string, ...args: unknown[]): Promise<unknown>;
-    on(channel: string, listener: (...args: unknown[]) => void): void;
-    once(channel: string, listener: (...args: unknown[]) => void): void;
-}
+import type {
+    ProductDialogRuntimeHostBridge
+} from "../../dialog-runtime/dialogRuntimeIpc";
 
 
 interface ProductDialogGlobal {
     dialogForge?: {
-        dialogRuntime?: ProductDialogRuntimeHost;
+        dialogRuntime?: ProductDialogRuntimeHostBridge;
         loadDialogBuilderPage?: () => void;
         savePlot?: (input: PlotDataSaveRequest) => Promise<PlotSaveResult>;
     };
 }
 
 
-const dialogRuntime: ProductDialogRuntimeHost = {
+const dialogRuntime: ProductDialogRuntimeHostBridge = {
     sendTo: function(window, channel, ...args): void {
         const target = String(window || "all");
 

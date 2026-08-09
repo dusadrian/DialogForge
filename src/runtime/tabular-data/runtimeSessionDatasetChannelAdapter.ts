@@ -44,11 +44,22 @@ export interface RuntimeSessionDatasetChannelAdapterOptions {
     initialRows: number;
     initialColumns: number;
     variableOverscanRows: number;
+    readVariableMetadataBatch?(
+        objectName: string,
+        start: number,
+        count: number
+    ): Promise<unknown>;
+    patchVariableMetadata?(
+        objectName: string,
+        variableName: string,
+        value: unknown
+    ): void;
     invalidateDataset(
         datasetName: string,
         effect: {
             previewChanged: boolean;
             variableMetadataChanged: boolean;
+            variableMetadataPatched: boolean;
         }
     ): Promise<void> | void;
 }
@@ -142,11 +153,13 @@ export const createRuntimeSessionDatasetChannelAdapter = function(
     const runtime = options.runtimeSessionManager;
     const invalidate = async function(
         name: string,
-        variableMetadataChanged = false
+        variableMetadataChanged = false,
+        variableMetadataPatched = false
     ): Promise<void> {
         await options.invalidateDataset(name, {
             previewChanged: true,
-            variableMetadataChanged
+            variableMetadataChanged,
+            variableMetadataPatched
         });
     };
     const executeDatasetMethod = async function(
@@ -272,6 +285,11 @@ export const createRuntimeSessionDatasetChannelAdapter = function(
                 input.count,
                 options.variableOverscanRows
             );
+
+            if (options.readVariableMetadataBatch) {
+                return options.readVariableMetadataBatch(name, start, count);
+            }
+
             const result = await executeDatasetMethod(
                 "workspace.dataset_variables_batch",
                 { name, start, count }
@@ -479,7 +497,16 @@ export const createRuntimeSessionDatasetChannelAdapter = function(
                 return null;
             }
 
-            await invalidate(result.objectName, true);
+            options.patchVariableMetadata?.(
+                result.objectName,
+                result.variableName,
+                result.value
+            );
+            await invalidate(
+                result.objectName,
+                true,
+                Boolean(options.patchVariableMetadata)
+            );
 
             return result.value;
         },

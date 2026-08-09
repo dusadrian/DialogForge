@@ -48,6 +48,7 @@ function applyDialogCanvasStyle(root: HTMLElement, dialogSpec: RuntimeDialogSche
 
   root.innerHTML = '';
   root.className = 'dialog-root preview-canvas';
+  root.tabIndex = -1;
   // A resizable dialog keeps its authored size as the floor and follows the
   // window from there; a fixed dialog stays pinned to the authored size.
   root.style.width = resizable ? '100%' : `${width}px`;
@@ -139,6 +140,7 @@ export function createDialogRuntimeBuildController(options: DialogRuntimeBuildCo
 
       runtime.makeCommand();
       await setupCustomJS(dialogSpec, runtime);
+      root.focus({ preventScroll: true });
     }
   };
 }

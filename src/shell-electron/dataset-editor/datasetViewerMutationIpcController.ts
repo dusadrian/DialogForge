@@ -54,6 +54,11 @@ export interface DatasetViewerMutationIpcControllerOptions {
     >;
     uiCommandVisibility(): UiCommandVisibility;
     invalidateInitialDatasetPreview(objectName: string): void;
+    patchVariableMetadata(
+        objectName: string,
+        variableName: string,
+        value: unknown
+    ): void;
     sendDatasetEditorChanges(changes: Array<Record<string, unknown>>): void;
     broadcastRuntimeEvents(options?: { sendDatasetChanges?: boolean }): Promise<void>;
 }
@@ -406,6 +411,12 @@ export const createDatasetViewerMutationIpcController = function(
             if (!result) {
                 return null;
             }
+
+            options.patchVariableMetadata(
+                result.objectName,
+                result.variableName,
+                result.value
+            );
 
             await notifyMutation(
                 options,

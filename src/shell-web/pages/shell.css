@@ -449,14 +449,14 @@ body.web-workspace-collapsed .web-workspace {
 
 #consoleCover {
     position: fixed;
-    inset: 0;
+    inset: 28px 0 0;
     display: none;
     align-items: center;
-    justify-content: center;
-    padding: 18px;
+    justify-content: flex-start;
+    padding: 0 18px 18px;
     box-sizing: border-box;
     background: linear-gradient(180deg, rgba(250, 250, 250, 0.68) 0%, rgba(245, 246, 248, 0.72) 100%);
-    z-index: 3000;
+    z-index: 2999;
     pointer-events: auto;
 }
 
@@ -474,7 +474,7 @@ body.console-cover-visible #consoleCover {
     min-width: min(420px, 100%);
     padding: 9px 12px 10px;
     border: 1px solid var(--web-shell-border-soft);
-    border-radius: 8px;
+    border-radius: 0 0 8px 8px;
     background: var(--web-shell-window-bg);
     color: var(--web-shell-muted);
     font-family: var(--dm-font-family);

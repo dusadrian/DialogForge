@@ -84,12 +84,12 @@ export const createBrowserDataEditorSurface = function(
         options.postEvent(
             targetFrame?.contentWindow,
             datasetEditorEventChannels.setDatasetList,
-            options.readDatasetNames()
+            { datasetNames: options.readDatasetNames() }
         );
         options.postEvent(
             targetFrame?.contentWindow,
             datasetEditorEventChannels.openDataset,
-            cleanName
+            { datasetName: cleanName }
         );
     };
 
@@ -150,17 +150,21 @@ export const createBrowserDataEditorSurface = function(
         gotoVariable: async function(name: string, variableName: string): Promise<void> {
             options.postEvent(
                 frame?.contentWindow,
-                "datasetEditor:gotoVariable",
-                name,
-                variableName
+                datasetEditorEventChannels.gotoVariable,
+                {
+                    datasetName: name,
+                    variableName
+                }
             );
         },
         gotoCase: async function(name: string, caseNumber: number): Promise<void> {
             options.postEvent(
                 frame?.contentWindow,
-                "datasetEditor:gotoCase",
-                name,
-                caseNumber
+                datasetEditorEventChannels.gotoCase,
+                {
+                    datasetName: name,
+                    caseNumber
+                }
             );
         },
         state: function(): BrowserDataEditorSurfaceState {

@@ -21,6 +21,23 @@ export interface RuntimeLocationResult {
 }
 
 
+export interface ApplicationSettingsRendererBridge {
+    onLoaded(callback: (payload: unknown) => void): void;
+    onSaved(callback: () => void): void;
+    chooseRuntimeLocation(input: {
+        providerId?: string;
+        currentPath?: string;
+    }): Promise<{ path: string } | null>;
+    discoverRuntimeLocation(input: {
+        providerId?: string;
+    }): Promise<RuntimeLocationResult>;
+    preview(input: unknown): void;
+    cancelPreview(): void;
+    save(input: unknown): void;
+    close?(): void;
+}
+
+
 export const applicationSettingsIpcChannels = {
     read: "base-app:readSettings",
     readWindowPayload: "base-app:readSettingsWindowPayload",

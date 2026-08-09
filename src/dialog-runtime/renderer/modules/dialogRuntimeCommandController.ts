@@ -4,6 +4,9 @@ import type { RuntimeControl } from "./dialogRuntimeTypes";
 import {
     dialogRuntimeEventChannels
 } from "../../dialogRuntimeIpc";
+import {
+    scriptEditorEventChannels
+} from "../../../script-editor/scriptEditorIpc";
 
 
 export interface DialogRuntimeCommandControllerOptions {
@@ -108,7 +111,7 @@ export const createDialogRuntimeCommandController = function(
         }
 
         options.sendTo(dialogRuntimeEventChannels.commandUpdate, command);
-        options.sendTo("scriptEditor:insertCode", { code: command });
+        options.sendTo(scriptEditorEventChannels.insertCode, { code: command });
     };
 
     const sendCurrentCommandToClipboard = function(): void {

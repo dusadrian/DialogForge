@@ -4,6 +4,7 @@ import {
 import type {
     RuntimeProvider,
     RuntimeSessionManager,
+    TranscriptEvent,
     VisibleCommandRequest,
     WorkspaceSnapshot,
     WorkspaceUpdate
@@ -23,17 +24,14 @@ import {
     createBrowserWebRSessionSnapshot
 } from "./webRBrowserStartup";
 import {
-    createBrowserWebRVisibleCommandController,
-    type WebRVisibleCommandOptions,
-    type WebRVisibleCommandRunnerBindings,
-    type WebRVisibleCommandRuntime
-} from "./webRVisibleCommandRunner";
-import {
     type WebRSharedRuntimeControlClient
 } from "./webRSharedRuntimeControl";
 import {
     createRRuntimeControllerSet
 } from "../r/controllers/rRuntimeControllerSet";
+import {
+    createRVisibleCommandExecutor
+} from "../r/controllers/rVisibleCommandExecutor";
 import {
     webRRuntimeManifest
 } from "./webRRuntimeManifest";
@@ -42,10 +40,22 @@ import {
 const manifest = webRRuntimeManifest;
 
 
+export interface WebRVisibleCommandOptions {
+    activityId?: string;
+    preRecorded?: boolean;
+    manageRuntimeBusy?: boolean;
+    outputWidth?: number;
+}
+
+export interface BrowserWebRVisibleCommandBindings {
+    readConsoleOutputWidth(): number;
+    recordTranscriptEvents(events: TranscriptEvent[]): void;
+    setWorkspaceMetadataStatus?(): void;
+}
+
 export interface BrowserWebRSessionBindings {
-    runtime: WebRVisibleCommandRuntime;
     runtimeControlClient: WebRSharedRuntimeControlClient;
-    visibleCommands: WebRVisibleCommandRunnerBindings;
+    visibleCommands: BrowserWebRVisibleCommandBindings;
     runtimeMethods: WebRRuntimeMethodRouterBindings;
     runRuntimeOperation<T>(action: () => Promise<T>): Promise<T>;
     workspaceChanged(
@@ -72,7 +82,6 @@ export const createBrowserWebRSession = function(
         VisibleCommandRequest,
         WebRVisibleCommandOptions
     >();
-    const runRuntimeOperation = bindings.runRuntimeOperation;
     const client = bindings.runtimeControlClient;
     let requestSequence = 0;
     const createRequestId = function(prefix: string): string {
@@ -83,16 +92,13 @@ export const createBrowserWebRSession = function(
     const getClient = function() {
         return client;
     };
-    const visibleCommandBindings: WebRVisibleCommandRunnerBindings = {
-        ...bindings.visibleCommands,
-        runRuntimeOperation
-    };
-    const commandController = createBrowserWebRVisibleCommandController(
-        visibleCommandBindings,
-        function(request) {
-            return commandOptions.get(request) || {};
+    const commandController = createRVisibleCommandExecutor({
+        getClient,
+        createRequestId,
+        resolveParentId: function(request) {
+            return String(commandOptions.get(request)?.activityId || "");
         }
-    );
+    });
     const transcriptHasFailure = function(events: Array<{
         type?: string;
         state?: string;
@@ -179,13 +185,18 @@ export const createBrowserWebRSession = function(
             const request = createVisibleCommandRequest({
                 text,
                 source: "browser.webr.visible-command",
-                outputWidth: bindings.visibleCommands.readConsoleOutputWidth()
+                outputWidth: options.outputWidth
+                    || bindings.visibleCommands.readConsoleOutputWidth()
             });
 
             commandOptions.set(request, options);
 
             const result = await runtimeSessionManager
                 .executeVisibleCommandWithEffects(request);
+
+            bindings.visibleCommands.recordTranscriptEvents(
+                result.transcriptEvents
+            );
 
             if (workspaceUpdateHasChanges(result.workspaceUpdate)) {
                 await bindings.workspaceChanged(
@@ -196,7 +207,8 @@ export const createBrowserWebRSession = function(
 
             return {
                 ok: !result.transcriptEvents.some((event) => {
-                    return event.type === "rejected"
+                    return event.type === "failed"
+                        || event.type === "rejected"
                         || event.type === "error"
                         || event.state === "error";
                 })

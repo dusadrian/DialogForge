@@ -1,3 +1,111 @@
+remove_runtime_global_bindings <- function() {
+    for (name in c(".app_runtime_control_status")) {
+        if (exists(name, envir = .GlobalEnv, inherits = FALSE)) {
+            safe(rm(list = name, envir = .GlobalEnv))
+        }
+    }
+
+    invisible(NULL)
+}
+
+
+ensure_dialog_app_search_position <- function() {
+    if (length(search()) >= 2L && identical(search()[[2L]], "DialogApp")) {
+        return(invisible(TRUE))
+    }
+
+    environment <- app_env
+
+    if (is.element("DialogApp", search())) {
+        safe(detach("DialogApp", character.only = TRUE))
+    }
+
+    safe(attach(
+        environment,
+        name = "DialogApp",
+        pos = 2L,
+        warn.conflicts = FALSE
+    ))
+    app_env <<- as.environment("DialogApp")
+
+    invisible(TRUE)
+}
+
+
+runtime_console_pager <- function(
+    files,
+    header = rep("", length(files)),
+    title = "R Information",
+    delete.file = FALSE
+) {
+    files <- path.expand(as.character(files))
+    headers <- rep_len(as.character(header), length(files))
+
+    if (isTRUE(delete.file)) {
+        on.exit(unlink(files), add = TRUE)
+    }
+
+    for (index in seq_along(files)) {
+        if (index > 1L) writeLines("")
+        if (nzchar(headers[[index]])) writeLines(headers[[index]])
+        if (file.exists(files[[index]])) {
+            writeLines(readLines(files[[index]], warn = FALSE))
+        }
+    }
+
+    invisible(title)
+}
+
+
+install_runtime_console_bindings <- function() {
+    ensure_dialog_app_search_position()
+    app_env$plot <- graphics::plot
+    options(pager = runtime_console_pager)
+
+    invisible(TRUE)
+}
+
+
+if (!exists("current_activity_id", inherits = FALSE)) {
+    current_activity_id <- ""
+}
+
+
+runtime_eval_code_text <- function(code) {
+    withCallingHandlers({
+        captured <- utils::capture.output({
+            result <- withVisible(eval(parse(text = code), envir = .GlobalEnv))
+        }, type = "output")
+        captured <- captured[nzchar(captured)]
+        value_text <- ""
+
+        if (isTRUE(result$visible)) {
+            value_text <- if (
+                is.character(result$value) && length(result$value) == 1L
+            ) {
+                as.character(result$value)
+            }
+            else {
+                paste(
+                    utils::capture.output(print(result$value)),
+                    collapse = "\n"
+                )
+            }
+        }
+
+        output <- c(captured, value_text)
+        paste(output[nzchar(output)], collapse = "\n")
+    }, error = function(error) {
+        app_env$dialog_record_traceback()
+    })
+}
+
+
+evaluate_code_result <- function(code) {
+    list(ok = TRUE, result = runtime_eval_code_text(code))
+}
+
+
 runtime_output_width <- function(value) {
     width <- suppressWarnings(as.integer(value %||% NA_integer_))
 
@@ -103,10 +211,6 @@ runtime_collapse_stream_lines <- function(lines) {
 
     while (length(lines) && !nzchar(lines[[length(lines)]])) {
         lines <- lines[-length(lines)]
-    }
-
-    while (length(lines) && !nzchar(lines[[1L]])) {
-        lines <- lines[-1L]
     }
 
     paste(lines, collapse = "\n")
@@ -733,6 +837,10 @@ runtime_dispatch_dataset_read <- function(method, params) {
             params$name %||% "",
             params$start %||% 1L,
             params$count %||% 20L
+        ),
+        "workspace.dataset_variables_named" = workspace_dataset_variables_named(
+            params$name %||% "",
+            params$variableNames %||% character(0)
         ),
         "workspace.dataset_values" = workspace_dataset_values(
             params$name %||% "",

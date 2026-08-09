@@ -246,6 +246,7 @@ export const createBrowserLiveScriptTransport = function(
         const transport = await transportPromise;
         activeSessionId = "";
         await transport.shutdown();
+        transportPromise = null;
     };
 
     return {

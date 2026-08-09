@@ -414,6 +414,8 @@ runtime_transport_error_payload <- function(error, dedicated) {
 
 runtime_transport_response_payload <- function(output, result_json, dedicated) {
     if (isTRUE(dedicated)) {
+        events_json <- as.character(output$events_json %||% "[]")
+
         return(paste0(
             "{\"id\":", json_str(output$id %||% ""),
             ",\"method\":", json_str(output$method %||% ""),
@@ -421,6 +423,7 @@ runtime_transport_response_payload <- function(output, result_json, dedicated) {
             ",\"result\":", result_json,
             ",\"error\":", json_str(output$error %||% ""),
             ",\"mode\":", json_str(output$mode %||% ""),
+            ",\"events\":", events_json,
             "}"
         ))
     }

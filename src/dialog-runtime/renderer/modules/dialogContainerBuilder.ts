@@ -246,7 +246,10 @@ export const createDialogContainerBuilder = function(
             return merged;
         };
         const reorderPinnedRows = function(): void {
-            if (control.deferPinOnTop) {
+            if (
+                control.deferPinOnTop
+                || !control.pinOnTopEnabled
+            ) {
                 return;
             }
 
@@ -462,7 +465,8 @@ export const createDialogContainerBuilder = function(
             entries: ContainerOption[]
         ): void {
             const previous = new Set(control.value);
-            content.innerHTML = "";
+            const fragment = document.createDocumentFragment();
+
             control.listLength = entries.length;
             control.__scriptItems = entries.map(function(
                 entry
@@ -502,8 +506,10 @@ export const createDialogContainerBuilder = function(
                         selectRow(row, event);
                     }
                 );
-                content.appendChild(row);
+                fragment.appendChild(row);
             });
+
+            content.replaceChildren(fragment);
 
             synchronizeSelection();
             runtime.retryPendingRestore();

@@ -6,6 +6,10 @@ export const coerceRuntimeCellValue = function(
         return value;
     }
 
+    if (!value.trim()) {
+        return value;
+    }
+
     if (/numeric|integer|double|number/i.test(columnType)) {
         const numberValue = Number(value);
 

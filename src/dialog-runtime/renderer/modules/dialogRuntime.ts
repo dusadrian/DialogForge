@@ -232,7 +232,7 @@ export function createDialogRuntime() {
       return customJSRuntime.setup(dialogSpec, runtimeState, coms);
     },
     logBuildError: function(message): void {
-      coms.sendTo('main', 'consolog', message);
+      coms.sendTo('main', dialogRuntimeEventChannels.log, message);
     }
   });
 

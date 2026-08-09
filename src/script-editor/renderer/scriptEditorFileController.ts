@@ -49,6 +49,7 @@ export interface ScriptEditorFileController {
     ): Promise<void>;
     closeTab(tabId: string): Promise<boolean>;
     restoreSession(): Promise<boolean>;
+    refreshOpenFiles(): Promise<void>;
 }
 
 
@@ -292,11 +293,58 @@ export const createScriptEditorFileController = function(
         );
     };
 
+    const refreshOpenFiles = async function(): Promise<void> {
+        const fileTabs = options.tabs.getTabs().filter((tab) => {
+            return tab.kind === "local" && Boolean(tab.filePath);
+        });
+
+        await Promise.all(fileTabs.map(async (tab) => {
+            let response: OpenScriptFileResponse;
+
+            try {
+                response = asOpenScriptFileResponse(
+                    await options.transport.invoke(
+                        "base-app:openScriptFilePath",
+                        tab.filePath
+                    )
+                );
+            }
+            catch {
+                return;
+            }
+
+            if (
+                response.status !== "ready"
+                || tab.dirty
+                || options.tabs.findTab(tab.id) !== tab
+            ) {
+                return;
+            }
+
+            const content = String(response.content || "");
+
+            if (content === tab.model.getValue()) {
+                return;
+            }
+
+            setScriptDocumentContent(tab, content, false);
+
+            if (options.tabs.getActiveTabId() === tab.id) {
+                options.scheduleValidation();
+                options.updateOutline();
+            }
+
+            options.tabs.refresh();
+            options.documentStateChanged();
+        }));
+    };
+
     return {
         saveTab,
         saveCurrent,
         openFile,
         closeTab,
-        restoreSession
+        restoreSession,
+        refreshOpenFiles
     };
 };

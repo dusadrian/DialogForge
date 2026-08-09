@@ -330,6 +330,9 @@ export const createProductDialogWindowController = function<WorkspaceSource>(
         window.once("ready-to-show", function(): void {
             if (!window.isDestroyed()) {
                 window.show();
+                void window.webContents.executeJavaScript(
+                    "document.getElementById('paper')?.focus({ preventScroll: true });"
+                );
             }
         });
         window.on("closed", function(): void {

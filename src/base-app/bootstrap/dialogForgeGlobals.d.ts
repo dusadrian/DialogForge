@@ -2,14 +2,18 @@
 // This file is picked up automatically because tsconfig.json includes "src/**/*.ts".
 
 import type { CopyPayload } from "../../dataset-editor/clipboard/copyPayload";
-import type { DatasetEditorInitMessage, DatasetEditorLanguageMessage } from "../../dataset-editor/renderer/datasetEditorIpcBindings";
+import type { DatasetEditorIpcBridge } from "../../dataset-editor/renderer/datasetEditorIpcBindings";
+import type { DatasetEditorTransportBridge } from "../../dataset-editor/renderer/datasetEditorRendererTransport";
 import type {
     OpenFileResult,
     PathInfoResult
 } from "../features/files/openFileResult";
-import type { ScriptEditorInitPayload, ScriptEditorLanguagePayload, ScriptEditorOpenFilePayload } from "../../script-editor/renderer/scriptEditorIpcBindings";
+import type { ScriptEditorIpcBridge } from "../../script-editor/renderer/scriptEditorIpcBindings";
+import type { ScriptEditorTransportBridge } from "../../script-editor/renderer/scriptEditorRendererTransport";
 import type { ScriptFileResult } from "../../script-editor/files/scriptFileResult";
 import type { LiveScriptRendererBridge } from "../../script-editor/collaboration/liveScriptIpc";
+import type { ApplicationSettingsRendererBridge } from "../features/settings/applicationSettingsIpc";
+import type { ProductDialogRuntimeHostBridge } from "../../dialog-runtime/dialogRuntimeIpc";
 import type { ExternalUrlOpenRequest } from "../features/external-url/externalUrl";
 import type {
     PlotCopyResult,
@@ -262,28 +266,7 @@ declare global {
                 patch: DatasetVariableUpdatePatch
             ): Promise<DatasetVariableMetadata | null>;
         };
-        settings: {
-            onLoaded(callback: (payload: unknown) => void): void;
-            onSaved(callback: () => void): void;
-            chooseRuntimeLocation(input: {
-                providerId?: string;
-                currentPath?: string;
-            }): Promise<{ path: string } | null>;
-            discoverRuntimeLocation(input: {
-                providerId?: string;
-            }): Promise<{
-                providerId: string;
-                configurable: boolean;
-                configuredPath: string;
-                resolvedPath: string;
-                source: "configured" | "discovered" | "invalid" | "unavailable";
-                message: string;
-            }>;
-            preview(input: unknown): void;
-            cancelPreview(): void;
-            save(input: unknown): void;
-            close?(): void;
-        };
+        settings: ApplicationSettingsRendererBridge;
         menuCustomization: {
             onLoaded(callback: (payload: unknown) => void): void;
             onSaved(callback: (payload: unknown) => void): void;
@@ -296,48 +279,11 @@ declare global {
             onSaved(callback: (payload: unknown) => void): void;
             save(input: unknown): void;
         };
-        dialogRuntime: {
-            sendTo(window: string, channel: string, ...args: unknown[]): void;
-            invoke(channel: string, ...args: unknown[]): Promise<unknown>;
-            on(channel: string, listener: (...args: unknown[]) => void): void;
-            once(channel: string, listener: (...args: unknown[]) => void): void;
-        };
-        scriptEditor: {
-            onInit(callback: (payload: ScriptEditorInitPayload) => void): void;
-            onLanguageChanged(callback: (payload: ScriptEditorLanguagePayload) => void): void;
-            onTerminalSettingsUpdated(callback: (settings: Record<string, unknown>) => void): void;
-            onRequestSaveForClose(callback: (requestId: string) => void): void;
-            onRequestLiveSessionShutdown(callback: (requestId: string) => void): void;
-            onInsertCode(callback: (code: unknown) => void): void;
-            onOpenFile(callback: (payload: ScriptEditorOpenFilePayload) => void): void;
-            onRuntimeExecuted(callback: () => void): void;
-            onCommandBoundary(callback: () => void): void;
-            onSessionState(callback: (phase: string) => void): void;
-            publishDirtyState(state: { dirty: boolean; filePath: string; content: string }): void;
-            publishLiveSessionShutdownResult(input: {
-                requestId: string;
-                ok: boolean;
-            }): void;
-            chooseScriptFile(): Promise<{ filePath: string; content: string } | null>;
-            publishReady(): void;
+        dialogRuntime: ProductDialogRuntimeHostBridge;
+        scriptEditor: ScriptEditorIpcBridge & ScriptEditorTransportBridge & {
             live: LiveScriptRendererBridge;
         };
-        datasetEditor: {
-            onInit(callback: (payload: DatasetEditorInitMessage) => void): void;
-            onLanguageChanged(callback: (payload: DatasetEditorLanguageMessage) => void): void;
-            onSetDatasetList(callback: (datasetNames: string[]) => void): void;
-            onOpenDataset(callback: (datasetName: string) => void): void;
-            onRefreshDataset(callback: (datasetName: string) => void): void;
-            onFilterStateChanged(callback: (payload: unknown) => void): void;
-            onApplyChanges(callback: (changes: unknown) => void): void;
-            onGotoCase(callback: (datasetName: string, caseNumber: unknown) => void): void;
-            onGotoVariable(callback: (datasetName: string, variableName: string) => void): void;
-            persistVariableColumnWidths(widths: Record<string, unknown>): Promise<void>;
-            publishDatasetState(datasetName: string): void;
-            writeClipboardText(text: string): Promise<boolean>;
-            readClipboardText(): Promise<string>;
-            runVisibleCommand(command: string, datasetName: string, visible?: boolean): Promise<boolean>;
-        };
+        datasetEditor: DatasetEditorIpcBridge & DatasetEditorTransportBridge;
         saveScriptFile(input: { filePath?: string; content?: string }): Promise<ScriptFileResult>;
         saveScriptFileAs(input: { filePath?: string; content?: string }): Promise<ScriptFileResult>;
         updateScriptEditorDirtyState(input: { dirty?: boolean; filePath?: string; content?: string }): void;

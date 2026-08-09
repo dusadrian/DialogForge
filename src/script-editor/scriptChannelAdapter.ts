@@ -18,6 +18,7 @@ export interface ScriptChannelAdapterBindings {
     ensureRuntimeReady(): Promise<boolean>;
     checkFragment(code: string): Promise<string>;
     executeVisibleCommand(command: string): Promise<unknown>;
+    publishCommandBoundary?(command: string): void;
     getDocument(): ScriptEditorDocumentState;
     saveFile(input: unknown, saveAs: boolean): Promise<unknown>;
     openFile(): Promise<unknown>;
@@ -58,7 +59,8 @@ export const createScriptChannelAdapter = function(
                     await bindings.executeVisibleCommand(request.text);
 
                     return [];
-                }
+                },
+                publishCommandBoundary: bindings.publishCommandBoundary
             });
         },
 

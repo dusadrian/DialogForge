@@ -49,6 +49,12 @@ import {
     createRuntimeSessionDatasetChannelAdapter
 } from "/browser-esm/src/runtime/tabular-data/runtimeSessionDatasetChannelAdapter.js";
 import {
+    createDatasetEditorSettings
+} from "/browser-esm/src/dataset-editor/datasetEditorSettings.js";
+import {
+    createDatasetEditorWarmCache
+} from "/browser-esm/src/dataset-editor/datasetEditorWarmCache.js";
+import {
     createDialogChannelAdapter
 } from "/browser-esm/src/dialog-runtime/dialogChannelAdapter.js";
 import {
@@ -62,12 +68,17 @@ import {
     dialogRuntimeIpcChannels
 } from "/browser-esm/src/dialog-runtime/dialogRuntimeIpc.js";
 import {
-    readDialogContentSize
-} from "/browser-esm/src/base-app/features/dialog-host/dialogContentAdapter.js";
+    readDialogContentSizeFromSource
+} from "/browser-esm/src/base-app/features/dialog-host/dialogContentSize.js";
 import {
-    createProductDialogWorkspaceDataFromEntries,
-    readProductDialogDatasetDescriptors
+    createProductDialogWorkspaceDataFromEntries
 } from "/browser-esm/src/dialog-runtime/dialog-builder/productDialogWorkspaceData.js";
+import {
+    createRuntimeDialogDatasetResolver
+} from "/browser-esm/src/dialog-runtime/custom-js/runtimeDatasetResolver.js";
+import {
+    createProductDialogSessionController
+} from "/browser-esm/src/dialog-runtime/dialog-builder/productDialogSessionController.js";
 import {
     createBrowserImportAdapter
 } from "/browser-esm/src/shell-web/browserImportAdapter.js";
@@ -84,6 +95,12 @@ import {
 import {
     createBrowserLiveScriptTransport
 } from "/browser-esm/src/shell-web/browserLiveScriptTransport.js";
+import {
+    scriptEditorEventChannels
+} from "/browser-esm/src/script-editor/scriptEditorIpc.js";
+import {
+    datasetEditorEventChannels
+} from "/browser-esm/src/dataset-editor/datasetEditorIpc.js";
 import {
     showBrowserScriptSavePrompt
 } from "/browser-esm/src/shell-web/browserScriptSavePrompt.js";
@@ -187,6 +204,9 @@ import {
     workspaceUpdateHasChanges
 } from "/browser-esm/src/runtime/workspace/workspaceUpdate.js";
 import {
+    createRuntimeDatasetChangeProjector
+} from "/browser-esm/src/runtime/events/runtimeDatasetChanges.js";
+import {
     createWebRFilePath,
     ensureWebRDirectory,
     sanitizeWebRFileName,
@@ -229,9 +249,8 @@ import {
     isRPlotCommand
 } from "/browser-esm/src/runtime/providers/r/commands/rCommandIntents.js";
 import {
-    captureWebRHiddenText,
-    prewarmWebRGraphicsCapture as runWebRGraphicsPrewarm
-} from "/browser-esm/src/runtime/providers/webr/webRCommandCapture.js";
+    prewarmWebRGraphicsTransport as runWebRGraphicsPrewarm
+} from "/browser-esm/src/runtime/providers/webr/webRGraphicsTransport.js";
 import {
     createWebRRuntimePackageAdapter
 } from "/browser-esm/src/runtime/providers/webr/webRRuntimePackageAdapter.js";
@@ -258,9 +277,6 @@ import {
 import {
     createBrowserStorageAdapter
 } from "/browser-esm/src/shell-web/browserStorageAdapter.js";
-import {
-    datasetEditorEventChannels
-} from "/browser-esm/src/dataset-editor/datasetEditorIpc.js";
 import {
     readScriptBaseName
 } from "/browser-esm/src/script-editor/files/scriptPath.js";
@@ -301,14 +317,20 @@ const state = {
     dialogOpeningActivityEnd: null,
     dialogOpeningActivityId: "",
     dialogWorkspaceDataPromises: new WeakMap(),
+    dialogPayloads: new WeakMap(),
+    dialogSessionController: null,
     workspaceMetadataRefreshPromise: null,
     workspaceMetadataReady: false,
     productStateChips: [],
     dialogBindingState: createDialogBindingState(),
     dialogExternalCallHost: null,
+    dialogDatasetResolver: null,
+    dialogDatasetResolverRuntime: null,
     commandHistory: null,
     loadedRuntimePackages: new Set(),
     datasetChannelAdapter: null,
+    datasetWarmCache: null,
+    datasetWarmCacheRuntime: null,
     dialogChannelAdapter: null,
     generalChannelAdapter: null,
     browserImportAdapter: null,
@@ -317,6 +339,7 @@ const state = {
     browserRuntimeProgressController: null,
     runtimeSession: null,
     runtimeSessionRuntime: null,
+    runtimeDatasetChangeProjector: createRuntimeDatasetChangeProjector(),
     runtimeControlClient: null,
     runtimeOperationQueue: null,
     runtimeRestartWorkspaceController: null,
@@ -457,6 +480,15 @@ const browserNativeEditRoleAdapter = createBrowserNativeEditRoleAdapter(
 const browserApplicationStorageAdapter = createBrowserStorageAdapter({
     settingsKey: "dialogforge.settings"
 });
+const browserDatasetEditorSettings = createDatasetEditorSettings({
+    readSettings: browserApplicationStorageAdapter.readSettings,
+    writeSettings: browserApplicationStorageAdapter.writeSettings
+});
+state.dataEditor.variableColumnWidths = Object.assign(
+    {},
+    state.dataEditor.variableColumnWidths,
+    browserDatasetEditorSettings.readVariableColumnWidths()
+);
 const browserZoomAdapter = createBrowserZoomAdapter({
     document,
     window,
@@ -630,6 +662,10 @@ const previewBrowserSettings = async function (input) {
 
     state.settingsPreview = next;
     applyWebTerminalSettings(next);
+    broadcastBrowserPreloadEvent(
+        applicationEventChannels.terminalSettingsUpdated,
+        readTerminalSettings(next)
+    );
     await applyBrowserLanguage(nextLocale, {
         persist: false,
         refreshSettings: false
@@ -644,6 +680,10 @@ const cancelBrowserSettingsPreview = async function () {
 
     state.settingsPreview = null;
     applyWebTerminalSettings(saved);
+    broadcastBrowserPreloadEvent(
+        applicationEventChannels.terminalSettingsUpdated,
+        readTerminalSettings(saved)
+    );
     await applyBrowserLanguage(savedLocale, {
         persist: false,
         refreshSettings: false
@@ -672,6 +712,10 @@ const saveBrowserSettings = async function (input, sourceWindow) {
     state.settingsPreview = null;
     browserApplicationStorageAdapter.writeSettings(next);
     applyWebTerminalSettings(next);
+    broadcastBrowserPreloadEvent(
+        applicationEventChannels.terminalSettingsUpdated,
+        readTerminalSettings(next)
+    );
     await applyBrowserLanguage(nextLocale, {
         persist: false,
         refreshSettings: false
@@ -794,14 +838,52 @@ const browserPreloadChannelBridge = createBrowserPreloadChannelBridge({
             activateModelessSurface("scriptEditor");
         }
     },
+    persistDataEditorVariableColumnWidths(input) {
+        state.dataEditor.variableColumnWidths = Object.assign(
+            {},
+            state.dataEditor.variableColumnWidths,
+            browserDatasetEditorSettings.writeVariableColumnWidths(input)
+        );
+    },
+    publishDataEditorState(input) {
+        const datasetName = String(input.datasetName || "").trim();
+
+        if (datasetName) {
+            state.dataEditor.datasetName = datasetName;
+        }
+    },
+    async runVisibleDataEditorCommand(input) {
+        const result = await executeVisibleCommand(
+            String(input.command || ""),
+            {
+                source: "dataset-editor",
+                visible: input.visible !== false
+            }
+        );
+
+        return result?.status !== "failed" && result?.ok !== false;
+    },
     runVisibleDialogCommand(args) {
         return browserPreloadChannelBridge.invoke(
             dialogRuntimeIpcChannels.runVisibleCommand,
             args
         );
     },
-    handleDialogStateUpdate: handleBrowserGoToStateUpdate,
-    updateDialogCommandPane: updateCommandPane,
+    handleDialogStateUpdate: async function (input) {
+        if (input?.stateKind === "goto") {
+            await handleBrowserGoToStateUpdate(input);
+            return;
+        }
+
+        const dialogId = String(input?.name || "").trim();
+
+        browserDialogSessions().updateState(dialogId, input?.changes);
+    },
+    handleDialogCommandUpdate: async function (text, sourceWindow) {
+        const dialogId = readBrowserDialogIdForSourceWindow(sourceWindow);
+
+        browserDialogSessions().updateCommand(dialogId, text);
+    },
     closeDialogLayer(input) {
         closeDialogLayerForMessage(input || {}, null);
     },
@@ -823,7 +905,11 @@ const browserPreloadChannelBridge = createBrowserPreloadChannelBridge({
         const dialogId = frame?.closest(".dialogforge-web-dialog-layer")?.dataset.dialogId || "";
 
         browserZoomAdapter.postToWindow(sourceWindow);
-        await postSharedDialogCreatedEvent(frame, dialogId);
+        await postSharedDialogCreatedEvent(
+            frame,
+            dialogId,
+            state.dialogPayloads.get(frame) || null
+        );
     },
     updateScriptDirtyState(input) {
         state.scriptEditor.dirty = input?.dirty === true;
@@ -835,6 +921,9 @@ const browserPreloadChannelBridge = createBrowserPreloadChannelBridge({
     },
     resolveScriptCloseRequest(input) {
         browserScriptEditorSurface().resolveCloseRequest(input || {});
+    },
+    resolveScriptLiveSessionShutdownRequest(input) {
+        browserScriptEditorSurface().resolveLiveSessionShutdownRequest(input || {});
     },
     readSettingsPayload: readBrowserSettingsPayload,
     readApplicationSettings() {
@@ -951,29 +1040,9 @@ const webRRuntimeSession = function () {
                 return state.runtimeOperationQueue.run(action);
             },
             visibleCommands: {
-                loadedPackages: state.loadedRuntimePackages,
-                ensureRuntime,
                 readConsoleOutputWidth: readBrowserConsoleOutputWidth,
-                transcript,
-                createActivity: function (text, options = {}) {
-                    return options.preRecorded
-                        ? {
-                            id: String(options.activityId || `web_cmd_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`),
-                            commandText: normalizeConstructedCommandText(text)
-                        }
-                        : createVisibleCommandActivity(text, String(options.activityId || ""));
-                },
-                setRuntimeBusy: function (busy) {
-                    state.console?.session?.setRuntimeBusy?.(busy);
-                },
-                renderToolbar: function () {
-                    state.console?.toolbar?.render?.();
-                },
-                openHelpTopic: openHelpTopicModal,
-                maybeOpenPlotViewer: maybeOpenPlotViewerForCommand,
-                updatePlotImages: updatePlotViewerFromCapturedImages,
-                requestPrompt: function (input) {
-                    return webRPromptCoordinator().requestPrompt(input || {});
+                recordTranscriptEvents: function (events) {
+                    state.console?.recordTranscriptEvents?.(events || []);
                 },
                 setWorkspaceMetadataStatus: function () {
                     browserRuntimeProgress().setActivityMessage(
@@ -1035,14 +1104,23 @@ const browserRuntimeSessionManager = function () {
     return webRRuntimeSession()?.runtimeSessionManager || null;
 };
 
-const captureBrowserRuntimeText = function (runtime, command) {
-    const capture = function () {
-        return captureWebRHiddenText(runtime, command);
-    };
+const queryBrowserRuntimeText = async function (command) {
+    const manager = webRRuntimeSession()?.runtimeSessionManager;
 
-    return state.runtimeOperationQueue
-        ? state.runtimeOperationQueue.run(capture)
-        : capture();
+    if (!manager) {
+        throw new Error("WebR runtime session is not ready.");
+    }
+
+    const result = await manager.executeInvisibleQuery({
+        query: String(command || ""),
+        source: "browser.app-query"
+    });
+
+    if (result.status !== "ready") {
+        throw new Error(result.message || "R query failed.");
+    }
+
+    return String(result.value || "");
 };
 
 const appendTranscript = function (text, className = "") {
@@ -1106,6 +1184,18 @@ const workspaceObjectByName = function (objectName) {
     }) || null;
 };
 
+const broadcastBrowserWorkspaceSnapshot = function (snapshot) {
+    broadcastBrowserPreloadEvent(
+        applicationEventChannels.workspace,
+        snapshot
+    );
+    postBrowserPreloadEvent(
+        state.dataEditor.frame?.contentWindow,
+        datasetEditorEventChannels.setDatasetList,
+        { datasetNames: workspaceDatasetNames() }
+    );
+};
+
 const isBrowserTabularWorkspaceObject = function (object) {
     const kind = String(object?.kind || "").trim().toLowerCase();
     const capabilities = Array.isArray(object?.capabilities)
@@ -1121,24 +1211,21 @@ const isBrowserTabularWorkspaceObject = function (object) {
 };
 
 const browserDialogDatasets = async function () {
-    return readProductDialogDatasetDescriptors(
-        workspaceEntries().map((entry) => ({
-            ...entry,
-            columnEntries: workspaceColumnEntries(entry.name)
-        })),
-        {
-            allowAllTypes: isTokenLaunchSession(),
-            readVariables: readDataEditorVariableBatch
-        }
-    );
-};
+    const manager = webRRuntimeSession()?.runtimeSessionManager;
 
-const readDataEditorVariableBatch = function (datasetName, start, count) {
-    return browserDatasetEditorRuntimeBindings().readVariableBatch(
-        datasetName,
-        start,
-        count
-    );
+    if (!manager) {
+        return [];
+    }
+
+    if (
+        state.dialogDatasetResolverRuntime !== manager
+        || typeof state.dialogDatasetResolver !== "function"
+    ) {
+        state.dialogDatasetResolverRuntime = manager;
+        state.dialogDatasetResolver = createRuntimeDialogDatasetResolver(manager);
+    }
+
+    return state.dialogDatasetResolver();
 };
 
 const browserDialogExternalCallHost = function () {
@@ -1304,19 +1391,59 @@ const applyBrowserWorkspaceUpdate = async function (update, snapshot) {
 
     const previousDatasetNames = workspaceDatasetNames();
     const effects = createWorkspaceDatasetCacheEffects(update);
+    const warmCache = browserDatasetWarmCache();
+    const metadataRefreshes = [];
 
     effects.forEach((effect) => {
         state.dataEditor.cache.delete(effect.name);
+
+        if (effect.preview) {
+            warmCache?.invalidatePreview(effect.name);
+        }
+
+        if (!effect.variableMetadata) {
+            return;
+        }
+
+        if (
+            !effect.variableMetadataStructure
+            && effect.variableNames.length > 0
+        ) {
+            if (warmCache) {
+                metadataRefreshes.push(
+                    warmCache.refreshVariableMetadata(
+                        effect.name,
+                        effect.variableNames
+                    )
+                );
+            }
+            return;
+        }
+
+        warmCache?.invalidateVariableMetadata(effect.name);
     });
 
     state.workspaceSnapshot = snapshot;
     state.workspaceMetadataReady = true;
     selectActiveDatasetAfterWorkspaceRefresh(previousDatasetNames);
     renderWorkspacePane();
-    broadcastBrowserPreloadEvent(
-        applicationEventChannels.workspace,
-        state.workspaceSnapshot
-    );
+    broadcastBrowserWorkspaceSnapshot(state.workspaceSnapshot);
+
+    const activeEffect = effects.find((effect) => {
+        return effect.name === state.activeDatasetName && !effect.removed;
+    });
+
+    if (
+        activeEffect?.variableMetadata
+        && (
+            activeEffect.variableMetadataStructure
+            || activeEffect.variableNames.length === 0
+        )
+    ) {
+        warmCache?.warmVariableMetadata(state.activeDatasetName);
+    }
+
+    await Promise.allSettled(metadataRefreshes);
 
     if (workspaceUpdateChangesDialogVariables(effects)) {
         notifyBrowserDialogsWorkspaceChanged();
@@ -1345,20 +1472,6 @@ const workspaceColumnNames = function (objectName) {
         : [];
 };
 
-const workspaceColumnEntries = function (objectName) {
-    const object = workspaceObjectByName(objectName);
-
-    if (Array.isArray(object?.columnEntries) && object.columnEntries.length > 0) {
-        return object.columnEntries;
-    }
-
-    return workspaceColumnNames(objectName).map((name) => ({ name }));
-};
-
-const isTokenLaunchSession = function () {
-    return Boolean(String(state.moodleLaunchCode || "").trim());
-};
-
 const executeWorkspaceRemove = async function (name) {
     const objectName = String(name || "").trim();
     const manager = webRRuntimeSession()?.runtimeSessionManager;
@@ -1375,10 +1488,7 @@ const executeWorkspaceRemove = async function (name) {
     renderWorkspacePane();
     notifyBrowserDialogsWorkspaceChanged();
     refreshBrowserConsoleStateChips();
-    broadcastBrowserPreloadEvent(
-        applicationEventChannels.workspace,
-        state.workspaceSnapshot
-    );
+    broadcastBrowserWorkspaceSnapshot(state.workspaceSnapshot);
 };
 
 const executeWorkspaceClear = async function () {
@@ -1396,10 +1506,7 @@ const executeWorkspaceClear = async function () {
     renderWorkspacePane();
     notifyBrowserDialogsWorkspaceChanged();
     refreshBrowserConsoleStateChips();
-    broadcastBrowserPreloadEvent(
-        applicationEventChannels.workspace,
-        state.workspaceSnapshot
-    );
+    broadcastBrowserWorkspaceSnapshot(state.workspaceSnapshot);
 };
 
 const readWorkspacePaneSnapshot = function () {
@@ -1479,6 +1586,12 @@ const applyActiveWorkspaceDatasetName = function (datasetName) {
 
     refreshBrowserConsoleStateChips(state.activeDatasetName);
     notifyBrowserDialogsStateChanged(state.activeDatasetName);
+
+    if (state.activeDatasetName) {
+        browserDatasetWarmCache()?.warmVariableMetadata(
+            state.activeDatasetName
+        );
+    }
 };
 
 const selectActiveDatasetAfterWorkspaceRefresh = function (previousDatasetNames = []) {
@@ -1536,10 +1649,7 @@ const refreshWebRWorkspacePane = async function (options = {}) {
 
         selectActiveDatasetAfterWorkspaceRefresh(previousDatasetNames);
         renderWorkspacePane();
-        broadcastBrowserPreloadEvent(
-            applicationEventChannels.workspace,
-            state.workspaceSnapshot
-        );
+        broadcastBrowserWorkspaceSnapshot(state.workspaceSnapshot);
     };
     const pending = refreshMetadata();
 
@@ -1776,6 +1886,9 @@ const browserScriptEditorSurface = function () {
             },
             readLiveScriptJoinText: function () {
                 return readLiveScriptJoinTextFromUrl(window.location.href);
+            },
+            shutdownLiveSessions: function () {
+                return browserLiveScriptChannels().shutdown();
             },
             onStateChanged: function (surfaceState) {
                 state.scriptEditor.layer = surfaceState.layer;
@@ -2165,6 +2278,38 @@ const browserFrameSurfaces = function () {
     return state.browserFrameSurfaces;
 };
 
+const browserDialogSessions = function () {
+    if (!state.dialogSessionController) {
+        state.dialogSessionController = createProductDialogSessionController({
+            publishCommand(command, dialogId) {
+                state.commandPreviewDialogId = String(dialogId || "").trim();
+                updateCommandPane(command).catch((error) => {
+                    appendTranscript(
+                        error instanceof Error ? error.message : String(error),
+                        "web-transcript__line--stderr"
+                    );
+                });
+            }
+        });
+    }
+
+    return state.dialogSessionController;
+};
+
+const readBrowserDialogIdForSourceWindow = function (sourceWindow) {
+    if (!sourceWindow) {
+        return "";
+    }
+
+    const frame = Array.from(
+        document.querySelectorAll(".dialogforge-web-dialog__frame")
+    ).find((candidate) => candidate.contentWindow === sourceWindow);
+
+    return String(
+        frame?.closest(".dialogforge-web-dialog-layer")?.dataset.dialogId || ""
+    ).trim();
+};
+
 const browserWorkbenchLayout = function () {
     if (!state.browserWorkbenchLayout) {
         state.browserWorkbenchLayout = createBrowserWorkbenchLayout({
@@ -2352,16 +2497,22 @@ const notifyConsoleSession = function () {
     try {
         state.console?.session?.notifySessionPhase?.();
         state.console?.toolbar?.render?.();
-        broadcastBrowserPreloadEvent(
-            applicationEventChannels.runtimeSession,
-            browserRuntimeSessionManager()?.getSnapshot()
+        const snapshot = browserRuntimeSessionManager()?.getSnapshot()
             || (
                 state.runtimeStarting
                     ? runtimeSnapshot("starting", "WebR is starting.")
                     : state.runtimeReady
                         ? runtimeSnapshot("ready", "WebR ready.")
                         : runtimeSnapshot("stopped", "WebR not started.")
-            )
+            );
+
+        broadcastBrowserPreloadEvent(
+            applicationEventChannels.runtimeSession,
+            snapshot
+        );
+        broadcastBrowserPreloadEvent(
+            scriptEditorEventChannels.sessionState,
+            { phase: snapshot.status }
         );
     }
     catch { }
@@ -2809,6 +2960,14 @@ const applyBrowserLanguage = async function (locale, options = {}) {
     await refreshOpenTranslatedSurfaces({
         refreshSettings: options.refreshSettings
     });
+    broadcastBrowserPreloadEvent(
+        applicationEventChannels.languageChanged,
+        {
+            languageNS: cleanLocale,
+            language: cleanLocale.split(/[-_]/)[0].toLowerCase(),
+            appPath: "/"
+        }
+    );
 };
 
 const browserDatasetNavigationSupport = createMainDatasetNavigationSupport({
@@ -3262,6 +3421,14 @@ const ensureRuntime = async function () {
                 }
 
                 return response.text();
+            },
+            graphicsReceived: updatePlotViewerFromCapturedImages,
+            promptReceived: async function (input) {
+                const event = await webRPromptCoordinator().requestPrompt(input);
+
+                if (event) {
+                    state.console?.recordTranscriptEvents?.([event]);
+                }
             }
         });
         state.runtime = runtime;
@@ -3410,7 +3577,7 @@ const fetchHelpTopicDocument = async function (topic, packageName = "") {
             path,
             window.location.origin,
             function (command) {
-                return captureBrowserRuntimeText(runtime, command);
+                return queryBrowserRuntimeText(command);
             }
         );
 
@@ -3466,7 +3633,7 @@ const openHelpHomeModal = async function () {
     const document = await fetchWebRHelpHomeDocument(
         window.location.origin,
         function (command) {
-            return captureBrowserRuntimeText(runtime, command);
+            return queryBrowserRuntimeText(command);
         }
     );
 
@@ -3565,7 +3732,7 @@ const fetchBrowserRHelpPage = async function (value) {
         value,
         window.location.origin,
         function (command) {
-            return captureBrowserRuntimeText(runtime, command);
+            return queryBrowserRuntimeText(command);
         }
     );
 };
@@ -3599,20 +3766,49 @@ const installBrowserHelpBridge = function () {
     });
 };
 
-const webRVisibleCommandRunner = function () {
+const browserVisibleCommandSession = function () {
     return webRRuntimeSession();
 };
 
 const executeVisibleCommand = async function (text, options = {}) {
     await ensureRuntime();
 
-    const session = webRVisibleCommandRunner();
+    maybeOpenPlotViewerForCommand(String(text || ""));
+
+    const session = browserVisibleCommandSession();
 
     if (!session) {
         return { ok: false };
     }
 
-    return session.executeVisibleCommand(text, options);
+    const result = await session.executeVisibleCommand(text, options);
+
+    try {
+        const runtimeEvents = await session.runtimeSessionManager.listRuntimeEvents();
+        const changes = state.runtimeDatasetChangeProjector.project(
+            runtimeEvents.events || []
+        );
+
+        broadcastBrowserPreloadEvent(
+            applicationEventChannels.runtimeEvents,
+            runtimeEvents
+        );
+        if (changes.length > 0 && state.dataEditor.frame?.contentWindow) {
+            postBrowserPreloadEvent(
+                state.dataEditor.frame.contentWindow,
+                datasetEditorEventChannels.applyChanges,
+                { changes }
+            );
+        }
+    }
+    catch (error) {
+        appendTranscript(
+            error instanceof Error ? error.message : String(error),
+            "web-transcript__line--stderr"
+        );
+    }
+
+    return result;
 };
 
 const webRRuntimeRestartWorkspace = function () {
@@ -3671,6 +3867,10 @@ const stopWebRRuntime = async function (message) {
     state.runtimeOperationQueue = null;
     state.workspaceMetadataReady = false;
     state.datasetChannelAdapter = null;
+    state.datasetWarmCache = null;
+    state.datasetWarmCacheRuntime = null;
+    state.dialogDatasetResolver = null;
+    state.dialogDatasetResolverRuntime = null;
     state.promptCoordinator = null;
     state.plotViewerGraphicsWarmupPromise = null;
     state.plotViewerGraphicsWarm = false;
@@ -3806,7 +4006,14 @@ const initializeSharedConsole = async function () {
             });
         }
     });
-    const { session, completionModel, commandHistory, coordinator, toolbar } = consoleBootstrap;
+    const {
+        session,
+        completionModel,
+        commandHistory,
+        coordinator,
+        toolbar,
+        recordTranscriptEvents
+    } = consoleBootstrap;
 
     completionModel.ingestObjectNames(filterRInternalCompletionSymbols(workspaceObjectNames()));
 
@@ -3816,6 +4023,7 @@ const initializeSharedConsole = async function () {
         commandHistory,
         coordinator,
         toolbar,
+        recordTranscriptEvents,
         executeVisibleCommand,
         waitForPlotWarmup: async function () {
             if (state.runtimeReady && !state.plotViewerGraphicsWarmupPromise) {
@@ -3885,11 +4093,18 @@ const closeDialogLayerForMessage = function (message, sourceWindow) {
         message,
         sourceWindow
     );
+    const surfaceId = dialogId
+        || String(layer?.dataset.surfaceId || layer?.dataset.dialogId || "").trim();
 
-    layer?.remove();
+    if (surfaceId && browserFrameSurfaces().get(surfaceId)) {
+        browserFrameSurfaces().close(surfaceId);
+    }
+    else {
+        layer?.remove();
+    }
 
     if (
-        (dialogId && state.commandPreviewDialogId === dialogId)
+        (surfaceId && state.commandPreviewDialogId === surfaceId)
         || !document.querySelector(".dialogforge-web-dialog-layer[data-dialog-id]")
     ) {
         updateCommandPane("").catch((error) => {
@@ -3903,6 +4118,16 @@ const handleBrowserDialogStateCall = function (callName, parameters) {
         state: state.dialogBindingState,
         onFilterStateChanged(dataset) {
             notifyBrowserDialogsStateChanged(dataset);
+            postBrowserPreloadEvent(
+                state.dataEditor.frame?.contentWindow,
+                datasetEditorEventChannels.filterStateChanged,
+                {
+                    dataset,
+                    filter: dataset
+                        ? state.dialogBindingState.filters[dataset] || null
+                        : null
+                }
+            );
         },
         onConsoleStateChanged(dataset) {
             refreshBrowserConsoleStateChips(dataset);
@@ -3978,6 +4203,21 @@ const browserDialogChannels = function () {
             },
             loadRuntimePackages,
             executeVisibleCommand,
+            publishCommandBoundary(command) {
+                postBrowserPreloadEvent(
+                    state.scriptEditor.frame?.contentWindow,
+                    scriptEditorEventChannels.runtimeExecuted,
+                    {
+                        code: command,
+                        origin: "runScriptCodeBatch"
+                    }
+                );
+                postBrowserPreloadEvent(
+                    state.scriptEditor.frame?.contentWindow,
+                    scriptEditorEventChannels.commandBoundary,
+                    { code: command }
+                );
+            },
             callExternal(name, parameters) {
                 return handleBrowserDialogExternalCall(name, parameters);
             },
@@ -4055,6 +4295,7 @@ const postSharedDialogCreatedEvent = async function (frame, dialogId, dialogPayl
             postBrowserPreloadEvent(frame.contentWindow, dialogRuntimeEventChannels.created, {
                 dialogID: cleanId,
                 data: dialogSource,
+                lastState: browserDialogSessions().getState(cleanId),
                 workspaceData
             });
         }
@@ -4080,6 +4321,18 @@ const readBrowserDialogWorkspaceData = function () {
 
 const invalidateBrowserDataset = async function (datasetName, effect = {}) {
     state.dataEditor.cache.delete(String(datasetName || "").trim());
+    const warmCache = browserDatasetWarmCache();
+
+    warmCache?.invalidatePreview(datasetName);
+
+    if (
+        effect.variableMetadataChanged === true
+        && effect.variableMetadataPatched !== true
+    ) {
+        warmCache?.invalidateVariableMetadata(datasetName);
+        warmCache?.warmVariableMetadata(datasetName);
+    }
+
     const manager = webRRuntimeSession()?.runtimeSessionManager;
 
     if (manager) {
@@ -4098,6 +4351,24 @@ const invalidateBrowserDataset = async function (datasetName, effect = {}) {
     refreshBrowserConsoleStateChips();
 };
 
+const browserDatasetWarmCache = function () {
+    const manager = webRRuntimeSession()?.runtimeSessionManager;
+
+    if (!manager) {
+        return null;
+    }
+
+    if (
+        state.datasetWarmCacheRuntime !== manager
+        || !state.datasetWarmCache
+    ) {
+        state.datasetWarmCacheRuntime = manager;
+        state.datasetWarmCache = createDatasetEditorWarmCache(manager);
+    }
+
+    return state.datasetWarmCache;
+};
+
 const browserDatasetChannels = function () {
     if (!state.datasetChannelAdapter) {
         const manager = webRRuntimeSession()?.runtimeSessionManager;
@@ -4106,11 +4377,19 @@ const browserDatasetChannels = function () {
             throw new Error("Runtime session is not ready for dataset operations.");
         }
 
+        const warmCache = browserDatasetWarmCache();
+
         state.datasetChannelAdapter = createRuntimeSessionDatasetChannelAdapter({
             runtimeSessionManager: manager,
             initialRows: DATA_EDITOR_INITIAL_ROWS,
             initialColumns: DATA_EDITOR_INITIAL_COLUMNS,
             variableOverscanRows: DATA_EDITOR_VARIABLE_OVERSCAN_ROWS,
+            readVariableMetadataBatch: warmCache
+                ? warmCache.readVariableMetadata
+                : undefined,
+            patchVariableMetadata: warmCache
+                ? warmCache.patchVariableMetadata
+                : undefined,
             invalidateDataset: invalidateBrowserDataset
         });
     }
@@ -4272,7 +4551,7 @@ const openDialog = async function (dialog) {
         }
 
         dialogPayload = await response.json();
-        contentSize = await readDialogContentSize(dialog, fetchBrowserJsonIfAvailable);
+        contentSize = readDialogContentSizeFromSource(dialogPayload);
 
         await ensureDialogRuntimePackages(dialogPayload);
     }
@@ -4296,14 +4575,11 @@ const openDialog = async function (dialog) {
         frameTitle: dialog.label || dialog.id,
         storageKey: `dialog.${dialog.id}`,
         onClose: function () {
-            if (
-                state.commandPreviewDialogId === dialog.id
-                || !document.querySelector(".dialogforge-web-dialog-layer[data-dialog-id]")
-            ) {
-                updateCommandPane("").catch((error) => {
-                    appendTranscript(error instanceof Error ? error.message : String(error), "web-transcript__line--stderr");
-                });
-            }
+            const openDialogCount = document.querySelectorAll(
+                ".dialogforge-web-dialog-layer[data-dialog-id]"
+            ).length;
+
+            browserDialogSessions().closeWindow(dialog.id, openDialogCount);
         },
         onFrameLoad: function () {
             browserZoomAdapter.postToWindow(result.frame.contentWindow);
@@ -4311,6 +4587,7 @@ const openDialog = async function (dialog) {
     });
 
     result.layer.dataset.dialogId = dialog.id;
+    state.dialogPayloads.set(result.frame, dialogPayload);
     result.frame.focus();
 };
 

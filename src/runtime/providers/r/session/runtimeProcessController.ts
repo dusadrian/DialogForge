@@ -1,5 +1,4 @@
 import {
-    createTranscriptEvent,
     createVisibleCommandRequest
 } from "../../../commands/commandProtocol";
 import type {
@@ -24,16 +23,12 @@ import {
 } from "../protocol/runtimeControlClient";
 import {
     asRuntimeControlArray,
-    asRuntimeControlObject,
     createProviderRuntimeEvent,
     createTranscriptEventsFromRuntimeControl
 } from "../protocol/runtimeControlEvents";
 import {
-    workspaceUpdateHasChanges
-} from "../../../workspace/workspaceUpdate";
-import {
-    createRWorkspaceUpdate
-} from "../controllers/rWorkspaceUpdate";
+    createRVisibleCommandExecutor
+} from "../controllers/rVisibleCommandExecutor";
 import { createRRuntimeProcessHost } from "./runtimeProcessHost";
 import {
     createRRuntimeControllerSet
@@ -75,21 +70,6 @@ const createRequestId = function(prefix: string): string {
 const transcriptHasFailure = function(transcriptEvents: TranscriptEvent[]): boolean {
     return transcriptEvents.some((event) => {
         return event.type === "failed" || event.type === "rejected";
-    });
-};
-
-
-const isCommentOnlyRInput = function(commandText: string): boolean {
-    const text = String(commandText || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
-
-    if (!text.trim()) {
-        return true;
-    }
-
-    return text.split("\n").every((line) => {
-        const trimmed = line.trim();
-
-        return !trimmed || trimmed.startsWith("#");
     });
 };
 
@@ -141,99 +121,33 @@ export const createRRuntimeProcessController = function(
         }
     };
 
-    const workspaceUpdateFromEvents = function(
-        events: unknown[] | undefined
-    ) {
-        const workspaceEvent = asRuntimeControlArray(events).find((event) => {
-            return String(asRuntimeControlObject(event).type || "") ===
-                "workspace_update";
-        });
-
-        if (!workspaceEvent) {
-            return null;
+    const visibleCommandController = createRVisibleCommandExecutor({
+        getClient: function() {
+            return client;
+        },
+        createRequestId,
+        onRuntimeControlEvents: recordRuntimeControlEvents,
+        onExecutionStarted: function(request, parentId) {
+            activeVisibleCommand = { request, parentId };
+        },
+        onExecutionFinished: function() {
+            activeVisibleCommand = null;
         }
-
-        const update = createRWorkspaceUpdate(
-            asRuntimeControlObject(workspaceEvent).update
-        );
-
-        return workspaceUpdateHasChanges(update) ? update : null;
-    };
-
-    const executeVisibleRCommandWithEffects = async function(
+    });
+    const executeVisibleRCommandWithEffects = function(
         commandText: string,
         source: string,
         snapshot: RuntimeSessionSnapshot,
         outputWidth?: number
-    ): Promise<RuntimeCommandExecutionResult> {
-        const request = createVisibleCommandRequest({
-            text: commandText,
-            source,
-            outputWidth
-        });
-
-        if (isCommentOnlyRInput(request.text)) {
-            return {
-                transcriptEvents: [
-                    createTranscriptEvent("submitted", request),
-                    createTranscriptEvent("completed", request, {
-                        state: "idle"
-                    })
-                ],
-                workspaceUpdate: null
-            };
-        }
-
-        if (!client) {
-            return {
-                transcriptEvents: [
-                    createTranscriptEvent("rejected", request, {
-                        message: "R runtime-control session is not attached."
-                    })
-                ],
-                workspaceUpdate: null
-            };
-        }
-
-        const parentId = createRequestId("visible-command-activity");
-        activeVisibleCommand = {
-            request,
-            parentId
-        };
-
-        const result = await client.execute({
-            id: createRequestId("visible-command"),
-            method: "execute_input",
-            params: {
-                code: request.text,
-                parentId,
-                mode: "interactive",
-                outputWidth: request.outputWidth
-            }
-        }).finally(() => {
-            activeVisibleCommand = null;
-        });
-
-        recordRuntimeControlEvents(result.events, snapshot);
-
-        const liveTranscript = createTranscriptEventsFromRuntimeControl(result.events, request, parentId);
-
-        if (result.ok && liveTranscript.length > 0) {
-            return {
-                transcriptEvents: liveTranscript,
-                workspaceUpdate: workspaceUpdateFromEvents(result.events)
-            };
-        }
-
-        return {
-            transcriptEvents: [
-                createTranscriptEvent("submitted", request),
-                createTranscriptEvent("failed", request, {
-                    message: String(result.error || "R command execution failed.")
-                })
-            ],
-            workspaceUpdate: null
-        };
+    ) {
+        return visibleCommandController.executeVisibleCommand(
+            createVisibleCommandRequest({
+                text: commandText,
+                source,
+                outputWidth
+            }),
+            snapshot
+        );
     };
 
     const processHost = createRRuntimeProcessHost({
@@ -272,11 +186,9 @@ export const createRRuntimeProcessController = function(
                 request: VisibleCommandRequest,
                 snapshot: RuntimeSessionSnapshot
             ): Promise<RuntimeCommandExecutionResult> {
-                return executeVisibleRCommandWithEffects(
-                    request.text,
-                    request.source,
-                    snapshot,
-                    request.outputWidth
+                return visibleCommandController.executeVisibleCommand(
+                    request,
+                    snapshot
                 );
             }
         }

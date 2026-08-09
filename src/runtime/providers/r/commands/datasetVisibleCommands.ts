@@ -26,12 +26,9 @@ export const createVisibleCellUpdateCommand = function(
         `    .row <- ${request.rowIndex + 1}`,
         `    .column <- ${asRStringLiteral(request.columnName)}`,
         `    .value <- ${asRValueLiteral(request.value)}`,
-        "    if (!exists(.name, envir = .GlobalEnv, inherits = FALSE)) stop(\"Dataset not found: \", .name)",
-        "    .data <- get(.name, envir = .GlobalEnv)",
-        "    if (!is.element(.column, names(.data))) stop(\"Column not found: \", .column)",
-        "    .data[.row, .column] <- .value",
-        "    assign(.name, .data, envir = .GlobalEnv)",
-        "    invisible(.data)",
+        "    .result <- workspace_dataset_update_cell(.name, .row, .column, .value)",
+        "    if (!isTRUE(.result$ok)) stop(.result$error)",
+        "    invisible(.result$result)",
         "})"
     ].join("\n");
 };

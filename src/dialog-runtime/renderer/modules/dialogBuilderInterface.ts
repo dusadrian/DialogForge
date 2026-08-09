@@ -2,6 +2,7 @@ import { coms } from "./coms";
 import { createDialogRuntime } from "./dialogRuntime";
 import { isRuntimeDialogSchema } from "./dialog.types.js";
 import { normalizeNewDialogForRuntime } from "./dialogAdapter";
+import { dialogRuntimeEventChannels } from "../../dialogRuntimeIpc";
 
 const runtime = createDialogRuntime();
 let pendingWorkspacePollTimer: number | null = null;
@@ -23,7 +24,7 @@ const asDialogState = function(value: unknown): Record<string, Record<string, un
     return state;
 };
 
-coms.on("dialogCreated", async (value: unknown) => {
+coms.on(dialogRuntimeEventChannels.created, async (value: unknown) => {
     const args = asRecord(value);
     const rawData = asRecord(args.data);
     const data = isRuntimeDialogSchema(rawData)
@@ -47,7 +48,7 @@ coms.on("dialogCreated", async (value: unknown) => {
 
     await build;
 
-    coms.sendTo("main", "dialogCreated", {
+    coms.sendTo("main", dialogRuntimeEventChannels.created, {
         name: String(args.dialogID || ""),
         dependencies: String(properties.dependencies || "")
     });
@@ -58,7 +59,7 @@ coms.on("dialogCreated", async (value: unknown) => {
     }
 });
 
-coms.on("dialogIncomingData", (value: unknown) => {
+coms.on(dialogRuntimeEventChannels.incomingData, (value: unknown) => {
     runtime.incommingDataFromR(asRecord(value));
 });
 
@@ -66,7 +67,7 @@ coms.on("dataUpdateFromR", (value: unknown) => {
     runtime.incommingUpdateDataFromR(asRecord(value));
 });
 
-coms.sendTo("main", "dialogRuntime:ready", {});
+coms.sendTo("main", dialogRuntimeEventChannels.browserReady, {});
 
 try {
     document.getElementById("dialogSendToConsole")?.addEventListener("click", (event) => {

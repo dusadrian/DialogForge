@@ -36,6 +36,14 @@ export interface ProductDialogCommandResult {
 }
 
 
+export interface ProductDialogRuntimeHostBridge {
+    sendTo(window: string, channel: string, ...args: unknown[]): void;
+    invoke(channel: string, ...args: unknown[]): Promise<unknown>;
+    on(channel: string, listener: (...args: unknown[]) => void): void;
+    once(channel: string, listener: (...args: unknown[]) => void): void;
+}
+
+
 export interface DialogImportFileResult {
     ok: boolean;
     filePath: string;
@@ -80,8 +88,10 @@ export const dialogRuntimeEventChannels = {
     commandUpdate: "dialogCommandUpdate",
     stateUpdate: "dialogCurrentStateUpdate",
     closeWindow: "dialogCloseWindow",
-    // Wire name kept as "showMessageBox": the browser shell already routes it.
+    log: "consolog",
+    // Wire names stay compatible with existing dialog scripts.
     showMessage: "showMessageBox",
+    showError: "showErrorBox",
     created: "dialogCreated",
     incomingData: "dialogIncomingData",
     requirementsLoaded: "base-app:dialog-runtime-requirements-loaded",

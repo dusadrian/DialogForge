@@ -21,6 +21,9 @@ import {
     ProductDialogSessionStore
 } from "../../dialog-runtime/dialog-builder/productDialogSessionStore";
 import {
+    createProductDialogSessionController
+} from "../../dialog-runtime/dialog-builder/productDialogSessionController";
+import {
     createProductDialogEventController
 } from "../../dialog-runtime/dialog-builder/productDialogEventController";
 import {
@@ -55,11 +58,14 @@ export const createProductDialogComposition = function(
     options: ProductDialogCompositionOptions
 ) {
     const windows = new ProductDialogWindowRegistry<BrowserWindow>();
-    const sessions = new ProductDialogSessionStore();
+    const sessionStore = new ProductDialogSessionStore();
+    const sessions = createProductDialogSessionController({
+        sessions: sessionStore,
+        publishCommand: options.publishCommand
+    });
     const events = createProductDialogEventController({
         windows,
-        sessions,
-        publishCommand: options.publishCommand
+        sessions
     });
     const readDialog = createProductDialogSourceReader({
         rootDir: options.rootDir,
@@ -85,7 +91,7 @@ export const createProductDialogComposition = function(
         productId: options.productId,
         nativeWindowIconPath: options.nativeWindowIconPath,
         windows,
-        sessions,
+        sessions: sessionStore,
         readDialog,
         readWorkspaceData,
         readInitialWorkspaceData,

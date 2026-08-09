@@ -1,3 +1,21 @@
+runtime_collected_events <- NULL
+
+
+runtime_begin_event_collection <- function() {
+    runtime_collected_events <<- character(0)
+
+    invisible(NULL)
+}
+
+
+runtime_take_collected_events <- function() {
+    events <- runtime_collected_events
+    runtime_collected_events <<- NULL
+
+    events %||% character(0)
+}
+
+
 runtime_event_parent_id <- function(parent_id = "") {
     as.character(parent_id %||% current_activity_id %||% "")
 }
@@ -51,6 +69,12 @@ push_event <- function(line) {
     line <- as.character(line %||% "")
 
     if (!nzchar(line)) return(invisible(NULL))
+
+    if (!is.null(runtime_collected_events)) {
+        runtime_collected_events <<- c(runtime_collected_events, line)
+
+        return(invisible(NULL))
+    }
 
     if (isTRUE(live_events_enabled) && !is.null(client)) {
         safe(writeLines(line, client, useBytes = TRUE))

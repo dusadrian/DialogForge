@@ -7,6 +7,8 @@ export interface WorkspaceDatasetCacheEffect {
     name: string;
     preview: boolean;
     variableMetadata: boolean;
+    variableMetadataStructure: boolean;
+    variableNames: string[];
     removed: boolean;
 }
 
@@ -28,6 +30,8 @@ const ensureEffect = function(
             name: cleanName,
             preview: false,
             variableMetadata: false,
+            variableMetadataStructure: false,
+            variableNames: [],
             removed: false
         };
         effects.set(cleanName, effect);
@@ -48,6 +52,7 @@ export const createWorkspaceDatasetCacheEffects = function(
         if (effect) {
             effect.preview = true;
             effect.variableMetadata = true;
+            effect.variableMetadataStructure = true;
         }
     });
 
@@ -57,6 +62,7 @@ export const createWorkspaceDatasetCacheEffects = function(
         if (effect) {
             effect.preview = true;
             effect.variableMetadata = true;
+            effect.variableMetadataStructure = true;
             effect.removed = true;
         }
     });
@@ -78,11 +84,15 @@ export const createWorkspaceDatasetCacheEffects = function(
 
         if (change.kind === "dataset_variable_meta_changed") {
             effect.variableMetadata = true;
+            effect.variableNames = Array.from(new Set(
+                effect.variableNames.concat(change.columns || [])
+            ));
             return;
         }
 
         effect.preview = true;
         effect.variableMetadata = true;
+        effect.variableMetadataStructure = true;
     });
 
     return Array.from(effects.values());

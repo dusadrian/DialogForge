@@ -99,6 +99,31 @@ export const createProductDialogIpcController = function(
         }, event.sender);
     });
 
+    options.ipcMain.on(dialogRuntimeEventChannels.showError, (
+        event: IpcMainEvent,
+        message: unknown,
+        detail: unknown
+    ) => {
+        const text = String(message ?? "").trim();
+
+        if (!text) {
+            return;
+        }
+
+        options.showMessage({
+            type: "error",
+            message: text,
+            detail: String(detail ?? "")
+        }, event.sender);
+    });
+
+    options.ipcMain.on(dialogRuntimeEventChannels.log, (
+        _event: IpcMainEvent,
+        message: unknown
+    ) => {
+        console.error("DIALOG-RUNTIME:", String(message ?? ""));
+    });
+
     options.ipcMain.on(dialogRuntimeEventChannels.stateUpdate, (
         _event: IpcMainEvent,
         payload: ProductDialogStateUpdate

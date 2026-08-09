@@ -1,5 +1,6 @@
 import type { Communications } from './coms.types';
 import { SimpleEventEmitter } from './simpleEventEmitter';
+import { dialogRuntimeEventChannels } from '../../dialogRuntimeIpc';
 
 const messenger = new SimpleEventEmitter();
 const registeredChannels = new Set<string>();
@@ -67,7 +68,7 @@ export const coms = {
   maxHeight: 455
 } satisfies Communications;
 
-coms.on('consolog', (...args: unknown[]) => {
+coms.on(dialogRuntimeEventChannels.log, (...args: unknown[]) => {
   console.log(args[0]);
 });
 
@@ -76,11 +77,11 @@ export const showMessage = (
   title: string,
   message: string
 ) => {
-  coms.sendTo('main', 'showMessageBox', type, title, message);
+  coms.sendTo('main', dialogRuntimeEventChannels.showMessage, type, title, message);
 };
 
 export const showError = (message: string, error: string) => {
-  coms.sendTo('main', 'showErrorBox', message, error);
+  coms.sendTo('main', dialogRuntimeEventChannels.showError, message, error);
 };
 
 export default coms;

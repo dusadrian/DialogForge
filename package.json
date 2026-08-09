@@ -8,7 +8,7 @@
     "author": "Adrian Dusa",
     "license": "SEE LICENSE IN LICENSE",
     "scripts": {
-        "build": "tsc -p tsconfig.json && node scripts/copy-static.js && node scripts/generate-core-sdk.js && node dist/scripts/package-product-if-requested.js",
+    "build": "tsc -p tsconfig.json && node scripts/verify-dataset-metadata-cache.js && node scripts/copy-static.js && node scripts/generate-core-sdk.js && node dist/scripts/package-product-if-requested.js",
         "build:web": "node scripts/build-web.js",
         "sdk:core": "node scripts/generate-core-sdk.js",
         "generate:live-script-words": "node scripts/generate-live-script-short-code-words.js",

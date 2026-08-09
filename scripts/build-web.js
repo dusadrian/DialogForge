@@ -69,6 +69,7 @@ const main = function() {
         "--outDir",
         outputDir
     ], env);
+    run(process.execPath, ["scripts/verify-dataset-metadata-cache.js"], env);
     run(process.execPath, ["scripts/generate-core-sdk.js"], env);
     run(process.execPath, [
         "scripts/copy-static.js",

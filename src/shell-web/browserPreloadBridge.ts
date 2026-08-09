@@ -8,6 +8,10 @@ import {
     applicationSettingsEventChannels,
     applicationSettingsIpcChannels
 } from "../base-app/features/settings/applicationSettingsIpc";
+import type {
+    ApplicationSettingsRendererBridge,
+    RuntimeLocationResult
+} from "../base-app/features/settings/applicationSettingsIpc";
 import {
     shellClipboardIpcChannels
 } from "../base-app/clipboard/shellClipboardIpc";
@@ -18,14 +22,30 @@ import {
     datasetEditorEventChannels,
     datasetEditorIpcChannels
 } from "../dataset-editor/datasetEditorIpc";
+import type {
+    DatasetEditorIpcBridge
+} from "../dataset-editor/renderer/datasetEditorIpcBindings";
+import type {
+    DatasetEditorTransportBridge
+} from "../dataset-editor/renderer/datasetEditorRendererTransport";
 import {
     dialogRuntimeEventChannels,
     dialogRuntimeIpcChannels
+} from "../dialog-runtime/dialogRuntimeIpc";
+import type {
+    ProductDialogRuntimeHostBridge
 } from "../dialog-runtime/dialogRuntimeIpc";
 import {
     scriptEditorEventChannels,
     scriptEditorIpcChannels
 } from "../script-editor/scriptEditorIpc";
+import type {
+    ScriptEditorIpcBridge
+} from "../script-editor/renderer/scriptEditorIpcBindings";
+import type {
+    ScriptEditorTransportBridge,
+    SelectedScriptFile
+} from "../script-editor/renderer/scriptEditorRendererTransport";
 import {
     liveScriptEventChannels,
     liveScriptIpcChannels
@@ -92,6 +112,7 @@ const pending = new Map<string, {
     reject: (reason: Error) => void;
     timer: ReturnType<typeof setTimeout>;
 }>();
+const droppedBrowserFiles = new Map<string, File>();
 
 let installed = false;
 let configuredTargetOrigin = "*";
@@ -109,6 +130,36 @@ const nextRequestId = function(): string {
     const randomPart = Math.random().toString(36).slice(2);
 
     return requestPrefix + Date.now().toString(36) + "." + randomPart;
+};
+
+const rememberDroppedBrowserFile = function(file: File): string {
+    const fileName = String(file?.name || "").trim();
+
+    if (fileName) {
+        droppedBrowserFiles.set(fileName, file);
+    }
+
+    return fileName;
+};
+
+const openDroppedBrowserScriptFile = async function(
+    filePath: string
+): Promise<unknown> {
+    const cleanPath = String(filePath || "").trim();
+    const file = droppedBrowserFiles.get(cleanPath);
+
+    if (!file) {
+        return invokeHost(scriptEditorIpcChannels.openFilePath, cleanPath);
+    }
+
+    droppedBrowserFiles.delete(cleanPath);
+
+    return {
+        status: "opened",
+        filePath: cleanPath,
+        content: await file.text(),
+        message: `Opened ${cleanPath}.`
+    };
 };
 
 const postToParent = function(message: BrowserPreloadRequest | BrowserPreloadSend): void {
@@ -295,19 +346,34 @@ const datasetViewer = {
 };
 
 const scriptEditor = {
-    onInit: (callback: Listener): void => addListener(scriptEditorEventChannels.initialize, callback),
-    onLanguageChanged: (callback: Listener): void => addListener(applicationEventChannels.languageChanged, callback),
-    onTerminalSettingsUpdated: (callback: Listener): void => addListener(applicationEventChannels.terminalSettingsUpdated, callback),
-    onRequestSaveForClose: (callback: Listener): void => addListener(scriptEditorEventChannels.requestSaveForClose, callback),
-    onRequestLiveSessionShutdown: (callback: Listener): void => addListener(scriptEditorEventChannels.requestLiveSessionShutdown, callback),
-    onInsertCode: (callback: Listener): void => addListener(scriptEditorEventChannels.publishInsertCode, callback),
-    onOpenFile: (callback: Listener): void => addListener(scriptEditorEventChannels.publishOpenFile, callback),
-    onRuntimeExecuted: (callback: Listener): void => addListener(scriptEditorEventChannels.runtimeExecuted, callback),
-    onCommandBoundary: (callback: Listener): void => addListener(scriptEditorEventChannels.commandBoundary, callback),
-    onSessionState: (callback: Listener): void => addListener(scriptEditorEventChannels.sessionState, callback),
+    onInit: (callback: Parameters<ScriptEditorIpcBridge["onInit"]>[0]): void => addListener(scriptEditorEventChannels.initialize, callback as Listener),
+    onLanguageChanged: (callback: Parameters<ScriptEditorIpcBridge["onLanguageChanged"]>[0]): void => addListener(applicationEventChannels.languageChanged, callback as Listener),
+    onTerminalSettingsUpdated: (callback: Parameters<ScriptEditorIpcBridge["onTerminalSettingsUpdated"]>[0]): void => addListener(applicationEventChannels.terminalSettingsUpdated, callback as Listener),
+    onRequestSaveForClose: (callback: Parameters<ScriptEditorIpcBridge["onRequestSaveForClose"]>[0]): void => addListener(scriptEditorEventChannels.requestSaveForClose, (payload: unknown) => {
+        callback(String(asRecord(payload).requestId || payload || ""));
+    }),
+    onRequestLiveSessionShutdown: (callback: Parameters<ScriptEditorIpcBridge["onRequestLiveSessionShutdown"]>[0]): void => addListener(scriptEditorEventChannels.requestLiveSessionShutdown, (payload: unknown) => {
+        callback(String(asRecord(payload).requestId || payload || ""));
+    }),
+    onInsertCode: (callback: Parameters<ScriptEditorIpcBridge["onInsertCode"]>[0]): void => addListener(scriptEditorEventChannels.publishInsertCode, callback as Listener),
+    onOpenFile: (callback: Parameters<ScriptEditorIpcBridge["onOpenFile"]>[0]): void => addListener(scriptEditorEventChannels.publishOpenFile, callback as Listener),
+    onRuntimeExecuted: (callback: Parameters<ScriptEditorIpcBridge["onRuntimeExecuted"]>[0]): void => addListener(scriptEditorEventChannels.runtimeExecuted, callback as Listener),
+    onCommandBoundary: (callback: Parameters<ScriptEditorIpcBridge["onCommandBoundary"]>[0]): void => addListener(scriptEditorEventChannels.commandBoundary, callback as Listener),
+    onSessionState: (callback: Parameters<ScriptEditorIpcBridge["onSessionState"]>[0]): void => addListener(scriptEditorEventChannels.sessionState, (payload: unknown) => {
+        callback(String(asRecord(payload).phase || payload || ""));
+    }),
     publishDirtyState: (state: unknown): void => sendHost(scriptEditorEventChannels.updateDirtyState, state),
     publishLiveSessionShutdownResult: (input: unknown): void => sendHost(scriptEditorEventChannels.liveSessionShutdownResult, input),
-    chooseScriptFile: (): Promise<unknown> => invokeHost(scriptEditorIpcChannels.openFile),
+    chooseScriptFile: async (): Promise<SelectedScriptFile | null> => {
+        const result = asRecord(await invokeHost(scriptEditorIpcChannels.openFile));
+
+        return result.status === "opened" || result.status === "ready"
+            ? {
+                filePath: String(result.filePath || ""),
+                content: String(result.content || "")
+            }
+            : null;
+    },
     publishReady: (): void => sendHost(scriptEditorEventChannels.browserReady),
     live: {
         capability: (): Promise<unknown> => invokeHost(liveScriptIpcChannels.capability),
@@ -339,6 +405,8 @@ const scriptEditor = {
             callback
         )
     }
+} satisfies ScriptEditorIpcBridge & ScriptEditorTransportBridge & {
+    live: Record<string, unknown>;
 };
 
 const dialogRuntime = {
@@ -362,6 +430,13 @@ const dialogRuntime = {
     updateState: function(input: unknown): void {
         sendHost(dialogRuntimeEventChannels.stateUpdate, input);
     }
+} satisfies ProductDialogRuntimeHostBridge & {
+    send(channel: string, ...args: unknown[]): void;
+    executeDialog(input: unknown): Promise<unknown>;
+    callExternal(input: unknown): Promise<unknown>;
+    readConsoleStateChips(input: unknown): Promise<unknown>;
+    runVisibleCommand(input: unknown): Promise<unknown>;
+    updateState(input: unknown): void;
 };
 
 const settings = {
@@ -375,17 +450,34 @@ const settings = {
     onSaved: function(callback: Listener): void {
         addListener(applicationSettingsEventChannels.settingsSaved, callback);
     },
-    chooseRuntimeLocation: function(input: unknown): Promise<unknown> {
-        return invokeHost(
+    chooseRuntimeLocation: async function(input): Promise<{ path: string } | null> {
+        const result = asRecord(await invokeHost(
             applicationSettingsIpcChannels.chooseRuntimeLocation,
             input
-        );
+        ));
+        const path = String(result.path || "").trim();
+
+        return path ? { path } : null;
     },
-    discoverRuntimeLocation: function(input: unknown): Promise<unknown> {
-        return invokeHost(
+    discoverRuntimeLocation: async function(input): Promise<RuntimeLocationResult> {
+        const result = asRecord(await invokeHost(
             applicationSettingsIpcChannels.discoverRuntimeLocation,
             input
-        );
+        ));
+        const source = String(result.source || "unavailable");
+
+        return {
+            providerId: String(result.providerId || input.providerId || ""),
+            configurable: result.configurable === true,
+            configuredPath: String(result.configuredPath || ""),
+            resolvedPath: String(result.resolvedPath || ""),
+            source: (
+                source === "configured"
+                || source === "discovered"
+                || source === "invalid"
+            ) ? source : "unavailable",
+            message: String(result.message || "")
+        };
     },
     preview: function(input: unknown): void {
         sendHost(applicationSettingsEventChannels.previewSettings, input);
@@ -399,45 +491,97 @@ const settings = {
     close: function(): void {
         sendHost(applicationSettingsEventChannels.closeSettingsWindow);
     }
-};
+} satisfies ApplicationSettingsRendererBridge;
+
+const datasetEditor = {
+    onInit: (callback: Parameters<DatasetEditorIpcBridge["onInit"]>[0]): void => addListener(datasetEditorEventChannels.init, callback as Listener),
+    onLanguageChanged: (callback: Parameters<DatasetEditorIpcBridge["onLanguageChanged"]>[0]): void => addListener(applicationEventChannels.languageChanged, (payload: unknown) => {
+        const record = asRecord(payload);
+
+        callback({
+            languageNS: String(record.languageNS || "en_US"),
+            appPath: String(record.appPath || "")
+        });
+    }),
+    onSetDatasetList: (callback: Parameters<DatasetEditorIpcBridge["onSetDatasetList"]>[0]): void => addListener(datasetEditorEventChannels.setDatasetList, (payload: unknown) => {
+        const values = asRecord(payload).datasetNames;
+
+        callback(Array.isArray(values)
+            ? values.map((entry) => String(entry || "").trim()).filter(Boolean)
+            : []);
+    }),
+    onOpenDataset: (callback: Parameters<DatasetEditorIpcBridge["onOpenDataset"]>[0]): void => addListener(datasetEditorEventChannels.openDataset, (payload: unknown) => {
+        const record = asRecord(payload);
+
+        callback(String(record.datasetName || record.name || "").trim());
+    }),
+    onRefreshDataset: (callback: Parameters<DatasetEditorIpcBridge["onRefreshDataset"]>[0]): void => addListener(datasetEditorEventChannels.refreshDataset, (payload: unknown) => {
+        const record = asRecord(payload);
+
+        callback(String(record.datasetName || record.name || "").trim());
+    }),
+    onFilterStateChanged: (callback: Parameters<DatasetEditorIpcBridge["onFilterStateChanged"]>[0]): void => addListener(datasetEditorEventChannels.filterStateChanged, callback as Listener),
+    onApplyChanges: (callback: Parameters<DatasetEditorIpcBridge["onApplyChanges"]>[0]): void => addListener(datasetEditorEventChannels.applyChanges, (payload: unknown) => {
+        callback(asRecord(payload).changes);
+    }),
+    onGotoCase: (callback: Parameters<DatasetEditorIpcBridge["onGotoCase"]>[0]): void => addListener(datasetEditorEventChannels.gotoCase, (payload: unknown, caseNumber: unknown) => {
+        if (!isRecord(payload)) {
+            callback(String(payload || "").trim(), caseNumber);
+            return;
+        }
+
+        const record = asRecord(payload);
+
+        callback(String(record.datasetName || "").trim(), record.caseNumber);
+    }),
+    onGotoVariable: (callback: Parameters<DatasetEditorIpcBridge["onGotoVariable"]>[0]): void => addListener(datasetEditorEventChannels.gotoVariable, (payload: unknown, variableName: unknown) => {
+        if (!isRecord(payload)) {
+            callback(
+                String(payload || "").trim(),
+                String(variableName || "").trim()
+            );
+            return;
+        }
+
+        const record = asRecord(payload);
+        callback(
+            String(record.datasetName || "").trim(),
+            String(record.variableName || "").trim()
+        );
+    }),
+    persistVariableColumnWidths: (widths: Record<string, unknown>): Promise<void> => invokeHost(
+        datasetEditorIpcChannels.setVariableColumnWidths,
+        widths
+    ).then(() => undefined),
+    publishDatasetState: (datasetName: string): void => sendHost(
+        datasetEditorEventChannels.stateChanged,
+        { datasetName: String(datasetName || "").trim() }
+    ),
+    writeClipboardText: (value: string): Promise<boolean> => invokeHost(
+        shellClipboardIpcChannels.copyPayload,
+        { text: String(value || "") }
+    ).then((result) => asRecord(result).status === "copied"),
+    readClipboardText: (): Promise<string> => invokeHost(
+        shellClipboardIpcChannels.readText
+    ).then((value) => String(asRecord(value).text ?? value ?? "")),
+    runVisibleCommand: (
+        command: string,
+        datasetName: string,
+        visible = true
+    ): Promise<boolean> => invokeHost(
+        datasetEditorIpcChannels.runVisibleCommand,
+        {
+            command: String(command || ""),
+            datasetName: String(datasetName || "").trim(),
+            visible
+        }
+    ).then(Boolean)
+} satisfies DatasetEditorIpcBridge & DatasetEditorTransportBridge;
 
 const createDialogForgeApi = function(): BrowserDialogForgeApi {
     return {
         datasetViewer,
-        datasetEditor: {
-            onInit: (callback: Listener): void => addListener(datasetEditorEventChannels.init, callback),
-            onLanguageChanged: (callback: Listener): void => addListener(applicationEventChannels.languageChanged, callback),
-            onSetDatasetList: (callback: Listener): void => addListener(datasetEditorEventChannels.setDatasetList, callback),
-            onOpenDataset: (callback: Listener): void => addListener(datasetEditorEventChannels.openDataset, callback),
-            onRefreshDataset: (callback: Listener): void => addListener(datasetEditorEventChannels.refreshDataset, callback),
-            onFilterStateChanged: (callback: Listener): void => addListener(datasetEditorEventChannels.filterStateChanged, callback),
-            onApplyChanges: (callback: Listener): void => addListener(datasetEditorEventChannels.applyChanges, callback),
-            onGotoCase: (callback: Listener): void => addListener(datasetEditorEventChannels.gotoCase, (payload: unknown, caseNumber: unknown) => {
-                if (!isRecord(payload)) {
-                    callback(String(payload || "").trim(), caseNumber);
-                    return;
-                }
-
-                const record = asRecord(payload);
-
-                callback(String(record.datasetName || "").trim(), record.caseNumber);
-            }),
-            onGotoVariable: (callback: Listener): void => addListener(datasetEditorEventChannels.gotoVariable, (payload: unknown, variableName: unknown) => {
-                if (!isRecord(payload)) {
-                    callback(
-                        String(payload || "").trim(),
-                        String(variableName || "").trim()
-                    );
-                    return;
-                }
-
-                const record = asRecord(payload);
-                callback(
-                    String(record.datasetName || "").trim(),
-                    String(record.variableName || "").trim()
-                );
-            })
-        },
+        datasetEditor,
         scriptEditor,
         settings,
         dialogRuntime,
@@ -473,7 +617,7 @@ const createDialogForgeApi = function(): BrowserDialogForgeApi {
         },
         onMainZoomFactor: (callback: Listener): void => addListener(applicationEventChannels.mainZoomFactor, callback),
         readDroppedFilePath: function(file: File): string {
-            return file.name || "";
+            return rememberDroppedBrowserFile(file);
         },
         copyPayloadToClipboard: (payload: unknown): Promise<unknown> => invokeHost(shellClipboardIpcChannels.copyPayload, payload),
         readClipboardText: (): Promise<unknown> => invokeHost(shellClipboardIpcChannels.readText),
@@ -496,7 +640,7 @@ const createDialogForgeApi = function(): BrowserDialogForgeApi {
         saveScriptFile: (input: unknown): Promise<unknown> => invokeHost(scriptEditorIpcChannels.saveFile, input),
         saveScriptFileAs: (input: unknown): Promise<unknown> => invokeHost(scriptEditorIpcChannels.saveFileAs, input),
         openScriptFile: (): Promise<unknown> => invokeHost(scriptEditorIpcChannels.openFile),
-        openScriptFilePath: (filePath: string): Promise<unknown> => invokeHost(scriptEditorIpcChannels.openFilePath, filePath),
+        openScriptFilePath: openDroppedBrowserScriptFile,
         listScriptDirectory: (input: unknown): Promise<unknown> => invokeHost(scriptEditorIpcChannels.listDirectory, input),
         checkScriptFragment: (input: unknown): Promise<unknown> => invokeHost(scriptEditorIpcChannels.checkFragment, input),
         runScriptCodeBatch: (input: unknown): Promise<unknown> => invokeHost(scriptEditorIpcChannels.runCodeBatch, input),

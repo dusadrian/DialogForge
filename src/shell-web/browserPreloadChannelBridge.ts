@@ -15,6 +15,7 @@ import {
     tabularIpcChannels
 } from "../core/ipc/tabularIpc";
 import {
+    datasetEditorEventChannels,
     datasetEditorIpcChannels
 } from "../dataset-editor/datasetEditorIpc";
 import {
@@ -119,9 +120,15 @@ export interface BrowserPreloadChannelBridgeOptions {
     gotoVariable(input: Record<string, unknown>): Promise<unknown>;
     gotoCase(input: Record<string, unknown>): Promise<unknown>;
     runScriptCodeBatch(input: unknown): Promise<unknown>;
+    persistDataEditorVariableColumnWidths(input: Record<string, unknown>): Promise<void> | void;
+    publishDataEditorState(input: Record<string, unknown>): Promise<void> | void;
+    runVisibleDataEditorCommand(input: Record<string, unknown>): Promise<boolean>;
     runVisibleDialogCommand(args: unknown[]): Promise<unknown>;
     handleDialogStateUpdate(input: Record<string, unknown>): Promise<void>;
-    updateDialogCommandPane(text: string): Promise<void>;
+    handleDialogCommandUpdate(
+        text: string,
+        sourceWindow: Window | null
+    ): Promise<void>;
     closeDialogLayer(input: Record<string, unknown>): void;
     handleFrameKeyDown(input: Record<string, unknown>): void;
     openScriptEditorWithCode(code: string): Promise<void>;
@@ -131,6 +138,7 @@ export interface BrowserPreloadChannelBridgeOptions {
     updateScriptDirtyState(input: Record<string, unknown>): void;
     handleScriptBrowserReady(): void;
     resolveScriptCloseRequest(input: Record<string, unknown>): void;
+    resolveScriptLiveSessionShutdownRequest(input: Record<string, unknown>): void;
     readSettingsPayload(): Promise<unknown> | unknown;
     readApplicationSettings(): Promise<unknown> | unknown;
     readComposition(): Promise<unknown> | unknown;
@@ -217,6 +225,13 @@ export const createBrowserPreloadChannelBridge = function(
             }
             if (channel === datasetEditorIpcChannels.gotoCase) {
                 return options.gotoCase(input);
+            }
+            if (channel === datasetEditorIpcChannels.setVariableColumnWidths) {
+                await options.persistDataEditorVariableColumnWidths(input);
+                return true;
+            }
+            if (channel === datasetEditorIpcChannels.runVisibleCommand) {
+                return options.runVisibleDataEditorCommand(input);
             }
             if (channel === datasetEditorIpcChannels.getSchema) {
                 return options.datasetChannels().readSchema(input.name);
@@ -391,7 +406,7 @@ export const createBrowserPreloadChannelBridge = function(
                 return options.restartRuntime(action);
             }
 
-            return null;
+            throw new Error(`Unsupported browser host invoke channel: ${channel}`);
         },
 
         send(channel, args, sourceWindow) {
@@ -406,15 +421,16 @@ export const createBrowserPreloadChannelBridge = function(
             }
 
             if (channel === dialogRuntimeEventChannels.stateUpdate) {
-                if (input.stateKind === "goto") {
-                    reportAsyncError(options.handleDialogStateUpdate(input), options);
-                }
+                reportAsyncError(options.handleDialogStateUpdate(input), options);
                 return;
             }
 
             if (channel === dialogRuntimeEventChannels.commandUpdate) {
                 reportAsyncError(
-                    options.updateDialogCommandPane(String(args?.[0] || "")),
+                    options.handleDialogCommandUpdate(
+                        String(args?.[0] || ""),
+                        sourceWindow
+                    ),
                     options
                 );
                 return;
@@ -452,8 +468,23 @@ export const createBrowserPreloadChannelBridge = function(
                 return;
             }
 
-            if (channel === "showErrorBox") {
-                options.appendMessage(String(args?.[1] || args?.[0] || "Dialog error."), "web-transcript__line--stderr");
+            if (channel === dialogRuntimeEventChannels.showError) {
+                const parts = [args?.[0], args?.[1]]
+                    .map((part) => String(part ?? "").trim())
+                    .filter(Boolean);
+
+                options.appendMessage(
+                    parts.join(" — ") || "Dialog error.",
+                    "web-transcript__line--stderr"
+                );
+                return;
+            }
+
+            if (channel === dialogRuntimeEventChannels.log) {
+                options.appendMessage(
+                    String(args?.[0] || ""),
+                    "web-transcript__line--stderr"
+                );
                 return;
             }
 
@@ -472,6 +503,14 @@ export const createBrowserPreloadChannelBridge = function(
                 return;
             }
 
+            if (channel === datasetEditorEventChannels.stateChanged) {
+                reportAsyncError(
+                    Promise.resolve(options.publishDataEditorState(input)),
+                    options
+                );
+                return;
+            }
+
             if (channel === scriptEditorEventChannels.browserReady) {
                 options.handleScriptBrowserReady();
                 return;
@@ -479,6 +518,11 @@ export const createBrowserPreloadChannelBridge = function(
 
             if (channel === scriptEditorEventChannels.closeSaveResult) {
                 options.resolveScriptCloseRequest(input);
+                return;
+            }
+
+            if (channel === scriptEditorEventChannels.liveSessionShutdownResult) {
+                options.resolveScriptLiveSessionShutdownRequest(input);
                 return;
             }
 
@@ -508,7 +552,10 @@ export const createBrowserPreloadChannelBridge = function(
 
             if (channel === applicationSettingsEventChannels.closeSettingsWindow) {
                 options.closeSettingsWindow();
+                return;
             }
+
+            throw new Error(`Unsupported browser host send channel: ${channel}`);
         }
     };
 };

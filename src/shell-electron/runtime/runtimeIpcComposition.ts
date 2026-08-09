@@ -13,7 +13,7 @@ import type {
 } from "../../runtime/provider-contract/runtimeProvider";
 import {
     createDatasetEditorWarmCache
-} from "../dataset-editor/datasetEditorWarmCache";
+} from "../../dataset-editor/datasetEditorWarmCache";
 import {
     createDatasetViewerMutationIpcController
 } from "../dataset-editor/datasetViewerMutationIpcController";
@@ -92,6 +92,7 @@ export const createRuntimeIpcComposition = function(
         runtimeSessionManager: options.runtimeSessionManager,
         uiCommandVisibility: options.datasetEditorUiCommandVisibility,
         invalidateInitialDatasetPreview: warmCache.invalidate,
+        patchVariableMetadata: warmCache.patchVariableMetadata,
         sendDatasetEditorChanges: bridge.sendDatasetEditorChanges,
         broadcastRuntimeEvents: bridge.broadcastRuntimeEvents
     });
@@ -136,7 +137,18 @@ export const createRuntimeIpcComposition = function(
                 }
 
                 if (effect.variableMetadata) {
-                    warmCache.invalidateVariableMetadata(effect.name);
+                    if (
+                        !effect.variableMetadataStructure
+                        && effect.variableNames.length > 0
+                    ) {
+                        void warmCache.refreshVariableMetadata(
+                            effect.name,
+                            effect.variableNames
+                        ).catch(options.reportError);
+                    }
+                    else {
+                        warmCache.invalidateVariableMetadata(effect.name);
+                    }
                 }
             });
 
@@ -157,7 +169,13 @@ export const createRuntimeIpcComposition = function(
                 warmCache.warmPreview(activeDataset);
             }
 
-            if (activeEffect?.variableMetadata) {
+            if (
+                activeEffect?.variableMetadata
+                && (
+                    activeEffect.variableMetadataStructure
+                    || activeEffect.variableNames.length === 0
+                )
+            ) {
                 warmCache.warmVariableMetadata(activeDataset);
             }
         }

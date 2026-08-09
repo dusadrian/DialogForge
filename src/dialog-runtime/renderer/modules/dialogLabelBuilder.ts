@@ -488,39 +488,6 @@ export const createDialogLabelBuilder = function(
             label.dataset.left = String(left);
             label.dataset.top = String(top);
 
-            if (
-                lineClamp > 1
-                && rotation === 0
-            ) {
-                const renderedLines = Math.max(
-                    1,
-                    Math.round(
-                        (textNode.scrollHeight
-                            || singleLineHeight)
-                        / singleLineHeight
-                    )
-                );
-                const needsInset =
-                    renderedLines > 1
-                    && lineClamp > renderedLines;
-
-                label.dataset.previewWrapped =
-                    String(needsInset);
-
-                if (needsInset) {
-                    textNode.style.paddingTop = "6px";
-                }
-                else {
-                    textNode.style.removeProperty(
-                        "padding-top"
-                    );
-                }
-            }
-            else {
-                delete label.dataset.previewWrapped;
-                textNode.style.removeProperty("padding-top");
-            }
-
             if (lineClamp <= 1) {
                 const needsEllipsis = naturalWidth > width;
                 host.style.textOverflow = needsEllipsis

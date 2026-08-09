@@ -1,15 +1,13 @@
+import type {
+    ProductDialogSessionController
+} from "./productDialogSessionController";
+
+
 export interface ProductDialogEventWindowRegistry {
     dialogIdForSender(senderId: number): string;
     close(dialogId: string): boolean;
     remove(dialogId: string): void;
     count(): number;
-}
-
-
-export interface ProductDialogEventSessionStore {
-    updateCommand(dialogId: string, command: unknown): void;
-    updateState(dialogId: string, state: unknown): void;
-    closeWindow(dialogId: string): void;
 }
 
 
@@ -26,8 +24,7 @@ export interface ProductDialogCloseRequest {
 
 export interface ProductDialogEventControllerOptions {
     windows: ProductDialogEventWindowRegistry;
-    sessions: ProductDialogEventSessionStore;
-    publishCommand(command: string): void;
+    sessions: ProductDialogSessionController;
 }
 
 
@@ -52,9 +49,7 @@ export const createProductDialogEventController = function(
             return;
         }
 
-        const text = String(command || "");
-        options.sessions.updateCommand(dialogId, text);
-        options.publishCommand(text);
+        options.sessions.updateCommand(dialogId, command);
     };
     const updateState = function(
         payload: ProductDialogStateUpdate
@@ -76,11 +71,7 @@ export const createProductDialogEventController = function(
     };
     const windowClosed = function(dialogId: string): void {
         options.windows.remove(dialogId);
-        options.sessions.closeWindow(dialogId);
-
-        if (options.windows.count() === 0) {
-            options.publishCommand("");
-        }
+        options.sessions.closeWindow(dialogId, options.windows.count());
     };
 
     return {
