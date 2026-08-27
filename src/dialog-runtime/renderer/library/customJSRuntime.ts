@@ -1097,13 +1097,19 @@ const customJSRuntime = {
         }
         return null;
       })();
+      const requirementOverride = options
+        && typeof options === 'object'
+        && Array.isArray(options.rPackageRequirements)
+          ? options.rPackageRequirements.slice()
+          : [];
       coms.sendTo('main', dialogRuntimeEventChannels.commandUpdate, normalized);
       const result = await coms.invoke(dialogRuntimeIpcChannels.runVisibleCommand, {
         command: normalized,
         dependencies: dependencyOverride !== null ? dependencyOverride : dialogDependencies.slice(),
         rPackageRequirements: dependencyOverride !== null
           ? dialogRPackageRequirements.concat(
-              dependencyOverride.map((name) => ({ name }))
+              dependencyOverride.map((name) => ({ name })),
+              requirementOverride
             )
           : dialogRPackageRequirements.slice(),
         dialogID: String(objects?.dialogID || '')

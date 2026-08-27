@@ -73,6 +73,24 @@ export const createMenuCustomizationModel = function(
         const isSubmenu = Array.isArray(item.items);
         const isDialog = item.type === "product-dialog"
             || item.type === "shared-dialog";
+        const dialogRequirements = isDialog
+            ? findDialog(String(item.dialog || item.id))?.rPackages || []
+            : [];
+        const dependencies = dialogRequirements.map((requirement) => {
+            if (!requirement.minimumVersion) {
+                return requirement.name;
+            }
+
+            const operator = requirement.minimumVersionExclusive
+                ? ">"
+                : ">=";
+
+            return [
+                requirement.name,
+                operator,
+                requirement.minimumVersion
+            ].join(" ");
+        }).join("; ");
 
         return {
             id: isDialog ? String(item.dialog || item.id) : item.id,
@@ -87,9 +105,7 @@ export const createMenuCustomizationModel = function(
                 ? (item.items || []).map(nodeFromItem)
                 : [],
             shortcut: item.accelerator,
-            dependencies: isDialog && Array.isArray(item.rPackages)
-                ? item.rPackages.join(", ")
-                : undefined,
+            dependencies: dependencies || undefined,
             builtIn: true,
             locked: true
         };

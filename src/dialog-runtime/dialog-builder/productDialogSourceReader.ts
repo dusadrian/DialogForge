@@ -11,6 +11,10 @@ import type {
     RPackageRequirement
 } from "../../core/contracts/applicationComposition";
 import {
+    mergeRPackageRequirements,
+    normalizeRPackageRequirementsAtIngestion
+} from "../../runtime/providers/r/dependencies/rPackageCompatibility";
+import {
     readDialogCustomJSSource
 } from "../dialogCustomJSSource";
 
@@ -46,9 +50,12 @@ const mergeDialogDependencies = function(
         .split(/[;,\n]/g)
         .map((name) => name.trim())
         .filter(Boolean);
-    const requirements = Array.isArray(definition.rPackages)
-        ? definition.rPackages
-        : [];
+    const requirements = mergeRPackageRequirements(
+        normalizeRPackageRequirementsAtIngestion(
+            properties.rPackageRequirements
+        ),
+        definition.rPackages || []
+    );
     const required = requirements.map((requirement) => {
         return String(requirement.name || "").trim();
     }).filter(Boolean);

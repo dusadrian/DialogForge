@@ -10,6 +10,10 @@ import type {
 import {
     parseNewDialogJson
 } from "../../dialog-runtime/renderer/modules/dialogAdapter";
+import {
+    mergeRPackageRequirements,
+    normalizeRPackageRequirementsAtIngestion
+} from "../../runtime/providers/r/dependencies/rPackageCompatibility";
 
 
 const DIALOG_JSON = "dialog.json";
@@ -365,7 +369,12 @@ const writeRegistryEntry = function(
         {},
         existing || {},
         definition,
-        existing?.rPackages ? { rPackages: existing.rPackages } : {}
+        {
+            rPackages: mergeRPackageRequirements(
+                existing?.rPackages || [],
+                definition.rPackages || []
+            )
+        }
     );
     const nextRegistry = registry.filter((entry) => entry.id !== definition.id)
         .concat(nextDefinition)
@@ -424,6 +433,9 @@ export const planDialogPackageImport = function(
             targetHome,
             sourceFile,
             status: "source-imported",
+            rPackages: normalizeRPackageRequirementsAtIngestion(
+                properties.rPackageRequirements
+            ),
             replacement: "Run through the DialogCreator-compatible DialogForge dialog runtime."
         }
     };

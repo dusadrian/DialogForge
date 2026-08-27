@@ -81,7 +81,7 @@ export const readRDialogPackageRequirements = function(
             sourceProperties.rPackageRequirements
         ),
         normalizeRPackageRequirementsAtIngestion(definition.rPackages),
-        createRPackageRequirementsFromNames(
+        normalizeRPackageRequirementsAtIngestion(
             requirementsByDialogId[dialogId]
         ),
         createRPackageRequirementsFromNames(sourceProperties.dependencies),

@@ -4201,7 +4201,26 @@ const browserDialogChannels = function () {
             runActivity(message, action) {
                 return browserRuntimeProgress().runActivity(message, action);
             },
-            loadRuntimePackages,
+            ensureRuntimePackages(input) {
+                const dependencies = Array.isArray(input.dependencies)
+                    ? input.dependencies
+                    : String(input.dependencies || "").split(/[;,\n]/g);
+                const requirements = Array.isArray(input.rPackageRequirements)
+                    ? input.rPackageRequirements.slice()
+                    : [];
+
+                dependencies.forEach((name) => {
+                    const normalized = String(name || "").trim();
+
+                    if (normalized) {
+                        requirements.push({ name: normalized });
+                    }
+                });
+
+                return browserRuntimePackages().ensureRequirements(
+                    requirements
+                );
+            },
             executeVisibleCommand,
             publishCommandBoundary(command) {
                 postBrowserPreloadEvent(
@@ -4500,6 +4519,8 @@ const browserRuntimePackages = function () {
     if (!state.runtimePackageAdapter) {
         state.runtimePackageAdapter = createWebRRuntimePackageAdapter({
             loadedPackages: state.loadedRuntimePackages,
+            packageRequirements:
+                state.composition?.productSettings?.rPackageRequirements || [],
             createActivity: createVisibleCommandActivity,
             finishActivity: finishVisibleCommandActivity,
             recordRuntimeMessageStream(message) {

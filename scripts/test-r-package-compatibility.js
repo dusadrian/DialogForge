@@ -73,13 +73,28 @@ const verifyResolver = function() {
         compatibility.normalizeRPackageRequirementsAtIngestion([
             "statistics",
             { name: "statistics", minimumVersion: "0.14" },
+            {
+                name: "statistics",
+                minimumVersion: "0.14",
+                minimumVersionExclusive: true
+            },
             { name: "admisc" }
         ]),
         [
-            { name: "statistics", minimumVersion: "0.14" },
+            {
+                name: "statistics",
+                minimumVersion: "0.14",
+                minimumVersionExclusive: true
+            },
             { name: "admisc" }
         ]
     );
+    assert.throws(() => {
+        compatibility.normalizeRPackageRequirements([{
+            name: "QCA",
+            minimumVersionExclusive: true
+        }]);
+    }, /requires minimumVersion/);
     assert.throws(() => {
         compatibility.readInstalledRPackageManifest({
             schemaVersion: 1,
@@ -104,6 +119,34 @@ const verifyResolver = function() {
     assert.deepStrictEqual(
         result.packages.map((entry) => entry.status),
         ["too-old", "satisfied", "missing"]
+    );
+
+    const strictResult = compatibility.resolveRPackageCompatibility([
+        {
+            name: "statistics",
+            minimumVersion: "0.14",
+            minimumVersionExclusive: true
+        },
+        {
+            name: "QCA",
+            minimumVersion: "3.25",
+            minimumVersionExclusive: true
+        }
+    ], {
+        schemaVersion: 1,
+        packages: {
+            statistics: { version: "0.14" },
+            QCA: { version: "3.25.1" }
+        }
+    });
+
+    assert.deepStrictEqual(
+        strictResult.packages.map((entry) => entry.status),
+        ["too-old", "satisfied"]
+    );
+    assert.match(
+        compatibility.createRPackageCompatibilityMessage(strictResult),
+        /statistics: requires a version newer than 0\.14; installed 0\.14\./
     );
 
     assert.deepStrictEqual(

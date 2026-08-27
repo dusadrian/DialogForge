@@ -20,6 +20,7 @@ import {
     createProductDialogRuntimeIpcController
 } from "./productDialogRuntimeIpcController";
 import {
+    applyRPackageRequirementConstraints,
     createRPackageCompatibilityMessage,
     createRPackageRequirementsFromNames,
     createRPackageVersionsCommand,
@@ -33,6 +34,7 @@ export interface ProductDialogRuntimeCompositionOptions {
     ipcMain: IpcMain;
     runtimeSessionManager: RuntimeSessionManager;
     productId: string;
+    packageRequirements?: unknown;
     openImportFile(): Promise<unknown>;
     previewImportFile(
         input: Partial<ImportPreviewRequest>
@@ -105,9 +107,12 @@ export const registerProductDialogRuntimeComposition = function(
         source: string
     ): Promise<{ ok: boolean; error: string; status?: string }> {
         const dependencies = normalizeDependencies(value);
-        const requirements = mergeRPackageRequirements(
-            createRPackageRequirementsFromNames(dependencies),
-            packageRequirementsInput
+        const requirements = applyRPackageRequirementConstraints(
+            mergeRPackageRequirements(
+                createRPackageRequirementsFromNames(dependencies),
+                packageRequirementsInput
+            ),
+            options.packageRequirements || []
         );
 
         if (requirements.length === 0) {
@@ -120,7 +125,8 @@ export const registerProductDialogRuntimeComposition = function(
         const dependencyKey = requirements.map((requirement) => {
             return [
                 requirement.name,
-                requirement.minimumVersion || ""
+                requirement.minimumVersion || "",
+                requirement.minimumVersionExclusive ? ">" : ">="
             ].join("@");
         }).sort().join("\n");
         const existing = dependencyReadiness.get(dependencyKey);

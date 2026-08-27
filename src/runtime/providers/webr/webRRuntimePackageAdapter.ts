@@ -13,6 +13,7 @@ import type {
     RPackageRequirement
 } from "../../../core/contracts/applicationComposition";
 import {
+    applyRPackageRequirementConstraints,
     createRPackageCompatibilityMessage,
     createRPackageVersionsCommand,
     parseRPackageVersions,
@@ -35,6 +36,7 @@ export interface WebRRuntimePackageLoadOptions {
 export interface WebRRuntimePackageAdapterBindings {
     loadedPackages: Set<string>;
     packageRequirementsByDialogId?: Record<string, unknown>;
+    packageRequirements?: unknown;
     createActivity(command: string): WebRRuntimePackageActivity;
     finishActivity(activityId: string, stateName: string): void;
     recordRuntimeMessageStream(message: {
@@ -57,6 +59,7 @@ export interface WebRRuntimePackageAdapter {
     readRequirements(dialogPayload: unknown): RPackageRequirement[];
     loadPackages(packages: unknown, options?: WebRRuntimePackageLoadOptions): Promise<void>;
     installSessionPackages(packages: unknown): Promise<void>;
+    ensureRequirements(requirements: unknown): Promise<void>;
     ensureDialogPackages(dialogPayload: unknown): Promise<void>;
 }
 
@@ -77,9 +80,12 @@ export const createWebRRuntimePackageAdapter = function(
     const readRequirements = function(
         dialogPayload: unknown
     ): RPackageRequirement[] {
-        return readRDialogPackageRequirements(
-            dialogPayload,
-            bindings.packageRequirementsByDialogId || {}
+        return applyRPackageRequirementConstraints(
+            readRDialogPackageRequirements(
+                dialogPayload,
+                bindings.packageRequirementsByDialogId || {}
+            ),
+            bindings.packageRequirements || []
         );
     };
 
@@ -213,36 +219,46 @@ export const createWebRRuntimePackageAdapter = function(
         });
     };
 
+    const ensureRequirements = async function(
+        requirementsInput: unknown
+    ): Promise<void> {
+        const requirements = applyRPackageRequirementConstraints(
+            requirementsInput,
+            bindings.packageRequirements || []
+        );
+
+        if (!requirements.length) {
+            return;
+        }
+
+        const compatibility = resolveRPackageCompatibility(
+            requirements,
+            parseRPackageVersions(
+                await bindings.evaluateHiddenText(
+                    createRPackageVersionsCommand(requirements)
+                )
+            )
+        );
+
+        if (!compatibility.compatible) {
+            throw new Error([
+                "Package update required",
+                createRPackageCompatibilityMessage(compatibility)
+            ].join("\n"));
+        }
+
+        await loadPackages(
+            requirements.map((requirement) => requirement.name)
+        );
+    };
+
     return {
         readRequirements,
         loadPackages,
         installSessionPackages,
+        ensureRequirements,
         async ensureDialogPackages(dialogPayload) {
-            const requirements = readRequirements(dialogPayload);
-
-            if (!requirements.length) {
-                return;
-            }
-
-            const compatibility = resolveRPackageCompatibility(
-                requirements,
-                parseRPackageVersions(
-                    await bindings.evaluateHiddenText(
-                        createRPackageVersionsCommand(requirements)
-                    )
-                )
-            );
-
-            if (!compatibility.compatible) {
-                throw new Error([
-                    "Package update required",
-                    createRPackageCompatibilityMessage(compatibility)
-                ].join("\n"));
-            }
-
-            await loadPackages(
-                requirements.map((requirement) => requirement.name)
-            );
+            await ensureRequirements(readRequirements(dialogPayload));
         }
     };
 };

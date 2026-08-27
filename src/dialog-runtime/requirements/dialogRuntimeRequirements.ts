@@ -1,7 +1,12 @@
 import type {
     DialogDefinition,
-    ProductDialogRuntimeRequirement
+    ProductDialogRuntimeRequirement,
+    RPackageRequirement
 } from "../../core/contracts/applicationComposition";
+import {
+    mergeRPackageRequirements,
+    normalizeRPackageRequirementsAtIngestion
+} from "../../runtime/providers/r/dependencies/rPackageCompatibility";
 
 
 export type DialogRuntimeRequirementMap = Record<
@@ -12,13 +17,42 @@ export type DialogRuntimeRequirementMap = Record<
 
 export const normalizeDialogRuntimePackages = function(
     value: unknown
-): string[] {
-    return Array.from(new Set(
-        String(value || "")
-            .split(/[;,\n]/g)
-            .map((name) => name.trim())
-            .filter(Boolean)
-    )).sort();
+): RPackageRequirement[] {
+    if (Array.isArray(value)) {
+        return normalizeRPackageRequirementsAtIngestion(value);
+    }
+
+    const requirements = String(value || "")
+        .split(/[;,\n]/g)
+        .map((entry) => entry.trim())
+        .filter(Boolean)
+        .map((entry): RPackageRequirement => {
+            const match = entry.match(
+                /^([A-Za-z][A-Za-z0-9.]*)(?:\s*(>=|>)\s*([0-9]+(?:[.-][0-9]+)*))?$/
+            );
+
+            if (!match) {
+                throw new Error(
+                    `Invalid R package requirement: ${entry}`
+                );
+            }
+
+            const requirement: RPackageRequirement = {
+                name: match[1]
+            };
+
+            if (match[3]) {
+                requirement.minimumVersion = match[3];
+
+                if (match[2] === ">") {
+                    requirement.minimumVersionExclusive = true;
+                }
+            }
+
+            return requirement;
+        });
+
+    return normalizeRPackageRequirementsAtIngestion(requirements);
 };
 
 
@@ -42,9 +76,7 @@ export const normalizeDialogRuntimeRequirementMap = function(
         const packages = (requirement as { rPackages?: unknown }).rPackages;
 
         result[dialogId] = {
-            rPackages: Array.isArray(packages)
-                ? packages.map((name) => String(name)).filter(Boolean)
-                : []
+            rPackages: normalizeDialogRuntimePackages(packages)
         };
     });
 
@@ -74,6 +106,20 @@ export const createDialogRuntimeRequirementsPayload = function(
     requirements: unknown,
     strings: Record<string, string>
 ) {
+    const configured = normalizeDialogRuntimeRequirementMap(requirements);
+    const effective: DialogRuntimeRequirementMap = {};
+
+    dialogs.forEach((dialog) => {
+        const rPackages = mergeRPackageRequirements(
+            dialog.rPackages || [],
+            configured[dialog.id]?.rPackages || []
+        );
+
+        if (rPackages.length > 0) {
+            effective[dialog.id] = { rPackages };
+        }
+    });
+
     return {
         dialogs: dialogs.map((dialog) => {
             return {
@@ -81,7 +127,7 @@ export const createDialogRuntimeRequirementsPayload = function(
                 title: dialog.label || dialog.id
             };
         }),
-        requirements: normalizeDialogRuntimeRequirementMap(requirements),
+        requirements: effective,
         strings
     };
 };

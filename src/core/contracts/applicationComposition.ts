@@ -40,6 +40,7 @@ export interface RuntimeRequirement {
 export interface RPackageRequirement {
     name: string;
     minimumVersion?: string;
+    minimumVersionExclusive?: boolean;
 }
 
 
@@ -126,7 +127,7 @@ export interface ProductAboutDefinition {
 
 
 export interface ProductDialogRuntimeRequirement {
-    rPackages?: string[];
+    rPackages?: RPackageRequirement[];
 }
 
 
@@ -153,6 +154,7 @@ export interface ProductTerminalSettingsDefinition {
 export interface ProductSettingsDefinition {
     dependencies: string[];
     dialogRuntimeRequirements: Record<string, ProductDialogRuntimeRequirement>;
+    rPackageRequirements?: RPackageRequirement[];
     uiActionCommandVisibility?: "hidden" | "visible";
     packageSources?: ProductPackageSourcePolicy;
     runtimeStartup?: ProductRuntimeStartupPolicy;

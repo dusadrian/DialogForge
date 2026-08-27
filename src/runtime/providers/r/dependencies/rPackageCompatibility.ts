@@ -20,6 +20,7 @@ export type RPackageCompatibilityStatus =
 export interface RPackageCompatibilityItem {
     packageName: string;
     requiredVersion?: string;
+    requiredVersionExclusive?: boolean;
     installedVersion?: string;
     status: RPackageCompatibilityStatus;
 }
@@ -112,6 +113,24 @@ const normalizeRequirement = function(value: unknown): RPackageRequirement {
         );
     }
 
+    if (Object.prototype.hasOwnProperty.call(record, "minimumVersionExclusive")) {
+        if (typeof record.minimumVersionExclusive !== "boolean") {
+            throw new Error(
+                "R package minimumVersionExclusive must be a boolean."
+            );
+        }
+
+        if (!requirement.minimumVersion) {
+            throw new Error(
+                "R package minimumVersionExclusive requires minimumVersion."
+            );
+        }
+
+        if (record.minimumVersionExclusive) {
+            requirement.minimumVersionExclusive = true;
+        }
+    }
+
     return requirement;
 };
 
@@ -138,17 +157,31 @@ export const normalizeRPackageRequirements = function(
             return;
         }
 
-        if (
-            candidate.minimumVersion
-            && (
-                !existing.minimumVersion
-                || compareRVersions(
+        if (candidate.minimumVersion) {
+            const comparison = existing.minimumVersion
+                ? compareRVersions(
                     candidate.minimumVersion,
                     existing.minimumVersion
-                ) > 0
-            )
-        ) {
-            existing.minimumVersion = candidate.minimumVersion;
+                )
+                : 1;
+
+            if (
+                comparison > 0
+                || (
+                    comparison === 0
+                    && candidate.minimumVersionExclusive
+                    && !existing.minimumVersionExclusive
+                )
+            ) {
+                existing.minimumVersion = candidate.minimumVersion;
+
+                if (candidate.minimumVersionExclusive) {
+                    existing.minimumVersionExclusive = true;
+                }
+                else {
+                    delete existing.minimumVersionExclusive;
+                }
+            }
         }
     });
 
@@ -200,6 +233,24 @@ export const mergeRPackageRequirements = function(
             return Array.isArray(value) ? value : [];
         })
     );
+};
+
+
+export const applyRPackageRequirementConstraints = function(
+    requirementsInput: unknown,
+    constraintsInput: unknown
+): RPackageRequirement[] {
+    const requirements = normalizeRPackageRequirements(requirementsInput);
+    const names = new Set(requirements.map((requirement) => {
+        return requirement.name;
+    }));
+    const constraints = normalizeRPackageRequirements(
+        constraintsInput
+    ).filter((requirement) => {
+        return names.has(requirement.name);
+    });
+
+    return mergeRPackageRequirements(requirements, constraints);
 };
 
 
@@ -277,20 +328,34 @@ export const resolveRPackageCompatibility = function(
             return {
                 packageName: requirement.name,
                 requiredVersion: requirement.minimumVersion,
+                requiredVersionExclusive:
+                    requirement.minimumVersionExclusive,
                 status: "missing"
             };
         }
 
-        if (
-            requirement.minimumVersion
-            && compareRVersions(
+        const versionComparison = requirement.minimumVersion
+            ? compareRVersions(
                 installedVersion,
                 requirement.minimumVersion
-            ) < 0
+            )
+            : 1;
+
+        if (
+            requirement.minimumVersion
+            && (
+                versionComparison < 0
+                || (
+                    versionComparison === 0
+                    && requirement.minimumVersionExclusive
+                )
+            )
         ) {
             return {
                 packageName: requirement.name,
                 requiredVersion: requirement.minimumVersion,
+                requiredVersionExclusive:
+                    requirement.minimumVersionExclusive,
                 installedVersion,
                 status: "too-old"
             };
@@ -299,6 +364,7 @@ export const resolveRPackageCompatibility = function(
         return {
             packageName: requirement.name,
             requiredVersion: requirement.minimumVersion,
+            requiredVersionExclusive: requirement.minimumVersionExclusive,
             installedVersion,
             status: "satisfied"
         };
@@ -319,14 +385,18 @@ export const createRPackageCompatibilityMessage = function(
     const lines = result.packages.filter((entry) => {
         return entry.status !== "satisfied";
     }).map((entry) => {
+        const requirement = entry.requiredVersionExclusive
+            ? `a version newer than ${entry.requiredVersion}`
+            : `${entry.requiredVersion} or newer`;
+
         if (entry.status === "missing") {
             return entry.requiredVersion
-                ? `${entry.packageName}: requires ${entry.requiredVersion} or newer; not installed.`
+                ? `${entry.packageName}: requires ${requirement}; not installed.`
                 : `${entry.packageName}: not installed.`;
         }
 
         return [
-            `${entry.packageName}: requires ${entry.requiredVersion} or newer;`,
+            `${entry.packageName}: requires ${requirement};`,
             `installed ${entry.installedVersion}.`
         ].join(" ");
     });

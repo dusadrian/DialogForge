@@ -2,6 +2,12 @@ import {
   normalizeRuntimeProvider,
   runtimeProvidersMatch
 } from '../features/menu-commands/menuRuntimeProvider';
+import {
+  normalizeDialogRuntimePackages
+} from '../../dialog-runtime/requirements/dialogRuntimeRequirements';
+import type {
+  RPackageRequirement
+} from '../../core/contracts/applicationComposition';
 
 type MenuNode = {
   id: string;
@@ -45,6 +51,16 @@ const normalizePositions = (items: MenuNode[]) => {
 };
 
 const clone = <T>(x: T): T => JSON.parse(JSON.stringify(x));
+
+const formatPackageRequirements = (
+  requirements: RPackageRequirement[]
+): string => {
+  return requirements.map((requirement) => {
+    if (!requirement.minimumVersion) return requirement.name;
+    const operator = requirement.minimumVersionExclusive ? '>' : '>=';
+    return `${requirement.name} ${operator} ${requirement.minimumVersion}`;
+  }).join('; ');
+};
 
 const pathKey = (path: number[]) => path.join('.');
 const parsePathKey = (key: string): number[] => {
@@ -785,6 +801,44 @@ const saveMenu = () => {
     return;
   }
 
+  const invalidPackageRequirement = (() => {
+    const stack: MenuNode[] = [...tree];
+
+    while (stack.length > 0) {
+      const node = stack.shift();
+
+      if (!node) {
+        continue;
+      }
+
+      if (node.type === 'dialog') {
+        try {
+          normalizeDialogRuntimePackages(node.dependencies || '');
+        }
+        catch (error) {
+          return {
+            node,
+            message: error instanceof Error ? error.message : String(error)
+          };
+        }
+      }
+
+      if (Array.isArray(node.subitems) && node.subitems.length > 0) {
+        stack.unshift(...node.subitems);
+      }
+    }
+
+    return null;
+  })();
+
+  if (invalidPackageRequirement) {
+    window.alert(
+      `${String(invalidPackageRequirement.node.name || t('Unnamed'))}: `
+        + invalidPackageRequirement.message
+    );
+    return;
+  }
+
   const payload = toSerializableMenu(tree).map((x, i) => ({
     id: String(x.id || `top-${i}`),
     name: String(x.name || ''),
@@ -808,13 +862,13 @@ const applyLocalizedTexts = () => {
   byId<HTMLLabelElement>('labelPropDialogFile').textContent = t('Dialog Package');
   byId<HTMLLabelElement>('labelPropRuntimeProvider').textContent = t('Runtime Provider');
   byId<HTMLLabelElement>('labelPropShortcut').textContent = t('Shortcut');
-  byId<HTMLLabelElement>('labelPropDependencies').textContent = t('Dependencies (packages)');
+  byId<HTMLLabelElement>('labelPropDependencies').textContent = t('Dependencies (packages and versions)');
   byId<HTMLLabelElement>('labelPropIcon').textContent = t('Icon (optional path)');
 
   byId<HTMLInputElement>('propDialogFile').placeholder = t('No file selected');
   byId<HTMLInputElement>('propRuntimeProvider').placeholder = t('blank');
   byId<HTMLInputElement>('propShortcut').placeholder = t('e.g. CmdOrCtrl+Shift+R');
-  byId<HTMLInputElement>('propDependencies').placeholder = t('pkg1, pkg2');
+  byId<HTMLInputElement>('propDependencies').placeholder = t('admisc >= 0.41; statistics > 0.14');
 
   const setBtn = (id: string, label: string) => {
     const btn = byId<HTMLButtonElement>(id);
@@ -894,6 +948,13 @@ window.dialogForge.menuCustomization.onBrowsed((args: unknown) => {
     // it too, so what the user reads is what the menu actually holds.
     node.runtimeProvider = normalizeProvider(
       node.runtimeProvider || defaultRuntimeProvider
+    ) || undefined;
+    node.dependencies = formatPackageRequirements(
+      normalizeDialogRuntimePackages(
+        Array.isArray(payloadArgs?.rPackageRequirements)
+          ? payloadArgs.rPackageRequirements
+          : []
+      )
     ) || undefined;
     byId<HTMLInputElement>('propDialogFile').value = `${id}.dc.zip`;
     byId<HTMLInputElement>('propLabel').value = node.name;

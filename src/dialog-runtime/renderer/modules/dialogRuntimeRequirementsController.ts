@@ -1,5 +1,13 @@
+import type {
+    RPackageRequirement
+} from "../../../core/contracts/applicationComposition";
+import {
+    normalizeDialogRuntimePackages
+} from "../../requirements/dialogRuntimeRequirements";
+
+
 export interface DialogRuntimeRequirement {
-    rPackages?: string[];
+    rPackages?: RPackageRequirement[];
 }
 
 
@@ -12,7 +20,10 @@ export interface DialogRuntimeRequirementsPayload {
 
 export interface DialogRuntimeRequirementsBindings {
     document: Document;
-    save(input: { dialogId: string; rPackages: string }): void;
+    save(input: {
+        dialogId: string;
+        rPackages: RPackageRequirement[];
+    }): void;
     close(): void;
 }
 
@@ -21,6 +32,7 @@ export const createDialogRuntimeRequirementsController = function(
     bindings: DialogRuntimeRequirementsBindings
 ) {
     let requirements: Record<string, DialogRuntimeRequirement> = {};
+    let helpText = "";
 
     const byId = function<T extends HTMLElement>(id: string): T {
         const element = bindings.document.getElementById(id);
@@ -67,13 +79,25 @@ export const createDialogRuntimeRequirementsController = function(
         }).value || "");
     };
 
+    const formatRequirement = function(
+        requirement: RPackageRequirement
+    ): string {
+        if (!requirement.minimumVersion) {
+            return requirement.name;
+        }
+
+        const operator = requirement.minimumVersionExclusive ? ">" : ">=";
+
+        return `${requirement.name} ${operator} ${requirement.minimumVersion}`;
+    };
+
     const renderSelection = function(): void {
         const requirement = requirements[selectedDialogId()] || {};
 
         byId<HTMLInputElement>("rPackages").value = Array.isArray(
             requirement.rPackages
         )
-            ? requirement.rPackages.join("; ")
+            ? requirement.rPackages.map(formatRequirement).join("; ")
             : "";
     };
 
@@ -95,8 +119,10 @@ export const createDialogRuntimeRequirementsController = function(
             translate("Dialog");
         byId<HTMLLabelElement>("labelPackages").textContent =
             translate("R packages");
-        byId<HTMLDivElement>("help").textContent =
-            translate("Use ; or , between package names.");
+        helpText = translate(
+            "Use ; or , between requirements. Example: admisc >= 0.41; statistics > 0.14"
+        );
+        byId<HTMLDivElement>("help").textContent = helpText;
         byId<HTMLButtonElement>("saveBtn").textContent = translate("Save");
         byId<HTMLButtonElement>("closeBtn").textContent = translate("Close");
         bindings.document.title = translate("Dialog Runtime Requirements");
@@ -112,7 +138,7 @@ export const createDialogRuntimeRequirementsController = function(
 
     const applySaved = function(payload: {
         dialogId?: string;
-        rPackages?: string[];
+        rPackages?: RPackageRequirement[];
     }): void {
         const dialogId = String(payload?.dialogId || "");
 
@@ -133,10 +159,22 @@ export const createDialogRuntimeRequirementsController = function(
             renderSelection
         );
         byId<HTMLButtonElement>("saveBtn").addEventListener("click", () => {
-            bindings.save({
-                dialogId: selectedDialogId(),
-                rPackages: byId<HTMLInputElement>("rPackages").value
-            });
+            const help = byId<HTMLDivElement>("help");
+
+            try {
+                bindings.save({
+                    dialogId: selectedDialogId(),
+                    rPackages: normalizeDialogRuntimePackages(
+                        byId<HTMLInputElement>("rPackages").value
+                    )
+                });
+                help.textContent = helpText;
+            }
+            catch (error) {
+                help.textContent = error instanceof Error
+                    ? error.message
+                    : String(error);
+            }
         });
         byId<HTMLButtonElement>("closeBtn").addEventListener(
             "click",

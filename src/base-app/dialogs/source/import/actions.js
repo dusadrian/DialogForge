@@ -57,7 +57,13 @@ const formatCall = (name, args) => {
   if (callArgs.length === 1) return name + '(' + callArgs[0] + ')';
   return name + '(\n    ' + callArgs.join(',\n    ') + '\n)';
 };
-const commandDependencies = (command) => /\bconvert\s*\(/.test(String(command || '')) ? ['DDIwR'] : [];
+const commandRuntimeOptions = (command) => {
+  if (!/\bconvert\s*\(/.test(String(command || ''))) return { dependencies: [] };
+  return {
+    dependencies: ['DDIwR'],
+    rPackageRequirements: [{ name: 'DDIwR', minimumVersion: '0.20' }]
+  };
+};
 const normalizeDatasetName = (value) => {
   let out = String(value || '').trim().replace(/[^A-Za-z0-9._]/g, '_');
   if (!out) return '';
@@ -386,6 +392,6 @@ onClick(b_import, async () => {
   }
   if (!syncFileTypeError()) return;
   clearError(input1);
-  await run(command, commandDependencies(command));
+  await run(command, commandRuntimeOptions(command));
 });
 refreshPreview();

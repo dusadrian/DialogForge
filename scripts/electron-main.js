@@ -38,6 +38,7 @@ const rHelpServerModule = require("../src/runtime/providers/r/help/rHelpServer")
 const rHelpPageProxyModule = require("../src/runtime/providers/r/help/rHelpPageProxy");
 const nodeResourceClientModule = require("../src/core/host/nodeResourceClient");
 const packageInstallDialogControllerModule = require("../src/shell-electron/runtime/packageInstallDialogController");
+const rPackageCompatibilityModule = require("../src/runtime/providers/r/dependencies/rPackageCompatibility");
 const electronUpdateServiceModule = require("../src/shell-electron/updater/electronUpdateService");
 const settingsStorage = require("../src/shell-electron/settings/settingsStorage");
 const applicationSupportWindowCompositionModule = require("../src/shell-electron/windows/applicationSupportWindowComposition");
@@ -437,6 +438,7 @@ productDialogRuntimeComposition.registerProductDialogRuntimeComposition({
     ipcMain: electron.ipcMain,
     runtimeSessionManager,
     productId: product,
+    packageRequirements: composition.productSettings.rPackageRequirements,
     openImportFile: function () {
         return shellFileDialogController.openImportFile();
     },
@@ -612,28 +614,12 @@ const findProductDialogDefinition = function (dialogId) {
         && Array.isArray(requirements.rPackages)
         ? requirements.rPackages
         : [];
-    const rPackagesByName = new Map();
-
-    (Array.isArray(definition.rPackages) ? definition.rPackages : [])
-        .forEach((requirement) => {
-            if (!requirement || typeof requirement !== "object") {
-                return;
-            }
-
-            const name = String(requirement.name || "").trim();
-
-            if (name) {
-                rPackagesByName.set(name, requirement);
-            }
-        });
-    configuredPackages.forEach((packageName) => {
-        const name = String(packageName || "").trim();
-
-        if (name && !rPackagesByName.has(name)) {
-            rPackagesByName.set(name, { name });
-        }
-    });
-    const rPackages = Array.from(rPackagesByName.values());
+    const rPackages = rPackageCompatibilityModule.mergeRPackageRequirements(
+        Array.isArray(definition.rPackages) ? definition.rPackages : [],
+        rPackageCompatibilityModule.normalizeRPackageRequirementsAtIngestion(
+            configuredPackages
+        )
+    );
 
     return Object.assign({}, definition, {
         rPackages

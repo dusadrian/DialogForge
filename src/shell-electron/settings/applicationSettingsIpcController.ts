@@ -10,7 +10,11 @@ import type {
 import type {
     ResolvedProductLocation
 } from "../../core/contracts/productLocation";
+import type {
+    ProductDialogRuntimeRequirement
+} from "../../core/contracts/applicationComposition";
 import {
+    normalizeDialogRuntimePackages,
     updateDialogRuntimeRequirements
 } from "../../dialog-runtime/requirements/dialogRuntimeRequirements";
 import {
@@ -105,7 +109,7 @@ const isRecord = function(value: unknown): value is Record<string, unknown> {
 
 const collectMenuRequirements = function(
     items: MenuCustomizationNode[],
-    requirements: Record<string, { rPackages: string[] }>,
+    requirements: Record<string, ProductDialogRuntimeRequirement>,
     defaultRuntimeProvider: string
 ): void {
     items.forEach((item) => {
@@ -116,14 +120,9 @@ const collectMenuRequirements = function(
             const runtimeProvider = normalizeRuntimeProvider(
                 item.runtimeProvider || defaultRuntimeProvider
             );
-            const rPackages = Array.from(new Set(
-                runtimeProvider === "r"
-                    ? String(item.dependencies || "")
-                        .split(/[;,\n]/g)
-                        .map((name) => name.trim())
-                        .filter(Boolean)
-                    : []
-            ));
+            const rPackages = runtimeProvider === "r"
+                ? normalizeDialogRuntimePackages(item.dependencies)
+                : [];
 
             if (rPackages.length > 0) {
                 requirements[item.id] = {
@@ -373,7 +372,10 @@ export const createApplicationSettingsIpcController = function(
         }
 
         const menu = input.menu as MenuCustomizationNode[];
-        const requirements: Record<string, { rPackages: string[] }> = {};
+        const requirements: Record<
+            string,
+            ProductDialogRuntimeRequirement
+        > = {};
         collectMenuRequirements(menu, requirements, String(input?.runtimeProvider || "").trim());
 
         const current = options.readSettings();
@@ -520,7 +522,9 @@ export const createApplicationSettingsIpcController = function(
             const imported = importDialogPackage(sourcePath, target);
             options.menuCustomizationWindowController.notifyDialogBrowsed({
                 id: imported.id,
-                name: imported.label
+                name: imported.label,
+                rPackageRequirements:
+                    imported.definition.rPackages || []
             });
         } catch (error) {
             await options.dialog.showMessageBox(menuCustomizationWindow, {

@@ -23,7 +23,7 @@ export interface DialogChannelAdapterBindings {
         message: string,
         action: () => Promise<Result>
     ): Promise<Result>;
-    loadRuntimePackages(packages: unknown): Promise<void>;
+    ensureRuntimePackages(input: Record<string, unknown>): Promise<void>;
     executeVisibleCommand(command: string): Promise<{ ok?: boolean } | null | undefined>;
     callExternal?(name: string, parameters: Record<string, unknown>): unknown;
     handleStateCall(name: string, parameters: unknown): unknown;
@@ -88,7 +88,7 @@ export const createDialogChannelAdapter = function(
             const execute = async function(): Promise<{
                 ok?: boolean;
             } | null | undefined> {
-                await bindings.loadRuntimePackages(input.dependencies || []);
+                await bindings.ensureRuntimePackages(input);
 
                 return bindings.executeVisibleCommand(command);
             };

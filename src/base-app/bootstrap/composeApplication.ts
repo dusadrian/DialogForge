@@ -42,6 +42,7 @@ import {
     readProductManifest
 } from "./productManifestReader";
 import {
+    applyRPackageRequirementConstraints,
     createRPackageRequirementsFromNames,
     mergeRPackageRequirements,
     normalizeRPackageRequirementsAtIngestion
@@ -199,11 +200,14 @@ const applyProductSettingsToDialogs = function(
 ): DialogDefinition[] {
     return dialogs.map((dialog) => {
         const requirement = productSettings.dialogRuntimeRequirements[dialog.id];
-        const rPackages = mergeRPackageRequirements(
-            dialog.rPackages,
-            createRPackageRequirementsFromNames(
-                requirement?.rPackages || []
-            )
+        const rPackages = applyRPackageRequirementConstraints(
+            mergeRPackageRequirements(
+                dialog.rPackages,
+                normalizeRPackageRequirementsAtIngestion(
+                    requirement?.rPackages
+                )
+            ),
+            productSettings.rPackageRequirements || []
         );
 
         if (rPackages.length === 0) {
@@ -269,7 +273,9 @@ const applyRuntimePackagePolicyToDialogs = function(
                 const existing = dialog.rPackages?.[index];
 
                 return requirement.name === existing?.name
-                    && requirement.minimumVersion === existing.minimumVersion;
+                    && requirement.minimumVersion === existing.minimumVersion
+                    && requirement.minimumVersionExclusive
+                        === existing.minimumVersionExclusive;
             })
         ) {
             return dialog;
@@ -323,6 +329,7 @@ const emptyProductSettings = function(): ProductSettingsDefinition {
     return {
         dependencies: [],
         dialogRuntimeRequirements: {},
+        rPackageRequirements: [],
         uiActionCommandVisibility: "hidden",
         packageSources: {},
         runtimeStartup: {
@@ -347,10 +354,18 @@ const readProductAbout = function(location: ResolvedProductLocation): ProductAbo
 
 
 const readProductSettings = function(location: ResolvedProductLocation): ProductSettingsDefinition {
-    return readJson<ProductSettingsDefinition>(
+    const settings = readJson<ProductSettingsDefinition & {
+        rPackageRequirements?: unknown;
+    }>(
         location.settingsPath,
         emptyProductSettings()
     );
+
+    return Object.assign({}, settings, {
+        rPackageRequirements: normalizeRPackageRequirementsAtIngestion(
+            settings.rPackageRequirements
+        )
+    });
 };
 
 
