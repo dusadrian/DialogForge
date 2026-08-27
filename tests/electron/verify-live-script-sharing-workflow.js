@@ -486,6 +486,14 @@ const run = async function() {
         });
 
         await participantEditor.locator(".dm-script-btn-join-live").click();
+        const rememberParticipantNickname = participantEditor.locator(
+            ".dm-live-panel__remember input[type=\"checkbox\"]"
+        );
+
+        if (await rememberParticipantNickname.isChecked()) {
+            throw new Error("Nickname remembering was enabled by default.");
+        }
+
         await participantEditor.locator(".dm-live-panel__nickname").fill("Maria");
         await participantEditor.locator(".dm-live-panel__ticket").fill(
             classroomCode.toUpperCase().replace(/-/g, " ")
@@ -540,7 +548,43 @@ const run = async function() {
             const button = document.querySelector(".dm-script-btn-join-live");
             return button instanceof HTMLButtonElement && !button.disabled;
         }, undefined, { timeout: 30000 });
+        await duplicateEditor.evaluate(() => {
+            localStorage.setItem(
+                "app.scriptEditor.live.nickname.v2",
+                "Previous student"
+            );
+        });
         await duplicateEditor.locator(".dm-script-btn-join-live").click();
+        const duplicateNickname = duplicateEditor.locator(
+            ".dm-live-panel__nickname"
+        );
+        const rememberDuplicateNickname = duplicateEditor.locator(
+            ".dm-live-panel__remember input[type=\"checkbox\"]"
+        );
+
+        if (await duplicateNickname.inputValue() !== "Previous student"
+            || !await rememberDuplicateNickname.isChecked()) {
+            throw new Error("Saved nickname state was not shown accurately.");
+        }
+
+        await rememberDuplicateNickname.uncheck();
+
+        const forgottenNicknameState = await duplicateEditor.evaluate(() => ({
+            nickname: document.querySelector(".dm-live-panel__nickname")?.value,
+            remembered: document.querySelector(
+                ".dm-live-panel__remember input[type=\"checkbox\"]"
+            )?.checked,
+            stored: localStorage.getItem("app.scriptEditor.live.nickname.v2")
+        }));
+
+        if (forgottenNicknameState.nickname !== "Previous student"
+            || forgottenNicknameState.remembered
+            || forgottenNicknameState.stored) {
+            throw new Error(
+                `Saved nickname was not forgotten: ${JSON.stringify(forgottenNicknameState)}`
+            );
+        }
+
         await duplicateEditor.locator(".dm-live-panel__nickname").fill("maria");
         await duplicateEditor.locator(".dm-live-panel__ticket").fill(joinLink);
         await duplicateEditor.getByRole("dialog").getByRole("button", {

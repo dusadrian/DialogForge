@@ -286,10 +286,12 @@ let liveRendezvous: LiveScriptRendezvousProvider | null = null;
 const hostedLinks = new Map<string, string>();
 const hostedTickets = new Map<string, LiveScriptSessionTicket>();
 const hostedPublications = new Map<string, LiveScriptRendezvousPublication>();
-const liveScriptNicknameStorageKey = 'app.scriptEditor.live.nickname.v1';
+const legacyLiveScriptNicknameStorageKey = 'app.scriptEditor.live.nickname.v1';
+const liveScriptNicknameStorageKey = 'app.scriptEditor.live.nickname.v2';
 
-const readLiveScriptNickname = function(): string {
+const readRememberedLiveScriptNickname = function(): string {
   try {
+    localStorage.removeItem(legacyLiveScriptNicknameStorageKey);
     return localStorage.getItem(liveScriptNicknameStorageKey) || '';
   }
   catch {
@@ -297,9 +299,27 @@ const readLiveScriptNickname = function(): string {
   }
 };
 
-const rememberLiveScriptNickname = function(nickname: string): void {
+const storeLiveScriptNickname = function(
+  nickname: string,
+  rememberNickname: boolean
+): void {
   try {
-    localStorage.setItem(liveScriptNicknameStorageKey, nickname);
+    localStorage.removeItem(legacyLiveScriptNicknameStorageKey);
+
+    if (rememberNickname) {
+      localStorage.setItem(liveScriptNicknameStorageKey, nickname);
+    }
+    else {
+      localStorage.removeItem(liveScriptNicknameStorageKey);
+    }
+  }
+  catch {}
+};
+
+const forgetSavedLiveScriptNickname = function(): void {
+  try {
+    localStorage.removeItem(legacyLiveScriptNicknameStorageKey);
+    localStorage.removeItem(liveScriptNicknameStorageKey);
   }
   catch {}
 };
@@ -432,7 +452,8 @@ const getLivePanelLabels = (): LiveScriptPanelLabels => ({
   endSpotlight: t('End spotlight'),
   handRequest: t('Raised hand'),
   nickname: t('Your name in this class'),
-  nicknamePlaceholder: t('Choose a nickname')
+  nicknamePlaceholder: t('Choose a nickname'),
+  rememberNickname: t('Remember the nickname on this computer')
 });
 const reportDirtyState = scriptEditorViewState.reportDirtyState;
 const updateTitle = scriptEditorViewState.updateTitle;
@@ -754,7 +775,8 @@ const showShareLive = async function(): Promise<void> {
 };
 
 const showJoinLive = function(): void {
-  livePanelController?.showJoin('', readLiveScriptNickname());
+  const nickname = readRememberedLiveScriptNickname();
+  livePanelController?.showJoin('', nickname, Boolean(nickname));
 };
 
 const showRaisedHands = function(): void {
@@ -800,7 +822,7 @@ const initializeLiveScriptUi = async function(): Promise<void> {
   livePanelController = createLiveScriptPanelController({
     root,
     getLabels: getLivePanelLabels,
-    join: async (value, nicknameValue) => {
+    join: async (value, nicknameValue, rememberNickname) => {
       const nicknameResult = validateLiveScriptNickname(nicknameValue);
 
       if (!nicknameResult.ok) {
@@ -820,7 +842,7 @@ const initializeLiveScriptUi = async function(): Promise<void> {
         ticket,
         nicknameResult.nickname
       );
-      rememberLiveScriptNickname(nicknameResult.nickname);
+      storeLiveScriptNickname(nicknameResult.nickname, rememberNickname);
       livePanelDocumentId = joinedDocument.id;
       livePanelController?.showParticipant(
         joinedDocument.displayName,
@@ -828,6 +850,7 @@ const initializeLiveScriptUi = async function(): Promise<void> {
       );
       updateLiveToolbarState();
     },
+    forgetSavedNickname: forgetSavedLiveScriptNickname,
     stopSharing: async () => {
       if (!livePanelDocumentId) {
         return;
@@ -899,9 +922,11 @@ const initializeLiveScriptUi = async function(): Promise<void> {
   updateLiveToolbarState();
 
   if (pendingLiveScriptJoinText && liveCanJoin) {
+    const nickname = readRememberedLiveScriptNickname();
     livePanelController.showJoin(
       pendingLiveScriptJoinText,
-      readLiveScriptNickname()
+      nickname,
+      Boolean(nickname)
     );
     pendingLiveScriptJoinText = '';
   }

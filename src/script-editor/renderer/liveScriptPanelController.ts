@@ -40,13 +40,19 @@ export interface LiveScriptPanelLabels {
     handRequest: string;
     nickname: string;
     nicknamePlaceholder: string;
+    rememberNickname: string;
 }
 
 
 export interface LiveScriptPanelControllerOptions {
     root: HTMLElement;
     getLabels(): LiveScriptPanelLabels;
-    join(value: string, nickname: string): Promise<void>;
+    join(
+        value: string,
+        nickname: string,
+        rememberNickname: boolean
+    ): Promise<void>;
+    forgetSavedNickname(): void;
     stopSharing(): Promise<void>;
     detach(): Promise<void>;
     regenerateShortCode(): Promise<void>;
@@ -58,7 +64,11 @@ export interface LiveScriptPanelControllerOptions {
 
 
 export interface LiveScriptPanelController {
-    showJoin(value?: string, nickname?: string): void;
+    showJoin(
+        value?: string,
+        nickname?: string,
+        nicknameRemembered?: boolean
+    ): void;
     showHost(
         link: string,
         displayName: string,
@@ -154,7 +164,11 @@ export const createLiveScriptPanelController = function(
         return element;
     };
 
-    const showJoin = function(value = "", nickname = ""): void {
+    const showJoin = function(
+        value = "",
+        nickname = "",
+        nicknameRemembered = false
+    ): void {
         const labels = options.getLabels();
         clear("join", labels.joinLive);
         const nicknameLabel = createElement(
@@ -169,17 +183,34 @@ export const createLiveScriptPanelController = function(
         nicknameInput.setAttribute("aria-label", labels.nickname);
         nicknameInput.value = nickname;
         nicknameLabel.appendChild(nicknameInput);
+        const rememberLabel = createElement("label", "dm-live-panel__remember");
+        const rememberInput = createElement("input", "");
+        rememberInput.type = "checkbox";
+        rememberInput.checked = nicknameRemembered;
+        rememberInput.addEventListener("change", () => {
+            if (!rememberInput.checked) {
+                options.forgetSavedNickname();
+            }
+        });
+        rememberLabel.append(
+            rememberInput,
+            createElement("span", "", labels.rememberNickname)
+        );
         const input = createElement("textarea", "dm-live-panel__ticket");
         input.rows = 5;
         input.placeholder = labels.enterLink;
         input.setAttribute("aria-label", labels.enterLink);
         input.value = value;
-        body.append(nicknameLabel, input);
+        body.append(nicknameLabel, rememberLabel, input);
         footer.append(
             action(labels.close, false, close),
             action(labels.joinLive, true, () => {
                 message.textContent = "";
-                void options.join(input.value, nicknameInput.value).catch((error) => {
+                void options.join(
+                    input.value,
+                    nicknameInput.value,
+                    rememberInput.checked
+                ).catch((error) => {
                     const errorMessage = error instanceof Error
                         ? error.message
                         : String(error);
