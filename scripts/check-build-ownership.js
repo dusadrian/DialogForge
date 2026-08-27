@@ -103,6 +103,21 @@ const assertSigningBrokerUsesProductOutput = function() {
         || !packageProductSource.includes("process.env.DIALOGFORGE_RELEASE_TAG")) {
         fail("Release packaging must configure updater metadata for brokered builds.");
     }
+    const signingStep = actionSource.indexOf("- name: Sign Windows artifacts");
+    const refreshStep = actionSource.indexOf("- name: Refresh signed Windows updater metadata");
+    const uploadStep = actionSource.indexOf("- name: Upload files to GitHub release");
+    if (
+        signingStep < 0 ||
+        refreshStep <= signingStep ||
+        uploadStep <= refreshStep
+    ) {
+        fail("Windows updater metadata must be refreshed after signing and before upload.");
+    }
+    if (!actionSource.includes(
+        "node scripts/refresh-windows-update-metadata.js --output-dir ./external-product/build/output"
+    )) {
+        fail("Windows updater metadata must be refreshed in the product-owned output directory.");
+    }
 };
 
 const main = function() {

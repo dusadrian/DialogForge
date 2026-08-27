@@ -17,15 +17,15 @@ export interface DialogScriptApi {
     clearContent: (...names: string[]) => void;
     clearError: (...names: string[]) => void;
     clearValue: (name: string, value?: unknown) => void;
-    disable: (name: string) => void;
-    enable: (name: string) => void;
+    disable: (name: string, on?: boolean) => void;
+    enable: (name: string, on?: boolean) => void;
     getSelected: (name: string) => string[];
     getValue: (name: string) => unknown;
-    hide: (name: string) => void;
+    hide: (name: string, on?: boolean) => void;
     isChecked: (name: string) => boolean;
     setSelected: (name: string, selected: unknown) => void;
     setValue: (name: string, value: unknown) => void;
-    show: (name: string) => void;
+    show: (name: string, on?: boolean) => void;
     uncheck: (name: string) => void;
 }
 
@@ -93,11 +93,11 @@ export const createDialogScriptApi = function(model: DialogControlModel): Dialog
             setDialogControlValue(model, name, next);
             setDialogControlSelected(model, name, []);
         },
-        disable: function(name: string): void {
-            setDialogControlEnabled(model, name, false);
+        disable: function(name: string, on = true): void {
+            setDialogControlEnabled(model, name, !on);
         },
-        enable: function(name: string): void {
-            setDialogControlEnabled(model, name, true);
+        enable: function(name: string, on = true): void {
+            setDialogControlEnabled(model, name, on);
         },
         getSelected: function(name: string): string[] {
             return getDialogControl(model, name).selected.slice();
@@ -105,8 +105,8 @@ export const createDialogScriptApi = function(model: DialogControlModel): Dialog
         getValue: function(name: string): unknown {
             return getDialogControl(model, name).value;
         },
-        hide: function(name: string): void {
-            setDialogControlVisible(model, name, false);
+        hide: function(name: string, on = true): void {
+            setDialogControlVisible(model, name, !on);
         },
         isChecked: function(name: string): boolean {
             return getDialogControl(model, name).checked;
@@ -121,8 +121,8 @@ export const createDialogScriptApi = function(model: DialogControlModel): Dialog
                 setDialogControlChecked(model, name, value);
             }
         },
-        show: function(name: string): void {
-            setDialogControlVisible(model, name, true);
+        show: function(name: string, on = true): void {
+            setDialogControlVisible(model, name, on);
         },
         uncheck: function(name: string): void {
             setDialogControlChecked(model, name, false);

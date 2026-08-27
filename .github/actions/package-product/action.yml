@@ -122,6 +122,11 @@ runs:
         timestamp-rfc3161: http://timestamp.acs.microsoft.com
         timestamp-digest: SHA256
 
+    - name: Refresh signed Windows updater metadata
+      if: ${{ inputs.platform == 'windows' }}
+      shell: bash
+      run: node scripts/refresh-windows-update-metadata.js --output-dir ./external-product/build/output
+
     - name: Upload files to GitHub release
       if: ${{ inputs.release_tag != '' }}
       shell: bash

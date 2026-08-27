@@ -154,6 +154,7 @@ export const encodeRuntimeControlRequest = function(
         nextName: safeEncode(params.nextName),
         targetName: safeEncode(params.targetName),
         variableName: safeEncode(params.variableName),
+        variableNames: safeEncode(encodeArray(params.variableNames)),
         xVariableName: safeEncode(params.xVariableName),
         yVariableName: safeEncode(params.yVariableName),
         thresholds: safeEncode(encodeArray(params.thresholds)),

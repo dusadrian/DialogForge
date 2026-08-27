@@ -1,4 +1,5 @@
 import {
+    createTranscriptEvent,
     createVisibleCommandRequest
 } from "../../../commands/commandProtocol";
 import type {
@@ -84,6 +85,7 @@ export const createRRuntimeProcessController = function(
         request: VisibleCommandRequest;
         parentId: string;
     } | null = null;
+    let pendingVisibleCommandClear: NodeJS.Immediate | null = null;
 
     const recordRuntimeControlEvents = function(
         events: unknown[] | undefined,
@@ -121,6 +123,32 @@ export const createRRuntimeProcessController = function(
         }
     };
 
+    const streamRuntimeProcessOutput = function(output: {
+        streamName: "stdout" | "stderr";
+        text: string;
+    }): void {
+        if (
+            !activeVisibleCommand
+            || !options.onTranscriptEvents
+            || !output.text
+        ) {
+            return;
+        }
+
+        options.onTranscriptEvents([
+            createTranscriptEvent(
+                "output",
+                activeVisibleCommand.request,
+                {
+                    id: createRequestId("process-stream"),
+                    parentId: activeVisibleCommand.parentId,
+                    streamName: output.streamName,
+                    message: output.text
+                }
+            )
+        ]);
+    };
+
     const visibleCommandController = createRVisibleCommandExecutor({
         getClient: function() {
             return client;
@@ -128,10 +156,23 @@ export const createRRuntimeProcessController = function(
         createRequestId,
         onRuntimeControlEvents: recordRuntimeControlEvents,
         onExecutionStarted: function(request, parentId) {
+            if (pendingVisibleCommandClear) {
+                clearImmediate(pendingVisibleCommandClear);
+                pendingVisibleCommandClear = null;
+            }
+
             activeVisibleCommand = { request, parentId };
         },
         onExecutionFinished: function() {
-            activeVisibleCommand = null;
+            const completedCommand = activeVisibleCommand;
+
+            pendingVisibleCommandClear = setImmediate(() => {
+                pendingVisibleCommandClear = null;
+
+                if (activeVisibleCommand === completedCommand) {
+                    activeVisibleCommand = null;
+                }
+            });
         }
     });
     const executeVisibleRCommandWithEffects = function(
@@ -157,6 +198,7 @@ export const createRRuntimeProcessController = function(
             client = nextClient;
         },
         onRuntimeEvent: streamRuntimeControlEvent,
+        onProcessOutput: streamRuntimeProcessOutput,
         onUnexpectedExit: options.onUnexpectedExit
     });
 

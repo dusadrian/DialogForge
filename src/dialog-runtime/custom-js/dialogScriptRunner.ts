@@ -117,13 +117,24 @@ export const createDialogScriptControlSnapshot = function(model: DialogControlMo
 
 export const listDialogScriptControlReferences = function(code: string): string[] {
     const names = new Set<string>();
+    const declaredNames = new Set<string>();
     const pattern = /\b(?:addError|addValue|check|clearContent|clearError|clearValue|disable|enable|getSelected|getValue|hide|isChecked|onChange|onClick|onInput|setSelected|setValue|show|triggerChange|uncheck)\s*\(\s*([A-Za-z_$][A-Za-z0-9_$]*)/g;
+    const declarationPattern = /\b(?:const|let|var|function)\s+([A-Za-z_$][A-Za-z0-9_$]*)/g;
     const bindPattern = /\bbindObjects\s*\(\s*\{([\s\S]*?)\}\s*\)/g;
     const bindControlPattern = /\b(?:datasets|variables)\s*:\s*([A-Za-z_$][A-Za-z0-9_$]*)/g;
+    let declarationMatch = declarationPattern.exec(code);
+
+    while (declarationMatch) {
+        declaredNames.add(declarationMatch[1]);
+        declarationMatch = declarationPattern.exec(code);
+    }
+
     let match = pattern.exec(code);
 
     while (match) {
-        names.add(match[1]);
+        if (!declaredNames.has(match[1])) {
+            names.add(match[1]);
+        }
         match = pattern.exec(code);
     }
 

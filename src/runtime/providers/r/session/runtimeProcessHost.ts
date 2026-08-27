@@ -25,6 +25,10 @@ export interface RRuntimeProcessHostOptions {
         client: ReturnType<typeof createRuntimeControlClient> | null
     ) => void;
     onRuntimeEvent: (event: unknown) => void;
+    onProcessOutput?: (output: {
+        streamName: "stdout" | "stderr";
+        text: string;
+    }) => void;
     onUnexpectedExit?: (details: {
         code: number | null;
         signal: NodeJS.Signals | null;
@@ -226,6 +230,7 @@ export const createRRuntimeProcessHost = function(
         let startupProcessOutput = "";
         let startupProcessOutputClosed = false;
         const appendActiveProcessOutput = function(
+            streamName: "stdout" | "stderr",
             chunk: Buffer | string
         ): void {
             const text = String(chunk || "");
@@ -244,12 +249,23 @@ export const createRRuntimeProcessHost = function(
                     activeProcessOutput.length - 12000
                 );
             }
+
+            if (!startupPending && text) {
+                options.onProcessOutput?.({
+                    streamName,
+                    text
+                });
+            }
         };
         child = spawnedChild;
         unregisterEmergencyTermination =
             registerEmergencyProcessTreeTermination(spawnedChild.pid);
-        spawnedChild.stdout.on("data", appendActiveProcessOutput);
-        spawnedChild.stderr.on("data", appendActiveProcessOutput);
+        spawnedChild.stdout.on("data", (chunk) => {
+            appendActiveProcessOutput("stdout", chunk);
+        });
+        spawnedChild.stderr.on("data", (chunk) => {
+            appendActiveProcessOutput("stderr", chunk);
+        });
         spawnedChild.once("error", (error) => {
             reportStartupFailure(
                 error instanceof Error ? error.message : String(error)

@@ -88,10 +88,11 @@ come from the selected product repository.
 The WebR package-library VFS is product-specific. DialogForge first uses the
 selected product's local `library/R/library.data.gz` and
 `library/R/library.js.metadata` files when they exist. If they are missing,
-the product must declare `product.webRPackageLibrary.releaseTag` in
-`package.json`; DialogR uses the `DialogR` tag and DialogQCA uses the `QCA` tag
-from `dusadrian/binaries`. Do not use the old generic `WebR` release tag for
-product VFS assets.
+the product must declare `product.webRPackageLibrary.releaseRepository` and
+`product.webRPackageLibrary.releaseTag` in `package.json`. DialogR owns its VFS
+in `RODA/DialogR` and DialogQCA owns its VFS in `RODA/DialogQCA`; both use the
+`web` release tag. Do not route product VFS assets through a shared binary
+repository.
 
 Do not pass a product path by hand for normal product builds. Product
 repositories wrap the lower-level DialogForge engine command and supply their

@@ -169,6 +169,7 @@ runtime_transport_dedicated_params <- function(raw) {
         nextName = runtime_transport_value(raw, "nextName"),
         targetName = runtime_transport_value(raw, "targetName"),
         variableName = runtime_transport_value(raw, "variableName"),
+        variableNames = runtime_transport_vector(raw, "variableNames"),
         xVariableName = runtime_transport_value(raw, "xVariableName"),
         yVariableName = runtime_transport_value(raw, "yVariableName"),
         thresholds = runtime_transport_numeric_vector(raw, "thresholds"),
