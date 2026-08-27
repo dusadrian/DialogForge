@@ -118,6 +118,9 @@ const assertSigningBrokerUsesProductOutput = function() {
     )) {
         fail("Windows updater metadata must be refreshed in the product-owned output directory.");
     }
+    if (!actionSource.includes("DIALOGFORGE_ROOT: ${{ github.workspace }}")) {
+        fail("Product checks must receive the checked-out DialogForge root explicitly.");
+    }
 };
 
 const main = function() {

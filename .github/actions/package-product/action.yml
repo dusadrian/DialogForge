@@ -92,6 +92,8 @@ runs:
     - name: Check product
       shell: bash
       working-directory: external-product
+      env:
+        DIALOGFORGE_ROOT: ${{ github.workspace }}
       run: npm run check
 
     - name: Build product package
