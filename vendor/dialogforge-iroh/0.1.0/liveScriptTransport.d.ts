@@ -1,6 +1,6 @@
 export interface LiveScriptFrame {
     protocol: "dialogforge/live-script";
-    version: 1;
+    version: 2;
     sessionId: string;
     type: string;
     senderEndpointId: string;

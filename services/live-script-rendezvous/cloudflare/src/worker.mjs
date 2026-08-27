@@ -214,8 +214,8 @@ const validTicket = function(ticket, expiresAt) {
         && typeof ticket.protocolVersions === "object"
         && !Array.isArray(ticket.protocolVersions)
         && Object.keys(ticket.protocolVersions).length === 2
-        && ticket.protocolVersions.minimum === 1
-        && ticket.protocolVersions.maximum === 1
+        && ticket.protocolVersions.minimum === 2
+        && ticket.protocolVersions.maximum === 2
         && (ticket.displayName === undefined
             || (typeof ticket.displayName === "string"
                 && ticket.displayName.length <= 128

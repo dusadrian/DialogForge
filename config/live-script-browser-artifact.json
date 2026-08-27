@@ -1,7 +1,7 @@
 {
     "packageVersion": "0.1.0",
-    "sourceRevision": "b57010c41d5d5e624b7d3b2e7d88b8c1aaeb8c85",
-    "artifactManifestSha256": "0a78bf939ec3d31f31a60165380f7ed83f3480baa87b7949f1821d6d676b4b9e",
+    "sourceRevision": "d025032e85b8ff17f883c80bf767de2ae014b959",
+    "artifactManifestSha256": "d6ab134437f657ad56ccb279c930e4d91039932363394a442af6f93f0409a76a",
     "sourceDirectory": "vendor/dialogforge-iroh/0.1.0",
     "webPath": "vendor/dialogforge-iroh/0.1.0"
 }
