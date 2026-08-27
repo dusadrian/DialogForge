@@ -100,7 +100,12 @@ const createToolbarButton = function(
 
     if (options?.title) {
         button.setAttribute("data-tooltip", options.title);
-        button.setAttribute("aria-label", options.title);
+    }
+
+    const accessibleLabel = options?.title || label;
+
+    if (accessibleLabel) {
+        button.setAttribute("aria-label", accessibleLabel);
     }
 
     const icon = document.createElement("span");
@@ -128,10 +133,16 @@ const createDivider = function(): HTMLSpanElement {
 const setButtonLabel = function(
     button: HTMLButtonElement,
     label: string,
-    tooltip: string
+    tooltip = ""
 ): void {
-    button.setAttribute("data-tooltip", tooltip);
-    button.setAttribute("aria-label", tooltip);
+    if (tooltip) {
+        button.setAttribute("data-tooltip", tooltip);
+    }
+    else {
+        button.removeAttribute("data-tooltip");
+    }
+
+    button.setAttribute("aria-label", tooltip || label);
     const text = button.querySelector<HTMLSpanElement>("span:nth-child(2)");
 
     if (text) {
@@ -200,8 +211,7 @@ export const createScriptToolbarView = function(
     const shareLiveButton = createToolbarButton(
         labels.shareLive,
         "codicon-broadcast",
-        actions.shareLive,
-        { title: labels.shareLive }
+        actions.shareLive
     );
     shareLiveButton.classList.add("dm-script-btn-share-live");
     toolbar.appendChild(shareLiveButton);
@@ -209,8 +219,7 @@ export const createScriptToolbarView = function(
     const joinLiveButton = createToolbarButton(
         labels.joinLive,
         "codicon-sign-in",
-        actions.joinLive,
-        { title: labels.joinLive }
+        actions.joinLive
     );
     joinLiveButton.classList.add("dm-script-btn-join-live");
     toolbar.appendChild(joinLiveButton);
@@ -228,8 +237,7 @@ export const createScriptToolbarView = function(
     const raiseHandButton = createToolbarButton(
         labels.raiseHand,
         "codicon-feedback",
-        actions.toggleHand,
-        { title: labels.raiseHand }
+        actions.toggleHand
     );
     raiseHandButton.classList.add("dm-script-btn-raise-hand");
     raiseHandButton.hidden = true;
@@ -294,12 +302,10 @@ export const createScriptToolbarView = function(
         saveAsButton.setAttribute("aria-label", nextLabels.saveAs);
         setButtonLabel(
             shareLiveButton,
-            nextLabels.shareLive,
             nextLabels.shareLive
         );
         setButtonLabel(
             joinLiveButton,
-            nextLabels.joinLive,
             nextLabels.joinLive
         );
         setButtonLabel(
@@ -312,7 +318,7 @@ export const createScriptToolbarView = function(
             : raiseHandButton.dataset.state === "raised"
                 ? nextLabels.lowerHand
                 : nextLabels.raiseHand;
-        setButtonLabel(raiseHandButton, handLabel, handLabel);
+        setButtonLabel(raiseHandButton, handLabel);
     };
 
     const updateDocumentState = function(
@@ -379,7 +385,7 @@ export const createScriptToolbarView = function(
             : input.handState === "raised"
                 ? currentLabels.lowerHand
                 : currentLabels.raiseHand;
-        setButtonLabel(raiseHandButton, handLabel, handLabel);
+        setButtonLabel(raiseHandButton, handLabel);
         raiseHandButton.dataset.state = input.handState;
     };
 

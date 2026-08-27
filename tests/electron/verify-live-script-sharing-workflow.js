@@ -435,6 +435,33 @@ const run = async function() {
         ).isVisible()) {
             throw new Error("Hands raised was visible before a student raised a hand.");
         }
+
+        const redundantTooltipState = await participantEditor.evaluate(() => {
+            const read = function(selector) {
+                const button = document.querySelector(selector);
+                return {
+                    tooltip: button?.getAttribute("data-tooltip"),
+                    accessibleName: button?.getAttribute("aria-label")
+                };
+            };
+
+            return {
+                share: read(".dm-script-btn-share-live"),
+                join: read(".dm-script-btn-join-live"),
+                hand: read(".dm-script-btn-raise-hand")
+            };
+        });
+
+        if (redundantTooltipState.share.tooltip
+            || redundantTooltipState.join.tooltip
+            || redundantTooltipState.hand.tooltip
+            || redundantTooltipState.share.accessibleName !== "Share live"
+            || redundantTooltipState.join.accessibleName !== "Join live script"
+            || redundantTooltipState.hand.accessibleName !== "Raise hand") {
+            throw new Error(
+                `Redundant live toolbar tooltip state: ${JSON.stringify(redundantTooltipState)}`
+            );
+        }
         process.stdout.write("live-script UI: collaboration controls available\n");
 
         await hostEditor.locator(".dm-script-btn-share-live").click();
@@ -484,6 +511,25 @@ const run = async function() {
             });
             return codeRow?.lastElementChild?.textContent || "";
         });
+        const shortCodeAlignment = await hostEditor.evaluate(() => {
+            const qr = document.querySelector(".dm-live-panel__qr")
+                ?.getBoundingClientRect();
+            const code = document.querySelector(
+                ".dm-live-panel__row--short-code .dm-live-panel__value"
+            )?.getBoundingClientRect();
+            return {
+                qrCenter: qr ? qr.left + (qr.width / 2) : 0,
+                codeCenter: code ? code.left + (code.width / 2) : 0
+            };
+        });
+
+        if (Math.abs(
+            shortCodeAlignment.qrCenter - shortCodeAlignment.codeCenter
+        ) > 1) {
+            throw new Error(
+                `Short code was not centered under the QR code: ${JSON.stringify(shortCodeAlignment)}`
+            );
+        }
 
         await participantEditor.locator(".dm-script-btn-join-live").click();
         const rememberParticipantNickname = participantEditor.locator(
@@ -661,7 +707,9 @@ const run = async function() {
             const badge = document.querySelector(".dm-script-tab-hand--raised");
             const button = document.querySelector(".dm-script-btn-raise-hand");
             return badge?.textContent === "Hand raised"
-                && button?.getAttribute("data-state") === "raised";
+                && button?.getAttribute("data-state") === "raised"
+                && button?.getAttribute("data-tooltip") === null
+                && button?.getAttribute("aria-label") === "Lower hand";
         }, undefined, { timeout: 10000 });
         await hostEditor.waitForFunction(() => {
             const button = document.querySelector(".dm-script-btn-hands-raised");
