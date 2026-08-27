@@ -255,7 +255,7 @@ export const createNativeIrohLiveScriptTransport = function(
             return options.loadModule();
         }
 
-        return import("@number0/iroh") as Promise<NativeIrohModule>;
+        return require("@number0/iroh") as NativeIrohModule;
     };
 
     const initialize = async function(): Promise<void> {
