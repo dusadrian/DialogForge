@@ -37,6 +37,12 @@ export interface RuntimeRequirement {
 }
 
 
+export interface RPackageRequirement {
+    name: string;
+    minimumVersion?: string;
+}
+
+
 export interface FeatureEvaluation extends RuntimeRequirement {
     feature: string;
     label: string;
@@ -75,7 +81,7 @@ export interface DialogDefinition {
     targetHome?: string;
     replacement?: string;
     sourceFile?: string;
-    rPackages?: string[];
+    rPackages?: RPackageRequirement[];
 }
 
 

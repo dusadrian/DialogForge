@@ -7,6 +7,9 @@ import {
 import type {
     ProductDialogDefinition
 } from "./productDialogDefinition";
+import type {
+    RPackageRequirement
+} from "../../core/contracts/applicationComposition";
 import {
     readDialogCustomJSSource
 } from "../dialogCustomJSSource";
@@ -15,7 +18,7 @@ import {
 export interface ProductDialogSourceDefinition {
     sourceFile?: string;
     owner?: string;
-    rPackages?: string[];
+    rPackages?: RPackageRequirement[];
 }
 
 
@@ -43,13 +46,17 @@ const mergeDialogDependencies = function(
         .split(/[;,\n]/g)
         .map((name) => name.trim())
         .filter(Boolean);
-    const required = Array.isArray(definition.rPackages)
-        ? definition.rPackages.map((name) => String(name).trim()).filter(Boolean)
+    const requirements = Array.isArray(definition.rPackages)
+        ? definition.rPackages
         : [];
+    const required = requirements.map((requirement) => {
+        return String(requirement.name || "").trim();
+    }).filter(Boolean);
 
     properties.dependencies = Array.from(new Set(
         declared.concat(required)
     )).join("; ");
+    properties.rPackageRequirements = requirements;
     parsed.properties = properties;
 };
 

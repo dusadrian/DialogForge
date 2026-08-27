@@ -23,6 +23,7 @@ export interface ProductDialogCommandPayload {
     command?: string;
     dialogID?: string;
     dependencies?: unknown;
+    rPackageRequirements?: unknown;
 }
 
 

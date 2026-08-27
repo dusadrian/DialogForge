@@ -36,6 +36,7 @@ import {
 export interface ProductDialogRuntimeDependencyResult {
     ok: boolean;
     error: string;
+    status?: string;
 }
 
 
@@ -52,6 +53,7 @@ export interface ProductDialogRuntimeIpcControllerOptions {
     ): Promise<unknown>;
     ensureDependencies(
         dependencies: unknown,
+        rPackageRequirements: unknown,
         source: string
     ): Promise<ProductDialogRuntimeDependencyResult>;
     executeVisibleCommand(request: VisibleCommandRequest): Promise<TranscriptEvent[]>;
@@ -70,6 +72,7 @@ interface ProductDialogCreatedPayload {
     name?: string;
     dialogID?: string;
     dependencies?: unknown;
+    rPackageRequirements?: unknown;
 }
 
 
@@ -98,6 +101,7 @@ export const createProductDialogRuntimeIpcController = function(
 
         void options.ensureDependencies(
             payload?.dependencies,
+            payload?.rPackageRequirements,
             source
         ).then((result) => {
             if (!result.ok) {
@@ -151,6 +155,7 @@ export const createProductDialogRuntimeIpcController = function(
         void (async () => {
             const dependencyResult = await options.ensureDependencies(
                 payload?.dependencies,
+                payload?.rPackageRequirements,
                 source
             );
 
@@ -194,13 +199,14 @@ export const createProductDialogRuntimeIpcController = function(
         );
         const dependencyResult = await options.ensureDependencies(
             payload?.dependencies,
+            payload?.rPackageRequirements,
             source
         );
 
         if (!dependencyResult.ok) {
             return {
                 ok: false,
-                status: "error",
+                status: dependencyResult.status || "error",
                 printed: "",
                 error: dependencyResult.error,
                 command

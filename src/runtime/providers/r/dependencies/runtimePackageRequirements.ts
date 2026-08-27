@@ -1,6 +1,14 @@
 import {
     parseRPackageList
 } from "../commands/rCommandIntents";
+import type {
+    RPackageRequirement
+} from "../../../../core/contracts/applicationComposition";
+import {
+    createRPackageRequirementsFromNames,
+    mergeRPackageRequirements,
+    normalizeRPackageRequirementsAtIngestion
+} from "./rPackageCompatibility";
 
 
 export interface RuntimePackageStatus {
@@ -54,7 +62,7 @@ const createRCharacterVector = function(values: string[]): string {
 export const readRDialogPackageRequirements = function(
     dialogPayload: unknown,
     requirementsByDialogId: Record<string, unknown> = {}
-): string[] {
+): RPackageRequirement[] {
     const definition = readNestedRecord(dialogPayload, "definition");
     const source = readNestedRecord(dialogPayload, "source");
     const sourceProperties = readNestedRecord(source, "properties");
@@ -65,11 +73,19 @@ export const readRDialogPackageRequirements = function(
         || ""
     ).trim();
 
-    return parseRPackageList(
-        runtimeRequirements.rPackages
-        || sourceProperties.dependencies
-        || definition.dependencies
-        || requirementsByDialogId[dialogId]
+    return mergeRPackageRequirements(
+        normalizeRPackageRequirementsAtIngestion(
+            runtimeRequirements.rPackages
+        ),
+        normalizeRPackageRequirementsAtIngestion(
+            sourceProperties.rPackageRequirements
+        ),
+        normalizeRPackageRequirementsAtIngestion(definition.rPackages),
+        createRPackageRequirementsFromNames(
+            requirementsByDialogId[dialogId]
+        ),
+        createRPackageRequirementsFromNames(sourceProperties.dependencies),
+        createRPackageRequirementsFromNames(definition.dependencies)
     );
 };
 

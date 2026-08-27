@@ -4287,6 +4287,18 @@ const postSharedDialogCreatedEvent = async function (frame, dialogId, dialogPayl
 
             const workspaceData = readBrowserDialogWorkspaceData();
             const dialogSource = Object.assign({}, payload.source || {});
+            const dialogProperties = Object.assign(
+                {},
+                dialogSource.properties || {}
+            );
+            const packageRequirements = Array.isArray(
+                payload.runtimeRequirements?.rPackages
+            )
+                ? payload.runtimeRequirements.rPackages
+                : [];
+
+            dialogProperties.rPackageRequirements = packageRequirements;
+            dialogSource.properties = dialogProperties;
 
             if (payload.actions && !dialogSource.customJS) {
                 dialogSource.customJS = String(payload.actions || "");

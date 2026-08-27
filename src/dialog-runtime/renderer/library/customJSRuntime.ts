@@ -132,6 +132,11 @@ const customJSRuntime = {
         .filter(Boolean);
     };
     const dialogDependencies = parseDependencies(dialogSpec?.properties?.dependencies);
+    const dialogRPackageRequirements = Array.isArray(
+      dialogSpec?.properties?.rPackageRequirements
+    )
+      ? dialogSpec.properties.rPackageRequirements.slice()
+      : [];
 
     const handlers = new Map();
     const registeredRawClicks = new Set();
@@ -1096,8 +1101,22 @@ const customJSRuntime = {
       const result = await coms.invoke(dialogRuntimeIpcChannels.runVisibleCommand, {
         command: normalized,
         dependencies: dependencyOverride !== null ? dependencyOverride : dialogDependencies.slice(),
+        rPackageRequirements: dependencyOverride !== null
+          ? dialogRPackageRequirements.concat(
+              dependencyOverride.map((name) => ({ name }))
+            )
+          : dialogRPackageRequirements.slice(),
         dialogID: String(objects?.dialogID || '')
       });
+      if (result?.status === 'r-package-update-required') {
+        coms.sendTo(
+          'main',
+          dialogRuntimeEventChannels.showMessage,
+          'warning',
+          'Package update required',
+          String(result.error || '')
+        );
+      }
       if (result?.ok && objects?.dialogID) {
         coms.sendTo('main', dialogRuntimeEventChannels.closeWindow, { dialogID: String(objects.dialogID) });
       }

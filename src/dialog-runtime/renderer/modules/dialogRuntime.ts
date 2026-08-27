@@ -33,6 +33,9 @@ import {
 } from './dialogRuntimeControlBuilderController';
 import customJSRuntime from '../library/customJSRuntime';
 import { SimpleEventEmitter } from './simpleEventEmitter';
+import type {
+  RPackageRequirement
+} from '../../../core/contracts/applicationComposition';
 
 export function createDialogRuntime() {
   const parseDependencies = (value: unknown): string[] => {
@@ -63,6 +66,7 @@ export function createDialogRuntime() {
     workspaceVariables: [] as Array<Record<string, unknown>>,
     selectData: {} as Record<string, unknown>,
     dependencies: [] as string[],
+    rPackageRequirements: [] as RPackageRequirement[],
     events: new SimpleEventEmitter(),
     syntax: { command: '', defaultElements: {} as Record<string, unknown> },
 
@@ -190,6 +194,7 @@ export function createDialogRuntime() {
       runtime.command = command;
     },
     getDependencies: () => runtime.dependencies,
+    getRPackageRequirements: () => runtime.rPackageRequirements,
     getDialogId: () => runtime.dialogID,
     sendTo: (channel, payload) => {
       coms.sendTo('main', channel, payload);

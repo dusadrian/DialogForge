@@ -70,6 +70,11 @@ const parseDependencies = function(value: unknown): string[] {
 };
 
 
+const dialogPackageNames = function(dialog: DialogDefinition): string[] {
+    return (dialog.rPackages || []).map((requirement) => requirement.name);
+};
+
+
 const resolveDialogSourcePath = function(rootDir: string, dialog: DialogDefinition): string {
     if (!dialog.sourceFile || !dialog.owner) {
         return "";
@@ -165,7 +170,7 @@ export const readDialogSourceSummary = function(rootDir: string, dialog: DialogD
             sourcePath,
             title: dialog.label || dialog.id,
             name: dialog.id,
-            dependencies: dialog.rPackages || [],
+            dependencies: dialogPackageNames(dialog),
             hasCustomJS: false,
             customJSUses: [],
             externalCalls: [],
@@ -183,7 +188,9 @@ export const readDialogSourceSummary = function(rootDir: string, dialog: DialogD
         const properties = parsed && typeof parsed === "object" ? parsed.properties || {} : {};
         const syntax = parsed && typeof parsed === "object" ? parsed.syntax || {} : {};
         const customJS = readDialogCustomJSSource(sourcePath, parsed);
-        const dependencies = parseDependencies(properties.dependencies).concat(dialog.rPackages || []);
+        const dependencies = parseDependencies(properties.dependencies).concat(
+            dialogPackageNames(dialog)
+        );
         const externalCalls = listExternalCalls(customJS);
         const productExternalCalls = externalCalls.filter((name) => {
             return name.includes(".");
@@ -214,7 +221,7 @@ export const readDialogSourceSummary = function(rootDir: string, dialog: DialogD
             sourcePath,
             title: dialog.label || dialog.id,
             name: dialog.id,
-            dependencies: dialog.rPackages || [],
+            dependencies: dialogPackageNames(dialog),
             hasCustomJS: false,
             customJSUses: [],
             externalCalls: [],

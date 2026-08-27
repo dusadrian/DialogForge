@@ -31,6 +31,7 @@ import type {
     ProductCapabilityDefinition,
     ProductManifest,
     ProductSettingsDefinition,
+    RPackageRequirement,
     RuntimeRequirement,
     StartupTaskDefinition
 } from "../../core/contracts/applicationComposition";
@@ -40,6 +41,11 @@ import type {
 import {
     readProductManifest
 } from "./productManifestReader";
+import {
+    createRPackageRequirementsFromNames,
+    mergeRPackageRequirements,
+    normalizeRPackageRequirementsAtIngestion
+} from "../../runtime/providers/r/dependencies/rPackageCompatibility";
 
 
 const readJson = function<T>(filePath: string, fallback: T): T {
@@ -170,10 +176,20 @@ const readProductDialogs = function(location: ResolvedProductLocation): DialogDe
         return [];
     }
 
-    return readJson<DialogDefinition[]>(
+    const dialogs = readJson<Array<DialogDefinition & {
+        rPackages?: unknown;
+    }>>(
         path.join(location.rootPath, "dialogs/dialogs.json"),
         []
     );
+
+    return dialogs.map((dialog) => {
+        return Object.assign({}, dialog, {
+            rPackages: normalizeRPackageRequirementsAtIngestion(
+                dialog.rPackages
+            )
+        });
+    });
 };
 
 
@@ -183,9 +199,12 @@ const applyProductSettingsToDialogs = function(
 ): DialogDefinition[] {
     return dialogs.map((dialog) => {
         const requirement = productSettings.dialogRuntimeRequirements[dialog.id];
-        const rPackages = Array.from(new Set(
-            (dialog.rPackages || []).concat(requirement?.rPackages || [])
-        ));
+        const rPackages = mergeRPackageRequirements(
+            dialog.rPackages,
+            createRPackageRequirementsFromNames(
+                requirement?.rPackages || []
+            )
+        );
 
         if (rPackages.length === 0) {
             return dialog;
@@ -198,7 +217,7 @@ const applyProductSettingsToDialogs = function(
 };
 
 
-const runtimeRequiredPackages = function(
+const runtimeRequiredPackageNames = function(
     packages: string[] | undefined,
     runtime: RuntimeProviderManifest
 ): string[] {
@@ -212,17 +231,45 @@ const runtimeRequiredPackages = function(
 };
 
 
+const runtimeRequiredDialogPackages = function(
+    packages: RPackageRequirement[] | undefined,
+    runtime: RuntimeProviderManifest
+): RPackageRequirement[] {
+    const satisfiedByRuntime = new Set(
+        runtime.policies?.packages?.satisfiedByRuntime || []
+    );
+
+    return (packages || []).filter((requirement) => {
+        return Boolean(requirement.minimumVersion)
+            || !satisfiedByRuntime.has(requirement.name);
+    });
+};
+
+
+const dialogPackageNames = function(
+    packages: RPackageRequirement[] | undefined
+): string[] {
+    return (packages || []).map((requirement) => requirement.name);
+};
+
+
 const applyRuntimePackagePolicyToDialogs = function(
     dialogs: DialogDefinition[],
     runtime: RuntimeProviderManifest
 ): DialogDefinition[] {
     return dialogs.map((dialog) => {
-        const rPackages = runtimeRequiredPackages(dialog.rPackages, runtime);
+        const rPackages = runtimeRequiredDialogPackages(
+            dialog.rPackages,
+            runtime
+        );
 
         if (
             rPackages.length === (dialog.rPackages || []).length
-            && rPackages.every((packageName, index) => {
-                return packageName === dialog.rPackages?.[index];
+            && rPackages.every((requirement, index) => {
+                const existing = dialog.rPackages?.[index];
+
+                return requirement.name === existing?.name
+                    && requirement.minimumVersion === existing.minimumVersion;
             })
         ) {
             return dialog;
@@ -482,7 +529,10 @@ const evaluateProductCapabilities = function(
         const missing = listMissingCapabilities(runtime, requirement);
 
         return Object.assign({}, capability, {
-            rPackages: runtimeRequiredPackages(capability.rPackages, runtime),
+            rPackages: runtimeRequiredPackageNames(
+                capability.rPackages,
+                runtime
+            ),
             missing,
             enabled: missing.length === 0,
             reason: missing.length === 0 ? "" : disabledCapabilityReason(i18n)
@@ -503,7 +553,10 @@ const evaluateStartupTasks = function(
         const missing = listMissingCapabilities(runtime, requirement);
 
         return Object.assign({}, task, {
-            rPackages: runtimeRequiredPackages(task.rPackages, runtime),
+            rPackages: runtimeRequiredPackageNames(
+                task.rPackages,
+                runtime
+            ),
             missing,
             enabled: missing.length === 0,
             reason: missing.length === 0 ? "" : disabledCapabilityReason(i18n)
@@ -572,7 +625,7 @@ const evaluateProductDialog = function(
     if (evaluated.target) {
         evaluated.rPackages = Array.from(new Set(
             (evaluated.rPackages || []).concat(
-                evaluated.target.rPackages || []
+                dialogPackageNames(evaluated.target.rPackages)
             )
         ));
     }
@@ -643,7 +696,10 @@ const evaluateMenuItem = function(
         role: item.role,
         accelerator: item.accelerator,
         runtimeProvider: item.runtimeProvider,
-        rPackages: runtimeRequiredPackages(item.rPackages, runtime),
+        rPackages: runtimeRequiredPackageNames(
+            item.rPackages,
+            runtime
+        ),
         label: resolveLabel(item, i18n),
         enabled: true,
         reason: "",

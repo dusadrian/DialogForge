@@ -522,6 +522,11 @@ export function normalizeNewDialogForRuntime(source: DialogCreatorSchema): Runti
       fontSize: toNumber(source.properties.fontSize, 12),
       background: toStringOr(source.properties.background, '#ffffff'),
       dependencies: toStringOr(source.properties.dependencies, ''),
+      rPackageRequirements: Array.isArray(
+        source.properties.rPackageRequirements
+      )
+        ? source.properties.rPackageRequirements
+        : [],
       resizable: toBoolString(source.properties.resizable, false) === 'true',
       preserveAspectRatio: toBoolString(
         source.properties.preserveAspectRatio,

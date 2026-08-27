@@ -12,6 +12,7 @@
         "build:web": "node scripts/build-web.js",
         "sdk:core": "node scripts/generate-core-sdk.js",
         "generate:live-script-words": "node scripts/generate-live-script-short-code-words.js",
+        "test:r-package-compatibility": "node scripts/test-r-package-compatibility.js",
         "check:build-ownership": "node scripts/check-build-ownership.js",
         "start": "npm run build && node dist/scripts/start-app.js",
         "dev:watch": "npm run build && node scripts/watch-product.js",

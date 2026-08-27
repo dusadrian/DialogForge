@@ -50,7 +50,12 @@ coms.on(dialogRuntimeEventChannels.created, async (value: unknown) => {
 
     coms.sendTo("main", dialogRuntimeEventChannels.created, {
         name: String(args.dialogID || ""),
-        dependencies: String(properties.dependencies || "")
+        dependencies: String(properties.dependencies || ""),
+        rPackageRequirements: Array.isArray(
+            properties.rPackageRequirements
+        )
+            ? properties.rPackageRequirements
+            : []
     });
 
     if (pendingWorkspacePollTimer !== null) {

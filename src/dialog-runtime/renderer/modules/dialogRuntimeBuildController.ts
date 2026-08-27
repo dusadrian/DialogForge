@@ -5,6 +5,9 @@ import {
   type DialogCanvasResizeController
 } from './dialogCanvasResizeController';
 import { asBoolean, asText, ensureNumber } from '../library/utils';
+import type {
+  RPackageRequirement
+} from '../../../core/contracts/applicationComposition';
 
 export interface DialogRuntimeBuildState {
   dialogID: string;
@@ -19,6 +22,7 @@ export interface DialogRuntimeBuildState {
   dataframes: Record<string, unknown>;
   selectData: Record<string, unknown>;
   dependencies: string[];
+  rPackageRequirements: RPackageRequirement[];
   syntax: {
     command: string;
     defaultElements: Record<string, unknown>;
@@ -107,6 +111,11 @@ export function createDialogRuntimeBuildController(options: DialogRuntimeBuildCo
       runtime.dataframes = {};
       runtime.selectData = {};
       runtime.dependencies = parseDependencies(dialogSpec.properties.dependencies);
+      runtime.rPackageRequirements = Array.isArray(
+        dialogSpec.properties.rPackageRequirements
+      )
+        ? dialogSpec.properties.rPackageRequirements.slice()
+        : [];
       runtime.syntax = {
         command: asText(dialogSpec?.syntax?.command, ''),
         defaultElements: (dialogSpec?.syntax?.defaultElements || {}) as Record<string, unknown>

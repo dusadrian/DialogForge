@@ -1,6 +1,9 @@
 import { asText } from "../library/utils";
 import { applyCommandDefaults } from "./dialogCommandTemplate";
 import type { RuntimeControl } from "./dialogRuntimeTypes";
+import type {
+    RPackageRequirement
+} from "../../../core/contracts/applicationComposition";
 import {
     dialogRuntimeEventChannels
 } from "../../dialogRuntimeIpc";
@@ -19,6 +22,7 @@ export interface DialogRuntimeCommandControllerOptions {
     getCommand(): string;
     setCommand(command: string): void;
     getDependencies(): string[];
+    getRPackageRequirements(): RPackageRequirement[];
     getDialogId(): string;
     sendTo(channel: string, payload: unknown): void;
 }
@@ -137,6 +141,7 @@ export const createDialogRuntimeCommandController = function(
         options.sendTo(dialogRuntimeEventChannels.runCommand, {
             command: options.getCommand(),
             dependencies: options.getDependencies().slice(),
+            rPackageRequirements: options.getRPackageRequirements().slice(),
             dialogID: options.getDialogId()
         });
     };

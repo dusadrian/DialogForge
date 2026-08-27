@@ -612,12 +612,28 @@ const findProductDialogDefinition = function (dialogId) {
         && Array.isArray(requirements.rPackages)
         ? requirements.rPackages
         : [];
-    const rPackages = Array.from(new Set(
-        (Array.isArray(definition.rPackages) ? definition.rPackages : [])
-            .concat(configuredPackages)
-            .map((name) => String(name || "").trim())
-            .filter(Boolean)
-    ));
+    const rPackagesByName = new Map();
+
+    (Array.isArray(definition.rPackages) ? definition.rPackages : [])
+        .forEach((requirement) => {
+            if (!requirement || typeof requirement !== "object") {
+                return;
+            }
+
+            const name = String(requirement.name || "").trim();
+
+            if (name) {
+                rPackagesByName.set(name, requirement);
+            }
+        });
+    configuredPackages.forEach((packageName) => {
+        const name = String(packageName || "").trim();
+
+        if (name && !rPackagesByName.has(name)) {
+            rPackagesByName.set(name, { name });
+        }
+    });
+    const rPackages = Array.from(rPackagesByName.values());
 
     return Object.assign({}, definition, {
         rPackages

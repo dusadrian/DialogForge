@@ -9,6 +9,15 @@ import {
     parseRRuntimePackageStatus,
     readRDialogPackageRequirements
 } from "../r/dependencies/runtimePackageRequirements";
+import type {
+    RPackageRequirement
+} from "../../../core/contracts/applicationComposition";
+import {
+    createRPackageCompatibilityMessage,
+    createRPackageVersionsCommand,
+    parseRPackageVersions,
+    resolveRPackageCompatibility
+} from "../r/dependencies/rPackageCompatibility";
 import {
     createWebRRequiredInstallCommand
 } from "../r/dependencies/packageInstallPlan";
@@ -45,7 +54,7 @@ export interface WebRRuntimePackageAdapterBindings {
 }
 
 export interface WebRRuntimePackageAdapter {
-    readRequirements(dialogPayload: unknown): string[];
+    readRequirements(dialogPayload: unknown): RPackageRequirement[];
     loadPackages(packages: unknown, options?: WebRRuntimePackageLoadOptions): Promise<void>;
     installSessionPackages(packages: unknown): Promise<void>;
     ensureDialogPackages(dialogPayload: unknown): Promise<void>;
@@ -65,7 +74,9 @@ const readRuntimePackageStatus = async function(
 export const createWebRRuntimePackageAdapter = function(
     bindings: WebRRuntimePackageAdapterBindings
 ): WebRRuntimePackageAdapter {
-    const readRequirements = function(dialogPayload: unknown): string[] {
+    const readRequirements = function(
+        dialogPayload: unknown
+    ): RPackageRequirement[] {
         return readRDialogPackageRequirements(
             dialogPayload,
             bindings.packageRequirementsByDialogId || {}
@@ -207,13 +218,31 @@ export const createWebRRuntimePackageAdapter = function(
         loadPackages,
         installSessionPackages,
         async ensureDialogPackages(dialogPayload) {
-            const packages = readRequirements(dialogPayload);
+            const requirements = readRequirements(dialogPayload);
 
-            if (!packages.length) {
+            if (!requirements.length) {
                 return;
             }
 
-            await loadPackages(packages);
+            const compatibility = resolveRPackageCompatibility(
+                requirements,
+                parseRPackageVersions(
+                    await bindings.evaluateHiddenText(
+                        createRPackageVersionsCommand(requirements)
+                    )
+                )
+            );
+
+            if (!compatibility.compatible) {
+                throw new Error([
+                    "Package update required",
+                    createRPackageCompatibilityMessage(compatibility)
+                ].join("\n"));
+            }
+
+            await loadPackages(
+                requirements.map((requirement) => requirement.name)
+            );
         }
     };
 };

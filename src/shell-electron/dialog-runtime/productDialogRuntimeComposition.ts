@@ -19,6 +19,14 @@ import type {
 import {
     createProductDialogRuntimeIpcController
 } from "./productDialogRuntimeIpcController";
+import {
+    createRPackageCompatibilityMessage,
+    createRPackageRequirementsFromNames,
+    createRPackageVersionsCommand,
+    mergeRPackageRequirements,
+    parseRPackageVersions,
+    resolveRPackageCompatibility
+} from "../../runtime/providers/r/dependencies/rPackageCompatibility";
 
 
 export interface ProductDialogRuntimeCompositionOptions {
@@ -46,7 +54,7 @@ export const registerProductDialogRuntimeComposition = function(
 ): void {
     const dependencyReadiness = new Map<
         string,
-        Promise<{ ok: boolean; error: string }>
+        Promise<{ ok: boolean; error: string; status?: string }>
     >();
     const executeUiActionCommand = async function(
         request: VisibleCommandRequest,
@@ -93,18 +101,28 @@ export const registerProductDialogRuntimeComposition = function(
 
     const ensureDependencies = async function(
         value: unknown,
+        packageRequirementsInput: unknown,
         source: string
-    ): Promise<{ ok: boolean; error: string }> {
+    ): Promise<{ ok: boolean; error: string; status?: string }> {
         const dependencies = normalizeDependencies(value);
+        const requirements = mergeRPackageRequirements(
+            createRPackageRequirementsFromNames(dependencies),
+            packageRequirementsInput
+        );
 
-        if (dependencies.length === 0) {
+        if (requirements.length === 0) {
             return {
                 ok: true,
                 error: ""
             };
         }
 
-        const dependencyKey = dependencies.slice().sort().join("\n");
+        const dependencyKey = requirements.map((requirement) => {
+            return [
+                requirement.name,
+                requirement.minimumVersion || ""
+            ].join("@");
+        }).sort().join("\n");
         const existing = dependencyReadiness.get(dependencyKey);
 
         if (existing) {
@@ -114,13 +132,41 @@ export const registerProductDialogRuntimeComposition = function(
         const readiness = (async function(): Promise<{
             ok: boolean;
             error: string;
+            status?: string;
         }> {
+            const versionResult = await options.runtimeSessionManager
+                .executeInvisibleQuery(createInvisibleQueryRequest({
+                    query: createRPackageVersionsCommand(requirements),
+                    source: `${source}.package-versions`
+                }));
+
+            if (versionResult.status !== "ready") {
+                return {
+                    ok: false,
+                    error: versionResult.message
+                        || "Failed to inspect required R package versions."
+                };
+            }
+
+            const compatibility = resolveRPackageCompatibility(
+                requirements,
+                parseRPackageVersions(versionResult.value)
+            );
+
+            if (!compatibility.compatible) {
+                return {
+                    ok: false,
+                    error: createRPackageCompatibilityMessage(compatibility),
+                    status: "r-package-update-required"
+                };
+            }
+
             let loadedPackage = false;
 
-            for (const packageName of dependencies) {
+            for (const packageName of requirements.map((entry) => entry.name)) {
                 const attached = await options.runtimeSessionManager
                     .executeInvisibleQuery(createInvisibleQueryRequest({
-                        query: `${JSON.stringify(`package:${packageName}`)} %in% search()`,
+                        query: `is.element(${JSON.stringify(`package:${packageName}`)}, search())`,
                         source: `${source}.dependencies`
                     }));
 

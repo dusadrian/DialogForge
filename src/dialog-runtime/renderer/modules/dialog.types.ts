@@ -1,3 +1,8 @@
+import type {
+  RPackageRequirement
+} from '../../../core/contracts/applicationComposition';
+
+
 export interface DialogCreatorProperties {
   name: string;
   title: string;
@@ -5,6 +10,7 @@ export interface DialogCreatorProperties {
   height: string | number;
   fontSize?: string | number;
   dependencies?: string;
+  rPackageRequirements?: RPackageRequirement[];
   language?: string;
   background?: string;
   // When true the dialog window may be resized past its authored size, which
@@ -55,6 +61,7 @@ export interface RuntimeDialogSchema {
     fontSize?: number | string;
     background?: string;
     dependencies: string;
+    rPackageRequirements?: RPackageRequirement[];
     resizable?: boolean;
     preserveAspectRatio?: boolean;
   };
