@@ -38,6 +38,7 @@ export interface ScriptEditorBootstrapFlowOptions {
     saveAs(): void;
     shareLive(): void;
     joinLive(): void;
+    showRaisedHands(): void;
     toggleHand(): void;
     getFilePath(file: File): string;
     createDroppedFilePlan?: CreateDroppedScriptFilePlan;
@@ -85,6 +86,7 @@ export const createScriptEditorBootstrapFlowController = function(
             saveAs: options.saveAs,
             shareLive: options.shareLive,
             joinLive: options.joinLive,
+            showRaisedHands: options.showRaisedHands,
             toggleHand: options.toggleHand,
             getFilePath: options.getFilePath,
             createDroppedFilePlan: options.createDroppedFilePlan,

@@ -429,6 +429,12 @@ const run = async function() {
         ).isVisible()) {
             throw new Error("Raise hand was visible before joining a classroom.");
         }
+
+        if (await hostEditor.locator(
+            ".dm-script-btn-hands-raised"
+        ).isVisible()) {
+            throw new Error("Hands raised was visible before a student raised a hand.");
+        }
         process.stdout.write("live-script UI: collaboration controls available\n");
 
         await hostEditor.locator(".dm-script-btn-share-live").click();
@@ -446,6 +452,10 @@ const run = async function() {
                 `Share panel did not finish hosting: ${panelText}`,
                 { cause: error }
             );
+        }
+
+        if (await hostEditor.locator(".dm-live-panel__hands").count() > 0) {
+            throw new Error("Share live still contains the raised-hand queue.");
         }
         await hostEditor.getByRole("dialog").getByRole("button", {
             name: "Copy link",
@@ -610,8 +620,17 @@ const run = async function() {
                 && button?.getAttribute("data-state") === "raised";
         }, undefined, { timeout: 10000 });
         await hostEditor.waitForFunction(() => {
-            return Array.from(document.querySelectorAll(".dm-live-panel__hand"))
-                .some((hand) => hand.textContent?.includes("Maria"));
+            const button = document.querySelector(".dm-script-btn-hands-raised");
+            return button instanceof HTMLButtonElement
+                && !button.hidden
+                && button.getAttribute("data-state") === "raised";
+        }, undefined, { timeout: 30000 });
+        await hostEditor.locator(".dm-script-btn-hands-raised").click();
+        await hostEditor.waitForFunction(() => {
+            const title = document.querySelector(".dm-live-panel__title");
+            return title?.textContent === "Raised hands"
+                && Array.from(document.querySelectorAll(".dm-live-panel__hand"))
+                    .some((hand) => hand.textContent?.includes("Maria"));
         }, undefined, { timeout: 30000 });
         const raisedHandRow = hostEditor.locator(".dm-live-panel__hand")
             .filter({ hasText: "Maria" });

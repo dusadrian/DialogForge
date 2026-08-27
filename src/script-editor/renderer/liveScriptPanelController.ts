@@ -65,6 +65,7 @@ export interface LiveScriptPanelController {
         shortCodeState?: string,
         canRegenerate?: boolean
     ): Promise<void>;
+    showRaisedHands(state: LiveScriptHostState): void;
     showParticipant(displayName: string, status?: string): void;
     showError(message: string): void;
     updateHost(state: LiveScriptHostState): void;
@@ -105,7 +106,7 @@ export const createLiveScriptPanelController = function(
     overlay.appendChild(dialog);
     options.root.appendChild(overlay);
 
-    let mode: "join" | "host" | "participant" = "join";
+    let mode: "join" | "host" | "hands" | "participant" = "join";
     let participantCount: HTMLElement | null = null;
     let connectionState: HTMLElement | null = null;
     let shortCodeValue: HTMLElement | null = null;
@@ -251,8 +252,6 @@ export const createLiveScriptPanelController = function(
         }
 
         body.append(participantRow, connectionRow);
-        handQueue = createElement("div", "dm-live-panel__hands");
-        body.appendChild(handQueue);
         footer.append(
             action(labels.close, false, close),
             action(labels.stopSharing, true, () => {
@@ -344,6 +343,15 @@ export const createLiveScriptPanelController = function(
         }
     };
 
+    const showRaisedHands = function(state: LiveScriptHostState): void {
+        const labels = options.getLabels();
+        clear("hands", labels.raisedHands);
+        handQueue = createElement("div", "dm-live-panel__hands");
+        body.appendChild(handQueue);
+        renderHandQueue(state);
+        footer.append(action(labels.close, false, close));
+    };
+
     const showParticipant = function(
         displayName: string,
         status = "joining"
@@ -377,12 +385,18 @@ export const createLiveScriptPanelController = function(
     return {
         showJoin,
         showHost,
+        showRaisedHands,
         showParticipant,
         showError: function(errorMessage) {
             message.textContent = errorMessage;
             overlay.hidden = false;
         },
         updateHost: function(state) {
+            if (mode === "hands") {
+                renderHandQueue(state);
+                return;
+            }
+
             if (mode !== "host") {
                 return;
             }
@@ -402,7 +416,6 @@ export const createLiveScriptPanelController = function(
                 connectionState.textContent = state.status;
             }
 
-            renderHandQueue(state);
         },
         updateShortCode: function(code) {
             if (mode === "host" && shortCodeValue) {

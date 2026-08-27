@@ -116,6 +116,7 @@ import {
   parseLiveScriptJoinText,
   sanitizeLiveScriptDisplayName,
   validateLiveScriptNickname,
+  type LiveScriptHostState,
   type LiveScriptSessionTicket
 } from '../collaboration/index.js';
 // Static imports only: the Electron renderer runs this module as CommonJS and
@@ -303,8 +304,25 @@ const rememberLiveScriptNickname = function(nickname: string): void {
   catch {}
 };
 
+const readHostAttention = function(): {
+  documentId: string;
+  state: LiveScriptHostState;
+} | null {
+  for (const documentId of hostedTickets.keys()) {
+    const state = liveScriptController.getHostedState(documentId);
+
+    if (state?.spotlight
+      || state?.participants.some((participant) => participant.handRaised)) {
+      return { documentId, state };
+    }
+  }
+
+  return null;
+};
+
 const updateLiveToolbarState = function(): void {
   const active = tabController.getActiveTab();
+  const hostAttention = readHostAttention();
 
   surfaceState.toolbarView?.updateLiveState({
     available: liveAvailable,
@@ -315,6 +333,11 @@ const updateLiveToolbarState = function(): void {
     isHosting: Boolean(
       active && liveScriptController.getHostedSessionId(active.id)
     ),
+    canManageRaisedHands: Boolean(hostAttention),
+    hasRaisedHands: Boolean(hostAttention?.state.participants.some(
+      (participant) => participant.handRaised
+    )),
+    hasSpotlight: Boolean(hostAttention?.state.spotlight),
     activeDocumentLocal: active?.kind === 'local',
     handState: active
       ? liveScriptController.getHandState(active.id)
@@ -734,6 +757,17 @@ const showJoinLive = function(): void {
   livePanelController?.showJoin('', readLiveScriptNickname());
 };
 
+const showRaisedHands = function(): void {
+  const attention = readHostAttention();
+
+  if (!attention || !livePanelController) {
+    return;
+  }
+
+  livePanelDocumentId = attention.documentId;
+  livePanelController.showRaisedHands(attention.state);
+};
+
 const toggleRaisedHand = async function(): Promise<void> {
   const active = getActiveTab();
 
@@ -933,6 +967,7 @@ const scriptEditorBootstrapFlow = createScriptEditorBootstrapFlowController({
     });
   },
   joinLive: showJoinLive,
+  showRaisedHands,
   toggleHand: () => {
     void toggleRaisedHand().catch((error) => {
       livePanelController?.showError(

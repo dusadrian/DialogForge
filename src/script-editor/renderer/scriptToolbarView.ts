@@ -12,6 +12,7 @@ export interface ScriptToolbarLabels {
     saveAs: string;
     shareLive: string;
     joinLive: string;
+    handsRaised: string;
     raiseHand: string;
     lowerHand: string;
     stopSpotlight: string;
@@ -28,6 +29,7 @@ export interface ScriptToolbarActions {
     saveAs(): void;
     shareLive(): void;
     joinLive(): void;
+    showRaisedHands(): void;
     toggleHand(): void;
 }
 
@@ -49,6 +51,7 @@ export const createScriptToolbarLabels = function(
         saveAs: translate("Save As"),
         shareLive: translate("Share live"),
         joinLive: translate("Join live script"),
+        handsRaised: translate("Hands raised"),
         raiseHand: translate("Raise hand"),
         lowerHand: translate("Lower hand"),
         stopSpotlight: translate("Stop spotlight")
@@ -72,6 +75,9 @@ export interface ScriptToolbarView {
         isParticipant: boolean;
         participantSessionActive?: boolean;
         isHosting: boolean;
+        canManageRaisedHands: boolean;
+        hasRaisedHands: boolean;
+        hasSpotlight: boolean;
         activeDocumentLocal: boolean;
         handState: "idle" | "raised" | "spotlight";
         hasOfferedDocument: boolean;
@@ -209,6 +215,16 @@ export const createScriptToolbarView = function(
     joinLiveButton.classList.add("dm-script-btn-join-live");
     toolbar.appendChild(joinLiveButton);
 
+    const handsRaisedButton = createToolbarButton(
+        labels.handsRaised,
+        "codicon-feedback",
+        actions.showRaisedHands,
+        { title: labels.handsRaised }
+    );
+    handsRaisedButton.classList.add("dm-script-btn-hands-raised");
+    handsRaisedButton.hidden = true;
+    toolbar.appendChild(handsRaisedButton);
+
     const raiseHandButton = createToolbarButton(
         labels.raiseHand,
         "codicon-feedback",
@@ -286,6 +302,11 @@ export const createScriptToolbarView = function(
             nextLabels.joinLive,
             nextLabels.joinLive
         );
+        setButtonLabel(
+            handsRaisedButton,
+            nextLabels.handsRaised,
+            nextLabels.handsRaised
+        );
         const handLabel = raiseHandButton.dataset.state === "spotlight"
             ? nextLabels.stopSpotlight
             : raiseHandButton.dataset.state === "raised"
@@ -327,6 +348,9 @@ export const createScriptToolbarView = function(
         isParticipant: boolean;
         participantSessionActive?: boolean;
         isHosting: boolean;
+        canManageRaisedHands: boolean;
+        hasRaisedHands: boolean;
+        hasSpotlight: boolean;
         activeDocumentLocal: boolean;
         handState: "idle" | "raised" | "spotlight";
         hasOfferedDocument: boolean;
@@ -340,6 +364,12 @@ export const createScriptToolbarView = function(
             ? "participant"
             : input.isHosting
                 ? "hosting"
+                : "idle";
+        handsRaisedButton.hidden = !input.canManageRaisedHands;
+        handsRaisedButton.dataset.state = input.hasSpotlight
+            ? "spotlight"
+            : input.hasRaisedHands
+                ? "raised"
                 : "idle";
         raiseHandButton.hidden = !input.participantSessionActive;
         raiseHandButton.disabled = !input.activeDocumentLocal
