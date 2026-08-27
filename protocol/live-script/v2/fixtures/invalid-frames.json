@@ -1,0 +1,80 @@
+[
+    {
+        "name": "version 1 frame is not accepted by version 2",
+        "frame": {
+            "protocol": "dialogforge/live-script",
+            "version": 1,
+            "sessionId": "session_1234567890abcdef",
+            "type": "ack",
+            "senderEndpointId": "participant_1234567890abcdef",
+            "messageNumber": 2,
+            "payload": { "revision": 1 }
+        }
+    },
+    {
+        "name": "join omits classroom nickname",
+        "frame": {
+            "protocol": "dialogforge/live-script",
+            "version": 2,
+            "sessionId": "session_1234567890abcdef",
+            "type": "join",
+            "senderEndpointId": "participant_1234567890abcdef",
+            "messageNumber": 1,
+            "payload": {
+                "capability": "capability_1234567890abcdefghijklmnop",
+                "supportedVersions": [2],
+                "participantId": "classmate_1234567890abcdef"
+            }
+        }
+    },
+    {
+        "name": "hand raise leaks a tab name",
+        "frame": {
+            "protocol": "dialogforge/live-script",
+            "version": 2,
+            "sessionId": "session_1234567890abcdef",
+            "type": "hand-raise",
+            "senderEndpointId": "participant_1234567890abcdef",
+            "messageNumber": 3,
+            "payload": { "displayName": "private.R" }
+        }
+    },
+    {
+        "name": "spotlight snapshot omits the granted tab name",
+        "frame": {
+            "protocol": "dialogforge/live-script",
+            "version": 2,
+            "sessionId": "session_1234567890abcdef",
+            "type": "spotlight-snapshot",
+            "senderEndpointId": "participant_1234567890abcdef",
+            "messageNumber": 4,
+            "payload": { "revision": 0, "content": "x <- 1\n" }
+        }
+    },
+    {
+        "name": "spotlight edit skips a source revision",
+        "frame": {
+            "protocol": "dialogforge/live-script",
+            "version": 2,
+            "sessionId": "session_1234567890abcdef",
+            "type": "spotlight-edit",
+            "senderEndpointId": "participant_1234567890abcdef",
+            "messageNumber": 5,
+            "payload": {
+                "baseRevision": 0,
+                "revision": 2,
+                "edits": [{
+                    "range": {
+                        "startLineNumber": 1,
+                        "startColumn": 1,
+                        "endLineNumber": 1,
+                        "endColumn": 1
+                    },
+                    "rangeOffset": 0,
+                    "rangeLength": 0,
+                    "text": "x"
+                }]
+            }
+        }
+    }
+]

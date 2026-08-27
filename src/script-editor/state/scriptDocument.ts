@@ -7,6 +7,7 @@ export interface ScriptDocument {
     kind: "local" | "live-participant";
     displayName: string;
     liveStatus: string;
+    handState: "" | "raised" | "spotlight";
     filePath: string;
     dirty: boolean;
     scrollTop: number;
@@ -56,6 +57,7 @@ export const createScriptDocument = function(
         kind: options.kind || "local",
         displayName: String(options.displayName || ""),
         liveStatus: "",
+        handState: "",
         filePath: String(options.filePath || ""),
         dirty: false,
         scrollTop: 0,

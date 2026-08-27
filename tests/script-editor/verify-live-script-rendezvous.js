@@ -22,7 +22,7 @@ const ticket = function() {
         transportAddress: "{\"nodeId\":\"instructor_1234567890abcdef\"}",
         sessionId: "session_1234567890abcdef",
         capability: "capability_1234567890abcdefghijklmnop",
-        protocolVersions: { minimum: 1, maximum: 1 },
+        protocolVersions: { minimum: 2, maximum: 2 },
         expiresAt: Date.now() + 60_000,
         displayName: "lesson.R"
     };

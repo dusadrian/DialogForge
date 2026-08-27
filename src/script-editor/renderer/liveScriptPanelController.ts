@@ -32,22 +32,33 @@ export interface LiveScriptPanelLabels {
     participants: string;
     connection: string;
     enterLink: string;
+    raisedHands: string;
+    spotlight: string;
+    accept: string;
+    dismiss: string;
+    endSpotlight: string;
+    handRequest: string;
+    nickname: string;
+    nicknamePlaceholder: string;
 }
 
 
 export interface LiveScriptPanelControllerOptions {
     root: HTMLElement;
     getLabels(): LiveScriptPanelLabels;
-    join(value: string): Promise<void>;
+    join(value: string, nickname: string): Promise<void>;
     stopSharing(): Promise<void>;
     detach(): Promise<void>;
     regenerateShortCode(): Promise<void>;
     followInstructorCursor(follow: boolean): void;
+    grantSpotlight(endpointId: string): Promise<void>;
+    dismissHand(endpointId: string): Promise<void>;
+    endSpotlight(): Promise<void>;
 }
 
 
 export interface LiveScriptPanelController {
-    showJoin(value?: string): void;
+    showJoin(value?: string, nickname?: string): void;
     showHost(
         link: string,
         displayName: string,
@@ -98,6 +109,7 @@ export const createLiveScriptPanelController = function(
     let participantCount: HTMLElement | null = null;
     let connectionState: HTMLElement | null = null;
     let shortCodeValue: HTMLElement | null = null;
+    let handQueue: HTMLElement | null = null;
 
     const action = function(
         label: string,
@@ -128,6 +140,7 @@ export const createLiveScriptPanelController = function(
         participantCount = null;
         connectionState = null;
         shortCodeValue = null;
+        handQueue = null;
         overlay.hidden = false;
     };
 
@@ -140,27 +153,51 @@ export const createLiveScriptPanelController = function(
         return element;
     };
 
-    const showJoin = function(value = ""): void {
+    const showJoin = function(value = "", nickname = ""): void {
         const labels = options.getLabels();
         clear("join", labels.joinLive);
+        const nicknameLabel = createElement(
+            "label",
+            "dm-live-panel__nickname-label",
+            labels.nickname
+        );
+        const nicknameInput = createElement("input", "dm-live-panel__nickname");
+        nicknameInput.type = "text";
+        nicknameInput.maxLength = 40;
+        nicknameInput.placeholder = labels.nicknamePlaceholder;
+        nicknameInput.setAttribute("aria-label", labels.nickname);
+        nicknameInput.value = nickname;
+        nicknameLabel.appendChild(nicknameInput);
         const input = createElement("textarea", "dm-live-panel__ticket");
         input.rows = 5;
         input.placeholder = labels.enterLink;
         input.setAttribute("aria-label", labels.enterLink);
         input.value = value;
-        body.appendChild(input);
+        body.append(nicknameLabel, input);
         footer.append(
             action(labels.close, false, close),
             action(labels.joinLive, true, () => {
                 message.textContent = "";
-                void options.join(input.value).catch((error) => {
-                    message.textContent = error instanceof Error
+                void options.join(input.value, nicknameInput.value).catch((error) => {
+                    const errorMessage = error instanceof Error
                         ? error.message
                         : String(error);
+                    message.textContent = errorMessage;
+
+                    if (errorMessage.includes("already taken")) {
+                        nicknameInput.focus();
+                        nicknameInput.select();
+                    }
                 });
             })
         );
-        input.focus();
+
+        if (nicknameInput.value) {
+            input.focus();
+        }
+        else {
+            nicknameInput.focus();
+        }
     };
 
     const showHost = async function(
@@ -214,6 +251,8 @@ export const createLiveScriptPanelController = function(
         }
 
         body.append(participantRow, connectionRow);
+        handQueue = createElement("div", "dm-live-panel__hands");
+        body.appendChild(handQueue);
         footer.append(
             action(labels.close, false, close),
             action(labels.stopSharing, true, () => {
@@ -224,6 +263,85 @@ export const createLiveScriptPanelController = function(
                 });
             })
         );
+    };
+
+    const renderHandQueue = function(state: LiveScriptHostState): void {
+        if (!handQueue) {
+            return;
+        }
+
+        const labels = options.getLabels();
+        handQueue.replaceChildren();
+        const heading = createElement(
+            "div",
+            "dm-live-panel__hands-title",
+            labels.raisedHands
+        );
+        handQueue.appendChild(heading);
+
+        if (state.spotlight) {
+            const active = createElement("div", "dm-live-panel__hand");
+            const name = createElement(
+                "span",
+                "dm-live-panel__hand-name",
+                `${labels.spotlight}: ${state.spotlight.displayName}`
+            );
+            active.append(
+                name,
+                action(labels.endSpotlight, false, () => {
+                    message.textContent = "";
+                    void options.endSpotlight().catch((error) => {
+                        message.textContent = error instanceof Error
+                            ? error.message
+                            : String(error);
+                    });
+                })
+            );
+            handQueue.appendChild(active);
+        }
+
+        state.participants.filter((participant) => participant.handRaised)
+            .forEach((participant) => {
+                const request = createElement("div", "dm-live-panel__hand");
+                const name = createElement(
+                    "span",
+                    "dm-live-panel__hand-name",
+                    participant.nickname
+                );
+                const controls = createElement(
+                    "span",
+                    "dm-live-panel__hand-actions"
+                );
+                const accept = action(labels.accept, true, () => {
+                    message.textContent = "";
+                    void options.grantSpotlight(participant.endpointId).catch((error) => {
+                        message.textContent = error instanceof Error
+                            ? error.message
+                            : String(error);
+                    });
+                });
+                accept.disabled = Boolean(state.spotlight);
+                controls.append(
+                    accept,
+                    action(labels.dismiss, false, () => {
+                        message.textContent = "";
+                        void options.dismissHand(participant.endpointId).catch((error) => {
+                            message.textContent = error instanceof Error
+                                ? error.message
+                                : String(error);
+                        });
+                    })
+                );
+                request.append(name, controls);
+                handQueue?.appendChild(request);
+            });
+
+        if (!state.spotlight
+            && !state.participants.some((participant) => participant.handRaised)) {
+            handQueue.appendChild(
+                createElement("div", "dm-live-panel__hands-empty", "—")
+            );
+        }
     };
 
     const showParticipant = function(
@@ -270,12 +388,21 @@ export const createLiveScriptPanelController = function(
             }
 
             if (participantCount) {
-                participantCount.textContent = String(state.participants.length);
+                const names = state.participants.map((participant) => {
+                    return participant.connectionState === "reconnecting"
+                        ? `${participant.nickname} (${participant.connectionState})`
+                        : participant.nickname;
+                });
+                participantCount.textContent = names.length > 0
+                    ? `${names.length} · ${names.join(", ")}`
+                    : "0";
             }
 
             if (connectionState) {
                 connectionState.textContent = state.status;
             }
+
+            renderHandQueue(state);
         },
         updateShortCode: function(code) {
             if (mode === "host" && shortCodeValue) {

@@ -41,6 +41,13 @@ const messageTypes: LiveScriptMessageType[] = [
     "resync-request",
     "cursor",
     "participant-state",
+    "hand-raise",
+    "hand-lower",
+    "spotlight-control",
+    "spotlight-snapshot",
+    "spotlight-edit",
+    "spotlight-cursor",
+    "spotlight-ended",
     "session-ended",
     "error",
     "ping",
@@ -160,13 +167,47 @@ const validPosition = function(value: unknown): boolean {
 };
 
 
+const validEditPayload = function(payload: Record<string, unknown>): boolean {
+    if (!hasExactKeys(payload, ["baseRevision", "revision", "edits"])
+        || !isSafeNonNegativeInteger(payload.baseRevision)
+        || !isSafePositiveInteger(payload.revision)
+        || payload.revision !== payload.baseRevision + 1
+        || !Array.isArray(payload.edits)
+        || payload.edits.length < 1
+        || payload.edits.length > LIVE_SCRIPT_MAX_EDITS_PER_FRAME) {
+        return false;
+    }
+
+    const edits = payload.edits.map(parseTextEdit);
+
+    if (edits.some((edit) => !edit)) {
+        return false;
+    }
+
+    let previousEnd = 0;
+
+    return (edits as LiveScriptTextEdit[]).every((edit, index) => {
+        const ordered = index === 0 || edit.rangeOffset >= previousEnd;
+        previousEnd = edit.rangeOffset + edit.rangeLength;
+        return ordered;
+    });
+};
+
+
 const validPayload = function(
     type: LiveScriptMessageType,
     payload: Record<string, unknown>
 ): boolean {
     if (type === "join") {
-        return hasExactKeys(payload, ["capability", "supportedVersions"])
+        return hasExactKeys(payload, [
+            "capability",
+            "supportedVersions",
+            "participantId",
+            "nickname"
+        ])
             && isBoundedString(payload.capability, 32, 256)
+            && isBoundedString(payload.participantId, 1, 256)
+            && isBoundedString(payload.nickname, 1, 40)
             && Array.isArray(payload.supportedVersions)
             && payload.supportedVersions.length > 0
             && payload.supportedVersions.length <= 16
@@ -190,30 +231,8 @@ const validPayload = function(
             && encoder.encode(payload.content).byteLength <= LIVE_SCRIPT_MAX_SNAPSHOT_BYTES;
     }
 
-    if (type === "edit") {
-        if (!hasExactKeys(payload, ["baseRevision", "revision", "edits"])
-            || !isSafeNonNegativeInteger(payload.baseRevision)
-            || !isSafePositiveInteger(payload.revision)
-            || payload.revision !== payload.baseRevision + 1
-            || !Array.isArray(payload.edits)
-            || payload.edits.length < 1
-            || payload.edits.length > LIVE_SCRIPT_MAX_EDITS_PER_FRAME) {
-            return false;
-        }
-
-        const edits = payload.edits.map(parseTextEdit);
-
-        if (edits.some((edit) => !edit)) {
-            return false;
-        }
-
-        let previousEnd = 0;
-
-        return (edits as LiveScriptTextEdit[]).every((edit, index) => {
-            const ordered = index === 0 || edit.rangeOffset >= previousEnd;
-            previousEnd = edit.rangeOffset + edit.rangeLength;
-            return ordered;
-        });
+    if (type === "edit" || type === "spotlight-edit") {
+        return validEditPayload(payload);
     }
 
     if (type === "ack") {
@@ -244,6 +263,33 @@ const validPayload = function(
             );
     }
 
+    if (type === "hand-raise") {
+        return hasExactKeys(payload, []);
+    }
+
+    if (type === "hand-lower" || type === "spotlight-ended") {
+        return hasExactKeys(payload, []);
+    }
+
+    if (type === "spotlight-control") {
+        return hasExactKeys(payload, ["action"])
+            && ["granted", "dismissed", "ended"].includes(String(payload.action));
+    }
+
+    if (type === "spotlight-snapshot") {
+        return hasExactKeys(payload, ["revision", "displayName", "content"])
+            && isSafeNonNegativeInteger(payload.revision)
+            && isBoundedString(payload.displayName, 1, 120)
+            && typeof payload.content === "string"
+            && encoder.encode(payload.content).byteLength <= LIVE_SCRIPT_MAX_SNAPSHOT_BYTES;
+    }
+
+    if (type === "spotlight-cursor") {
+        return hasExactKeys(payload, ["position"], ["selection"])
+            && validPosition(payload.position)
+            && (payload.selection === undefined || Boolean(parseRange(payload.selection)));
+    }
+
     if (type === "session-ended") {
         return hasExactKeys(payload, ["reason"])
             && ["stopped", "expired", "instructor-closed"].includes(
@@ -257,6 +303,7 @@ const validPayload = function(
                 "authorization-failed",
                 "incompatible-version",
                 "invalid-frame",
+                "nickname-taken",
                 "session-ended",
                 "participant-limit"
             ].includes(String(payload.code))
@@ -307,6 +354,7 @@ export const parseLiveScriptFrameValue = function(
 
     const type = value.type as LiveScriptMessageType;
     const needsTimestamp = type === "cursor"
+        || type === "spotlight-cursor"
         || type === "participant-state"
         || type === "ping"
         || type === "pong";

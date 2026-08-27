@@ -151,7 +151,7 @@ const runHost = async function() {
             transportAddress,
             sessionId,
             capability: sessionCapability,
-            protocolVersions: { minimum: 1, maximum: 1 },
+            protocolVersions: { minimum: 2, maximum: 2 },
             expiresAt,
             displayName: "mixed-classroom.R"
         }

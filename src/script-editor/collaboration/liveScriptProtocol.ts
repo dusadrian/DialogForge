@@ -1,5 +1,5 @@
 export const LIVE_SCRIPT_PROTOCOL = "dialogforge/live-script" as const;
-export const LIVE_SCRIPT_PROTOCOL_VERSION = 1 as const;
+export const LIVE_SCRIPT_PROTOCOL_VERSION = 2 as const;
 export const LIVE_SCRIPT_MAX_FRAME_BYTES = 1024 * 1024;
 export const LIVE_SCRIPT_MAX_SNAPSHOT_BYTES = 768 * 1024;
 export const LIVE_SCRIPT_MAX_EDIT_TEXT_BYTES = 256 * 1024;
@@ -20,6 +20,13 @@ export type LiveScriptMessageType =
     | "resync-request"
     | "cursor"
     | "participant-state"
+    | "hand-raise"
+    | "hand-lower"
+    | "spotlight-control"
+    | "spotlight-snapshot"
+    | "spotlight-edit"
+    | "spotlight-cursor"
+    | "spotlight-ended"
     | "session-ended"
     | "error"
     | "ping"
@@ -40,6 +47,8 @@ export interface LiveScriptJoinFrame extends LiveScriptFrameBase<"join"> {
     payload: {
         capability: string;
         supportedVersions: number[];
+        participantId: string;
+        nickname: string;
     };
 }
 
@@ -126,6 +135,52 @@ export interface LiveScriptParticipantStateFrame extends LiveScriptFrameBase<"pa
 }
 
 
+export interface LiveScriptHandRaiseFrame extends LiveScriptFrameBase<"hand-raise"> {
+    payload: Record<string, never>;
+}
+
+
+export interface LiveScriptHandLowerFrame extends LiveScriptFrameBase<"hand-lower"> {
+    payload: Record<string, never>;
+}
+
+
+export interface LiveScriptSpotlightControlFrame extends LiveScriptFrameBase<"spotlight-control"> {
+    payload: {
+        action: "granted" | "dismissed" | "ended";
+    };
+}
+
+
+export interface LiveScriptSpotlightSnapshotFrame extends LiveScriptFrameBase<"spotlight-snapshot"> {
+    payload: {
+        revision: number;
+        displayName: string;
+        content: string;
+    };
+}
+
+
+export interface LiveScriptSpotlightEditFrame extends LiveScriptFrameBase<"spotlight-edit"> {
+    payload: {
+        baseRevision: number;
+        revision: number;
+        edits: LiveScriptTextEdit[];
+    };
+}
+
+
+export interface LiveScriptSpotlightCursorFrame extends LiveScriptFrameBase<"spotlight-cursor"> {
+    timestamp: number;
+    payload: LiveScriptCursorFrame["payload"];
+}
+
+
+export interface LiveScriptSpotlightEndedFrame extends LiveScriptFrameBase<"spotlight-ended"> {
+    payload: Record<string, never>;
+}
+
+
 export interface LiveScriptSessionEndedFrame extends LiveScriptFrameBase<"session-ended"> {
     payload: {
         reason: "stopped" | "expired" | "instructor-closed";
@@ -139,6 +194,7 @@ export interface LiveScriptErrorFrame extends LiveScriptFrameBase<"error"> {
             | "authorization-failed"
             | "incompatible-version"
             | "invalid-frame"
+            | "nickname-taken"
             | "session-ended"
             | "participant-limit";
         message: string;
@@ -171,6 +227,13 @@ export type LiveScriptFrame =
     | LiveScriptResyncRequestFrame
     | LiveScriptCursorFrame
     | LiveScriptParticipantStateFrame
+    | LiveScriptHandRaiseFrame
+    | LiveScriptHandLowerFrame
+    | LiveScriptSpotlightControlFrame
+    | LiveScriptSpotlightSnapshotFrame
+    | LiveScriptSpotlightEditFrame
+    | LiveScriptSpotlightCursorFrame
+    | LiveScriptSpotlightEndedFrame
     | LiveScriptSessionEndedFrame
     | LiveScriptErrorFrame
     | LiveScriptPingFrame

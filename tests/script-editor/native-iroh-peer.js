@@ -59,7 +59,7 @@ const runHost = async function() {
             transportAddress,
             sessionId,
             capability,
-            protocolVersions: { minimum: 1, maximum: 1 },
+            protocolVersions: { minimum: 2, maximum: 2 },
             displayName: "native-proof.R"
         }
     });

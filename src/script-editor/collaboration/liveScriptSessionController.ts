@@ -17,7 +17,8 @@ import type {
 } from "./liveScriptProtocol";
 import {
     LIVE_SCRIPT_DEFAULT_SESSION_DURATION_MS,
-    LIVE_SCRIPT_MAX_SESSION_DURATION_MS
+    LIVE_SCRIPT_MAX_SESSION_DURATION_MS,
+    LIVE_SCRIPT_PROTOCOL_VERSION
 } from "./liveScriptProtocol";
 import {
     LIVE_SCRIPT_TICKET_FORMAT_VERSION,
@@ -72,7 +73,10 @@ export interface LiveScriptSessionControllerOptions {
 
 export interface LiveScriptSessionController {
     host(input: LiveScriptHostedSessionInput): Promise<LiveScriptHostedSessionResult>;
-    join(ticket: LiveScriptSessionTicket): Promise<LiveScriptParticipantState>;
+    join(
+        ticket: LiveScriptSessionTicket,
+        nickname: string
+    ): Promise<LiveScriptParticipantState>;
     publishHostEdits(sessionId: string, edits: LiveScriptTextEdit[]): Promise<void>;
     publishHostCursor(
         sessionId: string,
@@ -80,6 +84,26 @@ export interface LiveScriptSessionController {
         selection?: LiveScriptCursorFrame["payload"]["selection"]
     ): Promise<void>;
     replaceHostContent(sessionId: string, content: string): Promise<void>;
+    grantHostSpotlight(sessionId: string, endpointId: string): Promise<void>;
+    dismissHostHand(sessionId: string, endpointId: string): Promise<void>;
+    endHostSpotlight(sessionId: string): Promise<void>;
+    raiseParticipantHand(sessionId: string, displayName: string): Promise<void>;
+    lowerParticipantHand(sessionId: string): Promise<void>;
+    publishParticipantSpotlightSnapshot(
+        sessionId: string,
+        displayName: string,
+        content: string
+    ): Promise<void>;
+    publishParticipantSpotlightEdits(
+        sessionId: string,
+        edits: LiveScriptTextEdit[]
+    ): Promise<void>;
+    publishParticipantSpotlightCursor(
+        sessionId: string,
+        position: LiveScriptCursorFrame["payload"]["position"],
+        selection?: LiveScriptCursorFrame["payload"]["selection"]
+    ): Promise<void>;
+    endParticipantSpotlight(sessionId: string): Promise<void>;
     endHost(
         sessionId: string,
         reason?: LiveScriptSessionEndedFrame["payload"]["reason"]
@@ -87,6 +111,7 @@ export interface LiveScriptSessionController {
     closeParticipant(sessionId: string): Promise<void>;
     getHostState(sessionId: string): LiveScriptHostState | null;
     getParticipantState(sessionId: string): LiveScriptParticipantState | null;
+    getParticipantSessionIds(): string[];
 }
 
 
@@ -100,6 +125,11 @@ export const createLiveScriptSessionController = function(
     const reconnecting = new Set<string>();
     const expiryTimers = new Map<string, ReturnType<typeof setTimeout>>();
     const participantDisconnectTimers = new Map<string, ReturnType<typeof setTimeout>>();
+    const pendingJoins = new Map<string, {
+        resolve(state: LiveScriptParticipantState): void;
+        reject(error: Error): void;
+        timer: ReturnType<typeof setTimeout>;
+    }>();
     const reconnectDelaysMs = options.reconnectDelaysMs || [0, 250, 500, 1000, 2000, 4000];
     const reconnectJitterMs = options.reconnectJitterMs
         ?? (options.reconnectDelaysMs ? 0 : 250);
@@ -157,7 +187,7 @@ export const createLiveScriptSessionController = function(
             return;
         }
 
-        host.removeParticipant(recipientEndpointId);
+        void sendOutbound(host.removeParticipant(recipientEndpointId)).catch(() => {});
         options.hostStateChanged(outbound.frame.sessionId, host.state());
     };
 
@@ -209,6 +239,21 @@ export const createLiveScriptSessionController = function(
         options.participantFrameApplied(frame.sessionId, frame, state);
         options.participantStateChanged(frame.sessionId, state);
         await sendOutbound(responses);
+
+        const pendingJoin = pendingJoins.get(frame.sessionId);
+
+        if (pendingJoin && state.status === "active") {
+            clearTimeout(pendingJoin.timer);
+            pendingJoins.delete(frame.sessionId);
+            pendingJoin.resolve(state);
+        }
+        else if (pendingJoin && state.status === "failed") {
+            clearTimeout(pendingJoin.timer);
+            pendingJoins.delete(frame.sessionId);
+            pendingJoin.reject(new Error(
+                state.errorMessage || "Could not join the live classroom."
+            ));
+        }
 
         if (state.status === "ended" || state.status === "failed") {
             reconnectGeneration.set(
@@ -321,9 +366,12 @@ export const createLiveScriptSessionController = function(
                 }
 
                 participantDisconnectTimers.set(disconnectKey, setTimeout(() => {
-                    host.removeParticipant(event.remoteEndpointId as string);
+                    const frames = host.removeParticipant(
+                        event.remoteEndpointId as string
+                    );
                     participantDisconnectTimers.delete(disconnectKey);
                     options.hostStateChanged(event.sessionId as string, host.state());
+                    queueHostBroadcast(frames);
                 }, participantDisconnectGraceMs));
             }
         }
@@ -382,7 +430,10 @@ export const createLiveScriptSessionController = function(
             transportAddress: operation.transportAddress,
             sessionId: input.sessionId,
             capability: input.capability,
-            protocolVersions: { minimum: 1, maximum: 1 },
+            protocolVersions: {
+                minimum: LIVE_SCRIPT_PROTOCOL_VERSION,
+                maximum: LIVE_SCRIPT_PROTOCOL_VERSION
+            },
             displayName,
             expiresAt
         };
@@ -399,7 +450,8 @@ export const createLiveScriptSessionController = function(
     };
 
     const join = async function(
-        ticket: LiveScriptSessionTicket
+        ticket: LiveScriptSessionTicket,
+        nickname: string
     ): Promise<LiveScriptParticipantState> {
         if (hosts.has(ticket.sessionId) || participants.has(ticket.sessionId)) {
             throw new Error("Live-script session is already active.");
@@ -418,6 +470,8 @@ export const createLiveScriptSessionController = function(
 
         const session = createLiveScriptParticipantSession({
             endpointId: operation.endpointId,
+            participantId: operation.endpointId,
+            nickname,
             ticket
         });
 
@@ -425,16 +479,33 @@ export const createLiveScriptSessionController = function(
 
         participantTickets.set(ticket.sessionId, ticket);
         reconnectGeneration.set(ticket.sessionId, 0);
+        const accepted = new Promise<LiveScriptParticipantState>((resolve, reject) => {
+            const timer = setTimeout(() => {
+                pendingJoins.delete(ticket.sessionId);
+                reject(new Error("The classroom did not answer the join request."));
+            }, 15_000);
+            pendingJoins.set(ticket.sessionId, { resolve, reject, timer });
+        });
+
         try {
             await sendOutbound([session.join()]);
+            const state = await accepted;
+            options.participantStateChanged(ticket.sessionId, state);
+            return state;
         }
         catch (error) {
+            const pendingJoin = pendingJoins.get(ticket.sessionId);
+
+            if (pendingJoin) {
+                clearTimeout(pendingJoin.timer);
+                pendingJoins.delete(ticket.sessionId);
+            }
+
             participants.delete(ticket.sessionId);
             participantTickets.delete(ticket.sessionId);
+            await options.transport.close(ticket.sessionId).catch(() => {});
             throw error;
         }
-        options.participantStateChanged(ticket.sessionId, session.state());
-        return session.state();
     };
 
     const requireHost = function(sessionId: string): LiveScriptHostSession {
@@ -442,6 +513,18 @@ export const createLiveScriptSessionController = function(
 
         if (!session) {
             throw new Error("Live-script host session is not active.");
+        }
+
+        return session;
+    };
+
+    const requireParticipant = function(
+        sessionId: string
+    ): LiveScriptParticipantSession {
+        const session = participants.get(sessionId);
+
+        if (!session) {
+            throw new Error("Live-script participant session is not active.");
         }
 
         return session;
@@ -473,6 +556,83 @@ export const createLiveScriptSessionController = function(
         queueHostBroadcast(
             requireHost(sessionId).publishCursor(position, selection)
         );
+    };
+
+    const grantHostSpotlight = async function(
+        sessionId: string,
+        endpointId: string
+    ): Promise<void> {
+        const session = requireHost(sessionId);
+        await sendOutbound(session.grantSpotlight(endpointId));
+        options.hostStateChanged(sessionId, session.state());
+    };
+
+    const dismissHostHand = async function(
+        sessionId: string,
+        endpointId: string
+    ): Promise<void> {
+        const session = requireHost(sessionId);
+        queueHostBroadcast(session.dismissHand(endpointId));
+        options.hostStateChanged(sessionId, session.state());
+    };
+
+    const endHostSpotlight = async function(sessionId: string): Promise<void> {
+        const session = requireHost(sessionId);
+        queueHostBroadcast(session.endSpotlight());
+        options.hostStateChanged(sessionId, session.state());
+    };
+
+    const raiseParticipantHand = async function(
+        sessionId: string,
+        displayName: string
+    ): Promise<void> {
+        const session = requireParticipant(sessionId);
+        await sendOutbound([session.raiseHand(displayName)]);
+        options.participantStateChanged(sessionId, session.state());
+    };
+
+    const lowerParticipantHand = async function(sessionId: string): Promise<void> {
+        const session = requireParticipant(sessionId);
+        await sendOutbound([session.lowerHand()]);
+        options.participantStateChanged(sessionId, session.state());
+    };
+
+    const publishParticipantSpotlightSnapshot = async function(
+        sessionId: string,
+        displayName: string,
+        content: string
+    ): Promise<void> {
+        const session = requireParticipant(sessionId);
+        await sendOutbound([
+            session.publishSpotlightSnapshot(displayName, content)
+        ]);
+    };
+
+    const publishParticipantSpotlightEdits = async function(
+        sessionId: string,
+        edits: LiveScriptTextEdit[]
+    ): Promise<void> {
+        const session = requireParticipant(sessionId);
+        await sendOutbound([session.publishSpotlightEdits(edits)]);
+    };
+
+    const publishParticipantSpotlightCursor = async function(
+        sessionId: string,
+        position: LiveScriptCursorFrame["payload"]["position"],
+        selection?: LiveScriptCursorFrame["payload"]["selection"]
+    ): Promise<void> {
+        const session = requireParticipant(sessionId);
+        await sendOutbound([
+            session.publishSpotlightCursor(position, selection)
+        ]);
+    };
+
+    const endParticipantSpotlight = async function(
+        sessionId: string
+    ): Promise<void> {
+        const session = requireParticipant(sessionId);
+        await sendOutbound([session.endSpotlight()]);
+        options.participantStateChanged(sessionId, session.state());
     };
 
     const endHost = async function(
@@ -526,6 +686,15 @@ export const createLiveScriptSessionController = function(
         publishHostEdits,
         publishHostCursor,
         replaceHostContent,
+        grantHostSpotlight,
+        dismissHostHand,
+        endHostSpotlight,
+        raiseParticipantHand,
+        lowerParticipantHand,
+        publishParticipantSpotlightSnapshot,
+        publishParticipantSpotlightEdits,
+        publishParticipantSpotlightCursor,
+        endParticipantSpotlight,
         endHost,
         closeParticipant,
         getHostState: function(sessionId) {
@@ -533,6 +702,9 @@ export const createLiveScriptSessionController = function(
         },
         getParticipantState: function(sessionId) {
             return participants.get(sessionId)?.state() || null;
+        },
+        getParticipantSessionIds: function() {
+            return Array.from(participants.keys());
         }
     };
 };

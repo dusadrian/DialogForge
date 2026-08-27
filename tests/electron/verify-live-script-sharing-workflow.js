@@ -277,12 +277,29 @@ const openScriptEditor = async function(app, mainPage, filePath) {
         });
 
         if (page) {
-            await page.locator(".monaco-editor textarea").waitFor({
-                state: "visible",
-                timeout: 30000
-            });
+            try {
+                await page.locator(".monaco-editor textarea").waitFor({
+                    state: "visible",
+                    timeout: 30000
+                });
+            }
+            catch (error) {
+                const state = await page.evaluate(() => ({
+                    readyState: document.readyState,
+                    title: document.title,
+                    bodyText: document.body?.innerText || "",
+                    editorCount: document.querySelectorAll(".monaco-editor").length,
+                    textareaCount: document.querySelectorAll(
+                        ".monaco-editor textarea"
+                    ).length
+                }));
+                throw new Error(
+                    `Script Editor did not render Monaco: ${JSON.stringify(state)}`,
+                    { cause: error }
+                );
+            }
             await page.locator(".dm-script-btn-share-live").waitFor({
-                state: "visible",
+                state: "attached",
                 timeout: 10000
             });
             return page;
@@ -308,6 +325,15 @@ const editorText = function(page) {
 };
 
 
+const replaceEditorText = async function(page, content) {
+    await page.bringToFront();
+    const input = page.locator(".monaco-editor textarea");
+    await input.click({ force: true });
+    await page.keyboard.press(process.platform === "darwin" ? "Meta+A" : "Control+A");
+    await page.keyboard.insertText(content);
+};
+
+
 const classroomCodeWasRevoked = async function(rendezvous, code) {
     if (rendezvous.records) {
         return !rendezvous.records.has(code);
@@ -326,10 +352,15 @@ const run = async function() {
     );
     const hostScript = path.join(tempDirectory, "instructor.R");
     const participantScript = path.join(tempDirectory, "participant.R");
+    const duplicateScript = path.join(tempDirectory, "duplicate.R");
     const objectName = `live_share_probe_${Date.now()}`;
     const sharedCode = `${objectName} <- 42\n`;
+    const spotlightObjectName = `student_spotlight_${Date.now()}`;
+    const spotlightCode = `${spotlightObjectName} <- "visible to class"\n`;
+    const updatedSpotlightCode = `${spotlightObjectName} <- "updated live"\n`;
     fs.writeFileSync(hostScript, "starting_value <- 1\n", "utf8");
     fs.writeFileSync(participantScript, "", "utf8");
+    fs.writeFileSync(duplicateScript, "", "utf8");
     const rendezvous = useDefaultRendezvous
         ? {
             records: null,
@@ -344,8 +375,10 @@ const run = async function() {
     );
     observePageErrors(hostApp, "instructor");
     let participantApp = null;
+    let duplicateApp = null;
     let hostMain = null;
     let participantMain = null;
+    let duplicateMain = null;
 
     try {
         hostMain = await waitForMainWindow(hostApp);
@@ -390,13 +423,30 @@ const run = async function() {
             const button = document.querySelector(".dm-script-btn-join-live");
             return button instanceof HTMLButtonElement && !button.disabled;
         }, undefined, { timeout: 30000 });
+
+        if (await participantEditor.locator(
+            ".dm-script-btn-raise-hand"
+        ).isVisible()) {
+            throw new Error("Raise hand was visible before joining a classroom.");
+        }
         process.stdout.write("live-script UI: collaboration controls available\n");
 
         await hostEditor.locator(".dm-script-btn-share-live").click();
-        await hostEditor.locator(".dm-live-panel__qr").waitFor({
-            state: "visible",
-            timeout: 30000
-        });
+        try {
+            await hostEditor.locator(".dm-live-panel__qr").waitFor({
+                state: "visible",
+                timeout: 30000
+            });
+        }
+        catch (error) {
+            const panelText = await hostEditor.locator(
+                ".dm-live-panel__dialog"
+            ).innerText();
+            throw new Error(
+                `Share panel did not finish hosting: ${panelText}`,
+                { cause: error }
+            );
+        }
         await hostEditor.getByRole("dialog").getByRole("button", {
             name: "Copy link",
             exact: true
@@ -426,6 +476,7 @@ const run = async function() {
         });
 
         await participantEditor.locator(".dm-script-btn-join-live").click();
+        await participantEditor.locator(".dm-live-panel__nickname").fill("Maria");
         await participantEditor.locator(".dm-live-panel__ticket").fill(
             classroomCode.toUpperCase().replace(/-/g, " ")
         );
@@ -463,11 +514,180 @@ const run = async function() {
             return rows.some((row) => row.textContent?.includes("Participants1"));
         }, undefined, { timeout: 30000 });
 
+        duplicateApp = await launchInstance(
+            path.join(tempDirectory, "duplicate-data"),
+            rendezvous.url
+        );
+        observePageErrors(duplicateApp, "duplicate participant");
+        duplicateMain = await waitForMainWindow(duplicateApp);
+        await verifyRuntime(duplicateMain, `duplicate_runtime_probe_${Date.now()}`);
+        const duplicateEditor = await openScriptEditor(
+            duplicateApp,
+            duplicateMain,
+            duplicateScript
+        );
+        await duplicateEditor.waitForFunction(() => {
+            const button = document.querySelector(".dm-script-btn-join-live");
+            return button instanceof HTMLButtonElement && !button.disabled;
+        }, undefined, { timeout: 30000 });
+        await duplicateEditor.locator(".dm-script-btn-join-live").click();
+        await duplicateEditor.locator(".dm-live-panel__nickname").fill("maria");
+        await duplicateEditor.locator(".dm-live-panel__ticket").fill(joinLink);
+        await duplicateEditor.getByRole("dialog").getByRole("button", {
+            name: "Join live script",
+            exact: true
+        }).click();
+        try {
+            await duplicateEditor.waitForFunction(() => {
+                const message = document.querySelector(".dm-live-panel__message");
+                const nickname = document.querySelector(".dm-live-panel__nickname");
+                return message?.textContent?.includes("already taken")
+                    && nickname === document.activeElement
+                    && !document.querySelector(".dm-script-tab--live");
+            }, undefined, { timeout: 30000 });
+        }
+        catch (error) {
+            const state = await duplicateEditor.evaluate(() => ({
+                message: document.querySelector(".dm-live-panel__message")?.textContent,
+                nickname: document.querySelector(".dm-live-panel__nickname")?.value,
+                activeClass: document.activeElement?.className,
+                liveTab: Boolean(document.querySelector(".dm-script-tab--live"))
+            }));
+            throw new Error(
+                `Duplicate nickname rejection was not visible: ${JSON.stringify(state)}`,
+                { cause: error }
+            );
+        }
+        await duplicateEditor.locator(".dm-live-panel__nickname").fill("Mihai");
+        await duplicateEditor.getByRole("dialog").getByRole("button", {
+            name: "Join live script",
+            exact: true
+        }).click();
+        await duplicateEditor.waitForFunction(() => {
+            return Boolean(document.querySelector(".dm-script-tab--live"));
+        }, undefined, { timeout: 30000 });
+        await duplicateEditor.getByRole("button", {
+            name: "Close",
+            exact: true
+        }).click();
+        await hostEditor.waitForFunction(() => {
+            const rows = Array.from(document.querySelectorAll(".dm-live-panel__row"));
+            return rows.some((row) => row.textContent?.includes("Participants2")
+                && row.textContent?.includes("Maria")
+                && row.textContent?.includes("Mihai"));
+        }, undefined, { timeout: 30000 });
+        process.stdout.write(
+            "live-script UI: duplicate nickname rejected and replacement accepted\n"
+        );
+
+        await participantApp.evaluate(({ BrowserWindow }) => {
+            const editorWindow = BrowserWindow.getAllWindows().find((window) => {
+                return window.webContents.getURL().includes("scriptEditor.html");
+            });
+            editorWindow?.show();
+            editorWindow?.focus();
+        });
+        const participantLocalTab = participantEditor.locator(
+            ".dm-script-tab:not(.dm-script-tab--live)"
+        ).first();
+        await participantLocalTab.click();
+        await replaceEditorText(participantEditor, spotlightCode);
+        await participantEditor.waitForFunction((identifier) => {
+            return document.querySelector(".view-lines")
+                ?.textContent?.includes(identifier);
+        }, spotlightObjectName, { timeout: 10000 });
+        const raiseHand = participantEditor.locator(".dm-script-btn-raise-hand");
+
+        if (!await raiseHand.isVisible()) {
+            throw new Error("Raise hand was not available on the local student tab.");
+        }
+
+        await raiseHand.click();
+        await participantEditor.waitForFunction(() => {
+            const badge = document.querySelector(".dm-script-tab-hand--raised");
+            const button = document.querySelector(".dm-script-btn-raise-hand");
+            return badge?.textContent === "Hand raised"
+                && button?.getAttribute("data-state") === "raised";
+        }, undefined, { timeout: 10000 });
+        await hostEditor.waitForFunction(() => {
+            return Array.from(document.querySelectorAll(".dm-live-panel__hand"))
+                .some((hand) => hand.textContent?.includes("Maria"));
+        }, undefined, { timeout: 30000 });
+        const raisedHandRow = hostEditor.locator(".dm-live-panel__hand")
+            .filter({ hasText: "Maria" });
+        await raisedHandRow.getByRole("button", {
+            name: "Accept",
+            exact: true
+        }).click();
+
+        await participantEditor.waitForFunction(() => {
+            const badge = document.querySelector(".dm-script-tab-hand--spotlight");
+            const button = document.querySelector(".dm-script-btn-raise-hand");
+            return badge?.textContent === "On air"
+                && button?.getAttribute("data-state") === "spotlight";
+        }, undefined, { timeout: 30000 });
+        try {
+            await hostEditor.waitForFunction((identifier) => {
+                const active = document.querySelector(".dm-script-tab.active");
+                return active?.classList.contains("dm-script-tab--live")
+                    && document.querySelector(".view-lines")
+                        ?.textContent?.includes(identifier);
+            }, spotlightObjectName, { timeout: 30000 });
+        }
+        catch (error) {
+            const state = {
+                text: await editorText(hostEditor),
+                tabs: await hostEditor.locator(".dm-script-tabs").innerText(),
+                panel: await hostEditor.locator(".dm-live-panel__dialog").innerText()
+            };
+            throw new Error(
+                `Instructor spotlight was not visible: ${JSON.stringify(state)}`,
+                { cause: error }
+            );
+        }
+
+        await replaceEditorText(participantEditor, updatedSpotlightCode);
+        try {
+            await hostEditor.waitForFunction((expected) => {
+                return document.querySelector(".view-lines")
+                    ?.textContent?.includes(expected);
+            }, "updated", { timeout: 30000 });
+        }
+        catch (error) {
+            const state = {
+                hostText: await editorText(hostEditor),
+                participantText: await editorText(participantEditor),
+                participantTabs: await participantEditor.locator(
+                    ".dm-script-tabs"
+                ).innerText(),
+                hostPanel: await hostEditor.locator(
+                    ".dm-live-panel__dialog"
+                ).innerText()
+            };
+            throw new Error(
+                `Student spotlight edit did not update: ${JSON.stringify(state)}`,
+                { cause: error }
+            );
+        }
+        await raiseHand.click();
+        await hostEditor.waitForFunction(() => {
+            const active = document.querySelector(".dm-script-tab.active");
+            return !active?.classList.contains("dm-script-tab--live")
+                && active?.textContent?.includes("instructor.R")
+                && document.querySelector(".view-lines")
+                    ?.textContent?.includes("starting_value");
+        }, undefined, { timeout: 30000 });
+        await participantEditor.locator(".dm-script-tab--live").click();
+        await participantEditor.waitForFunction(() => {
+            return document.querySelector(".view-lines")
+                ?.textContent?.includes("starting_value");
+        }, undefined, { timeout: 30000 });
+        process.stdout.write(
+            "live-script UI: hand raise, grant, student spotlight, and restoration visible\n"
+        );
+
         await hostEditor.getByRole("button", { name: "Close", exact: true }).click();
-        const hostInput = hostEditor.locator(".monaco-editor textarea");
-        await hostInput.click({ force: true });
-        await hostEditor.keyboard.press(process.platform === "darwin" ? "Meta+A" : "Control+A");
-        await hostEditor.keyboard.insertText(sharedCode);
+        await replaceEditorText(hostEditor, sharedCode);
 
         await participantEditor.waitForFunction((expected) => {
             return document.querySelector(".view-lines")?.textContent?.includes(expected);
@@ -585,17 +805,34 @@ const run = async function() {
                 cause: error
             });
         }
-        await participantEditor.waitForFunction(() => {
-            const badge = document.querySelector(".dm-script-tab-live");
-            const notice = document.querySelector(".dm-script-live-notice");
-            const join = document.querySelector(".dm-script-btn-join-live");
-            return badge?.textContent === "Session ended · editable"
-                && notice instanceof HTMLElement
-                && !notice.hidden
-                && notice.textContent?.includes("presenter ended")
-                && join instanceof HTMLButtonElement
-                && !join.disabled;
-        }, undefined, { timeout: 30000 });
+        try {
+            await participantEditor.waitForFunction(() => {
+                const badge = document.querySelector(".dm-script-tab-live");
+                const notice = document.querySelector(".dm-script-live-notice");
+                const join = document.querySelector(".dm-script-btn-join-live");
+                return badge?.textContent === "Session ended · editable"
+                    && notice instanceof HTMLElement
+                    && !notice.hidden
+                    && notice.textContent?.includes("presenter ended")
+                    && join instanceof HTMLButtonElement
+                    && !join.disabled;
+            }, undefined, { timeout: 30000 });
+        }
+        catch (error) {
+            const state = await participantEditor.evaluate(() => ({
+                badges: Array.from(document.querySelectorAll(".dm-script-tab-live"))
+                    .map((badge) => badge.textContent || ""),
+                notice: document.querySelector(".dm-script-live-notice")?.textContent || "",
+                noticeHidden: document.querySelector(".dm-script-live-notice")?.hidden,
+                joinDisabled: document.querySelector(".dm-script-btn-join-live")?.disabled,
+                joinHidden: document.querySelector(".dm-script-btn-join-live")?.hidden,
+                tabs: document.querySelector(".dm-script-tabs")?.textContent || ""
+            }));
+            throw new Error(
+                `Participant did not enter stopped state: ${JSON.stringify(state)}`,
+                { cause: error }
+            );
+        }
         const stoppedState = await participantEditor.evaluate(() => ({
             badges: Array.from(document.querySelectorAll(".dm-script-tab-live"))
                 .map((badge) => badge.textContent || ""),
@@ -633,10 +870,12 @@ const run = async function() {
         );
     }
     finally {
+        await stopRuntimeSafely(duplicateMain);
         await stopRuntimeSafely(participantMain);
         await stopRuntimeSafely(hostMain);
         stopAppProcesses(hostApp);
         stopAppProcesses(participantApp);
+        stopAppProcesses(duplicateApp);
         await new Promise((resolve) => setTimeout(resolve, 250));
         if (rendezvous.server) {
             await new Promise((resolve) => rendezvous.server.close(resolve));

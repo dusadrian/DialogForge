@@ -18,7 +18,7 @@ const capability = "capability_1234567890abcdefghijklmnop";
 const loadFixture = function(name) {
     const fixturePath = path.join(
         __dirname,
-        "../../protocol/live-script/v1/fixtures",
+        "../../protocol/live-script/v2/fixtures",
         name
     );
 
@@ -96,7 +96,7 @@ const verifyTicketSanitization = function() {
         transportAddress: `memory://${instructorId}/${sessionId}`,
         sessionId,
         capability,
-        protocolVersions: { minimum: 1, maximum: 1 },
+        protocolVersions: { minimum: 2, maximum: 2 },
         displayName: "analysis.R"
     });
 
@@ -123,11 +123,13 @@ const verifyInMemorySession = async function() {
         transportAddress,
         sessionId,
         capability,
-        protocolVersions: { minimum: 1, maximum: 1 },
+        protocolVersions: { minimum: 2, maximum: 2 },
         displayName: "analysis.R"
     };
     const participant = collaboration.createLiveScriptParticipantSession({
         endpointId: participantId,
+        participantId,
+        nickname: "Maria",
         ticket
     });
     const attackerResponses = [];
@@ -154,7 +156,10 @@ const verifyInMemorySession = async function() {
         content: "x <- 1\n",
         displayName: "analysis.R",
         resyncPending: false,
-        errorMessage: ""
+        errorMessage: "",
+        handState: "idle",
+        offeredDisplayName: "",
+        nickname: "Maria"
     });
     assert.strictEqual(host.state().participants[0].acknowledgedRevision, 0);
 
@@ -262,6 +267,48 @@ const verifyInMemorySession = async function() {
     assert.strictEqual(attackerResponses[0].type, "error");
     assert.strictEqual(attackerResponses[0].payload.code, "authorization-failed");
 
+    await sendOutbound(participantTransport, [
+        participant.raiseHand("student.R")
+    ]);
+    await settleTransport();
+    assert.strictEqual(host.state().participants[0].handRaised, true);
+    assert.strictEqual(
+        Object.prototype.hasOwnProperty.call(
+            host.state().participants[0],
+            "offeredDisplayName"
+        ),
+        false,
+        "raising a hand must not publish tab metadata"
+    );
+
+    await sendOutbound(
+        instructorTransport,
+        host.grantSpotlight(participantId)
+    );
+    await settleTransport();
+    assert.strictEqual(participant.state().handState, "spotlight");
+
+    await sendOutbound(participantTransport, [
+        participant.publishSpotlightSnapshot(
+            "student.R",
+            "student_value <- 1\n"
+        )
+    ]);
+    await settleTransport();
+    assert.strictEqual(host.state().displayName, "Maria");
+    assert.strictEqual(host.state().content, "student_value <- 1\n");
+    assert.strictEqual(participant.state().content, "student_value <- 1\n");
+
+    await sendOutbound(participantTransport, [
+        participant.endSpotlight()
+    ]);
+    await settleTransport();
+    assert.strictEqual(host.state().spotlight, null);
+    assert.strictEqual(host.state().displayName, "analysis.R");
+    assert.strictEqual(host.state().content, "answer <- 42\n");
+    assert.strictEqual(participant.state().content, "answer <- 42\n");
+    assert.strictEqual(participant.state().handState, "idle");
+
     await sendOutbound(instructorTransport, host.end("stopped"));
     await settleTransport();
 
@@ -274,9 +321,68 @@ const verifyInMemorySession = async function() {
 };
 
 
+const verifyNicknameUniqueness = function() {
+    const host = collaboration.createLiveScriptHostSession({
+        sessionId,
+        capability,
+        endpointId: instructorId,
+        displayName: "analysis.R",
+        content: "x <- 1\n"
+    });
+    const ticket = {
+        formatVersion: 1,
+        instructorEndpointId: instructorId,
+        transportAddress: `memory://${instructorId}/${sessionId}`,
+        sessionId,
+        capability,
+        protocolVersions: { minimum: 2, maximum: 2 },
+        displayName: "analysis.R"
+    };
+    const maria = collaboration.createLiveScriptParticipantSession({
+        endpointId: participantId,
+        participantId,
+        nickname: "Maria",
+        ticket
+    });
+    const duplicate = collaboration.createLiveScriptParticipantSession({
+        endpointId: attackerId,
+        participantId: attackerId,
+        nickname: "maria",
+        ticket
+    });
+
+    assert.strictEqual(host.receive(maria.join().frame, participantId).length, 2);
+    const rejected = host.receive(duplicate.join().frame, attackerId);
+    assert.strictEqual(rejected[0].frame.payload.code, "nickname-taken");
+
+    const reconnectedEndpoint = "participant_reconnected_1234567890";
+    const reconnected = host.receive(
+        maria.reconnect(reconnectedEndpoint).frame,
+        reconnectedEndpoint
+    );
+    assert.strictEqual(reconnected.length, 2);
+    assert.strictEqual(host.state().participants[0].endpointId, reconnectedEndpoint);
+    assert.strictEqual(host.state().participants[0].nickname, "Maria");
+
+    host.participantDisconnected(reconnectedEndpoint);
+    const reserved = host.receive(
+        duplicate.reconnect(attackerId).frame,
+        attackerId
+    );
+    assert.strictEqual(reserved[0].frame.payload.code, "nickname-taken");
+
+    host.removeParticipant(reconnectedEndpoint);
+    assert.strictEqual(
+        host.receive(duplicate.reconnect(attackerId).frame, attackerId).length,
+        2
+    );
+};
+
+
 const run = async function() {
     verifyFixturesAndBounds();
     verifyTicketSanitization();
+    verifyNicknameUniqueness();
     await verifyInMemorySession();
     process.stdout.write("OK live-script host-neutral collaboration contract\n");
 };

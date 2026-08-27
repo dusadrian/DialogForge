@@ -16,6 +16,8 @@ export interface ScriptEditorTabLabels {
     liveReadOnly: string;
     sessionEndedReadOnly: string;
     connectionLostReadOnly: string;
+    handRaised: string;
+    onAir: string;
 }
 
 
@@ -290,7 +292,8 @@ export const createScriptEditorTabController = function(
                         displayName: tab.displayName,
                         dirty: tab.dirty,
                         liveReadOnly: tab.kind === "live-participant",
-                        liveStatus: tab.liveStatus
+                        liveStatus: tab.liveStatus,
+                        handState: tab.handState
                     })),
                     activeTabId,
                     options.getLabels(),

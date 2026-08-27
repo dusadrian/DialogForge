@@ -96,7 +96,7 @@ const run = async function() {
         transportAddress,
         sessionId: host.state().sessionId,
         capability: "capability_1234567890abcdefghijklmnop",
-        protocolVersions: { minimum: 1, maximum: 1 },
+        protocolVersions: { minimum: 2, maximum: 2 },
         displayName: "classroom-analysis.R"
     };
     const participants = [];

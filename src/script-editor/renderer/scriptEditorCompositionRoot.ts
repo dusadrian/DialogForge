@@ -19,6 +19,9 @@ import {
   type ScriptEditorTabController
 } from './scriptEditorTabController';
 import {
+  disposeScriptDocument
+} from '../state/scriptDocument';
+import {
   createScriptEditorFileController,
   type ScriptEditorFileController
 } from './scriptEditorFileController';
@@ -112,6 +115,7 @@ import {
   createLiveScriptJoinLink,
   parseLiveScriptJoinText,
   sanitizeLiveScriptDisplayName,
+  validateLiveScriptNickname,
   type LiveScriptSessionTicket
 } from '../collaboration/index.js';
 // Static imports only: the Electron renderer runs this module as CommonJS and
@@ -281,6 +285,23 @@ let liveRendezvous: LiveScriptRendezvousProvider | null = null;
 const hostedLinks = new Map<string, string>();
 const hostedTickets = new Map<string, LiveScriptSessionTicket>();
 const hostedPublications = new Map<string, LiveScriptRendezvousPublication>();
+const liveScriptNicknameStorageKey = 'app.scriptEditor.live.nickname.v1';
+
+const readLiveScriptNickname = function(): string {
+  try {
+    return localStorage.getItem(liveScriptNicknameStorageKey) || '';
+  }
+  catch {
+    return '';
+  }
+};
+
+const rememberLiveScriptNickname = function(nickname: string): void {
+  try {
+    localStorage.setItem(liveScriptNicknameStorageKey, nickname);
+  }
+  catch {}
+};
 
 const updateLiveToolbarState = function(): void {
   const active = tabController.getActiveTab();
@@ -290,12 +311,15 @@ const updateLiveToolbarState = function(): void {
     canHost: liveCanHost,
     canJoin: liveCanJoin,
     isParticipant: active?.kind === 'live-participant',
-    participantSessionActive: active?.kind === 'live-participant'
-      && active.liveStatus !== 'ended'
-      && active.liveStatus !== 'failed',
+    participantSessionActive: liveScriptController.hasParticipantSession(),
     isHosting: Boolean(
       active && liveScriptController.getHostedSessionId(active.id)
-    )
+    ),
+    activeDocumentLocal: active?.kind === 'local',
+    handState: active
+      ? liveScriptController.getHandState(active.id)
+      : 'idle',
+    hasOfferedDocument: liveScriptController.hasOfferedDocument()
   });
 };
 const tabController: ScriptEditorTabController = createScriptEditorTabController({
@@ -305,7 +329,9 @@ const tabController: ScriptEditorTabController = createScriptEditorTabController
     closeTab: t('Close Tab'),
     liveReadOnly: t('Live · read-only'),
     sessionEndedReadOnly: t('Session ended · editable'),
-    connectionLostReadOnly: t('Connection lost · editable')
+    connectionLostReadOnly: t('Connection lost · editable'),
+    handRaised: t('Hand raised'),
+    onAir: t('On air')
   }),
   activeTabChanged: () => {
     scriptEditorReactions.activeTabChanged();
@@ -375,7 +401,15 @@ const getLivePanelLabels = (): LiveScriptPanelLabels => ({
   regenerateCode: t('Regenerate code'),
   participants: t('Participants'),
   connection: t('Connection'),
-  enterLink: t('Paste a live-script link or ticket')
+  enterLink: t('Paste a live-script link or ticket'),
+  raisedHands: t('Raised hands'),
+  spotlight: t('Spotlight'),
+  accept: t('Accept'),
+  dismiss: t('Dismiss'),
+  endSpotlight: t('End spotlight'),
+  handRequest: t('Raised hand'),
+  nickname: t('Your name in this class'),
+  nicknamePlaceholder: t('Choose a nickname')
 });
 const reportDirtyState = scriptEditorViewState.reportDirtyState;
 const updateTitle = scriptEditorViewState.updateTitle;
@@ -446,6 +480,17 @@ const liveScriptController = createLiveScriptRendererController({
   getMonaco: () => monacoRuntime.current,
   getEditor: () => surfaceState.editor,
   createTab,
+  removeTab: (documentId) => {
+    const removed = tabController.removeTab(documentId);
+
+    if (removed) {
+      disposeScriptDocument(removed);
+      tabController.refresh();
+    }
+  },
+  activateTab: (documentId) => {
+    tabController.activateTab(documentId);
+  },
   refreshTabs: () => {
     tabController.refresh();
     scriptEditorReactions.tabStateChanged();
@@ -468,6 +513,7 @@ const liveScriptController = createLiveScriptRendererController({
   },
   participantStateChanged: (_sessionId, state) => {
     livePanelController?.updateParticipant(state);
+    updateLiveToolbarState();
   },
   participantCursorChanged: () => {},
   transportStateChanged: (event) => {
@@ -502,6 +548,13 @@ const scriptFileController: ScriptEditorFileController =
   });
 tabController.setCloseHandler((tabId) => {
   void (async () => {
+    if (liveScriptController.getHandState(tabId) === 'spotlight') {
+      await liveScriptController.endParticipantSpotlight(tabId);
+    }
+    else if (liveScriptController.getHandState(tabId) === 'raised') {
+      await liveScriptController.lowerHand(tabId);
+    }
+
     if (liveScriptController.getHostedSessionId(tabId)) {
       await revokeHostedCode(tabId);
       await liveScriptController.stopHosting(tabId, 'instructor-closed');
@@ -678,7 +731,29 @@ const showShareLive = async function(): Promise<void> {
 };
 
 const showJoinLive = function(): void {
-  livePanelController?.showJoin();
+  livePanelController?.showJoin('', readLiveScriptNickname());
+};
+
+const toggleRaisedHand = async function(): Promise<void> {
+  const active = getActiveTab();
+
+  if (!active || active.kind !== 'local') {
+    return;
+  }
+
+  const handState = liveScriptController.getHandState(active.id);
+
+  if (handState === 'spotlight') {
+    await liveScriptController.endParticipantSpotlight(active.id);
+  }
+  else if (handState === 'raised') {
+    await liveScriptController.lowerHand(active.id);
+  }
+  else {
+    await liveScriptController.raiseHand(active);
+  }
+
+  updateLiveToolbarState();
 };
 
 const initializeLiveScriptUi = async function(): Promise<void> {
@@ -691,7 +766,13 @@ const initializeLiveScriptUi = async function(): Promise<void> {
   livePanelController = createLiveScriptPanelController({
     root,
     getLabels: getLivePanelLabels,
-    join: async (value) => {
+    join: async (value, nicknameValue) => {
+      const nicknameResult = validateLiveScriptNickname(nicknameValue);
+
+      if (!nicknameResult.ok) {
+        throw new Error(nicknameResult.message);
+      }
+
       const parsed = parseLiveScriptJoinText(value);
       const ticket = parsed.ok
         ? parsed.ticket
@@ -701,7 +782,11 @@ const initializeLiveScriptUi = async function(): Promise<void> {
         throw new Error(parsed.ok ? 'Live session is not available.' : parsed.message);
       }
 
-      const joinedDocument = await liveScriptController.join(ticket);
+      const joinedDocument = await liveScriptController.join(
+        ticket,
+        nicknameResult.nickname
+      );
+      rememberLiveScriptNickname(nicknameResult.nickname);
       livePanelDocumentId = joinedDocument.id;
       livePanelController?.showParticipant(
         joinedDocument.displayName,
@@ -737,6 +822,21 @@ const initializeLiveScriptUi = async function(): Promise<void> {
         livePanelDocumentId,
         follow
       );
+    },
+    grantSpotlight: async (endpointId) => {
+      await liveScriptController.grantSpotlight(
+        livePanelDocumentId,
+        endpointId
+      );
+    },
+    dismissHand: async (endpointId) => {
+      await liveScriptController.dismissHand(
+        livePanelDocumentId,
+        endpointId
+      );
+    },
+    endSpotlight: async () => {
+      await liveScriptController.endHostSpotlight(livePanelDocumentId);
     }
   });
 
@@ -765,7 +865,10 @@ const initializeLiveScriptUi = async function(): Promise<void> {
   updateLiveToolbarState();
 
   if (pendingLiveScriptJoinText && liveCanJoin) {
-    livePanelController.showJoin(pendingLiveScriptJoinText);
+    livePanelController.showJoin(
+      pendingLiveScriptJoinText,
+      readLiveScriptNickname()
+    );
     pendingLiveScriptJoinText = '';
   }
 };
@@ -830,6 +933,13 @@ const scriptEditorBootstrapFlow = createScriptEditorBootstrapFlowController({
     });
   },
   joinLive: showJoinLive,
+  toggleHand: () => {
+    void toggleRaisedHand().catch((error) => {
+      livePanelController?.showError(
+        error instanceof Error ? error.message : String(error)
+      );
+    });
+  },
   getFilePath: droppedFilePathReader.read,
   createDroppedFilePlan: createRDroppedScriptFilePlan,
   openFile: openFileIntoTab,

@@ -5,6 +5,7 @@ export interface ScriptTabStripItem {
     dirty: boolean;
     liveReadOnly?: boolean;
     liveStatus?: string;
+    handState?: "" | "raised" | "spotlight";
 }
 
 
@@ -14,6 +15,8 @@ export interface ScriptTabStripLabels {
     liveReadOnly: string;
     sessionEndedReadOnly: string;
     connectionLostReadOnly: string;
+    handRaised: string;
+    onAir: string;
 }
 
 
@@ -75,6 +78,15 @@ export const renderScriptTabStrip = function(
                 ? `${labels.liveReadOnly} · ${tab.liveStatus}`
                 : labels.liveReadOnly);
             button.appendChild(liveBadge);
+        }
+
+        if (tab.handState) {
+            const handBadge = document.createElement("span");
+            handBadge.className = `dm-script-tab-hand dm-script-tab-hand--${tab.handState}`;
+            handBadge.textContent = tab.handState === "spotlight"
+                ? labels.onAir
+                : labels.handRaised;
+            button.appendChild(handBadge);
         }
 
         const closeButton = document.createElement("button");

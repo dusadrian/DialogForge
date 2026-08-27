@@ -12,6 +12,9 @@ export interface ScriptToolbarLabels {
     saveAs: string;
     shareLive: string;
     joinLive: string;
+    raiseHand: string;
+    lowerHand: string;
+    stopSpotlight: string;
 }
 
 
@@ -25,6 +28,7 @@ export interface ScriptToolbarActions {
     saveAs(): void;
     shareLive(): void;
     joinLive(): void;
+    toggleHand(): void;
 }
 
 
@@ -44,7 +48,10 @@ export const createScriptToolbarLabels = function(
         save: translate("Save"),
         saveAs: translate("Save As"),
         shareLive: translate("Share live"),
-        joinLive: translate("Join live script")
+        joinLive: translate("Join live script"),
+        raiseHand: translate("Raise hand"),
+        lowerHand: translate("Lower hand"),
+        stopSpotlight: translate("Stop spotlight")
     };
 };
 
@@ -65,6 +72,9 @@ export interface ScriptToolbarView {
         isParticipant: boolean;
         participantSessionActive?: boolean;
         isHosting: boolean;
+        activeDocumentLocal: boolean;
+        handState: "idle" | "raised" | "spotlight";
+        hasOfferedDocument: boolean;
     }): void;
 }
 
@@ -199,6 +209,16 @@ export const createScriptToolbarView = function(
     joinLiveButton.classList.add("dm-script-btn-join-live");
     toolbar.appendChild(joinLiveButton);
 
+    const raiseHandButton = createToolbarButton(
+        labels.raiseHand,
+        "codicon-feedback",
+        actions.toggleHand,
+        { title: labels.raiseHand }
+    );
+    raiseHandButton.classList.add("dm-script-btn-raise-hand");
+    raiseHandButton.hidden = true;
+    toolbar.appendChild(raiseHandButton);
+
     const spacer = document.createElement("div");
     spacer.style.flex = "1 1 auto";
     toolbar.appendChild(spacer);
@@ -266,6 +286,12 @@ export const createScriptToolbarView = function(
             nextLabels.joinLive,
             nextLabels.joinLive
         );
+        const handLabel = raiseHandButton.dataset.state === "spotlight"
+            ? nextLabels.stopSpotlight
+            : raiseHandButton.dataset.state === "raised"
+                ? nextLabels.lowerHand
+                : nextLabels.raiseHand;
+        setButtonLabel(raiseHandButton, handLabel, handLabel);
     };
 
     const updateDocumentState = function(
@@ -301,6 +327,9 @@ export const createScriptToolbarView = function(
         isParticipant: boolean;
         participantSessionActive?: boolean;
         isHosting: boolean;
+        activeDocumentLocal: boolean;
+        handState: "idle" | "raised" | "spotlight";
+        hasOfferedDocument: boolean;
     }): void {
         shareLiveButton.disabled = !input.available
             || (!input.isParticipant && input.canHost === false);
@@ -312,6 +341,16 @@ export const createScriptToolbarView = function(
             : input.isHosting
                 ? "hosting"
                 : "idle";
+        raiseHandButton.hidden = !input.participantSessionActive;
+        raiseHandButton.disabled = !input.activeDocumentLocal
+            || (input.hasOfferedDocument && input.handState === "idle");
+        const handLabel = input.handState === "spotlight"
+            ? currentLabels.stopSpotlight
+            : input.handState === "raised"
+                ? currentLabels.lowerHand
+                : currentLabels.raiseHand;
+        setButtonLabel(raiseHandButton, handLabel, handLabel);
+        raiseHandButton.dataset.state = input.handState;
     };
 
     return {

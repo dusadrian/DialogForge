@@ -16,9 +16,16 @@ export interface ScriptEditorHostModuleRequest {
 
 
 const readCommonJsRequire = function(): CommonJsRequire | null {
-    const candidate = (globalThis as Record<string, unknown>).require;
+    const globals = globalThis as Record<string, unknown>;
+    const processValue = globals.process as {
+        versions?: { electron?: unknown };
+    } | undefined;
+    const candidate = typeof require === "function"
+        ? require
+        : null;
 
-    return typeof candidate === "function"
+    return typeof processValue?.versions?.electron === "string"
+        && candidate
         ? candidate as CommonJsRequire
         : null;
 };
