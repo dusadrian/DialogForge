@@ -239,6 +239,7 @@ const verifyNativeProtection = async function() {
     const handlers = new Map();
     const visibleCommands = [];
     let installedVersion = "0.13";
+    let statisticsAttached = false;
     const ipcMain = {
         on: function() {},
         handle: function(channel, handler) {
@@ -246,48 +247,81 @@ const verifyNativeProtection = async function() {
         }
     };
 
-    nativeCompositionModule.registerProductDialogRuntimeComposition({
-        ipcMain,
-        productId: "DialogR",
-        runtimeSessionManager: {
-            executeInvisibleQuery: async function(request) {
-                return request.query.includes("packageVersion")
-                    ? {
+    const nativeComposition =
+        nativeCompositionModule.registerProductDialogRuntimeComposition({
+            ipcMain,
+            productId: "DialogR",
+            runtimeSessionManager: {
+                start: async function() {
+                    return {
                         status: "ready",
-                        value: `statistics\t${installedVersion}`,
-                        message: ""
-                    }
-                    : {
-                        status: "ready",
-                        value: true,
+                        providerId: "r",
                         message: ""
                     };
+                },
+                executeInvisibleQuery: async function(request) {
+                    return request.query.includes("packageVersion")
+                        ? {
+                            status: "ready",
+                            value: `statistics\t${installedVersion}`,
+                            message: ""
+                        }
+                        : {
+                            status: "ready",
+                            value: statisticsAttached,
+                            message: ""
+                        };
+                },
+                executeVisibleCommand: async function(request) {
+                    visibleCommands.push(request.text);
+                    if (request.text === "library(statistics)") {
+                        statisticsAttached = true;
+                    }
+                    return [];
+                },
+                executeDialog: async function() {
+                    return { status: "ready" };
+                },
+                executeRuntimeMethod: async function() {
+                    return { status: "ready" };
+                }
             },
-            executeVisibleCommand: async function(request) {
-                visibleCommands.push(request.text);
+            openImportFile: async function() {},
+            previewImportFile: async function() {},
+            getUiCommandVisibility: function() {
+                return "hidden";
+            },
+            executeVisibleCommandAndBroadcast: async function() {
                 return [];
             },
-            executeDialog: async function() {
-                return { status: "ready" };
-            },
-            executeRuntimeMethod: async function() {
-                return { status: "ready" };
-            }
-        },
-        openImportFile: async function() {},
-        previewImportFile: async function() {},
-        getUiCommandVisibility: function() {
-            return "hidden";
-        },
-        executeVisibleCommandAndBroadcast: async function() {
-            return [];
-        },
-        sendTranscriptEvents: function() {},
-        invalidateDatasetPreview: function() {},
-        refreshWorkspaceAndBroadcast: async function() {},
-        broadcastRuntimeEvents: async function() {},
-        reportError: function() {}
-    });
+            sendTranscriptEvents: function() {},
+            invalidateDatasetPreview: function() {},
+            refreshWorkspaceAndBroadcast: async function() {},
+            broadcastRuntimeEvents: async function() {},
+            reportError: function() {}
+        });
+
+    const dialogDefinition = {
+        properties: {
+            dependencies: "statistics",
+            rPackageRequirements: [{
+                name: "statistics",
+                minimumVersion: "0.14"
+            }]
+        }
+    };
+    const blockedOpen = await nativeComposition.prepareDialog(
+        "anovahv",
+        dialogDefinition
+    );
+
+    assert.strictEqual(blockedOpen.ok, false);
+    assert.strictEqual(
+        blockedOpen.status,
+        "r-package-update-required"
+    );
+    assert.match(blockedOpen.error, /installed 0\.13/);
+    assert.deepStrictEqual(visibleCommands, []);
 
     const runDialog = handlers.get(
         dialogRuntimeIpcChannels.runVisibleCommand
@@ -308,6 +342,15 @@ const verifyNativeProtection = async function() {
     assert.deepStrictEqual(visibleCommands, []);
 
     installedVersion = "0.14";
+    const readyOpen = await nativeComposition.prepareDialog(
+        "anovahv",
+        dialogDefinition
+    );
+
+    assert.strictEqual(readyOpen.ok, true);
+    assert.deepStrictEqual(visibleCommands, ["library(statistics)"]);
+    visibleCommands.length = 0;
+
     const satisfied = await runDialog({}, {
         command: "anovahv(...)",
         dialogID: "anovahv",

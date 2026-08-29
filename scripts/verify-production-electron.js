@@ -17,6 +17,7 @@ const readArgs = function() {
         targets: [
             "application-menu",
             "package-update-menu",
+            "dialog-package-readiness",
             "console",
             "help",
             "script-editor"

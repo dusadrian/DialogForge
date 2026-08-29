@@ -635,6 +635,95 @@ const runPackageUpdateMenuSmoke = async function(
 };
 
 
+const runDialogPackageReadinessSmoke = async function(
+    win: BrowserWindow,
+    messages: string[],
+    context: ElectronSmokeContext
+): Promise<void> {
+    const result = await win.webContents.executeJavaScript(
+        `(async () => {
+            const composition = await window.dialogForge.getComposition();
+            const dialog = (composition.productDialogs || []).find((candidate) => {
+                return Array.isArray(candidate.rPackages)
+                    && candidate.rPackages.length > 0;
+            });
+
+            if (!dialog) {
+                return { skipped: true };
+            }
+
+            const packageName = String(dialog.rPackages[0]?.name || "").trim();
+
+            if (!packageName) {
+                return {
+                    error: "Package-dependent dialog has no package name.",
+                    dialogId: dialog.id
+                };
+            }
+
+            const opened = await window.dialogForge.openProductDialog(dialog.id);
+            const attached = await window.dialogForge.executeInvisibleQuery({
+                query: "is.element(" + JSON.stringify("package:" + packageName)
+                    + ", search())",
+                source: "electron-smoke.dialog-package-readiness"
+            });
+
+            return {
+                dialogId: dialog.id,
+                packageName,
+                opened,
+                attached
+            };
+        })()`,
+        true
+    ) as {
+        skipped?: boolean;
+        error?: string;
+        dialogId?: string;
+        packageName?: string;
+        opened?: { status?: string };
+        attached?: { status?: string; value?: unknown };
+    };
+
+    if (result.skipped) {
+        console.log(JSON.stringify({
+            ok: true,
+            smoke: "electron-dialog-package-readiness",
+            product: context.product,
+            runtime: context.runtime,
+            result,
+            messages
+        }, null, 4));
+        return;
+    }
+
+    const attached = /^(?:\[1\]\s*)?true$/i.test(
+        String(result.attached?.value || "").trim()
+    );
+
+    if (
+        result.error
+        || result.opened?.status !== "opened"
+        || result.attached?.status !== "ready"
+        || !attached
+    ) {
+        throw new Error(
+            "Electron dialog package readiness smoke failed: "
+            + JSON.stringify({ result, messages }, null, 4)
+        );
+    }
+
+    console.log(JSON.stringify({
+        ok: true,
+        smoke: "electron-dialog-package-readiness",
+        product: context.product,
+        runtime: context.runtime,
+        result,
+        messages
+    }, null, 4));
+};
+
+
 export const runElectronSmoke = async function(options: ElectronSmokeRunnerOptions): Promise<void> {
     const { win, product, runtime } = options;
     const electronSmokeTarget = String(options.target || "console").trim();
@@ -741,6 +830,14 @@ export const runElectronSmoke = async function(options: ElectronSmokeRunnerOptio
             options.startRuntimeSession,
             options.readPackageInstallSmokePrompt
         );
+        return;
+    }
+
+    if (electronSmokeTarget === "dialog-package-readiness") {
+        await runDialogPackageReadinessSmoke(win, messages, {
+            product,
+            runtime
+        });
         return;
     }
 

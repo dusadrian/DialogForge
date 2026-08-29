@@ -162,6 +162,109 @@ const waitForServer = async function(url, child, timeoutMs) {
 };
 
 
+const findMenuDialog = function(items, dialogId) {
+    const pending = Array.isArray(items) ? items.slice() : [];
+
+    while (pending.length > 0) {
+        const item = pending.shift();
+
+        if (String(item?.dialog || "") === dialogId) {
+            return item;
+        }
+
+        pending.push(...(Array.isArray(item?.items) ? item.items : []));
+    }
+
+    return null;
+};
+
+
+const verifyDialogPackageReadiness = async function(
+    page,
+    composition,
+    timeoutMs
+) {
+    const dialog = (composition.productDialogs || []).find((candidate) => {
+        return Array.isArray(candidate.rPackages)
+            && candidate.rPackages.length > 0;
+    });
+
+    if (!dialog) {
+        return;
+    }
+
+    const requirement = dialog.rPackages[0];
+    const packageName = String(requirement?.name || "").trim();
+    const menuItem = findMenuDialog(composition.menu, dialog.id);
+
+    if (!packageName || !menuItem) {
+        throw new Error(
+            `Production web package dialog is not reachable: ${dialog.id}`
+        );
+    }
+
+    await page.evaluate((label) => {
+        const button = Array.from(document.querySelectorAll(
+            ".web-menu-item"
+        )).find((candidate) => {
+            return String(candidate.textContent || "").trim() === label;
+        });
+
+        if (!(button instanceof HTMLButtonElement)) {
+            throw new Error(`Web menu item was not rendered: ${label}`);
+        }
+
+        button.click();
+    }, String(menuItem.label || dialog.label || dialog.id));
+
+    const layerSelector =
+        `.dialogforge-web-dialog-layer[data-dialog-id="${dialog.id}"]`;
+    const layer = page.locator(layerSelector);
+
+    await layer.waitFor({
+        state: "visible",
+        timeout: timeoutMs
+    });
+
+    const frame = page.frameLocator(`${layerSelector} iframe`);
+
+    await frame.locator("#paper .dm-el").first().waitFor({
+        state: "visible",
+        timeout: timeoutMs
+    });
+
+    const marker = `DIALOGFORGE_PACKAGE_ATTACHED_${packageName}`;
+
+    await page.evaluate(async ({ name, outputMarker }) => {
+        const input = document.getElementById("visibleCommandInput");
+        const command = [
+            `cat(${JSON.stringify(outputMarker)}, ":", `,
+            `is.element(${JSON.stringify(`package:${name}`)}, search()))`
+        ].join("");
+
+        input.dialogForgeConsoleInputView.setText(command);
+        await input.dialogForgeConsoleInputView.submit();
+    }, {
+        name: packageName,
+        outputMarker: marker
+    });
+
+    await page.waitForFunction((outputMarker) => {
+        const transcript = String(
+            document.getElementById("consoleTerminal")?.innerText || ""
+        );
+
+        return transcript.includes(`${outputMarker} : TRUE`);
+    }, marker, {
+        timeout: timeoutMs
+    });
+
+    console.log(
+        `OK production web dialog package readiness (${dialog.id}: ${packageName})`
+    );
+};
+
+
 const startServer = function(options, port) {
     const serverScript = path.join(options.webDist, "scripts", "web-product-dev-server.js");
 
@@ -331,6 +434,13 @@ const verifyRenderedHelp = async function(options, product, port) {
         if (/Unable to load help page|HTTP 404/i.test(helpText)) {
             throw new Error(`Production web help reported a load failure: ${helpText.slice(0, 500)}`);
         }
+
+        await verifyDialogPackageReadiness(
+            page,
+            compositionJson,
+            options.timeoutMs
+        );
+
         if (failures.length > 0) {
             throw new Error(`Production web browser errors:\n${failures.join("\n")}`);
         }
