@@ -4599,9 +4599,23 @@ const openDialog = async function (dialog) {
         await ensureDialogRuntimePackages(dialogPayload);
     }
     catch (error) {
+        const message = error instanceof Error
+            ? error.message
+            : String(error);
+        const packageUpdateRequired = message.includes(
+            "Package update required"
+        );
+
         clearDialogOpeningCover(dialog.id);
+        window.alert(packageUpdateRequired
+            ? [
+                message,
+                "Use Packages > Update development versions for development packages, or Packages > Install required R packages for missing packages."
+            ].join("\n\n")
+            : message
+        );
         appendTranscript(
-            error instanceof Error ? error.message : String(error),
+            message,
             "web-transcript__line--stderr"
         );
         return;

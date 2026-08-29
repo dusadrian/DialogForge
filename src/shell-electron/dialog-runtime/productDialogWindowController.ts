@@ -21,6 +21,13 @@ import type {
 } from "../../dialog-runtime/dialog-builder/productDialogDefinition";
 
 
+export interface ProductDialogOpenReadiness {
+    ok: boolean;
+    error: string;
+    status?: string;
+}
+
+
 export interface ProductDialogWindowControllerOptions<WorkspaceSource> {
     rootDir: string;
     productId: string;
@@ -33,11 +40,16 @@ export interface ProductDialogWindowControllerOptions<WorkspaceSource> {
     getActiveDatasetName(): string;
     getParentWindow(): BrowserWindow | null;
     windowClosed(dialogId: string): void;
+    prepareDialog?(
+        dialogId: string,
+        dialog: ProductDialogDefinition
+    ): Promise<ProductDialogOpenReadiness>;
 }
 
 
 export interface ProductDialogWindowController<WorkspaceSource> {
     open(dialogId: string): BrowserWindow;
+    prepareOpen(dialogId: string): Promise<ProductDialogOpenReadiness>;
     refreshWorkspaceData(
         dialogId?: string,
         source?: WorkspaceSource
@@ -193,6 +205,20 @@ export const createProductDialogWindowController = function<WorkspaceSource>(
 
         return options.readInitialWorkspaceData(lastWorkspaceSource);
     };
+    const prepareOpen = async function(
+        dialogId: string
+    ): Promise<ProductDialogOpenReadiness> {
+        const runtimeDialog = options.readDialog(dialogId);
+
+        if (!options.prepareDialog) {
+            return {
+                ok: true,
+                error: ""
+            };
+        }
+
+        return options.prepareDialog(dialogId, runtimeDialog);
+    };
     const sendCreated = function(
         window: BrowserWindow,
         dialogId: string,
@@ -344,6 +370,7 @@ export const createProductDialogWindowController = function<WorkspaceSource>(
 
     return {
         open,
+        prepareOpen,
         refreshWorkspaceData,
         refreshLanguage: async function(): Promise<void> {
             const workspaceData = await readPreparedWorkspaceData();

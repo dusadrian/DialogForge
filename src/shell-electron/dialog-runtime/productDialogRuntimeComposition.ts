@@ -1,6 +1,9 @@
 import type {
     IpcMain
 } from "electron";
+import type {
+    ProductDialogDefinition
+} from "../../dialog-runtime/dialog-builder/productDialogDefinition";
 
 import type {
     RuntimeSessionManager,
@@ -51,9 +54,17 @@ export interface ProductDialogRuntimeCompositionOptions {
 }
 
 
+export interface ProductDialogRuntimeComposition {
+    prepareDialog(
+        dialogId: string,
+        dialog: ProductDialogDefinition
+    ): Promise<{ ok: boolean; error: string; status?: string }>;
+}
+
+
 export const registerProductDialogRuntimeComposition = function(
     options: ProductDialogRuntimeCompositionOptions
-): void {
+): ProductDialogRuntimeComposition {
     const dependencyReadiness = new Map<
         string,
         Promise<{ ok: boolean; error: string; status?: string }>
@@ -140,6 +151,15 @@ export const registerProductDialogRuntimeComposition = function(
             error: string;
             status?: string;
         }> {
+            const session = await options.runtimeSessionManager.start();
+
+            if (session.status !== "ready") {
+                return {
+                    ok: false,
+                    error: session.message || "R runtime is not ready."
+                };
+            }
+
             const versionResult = await options.runtimeSessionManager
                 .executeInvisibleQuery(createInvisibleQueryRequest({
                     query: createRPackageVersionsCommand(requirements),
@@ -252,4 +272,19 @@ export const registerProductDialogRuntimeComposition = function(
         broadcastRuntimeEvents: options.broadcastRuntimeEvents,
         reportError: options.reportError
     });
+
+    return {
+        prepareDialog: async function(dialogId, dialog) {
+            const properties = dialog.properties
+                && typeof dialog.properties === "object"
+                ? dialog.properties
+                : {};
+
+            return ensureDependencies(
+                properties.dependencies,
+                properties.rPackageRequirements,
+                `${options.productId}.dialog.${dialogId}.open`
+            );
+        }
+    };
 };

@@ -405,7 +405,7 @@ shellFileDialogIpcController.createShellFileDialogIpcController({
     ipcMain: electron.ipcMain,
     fileDialogController: shellFileDialogController
 });
-productDialogRuntimeComposition.registerProductDialogRuntimeComposition({
+const productDialogRuntime = productDialogRuntimeComposition.registerProductDialogRuntimeComposition({
     ipcMain: electron.ipcMain,
     runtimeSessionManager,
     productId: product,
@@ -634,6 +634,9 @@ productDialogComposition = productDialogCompositionModule.createProductDialogCom
     },
     getLocale: function () {
         return locale;
+    },
+    prepareDialog: function (dialogId, dialog) {
+        return productDialogRuntime.prepareDialog(dialogId, dialog);
     }
 });
 const productDialogWindowController = productDialogComposition.windowController;

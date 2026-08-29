@@ -13,10 +13,14 @@ import {
     dialogRuntimeEventChannels,
     dialogRuntimeIpcChannels
 } from "../../dialog-runtime/dialogRuntimeIpc";
+import type {
+    ProductDialogOpenReadiness
+} from "./productDialogWindowController";
 
 
 export interface ProductDialogIpcWindowController {
     open(dialogId: string): unknown;
+    prepareOpen(dialogId: string): Promise<ProductDialogOpenReadiness>;
 }
 
 
@@ -36,6 +40,27 @@ export interface ProductDialogIpcControllerOptions {
 
 
 const messageTypes = new Set(["info", "warning", "error", "question"]);
+
+
+const dialogOpenFailureMessage = function(
+    readiness: ProductDialogOpenReadiness
+): ProductDialogMessageRequest {
+    const packageUpdateRequired =
+        readiness.status === "r-package-update-required";
+
+    return {
+        type: packageUpdateRequired ? "warning" : "error",
+        message: packageUpdateRequired
+            ? "Package update required"
+            : "Unable to open dialog",
+        detail: packageUpdateRequired
+            ? [
+                readiness.error,
+                "Use Packages > Update development versions for development packages, or Packages > Install required R packages for missing packages."
+            ].join("\n\n")
+            : readiness.error
+    };
+};
 
 
 const readMessageType = function(
@@ -61,6 +86,29 @@ export const createProductDialogIpcController = function(
         if (!dialogId) {
             return {
                 status: "invalid",
+                dialogId
+            };
+        }
+
+        let readiness: ProductDialogOpenReadiness;
+
+        try {
+            readiness = await options.windowController.prepareOpen(dialogId);
+        }
+        catch (error) {
+            readiness = {
+                ok: false,
+                error: error instanceof Error
+                    ? error.message
+                    : String(error || "Unable to prepare dialog dependencies.")
+            };
+        }
+
+        if (!readiness.ok) {
+            options.showMessage(dialogOpenFailureMessage(readiness), _event.sender);
+
+            return {
+                status: readiness.status || "blocked",
                 dialogId
             };
         }

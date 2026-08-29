@@ -12,6 +12,12 @@ import type {
     DialogDefinition
 } from "../../core/contracts/applicationComposition";
 import type {
+    ProductDialogDefinition
+} from "../../dialog-runtime/dialog-builder/productDialogDefinition";
+import type {
+    ProductDialogOpenReadiness
+} from "./productDialogWindowController";
+import type {
     RuntimeSessionManager
 } from "../../runtime/provider-contract/runtimeProvider";
 import {
@@ -51,6 +57,10 @@ export interface ProductDialogCompositionOptions {
     getParentWindow(): BrowserWindow | null;
     publishCommand(command: string): void;
     getLocale(): string;
+    prepareDialog?(
+        dialogId: string,
+        dialog: ProductDialogDefinition
+    ): Promise<ProductDialogOpenReadiness>;
 }
 
 
@@ -99,7 +109,8 @@ export const createProductDialogComposition = function(
             return options.runtimeSessionManager.getActiveDataset().objectName;
         },
         getParentWindow: options.getParentWindow,
-        windowClosed: events.windowClosed
+        windowClosed: events.windowClosed,
+        prepareDialog: options.prepareDialog
     });
 
     createProductDialogIpcController({
