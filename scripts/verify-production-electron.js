@@ -258,17 +258,23 @@ const captureMacBacktrace = function(application, target, timeoutMs) {
 // A crash inside Electron cannot tell us whether the native iroh binary itself
 // is at fault, so load the very same unpacked .node in a plain Node process.
 const checkUnpackedNativeIroh = function(application) {
-    const bindingPath = path.join(
+    const unpackedModules = path.join(
         application.resourcesPath,
         "app.asar.unpacked",
         "node_modules",
-        "@number0",
-        "iroh-darwin-universal",
-        "iroh.darwin-universal.node"
+        "@number0"
     );
+    // Intel macOS ships a self-built binding inside @number0/iroh; every other
+    // platform keeps the published architecture packages.
+    const bindingPath = [
+        path.join(unpackedModules, "iroh", "iroh.darwin-x64.node"),
+        path.join(unpackedModules, "iroh-darwin-universal", "iroh.darwin-universal.node")
+    ].find((candidate) => {
+        return fs.existsSync(candidate);
+    });
 
-    if (!fs.existsSync(bindingPath)) {
-        return `Unpacked native iroh binary was not found: ${bindingPath}`;
+    if (!bindingPath) {
+        return `No unpacked native iroh binary was found under ${unpackedModules}`;
     }
 
     const probe = `

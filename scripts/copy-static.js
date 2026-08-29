@@ -5,6 +5,7 @@ const path = require("path");
 const {
     packagedRuntimeDependencies
 } = require("./packagedRuntimeDependencies");
+const { ensureNativeIrohBinding } = require("./nativeIrohBinding");
 const parentDir = path.resolve(__dirname, "..");
 const runningFromDist = path.basename(parentDir) === "dist";
 const sourceRoot = path.resolve(
@@ -179,6 +180,9 @@ cleanGeneratedAssetDirectories();
     walk(path.join(sourceRoot, dirName));
 });
 copyPackageJson();
+// Intel macOS carries a self-built iroh binding inside @number0/iroh, so it has
+// to be in place before that package is staged.
+ensureNativeIrohBinding(sourceRoot);
 packagedRuntimeDependencies.forEach((packageName) => {
     copyDirectory(path.join(sourceRoot, "node_modules", packageName), path.join(rootDir, "node_modules", packageName));
 });

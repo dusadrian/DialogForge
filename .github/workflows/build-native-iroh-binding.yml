@@ -1,0 +1,91 @@
+name: Build native iroh binding for Intel macOS
+
+on:
+  workflow_dispatch:
+    inputs:
+      iroh_version:
+        description: iroh-ffi tag to build, without the leading v.
+        required: false
+        default: "0.35.0"
+        type: string
+      publish_release:
+        description: Upload the binding to a release.
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-15-intel
+    steps:
+      - name: Check out DialogForge
+        uses: actions/checkout@v5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 20
+
+      - name: Check out iroh-ffi at the pinned tag
+        uses: actions/checkout@v5
+        with:
+          repository: n0-computer/iroh-ffi
+          ref: v${{ inputs.iroh_version }}
+          path: iroh-ffi
+
+      # --locked matters: the published npm package ships no Cargo.lock, and a
+      # fresh resolve pulls a socket2 that netwatch cannot compile against.
+      - name: Build the binding
+        shell: bash
+        working-directory: iroh-ffi
+        run: |
+          set -euo pipefail
+          rustc --version
+          cargo build --release --locked -p number0_iroh
+
+      - name: Verify the binding on this Intel runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp iroh-ffi/target/release/libnumber0_iroh.dylib iroh.darwin-x64.node
+          node scripts/probe-native-iroh.js --binary "$PWD/iroh.darwin-x64.node"
+          shasum -a 256 iroh.darwin-x64.node | tee SHA256SUMS
+          {
+            echo "### Intel macOS iroh binding"
+            echo
+            echo "iroh-ffi v${{ inputs.iroh_version }}"
+            echo
+            echo '```'
+            cat SHA256SUMS
+            echo '```'
+            echo
+            echo "Pin this digest as sha256 in scripts/nativeIrohBinding.js."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the binding as a workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: iroh-darwin-x64
+          path: |
+            iroh.darwin-x64.node
+            SHA256SUMS
+          if-no-files-found: error
+
+      - name: Publish the binding to a release
+        if: ${{ inputs.publish_release }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: iroh-bindings-${{ inputs.iroh_version }}
+        run: |
+          set -euo pipefail
+          if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" \
+              --title "$RELEASE_TAG" \
+              --notes "iroh napi binding for Intel macOS, built from iroh-ffi v${{ inputs.iroh_version }}." \
+              --prerelease --latest=false
+          fi
+          gh release upload "$RELEASE_TAG" iroh.darwin-x64.node SHA256SUMS --clobber
