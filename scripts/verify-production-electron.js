@@ -13,7 +13,13 @@ const readArgs = function() {
     const options = {
         productPath: "",
         outputDir: "",
-        targets: ["application-menu", "console", "help", "script-editor"],
+        targets: [
+            "application-menu",
+            "package-update-menu",
+            "console",
+            "help",
+            "script-editor"
+        ],
         timeoutMs: 120000
     };
     const args = process.argv.slice(2);

@@ -121,6 +121,24 @@ const assertSigningBrokerUsesProductOutput = function() {
     if (!actionSource.includes("DIALOGFORGE_ROOT: ${{ github.workspace }}")) {
         fail("Product checks must receive the checked-out DialogForge root explicitly.");
     }
+    const buildStep = actionSource.indexOf("- name: Build product package");
+    const packagedSmokeStep = actionSource.indexOf(
+        "- name: Verify packaged Script Editor and Live Script"
+    );
+    if (
+        buildStep < 0
+        || packagedSmokeStep <= buildStep
+        || packagedSmokeStep <= signingStep
+        || refreshStep <= packagedSmokeStep
+    ) {
+        fail("Packaged Live Script verification must run after signing and before upload metadata refresh.");
+    }
+    if (!actionSource.includes(
+        "node scripts/verify-production-electron.js --product-path ./external-product "
+        + "--output-dir ./external-product/build/output --target script-editor"
+    )) {
+        fail("The signing broker must exercise Live Script from the packaged product.");
+    }
 };
 
 const main = function() {

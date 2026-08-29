@@ -97,9 +97,12 @@ const createToolbarButton = function(
     const button = document.createElement("button");
     button.type = "button";
     button.className = `dm-script-btn${options?.iconOnly ? " icon-only" : ""}`;
+    const tooltip = String(options?.title || "").trim();
+    const repeatsVisibleLabel = !options?.iconOnly
+        && tooltip === label.trim();
 
-    if (options?.title) {
-        button.setAttribute("data-tooltip", options.title);
+    if (tooltip && !repeatsVisibleLabel) {
+        button.setAttribute("data-tooltip", tooltip);
     }
 
     const accessibleLabel = options?.title || label;
@@ -135,8 +138,10 @@ const setButtonLabel = function(
     label: string,
     tooltip = ""
 ): void {
-    if (tooltip) {
-        button.setAttribute("data-tooltip", tooltip);
+    const cleanTooltip = tooltip.trim();
+
+    if (cleanTooltip && cleanTooltip !== label.trim()) {
+        button.setAttribute("data-tooltip", cleanTooltip);
     }
     else {
         button.removeAttribute("data-tooltip");
@@ -335,16 +340,7 @@ export const createScriptToolbarView = function(
             ? currentLabels.functions
             : currentLabels.noFunctions;
         outlineButton.disabled = !hasFunctions;
-        outlineButton.setAttribute("data-tooltip", outlineText);
-        outlineButton.setAttribute("aria-label", outlineText);
-
-        const label = outlineButton.querySelector<HTMLSpanElement>(
-            "span:nth-child(2)"
-        );
-
-        if (label) {
-            label.textContent = outlineText;
-        }
+        setButtonLabel(outlineButton, outlineText, outlineText);
     };
 
     const updateLiveState = function(input: {

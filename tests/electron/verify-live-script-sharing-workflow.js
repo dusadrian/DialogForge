@@ -444,19 +444,38 @@ const run = async function() {
                     accessibleName: button?.getAttribute("aria-label")
                 };
             };
+            const duplicateButtons = Array.from(
+                document.querySelectorAll("button")
+            ).flatMap((button) => {
+                const label = String(button.innerText || "").trim();
+                const tooltip = String(
+                    button.getAttribute("data-tooltip")
+                    || button.getAttribute("title")
+                    || ""
+                ).trim();
+
+                return label && tooltip === label
+                    ? [button.className || button.id || label]
+                    : [];
+            });
 
             return {
                 share: read(".dm-script-btn-share-live"),
                 join: read(".dm-script-btn-join-live"),
-                hand: read(".dm-script-btn-raise-hand")
+                hands: read(".dm-script-btn-hands-raised"),
+                hand: read(".dm-script-btn-raise-hand"),
+                duplicateButtons
             };
         });
 
-        if (redundantTooltipState.share.tooltip
+        if (redundantTooltipState.duplicateButtons.length > 0
+            || redundantTooltipState.share.tooltip
             || redundantTooltipState.join.tooltip
+            || redundantTooltipState.hands.tooltip
             || redundantTooltipState.hand.tooltip
             || redundantTooltipState.share.accessibleName !== "Share live"
             || redundantTooltipState.join.accessibleName !== "Join live script"
+            || redundantTooltipState.hands.accessibleName !== "Hands raised"
             || redundantTooltipState.hand.accessibleName !== "Raise hand") {
             throw new Error(
                 `Redundant live toolbar tooltip state: ${JSON.stringify(redundantTooltipState)}`
@@ -715,7 +734,10 @@ const run = async function() {
             const button = document.querySelector(".dm-script-btn-hands-raised");
             return button instanceof HTMLButtonElement
                 && !button.hidden
-                && button.getAttribute("data-state") === "raised";
+                && button.getAttribute("data-state") === "raised"
+                && button.getAttribute("data-tooltip") === null
+                && button.getAttribute("title") === null
+                && button.innerText.trim() === "Hands raised";
         }, undefined, { timeout: 30000 });
         await hostEditor.locator(".dm-script-btn-hands-raised").click();
         await hostEditor.waitForFunction(() => {

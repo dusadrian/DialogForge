@@ -124,6 +124,10 @@ runs:
         timestamp-rfc3161: http://timestamp.acs.microsoft.com
         timestamp-digest: SHA256
 
+    - name: Verify packaged Script Editor and Live Script
+      shell: bash
+      run: node scripts/verify-production-electron.js --product-path ./external-product --output-dir ./external-product/build/output --target script-editor
+
     - name: Refresh signed Windows updater metadata
       if: ${{ inputs.platform == 'windows' }}
       shell: bash

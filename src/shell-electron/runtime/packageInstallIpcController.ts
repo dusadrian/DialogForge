@@ -44,6 +44,12 @@ const parentWindow = function(
     event: IpcMainInvokeEvent,
     options: PackageInstallIpcControllerOptions
 ): BrowserWindow | undefined {
+    const focusedWindow = BrowserWindow.getFocusedWindow();
+
+    if (focusedWindow && !focusedWindow.isDestroyed()) {
+        return focusedWindow;
+    }
+
     return BrowserWindow.fromWebContents(event.sender)
         || options.getMainWindow()
         || undefined;

@@ -16,6 +16,12 @@ export interface ElectronSmokeRunnerOptions {
     startRuntimeSession?(): Promise<unknown>;
     getScriptEditorWindow?(): BrowserWindow | null;
     insertScriptEditorCode?(code: string): Promise<unknown>;
+    readPackageInstallSmokePrompt?(): {
+        title: string;
+        message: string;
+        detail: string;
+        buttons: string[];
+    } | null;
 }
 
 interface ElectronSmokeContext {
@@ -345,12 +351,54 @@ const runScriptEditorSmoke = async function(
         );
     }
 
+    const liveScript = await settledWindow.webContents.executeJavaScript(
+        `(async () => {
+            const capability = await window.dialogForge.scriptEditor.live.capability();
+            const shareButton = document.querySelector(".dm-script-btn-share-live");
+            const joinButton = document.querySelector(".dm-script-btn-join-live");
+
+            return {
+                available: capability?.available === true,
+                endpointId: String(capability?.endpointId || ""),
+                message: String(capability?.message || ""),
+                hasShareButton: Boolean(shareButton),
+                hasJoinButton: Boolean(joinButton),
+                shareEnabled: Boolean(shareButton && !shareButton.disabled),
+                joinEnabled: Boolean(joinButton && !joinButton.disabled)
+            };
+        })()`,
+        true
+    ) as {
+        available: boolean;
+        endpointId: string;
+        message: string;
+        hasShareButton: boolean;
+        hasJoinButton: boolean;
+        shareEnabled: boolean;
+        joinEnabled: boolean;
+    };
+
+    if (
+        !liveScript.available
+        || !liveScript.endpointId
+        || !liveScript.hasShareButton
+        || !liveScript.hasJoinButton
+        || !liveScript.shareEnabled
+        || !liveScript.joinEnabled
+    ) {
+        throw new Error(
+            "Packaged Electron Live Script capability is unavailable: "
+            + JSON.stringify({ liveScript, messages }, null, 4)
+        );
+    }
+
     console.log(JSON.stringify({
         ok: true,
         smoke: "electron-script-editor",
         product: context.product,
         runtime: context.runtime,
         result,
+        liveScript,
         messages
     }, null, 4));
 };
@@ -462,6 +510,131 @@ const runApplicationMenuSmoke = function(
 };
 
 
+const runPackageUpdateMenuSmoke = async function(
+    win: BrowserWindow,
+    messages: string[],
+    context: ElectronSmokeContext,
+    startRuntimeSession: () => Promise<unknown>,
+    readPrompt: NonNullable<
+        ElectronSmokeRunnerOptions["readPackageInstallSmokePrompt"]
+    >
+): Promise<void> {
+    await startRuntimeSession();
+    const target = await win.webContents.executeJavaScript(
+        `(async () => {
+            const composition = await window.dialogForge.getComposition();
+            const pending = [...(composition.menu || [])];
+            let command = null;
+
+            while (pending.length > 0) {
+                const item = pending.shift();
+
+                if (
+                    String(item?.command || "").endsWith(
+                        ".packages.updateRequired"
+                    )
+                ) {
+                    command = item;
+                    break;
+                }
+
+                pending.push(...(item?.items || []));
+            }
+
+            if (!command) {
+                return { error: "Package update menu command was not found." };
+            }
+
+            const preferred = [
+                "statistics",
+                "admisc",
+                "declared",
+                "DDIwR",
+                "QCA",
+                "venn"
+            ];
+            const packages = (command.rPackages || []).map(String);
+            const packageName = preferred.find((name) => packages.includes(name));
+
+            if (!packageName) {
+                return {
+                    error: "Package update menu has no known development package.",
+                    packages
+                };
+            }
+
+            const query = await window.dialogForge.executeInvisibleQuery({
+                query: "suppressPackageStartupMessages(library(" + JSON.stringify(packageName)
+                    + ", character.only = TRUE)); TRUE",
+                source: "electron-smoke.package-update-menu"
+            });
+
+            return {
+                id: command.id,
+                packageName,
+                query
+            };
+        })()`,
+        true
+    ) as {
+        id?: string;
+        packageName?: string;
+        query?: { status?: string; message?: string };
+        error?: string;
+    };
+
+    if (target.error || target.query?.status !== "ready") {
+        throw new Error(
+            "Electron package update smoke could not prepare a loaded package: "
+            + JSON.stringify({ target, messages }, null, 4)
+        );
+    }
+
+    const menuItem = Menu.getApplicationMenu()?.getMenuItemById(
+        target.id || ""
+    );
+
+    if (!menuItem || typeof menuItem.click !== "function") {
+        throw new Error(
+            "Electron package update menu item was not actionable: "
+            + (target.id || "(missing)")
+        );
+    }
+
+    (menuItem.click as () => void)();
+
+    const started = Date.now();
+    let prompt = readPrompt();
+
+    while (!prompt && Date.now() - started < 20000) {
+        await new Promise((resolve) => {
+            setTimeout(resolve, 100);
+        });
+        prompt = readPrompt();
+    }
+
+    if (!prompt || !prompt.detail.includes(target.packageName || "")) {
+        throw new Error(
+            "Electron package update menu did not reach the loaded-package restart prompt: "
+            + JSON.stringify({ target, prompt, messages }, null, 4)
+        );
+    }
+
+    console.log(JSON.stringify({
+        ok: true,
+        smoke: "electron-package-update-menu",
+        product: context.product,
+        runtime: context.runtime,
+        result: {
+            menuItemId: target.id,
+            packageName: target.packageName,
+            prompt
+        },
+        messages
+    }, null, 4));
+};
+
+
 export const runElectronSmoke = async function(options: ElectronSmokeRunnerOptions): Promise<void> {
     const { win, product, runtime } = options;
     const electronSmokeTarget = String(options.target || "console").trim();
@@ -545,6 +718,29 @@ export const runElectronSmoke = async function(options: ElectronSmokeRunnerOptio
             product,
             runtime
         });
+        return;
+    }
+
+    if (electronSmokeTarget === "package-update-menu") {
+        if (
+            !options.startRuntimeSession
+            || !options.readPackageInstallSmokePrompt
+        ) {
+            throw new Error(
+                "Electron package update smoke requires runtime startup and restart-prompt inspection."
+            );
+        }
+
+        await runPackageUpdateMenuSmoke(
+            win,
+            messages,
+            {
+                product,
+                runtime
+            },
+            options.startRuntimeSession,
+            options.readPackageInstallSmokePrompt
+        );
         return;
     }
 

@@ -65,10 +65,10 @@ const npmInvocation = function(args) {
 };
 
 
-const run = function(command, args, cwd) {
+const run = function(command, args, cwd, env = process.env) {
     const result = spawnSync(command, args, {
         cwd,
-        env: process.env,
+        env,
         stdio: "inherit",
         shell: process.platform === "win32" && command.endsWith(".cmd")
     });
@@ -89,8 +89,24 @@ const runProductBuild = function(productPath, script) {
 };
 
 
+const runReleasePreflight = function(productPath) {
+    run(process.execPath, [
+        path.join(rootDir, "scripts", "check-build-ownership.js")
+    ], rootDir);
+
+    const invocation = npmInvocation(["run", "check"]);
+    run(invocation.command, invocation.args, productPath, Object.assign(
+        {},
+        process.env,
+        { DIALOGFORGE_ROOT: rootDir }
+    ));
+};
+
+
 const main = function() {
     const options = readArgs();
+
+    runReleasePreflight(options.productPath);
 
     if (options.electron) {
         if (!options.skipBuild) {

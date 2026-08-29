@@ -62,9 +62,20 @@ const createUnsupportedPackageInstallWorkflow = function(): RuntimePackageInstal
 export const createRuntimePackageInstallWorkflow = function(
     bindings: RuntimePackageInstallWorkflowBindings
 ): RuntimePackageInstallWorkflow {
-    if (bindings.getRuntimeProviderId() === "r") {
-        return createRPackageInstallWorkflow(bindings);
-    }
+    const rWorkflow = createRPackageInstallWorkflow(bindings);
+    const unsupportedWorkflow = createUnsupportedPackageInstallWorkflow();
+    const currentWorkflow = function(): RuntimePackageInstallWorkflow {
+        return bindings.getRuntimeProviderId() === "r"
+            ? rWorkflow
+            : unsupportedWorkflow;
+    };
 
-    return createUnsupportedPackageInstallWorkflow();
+    return {
+        installRequired: function(value): Promise<void> {
+            return currentWorkflow().installRequired(value);
+        },
+        updateRequired: function(value): Promise<void> {
+            return currentWorkflow().updateRequired(value);
+        }
+    };
 };

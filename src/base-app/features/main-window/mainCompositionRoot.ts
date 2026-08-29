@@ -1194,12 +1194,21 @@ const setTranslatedControlLabel = function(
     }
 
     const label = applicationI18n[key] || key;
+    const repeatsVisibleLabel = options.text === true;
 
-    element.dataset.tooltip = label;
+    if (repeatsVisibleLabel) {
+        delete element.dataset.tooltip;
+    }
+    else {
+        element.dataset.tooltip = label;
+    }
     element.setAttribute("aria-label", label);
 
-    if (options.title) {
+    if (options.title && !repeatsVisibleLabel) {
         element.setAttribute("title", label);
+    }
+    else {
+        element.removeAttribute("title");
     }
 
     if (options.text) {

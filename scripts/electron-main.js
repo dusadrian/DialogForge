@@ -70,6 +70,7 @@ const requestedLocale = readOption("locale", "");
 const developerToolsEnabled = args.includes("--devtools");
 const electronSmokeMode = process.env.DIALOGFORGE_ELECTRON_SMOKE === "1";
 const electronSmokeTarget = String(process.env.DIALOGFORGE_ELECTRON_SMOKE_TARGET || "console").trim();
+let packageInstallSmokePrompt = null;
 const testUserDataPath = String(process.env.DIALOGFORGE_TEST_USER_DATA_PATH || "").trim();
 if (testUserDataPath) {
     electron.app.setPath("userData", testUserDataPath);
@@ -185,7 +186,6 @@ let runtimeLifecycleComposition;
 let productDialogComposition;
 let datasetEditorComposition;
 let installApplicationMenu = function () { };
-let updateDownloadInProgress = false;
 const mainWindowMinWidth = 800;
 const mainWindowMinHeight = 600;
 const plotDownloadController = plotDownloadControllerModule.createPlotDownloadController({
@@ -326,31 +326,6 @@ const sendToAllWindows = function (channel, payload) {
         }
     });
 };
-const setMenuEnabled = function (menu, enabled) {
-    if (!menu || !Array.isArray(menu.items)) {
-        return;
-    }
-
-    menu.items.forEach((item) => {
-        item.enabled = enabled;
-        if (item.submenu) {
-            setMenuEnabled(item.submenu, enabled);
-        }
-    });
-};
-const setUpdateDownloadInProgress = function (active) {
-    if (updateDownloadInProgress === active) {
-        return;
-    }
-
-    updateDownloadInProgress = active;
-    if (active) {
-        setMenuEnabled(electron.Menu.getApplicationMenu(), false);
-        return;
-    }
-
-    installApplicationMenu();
-};
 externalCallIpcController.createDialogExternalCallIpcController({
     ipcMain: electron.ipcMain,
     host: dialogExternalCallHost,
@@ -369,10 +344,6 @@ externalCallIpcController.createDialogExternalCallIpcController({
     }
 });
 const sendMenuCommand = function (command) {
-    if (updateDownloadInProgress) {
-        return;
-    }
-
     if (command.command === "app.showSettings") {
         createSettingsWindow();
         return;
@@ -490,8 +461,29 @@ const mainWindowComposition = mainWindowCompositionModule.createMainWindowCompos
 });
 const mainWindowZoomController = mainWindowComposition.zoomController;
 const createMainWindow = mainWindowComposition.createWindow;
+const packageInstallDialog = electronSmokeMode
+    && electronSmokeTarget === "package-update-menu"
+    ? {
+        showMessageBox: async function (...args) {
+            const messageOptions = args[args.length - 1] || {};
+            packageInstallSmokePrompt = {
+                title: String(messageOptions.title || ""),
+                message: String(messageOptions.message || ""),
+                detail: String(messageOptions.detail || ""),
+                buttons: Array.isArray(messageOptions.buttons)
+                    ? messageOptions.buttons.map(String)
+                    : []
+            };
+
+            return {
+                response: 0,
+                checkboxChecked: false
+            };
+        }
+    }
+    : electron.dialog;
 const packageInstallDialogController = packageInstallDialogControllerModule.createPackageInstallDialogController({
-    dialog: electron.dialog,
+    dialog: packageInstallDialog,
     translate: translateCompositionText
 });
 const workspaceQuitDialogController = workspaceQuitDialogControllerModule.createWorkspaceQuitDialogController({
@@ -519,7 +511,6 @@ const electronUpdateService = electronUpdateServiceModule.createElectronUpdateSe
         return mainWindow;
     },
     onDownloadProgress: function (state) {
-        setUpdateDownloadInProgress(state.active);
         sendToAllWindows(
             applicationEvents.applicationEventChannels.updateDownloadProgress,
             state
@@ -814,6 +805,9 @@ electronApplicationLifecycle.bindElectronApplicationLifecycle({
                 }
 
                 throw new Error("R runtime did not become ready for help smoke.");
+            },
+            readPackageInstallSmokePrompt: function () {
+                return packageInstallSmokePrompt;
             }
         });
     },

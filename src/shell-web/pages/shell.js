@@ -2632,12 +2632,22 @@ const setTranslatedElementLabel = function (id, key, fallback = key, options = {
     }
 
     const label = translateCompositionText(key, fallback);
+    const repeatsVisibleLabel = options.text === true;
 
     element.setAttribute("aria-label", label);
-    element.dataset.tooltip = label;
 
-    if (options.title) {
+    if (repeatsVisibleLabel) {
+        delete element.dataset.tooltip;
+    }
+    else {
+        element.dataset.tooltip = label;
+    }
+
+    if (options.title && !repeatsVisibleLabel) {
         element.setAttribute("title", label);
+    }
+    else {
+        element.removeAttribute("title");
     }
 
     if (options.text) {
