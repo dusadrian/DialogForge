@@ -4,6 +4,7 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const { spawn, spawnSync } = require("child_process");
+const { assertBindingPinMatchesDependency } = require("./nativeIrohBinding");
 
 
 const rootDir = path.resolve(__dirname, "..");
@@ -258,17 +259,23 @@ const captureMacBacktrace = function(application, target, timeoutMs) {
 // A crash inside Electron cannot tell us whether the native iroh binary itself
 // is at fault, so load the very same unpacked .node in a plain Node process.
 const checkUnpackedNativeIroh = function(application) {
-    const bindingPath = path.join(
+    const unpackedModules = path.join(
         application.resourcesPath,
         "app.asar.unpacked",
         "node_modules",
-        "@number0",
-        "iroh-darwin-universal",
-        "iroh.darwin-universal.node"
+        "@number0"
     );
+    // Intel macOS ships a self-built binding inside @number0/iroh; every other
+    // platform keeps the published architecture packages.
+    const bindingPath = [
+        path.join(unpackedModules, "iroh", "iroh.darwin-x64.node"),
+        path.join(unpackedModules, "iroh-darwin-universal", "iroh.darwin-universal.node")
+    ].find((candidate) => {
+        return fs.existsSync(candidate);
+    });
 
-    if (!fs.existsSync(bindingPath)) {
-        return `Unpacked native iroh binary was not found: ${bindingPath}`;
+    if (!bindingPath) {
+        return `No unpacked native iroh binary was found under ${unpackedModules}`;
     }
 
     const probe = `
@@ -299,107 +306,6 @@ const checkUnpackedNativeIroh = function(application) {
             + `${result.signal ? ` (${result.signal})` : ""}`,
         output ? `  output: ${output.split("\n").slice(0, 8).join("\n          ")}` : ""
     ].filter(Boolean).join("\n");
-};
-
-
-// macOS 12+ writes .ips crash reports as a JSON header line followed by a JSON
-// body; older .crash reports are plain text. Handle both.
-const summarizeCrashReport = function(contents) {
-    const lines = contents.split("\n");
-
-    try {
-        const body = JSON.parse(lines.slice(1).join("\n"));
-        const images = Array.isArray(body.usedImages) ? body.usedImages : [];
-        const threads = Array.isArray(body.threads) ? body.threads : [];
-        const faulting = threads[body.faultingThread] || threads[0] || {};
-        const frames = Array.isArray(faulting.frames) ? faulting.frames : [];
-        const described = frames.slice(0, 20).map((frame, index) => {
-            const image = images[frame.imageIndex] || {};
-            const binary = String(image.name || image.path || "unknown");
-            const symbol = frame.symbol
-                ? `${frame.symbol} + ${frame.symbolLocation || 0}`
-                : `0x${Number(frame.imageOffset || 0).toString(16)}`;
-
-            return `  ${index}  ${binary}  ${symbol}`;
-        });
-
-        return [
-            `Exception: ${JSON.stringify(body.exception || {})}`,
-            `Faulting thread: ${body.faultingThread}`,
-            ...described
-        ].join("\n");
-    } catch (parseError) {
-        const crashedIndex = lines.findIndex((line) => {
-            return /Thread \d+ Crashed/.test(line);
-        });
-
-        return crashedIndex >= 0
-            ? lines.slice(crashedIndex, crashedIndex + 25).join("\n")
-            : lines.slice(0, 40).join("\n");
-    }
-};
-
-
-const findMacCrashReports = function(reportDir, productName, startedAt) {
-    return fs.readdirSync(reportDir)
-        .filter((name) => {
-            return name.startsWith(productName) && /\.(ips|crash)$/.test(name);
-        })
-        .map((name) => {
-            const reportPath = path.join(reportDir, name);
-
-            return { reportPath, modifiedAt: fs.statSync(reportPath).mtimeMs };
-        })
-        .filter((report) => {
-            return report.modifiedAt >= startedAt;
-        })
-        .sort((left, right) => {
-            return right.modifiedAt - left.modifiedAt;
-        });
-};
-
-
-const readMacCrashReport = function(productName, startedAt) {
-    const reportDirs = [
-        path.join(os.homedir(), "Library", "Logs", "DiagnosticReports"),
-        path.join("/Library", "Logs", "DiagnosticReports")
-    ].filter((candidate) => {
-        return fs.existsSync(candidate);
-    });
-
-    if (process.platform !== "darwin" || reportDirs.length === 0) {
-        return "";
-    }
-
-    // ReportCrash writes the report asynchronously, so it is usually not on
-    // disk yet when the crashed child exits. Wait for it before giving up.
-    let reports = [];
-
-    for (let attempt = 0; attempt < 20; attempt += 1) {
-        reports = reportDirs.flatMap((reportDir) => {
-            return findMacCrashReports(reportDir, productName, startedAt);
-        }).sort((left, right) => {
-            return right.modifiedAt - left.modifiedAt;
-        });
-
-        if (reports.length > 0) {
-            break;
-        }
-
-        spawnSync("sleep", ["0.5"]);
-    }
-
-    if (reports.length === 0) {
-        return `No macOS crash report for ${productName} appeared under `
-            + `${reportDirs.join(", ")}.`;
-    }
-
-    const contents = fs.readFileSync(reports[0].reportPath, "utf8");
-
-    return [
-        `Crash report: ${reports[0].reportPath}`,
-        summarizeCrashReport(contents)
-    ].join("\n");
 };
 
 
@@ -434,7 +340,6 @@ const smokeLaunchCommand = function(executablePath) {
 const runSmokeTarget = function(application, product, target, timeoutMs) {
     return new Promise((resolve, reject) => {
         const userDataPath = fs.mkdtempSync(path.join(os.tmpdir(), "dialogforge-production-"));
-        const startedAt = Date.now();
         const launch = smokeLaunchCommand(application.executablePath);
         const child = spawn(launch.command, launch.args, {
             cwd: application.appPath,
@@ -505,7 +410,6 @@ const runSmokeTarget = function(application, product, target, timeoutMs) {
                     signal && process.platform === "darwin"
                         ? checkUnpackedNativeIroh(application)
                         : "",
-                    signal ? readMacCrashReport(product.productName, startedAt) : "",
                     signal && process.platform === "darwin"
                         ? captureMacBacktrace(application, target, timeoutMs)
                         : ""
@@ -531,6 +435,9 @@ const runSmokeTarget = function(application, product, target, timeoutMs) {
 
 const main = async function() {
     const options = readArgs();
+
+    assertBindingPinMatchesDependency(rootDir);
+
     const product = readProduct(options.productPath);
     const application = findPackagedApplication(options.outputDir, product.productName);
 

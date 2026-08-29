@@ -2,6 +2,10 @@
 
 const path = require("path");
 const { spawnSync } = require("child_process");
+const {
+    assertBindingPinMatchesDependency,
+    nativeIrohBindingPin
+} = require("./nativeIrohBinding");
 
 
 const rootDir = path.resolve(__dirname, "..");
@@ -93,6 +97,13 @@ const runReleasePreflight = function(productPath) {
     run(process.execPath, [
         path.join(rootDir, "scripts", "check-build-ownership.js")
     ], rootDir);
+
+    const irohVersion = assertBindingPinMatchesDependency(rootDir);
+
+    console.log(
+        `Intel macOS iroh binding pinned to ${irohVersion}`
+        + ` (${nativeIrohBindingPin.releaseTag}).`
+    );
 
     const invocation = npmInvocation(["run", "check"]);
     run(invocation.command, invocation.args, productPath, Object.assign(
