@@ -1,0 +1,36 @@
+name: Probe native iroh on Intel macOS
+
+on:
+  workflow_dispatch:
+    inputs:
+      versions:
+        description: Space separated @number0/iroh versions to probe.
+        required: false
+        default: "0.35.0 0.31.0 0.30.0 0.29.0 0.28.1"
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: macos-15-intel
+    steps:
+      - name: Check out DialogForge
+        uses: actions/checkout@v5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 20
+
+      - name: Probe published iroh versions
+        shell: bash
+        run: |
+          status=0
+          for version in ${{ inputs.versions }}; do
+            echo "::group::iroh $version"
+            node scripts/probe-native-iroh.js --version "$version" || status=1
+            echo "::endgroup::"
+          done
+          echo "At least one version failed: $status"
