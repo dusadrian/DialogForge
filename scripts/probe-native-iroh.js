@@ -7,7 +7,7 @@ const { spawnSync } = require("child_process");
 
 
 const readArgs = function() {
-    const options = { version: "" };
+    const options = { version: "", binary: "" };
     const args = process.argv.slice(2);
 
     for (let index = 0; index < args.length; index += 1) {
@@ -16,12 +16,17 @@ const readArgs = function() {
             options.version = String(args[index] || "").trim();
             continue;
         }
+        if (args[index] === "--binary") {
+            index += 1;
+            options.binary = path.resolve(String(args[index] || "").trim());
+            continue;
+        }
 
         throw new Error(`Unknown native iroh probe argument: ${args[index]}`);
     }
 
-    if (!options.version) {
-        throw new Error("Missing required --version argument.");
+    if (!options.version && !options.binary) {
+        throw new Error("Missing required --version or --binary argument.");
     }
 
     return options;
@@ -99,9 +104,9 @@ const probeBinding = function(bindingPath) {
 
 const main = function() {
     const options = readArgs();
-    const workDir = installIroh(options.version);
-    const bindingPath = path.join(
-        workDir,
+    const label = options.binary || options.version;
+    const bindingPath = options.binary || path.join(
+        installIroh(options.version),
         "node_modules",
         "@number0",
         "iroh-darwin-universal",
@@ -113,12 +118,12 @@ const main = function() {
     });
 
     console.log(
-        `iroh ${options.version} on ${process.platform}/${process.arch}`
+        `iroh ${label} on ${process.platform}/${process.arch}`
         + ` (${String(cpuBrand.stdout || "unknown cpu").trim()})`
     );
 
     if (!fs.existsSync(bindingPath)) {
-        console.log(`FAIL no darwin-universal binary published for ${options.version}`);
+        console.log(`FAIL no binary to probe: ${bindingPath}`);
         process.exitCode = 1;
         return;
     }
@@ -134,7 +139,7 @@ const main = function() {
 
     if (result.signal || result.status !== 0) {
         console.log(
-            `FAIL iroh ${options.version} exit=${result.status === null ? "null" : result.status}`
+            `FAIL iroh ${label} exit=${result.status === null ? "null" : result.status}`
             + `${result.signal ? ` (${result.signal})` : ""} ${output}`
         );
         process.exitCode = 1;
@@ -143,7 +148,7 @@ const main = function() {
 
     if (isAppleSilicon()) {
         console.log(
-            `INCONCLUSIVE iroh ${options.version} ${output}`
+            `INCONCLUSIVE iroh ${label} ${output}`
             + " — Apple silicon runs this x86_64 slice under Rosetta, which hides"
             + " the fault seen on genuine Intel hardware. Run this on an Intel Mac."
         );
@@ -151,7 +156,7 @@ const main = function() {
         return;
     }
 
-    console.log(`PASS iroh ${options.version} ${output}`);
+    console.log(`PASS iroh ${label} ${output}`);
 };
 
 

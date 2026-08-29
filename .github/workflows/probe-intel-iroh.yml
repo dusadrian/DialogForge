@@ -34,3 +34,48 @@ jobs:
             echo "::endgroup::"
           done
           echo "At least one version failed: $status"
+
+  build-and-probe:
+    runs-on: macos-15-intel
+    steps:
+      - name: Check out DialogForge
+        uses: actions/checkout@v5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 20
+
+      # The published npm package ships no Cargo.lock, so building it resolves
+      # newer semver-compatible dependencies than iroh-ffi 0.35.0 was built
+      # against and fails to compile. Build the tagged workspace instead.
+      - name: Check out iroh-ffi at the pinned tag
+        uses: actions/checkout@v5
+        with:
+          repository: n0-computer/iroh-ffi
+          ref: v0.35.0
+          path: iroh-ffi
+
+      - name: Build the binding for Intel macOS
+        shell: bash
+        working-directory: iroh-ffi
+        run: |
+          set -euo pipefail
+          rustc --version
+          cargo build --release --locked -p number0_iroh
+
+      - name: Probe the self-built binding
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp iroh-ffi/target/release/libnumber0_iroh.dylib \
+            "$RUNNER_TEMP/iroh.darwin-x64.node"
+          node scripts/probe-native-iroh.js --binary "$RUNNER_TEMP/iroh.darwin-x64.node"
+
+      - name: Upload the self-built binding
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: iroh-darwin-x64
+          path: ${{ runner.temp }}/iroh.darwin-x64.node
+          if-no-files-found: warn
