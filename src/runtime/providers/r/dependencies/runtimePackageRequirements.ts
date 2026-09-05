@@ -101,8 +101,10 @@ export const createRRuntimePackageStatusCommand = function(
 
     return `local({
             .pkgs <- ${createRCharacterVector(normalized)}
-            .installed <- rownames(installed.packages())
-            .missing <- .pkgs[!is.element(.pkgs, .installed)]
+            .installed <- vapply(.pkgs, function(.pkg) {
+                nzchar(find.package(.pkg, quiet = TRUE))
+            }, logical(1))
+            .missing <- .pkgs[!.installed]
             .attached <- .pkgs[vapply(.pkgs, function(.pkg) is.element(paste0("package:", .pkg), search()), logical(1))]
             cat(paste(paste(.missing, collapse = ","), paste(.attached, collapse = ","), sep = "|"))
         })`;

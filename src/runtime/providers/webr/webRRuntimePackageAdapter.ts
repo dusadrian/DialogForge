@@ -77,6 +77,7 @@ const readRuntimePackageStatus = async function(
 export const createWebRRuntimePackageAdapter = function(
     bindings: WebRRuntimePackageAdapterBindings
 ): WebRRuntimePackageAdapter {
+    const verifiedRequirementSets = new Set<string>();
     const readRequirements = function(
         dialogPayload: unknown
     ): RPackageRequirement[] {
@@ -93,24 +94,13 @@ export const createWebRRuntimePackageAdapter = function(
         packages: unknown,
         options: WebRRuntimePackageLoadOptions = {}
     ): Promise<void> {
-        const pending = parseRPackageList(packages).filter((packageName) => {
-            return !bindings.loadedPackages.has(packageName);
-        });
+        const pending = parseRPackageList(packages);
 
         if (!pending.length) {
             return;
         }
 
         const activitiesByPackage = options.activitiesByPackage || new Map();
-
-        for (const packageName of pending) {
-            if (!activitiesByPackage.has(packageName)) {
-                activitiesByPackage.set(
-                    packageName,
-                    bindings.createActivity(createRLibraryLoadCommand(packageName))
-                );
-            }
-        }
 
         const manageRuntimeBusy = options.manageRuntimeBusy !== false;
 
@@ -161,14 +151,18 @@ export const createWebRRuntimePackageAdapter = function(
             }
 
             for (const packageName of pending) {
-                const activity = activitiesByPackage.get(packageName);
-
                 if (status.attached.includes(packageName)) {
                     bindings.loadedPackages.add(packageName);
-                    if (activity?.id) {
-                        bindings.finishActivity(activity.id, "idle");
-                    }
                     continue;
+                }
+
+                let activity = activitiesByPackage.get(packageName);
+
+                if (!activity) {
+                    activity = bindings.createActivity(
+                        createRLibraryLoadCommand(packageName)
+                    );
+                    activitiesByPackage.set(packageName, activity);
                 }
 
                 const result = await bindings.executeVisibleCommand(
@@ -217,6 +211,7 @@ export const createWebRRuntimePackageAdapter = function(
         packageNames.forEach((packageName) => {
             bindings.loadedPackages.delete(packageName);
         });
+        verifiedRequirementSets.clear();
     };
 
     const ensureRequirements = async function(
@@ -231,20 +226,26 @@ export const createWebRRuntimePackageAdapter = function(
             return;
         }
 
-        const compatibility = resolveRPackageCompatibility(
-            requirements,
-            parseRPackageVersions(
-                await bindings.evaluateHiddenText(
-                    createRPackageVersionsCommand(requirements)
-                )
-            )
-        );
+        const requirementKey = JSON.stringify(requirements);
 
-        if (!compatibility.compatible) {
-            throw new Error([
-                "Package update required",
-                createRPackageCompatibilityMessage(compatibility)
-            ].join("\n"));
+        if (!verifiedRequirementSets.has(requirementKey)) {
+            const compatibility = resolveRPackageCompatibility(
+                requirements,
+                parseRPackageVersions(
+                    await bindings.evaluateHiddenText(
+                        createRPackageVersionsCommand(requirements)
+                    )
+                )
+            );
+
+            if (!compatibility.compatible) {
+                throw new Error([
+                    "Package update required",
+                    createRPackageCompatibilityMessage(compatibility)
+                ].join("\n"));
+            }
+
+            verifiedRequirementSets.add(requirementKey);
         }
 
         await loadPackages(

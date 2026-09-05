@@ -195,7 +195,11 @@ export const createBrowserWebRSession = function(
                 .executeVisibleCommandWithEffects(request);
 
             bindings.visibleCommands.recordTranscriptEvents(
-                result.transcriptEvents
+                options.preRecorded
+                    ? result.transcriptEvents.filter((event) => {
+                        return event.type !== "submitted";
+                    })
+                    : result.transcriptEvents
             );
 
             if (workspaceUpdateHasChanges(result.workspaceUpdate)) {

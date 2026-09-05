@@ -4292,7 +4292,10 @@ const postSharedDialogCreatedEvent = async function (frame, dialogId, dialogPayl
         let payload = dialogPayload;
 
         try {
-            if (state.workspaceMetadataRefreshPromise) {
+            if (
+                state.workspaceMetadataRefreshPromise
+                && !state.workspaceMetadataReady
+            ) {
                 await state.workspaceMetadataRefreshPromise;
             }
             else if (state.runtimeReady && !state.workspaceMetadataReady) {
