@@ -4,6 +4,7 @@ const childProcess = require("child_process");
 const esbuild = require("esbuild");
 const fs = require("fs");
 const path = require("path");
+const { createHash } = require("crypto");
 
 const rootDir = path.resolve(__dirname, "..");
 const sourceRoot = path.resolve(process.env.DIALOGFORGE_SOURCE_ROOT || rootDir);
@@ -22,6 +23,55 @@ childProcess.execFileSync(process.execPath, [
 });
 
 const browserModuleOutput = path.join(outputRoot, "browser-esm");
+
+// Keep the shared renderer and preload bridge together. Loading their source
+// module graph over HTTP adds a network round trip at every dependency level.
+// The product extension must still initialize before the renderer starts.
+esbuild.buildSync({
+    stdin: {
+        contents: [
+            "await import('./src/shell-web/browserPreloadBridge');",
+            "await import('/api/product-dialog-runtime.js');",
+            "await import('./src/dialog-runtime/renderer/modules/dialogBuilderInterface');"
+        ].join("\n"),
+        resolveDir: sourceRoot,
+        sourcefile: "dialogBuilderBrowser.js"
+    },
+    outfile: path.join(browserModuleOutput, "dialogBuilder.js"),
+    bundle: true,
+    format: "esm",
+    platform: "browser",
+    target: "es2022",
+    external: ["/api/product-dialog-runtime.js"]
+});
+
+const dialogBundle = fs.readFileSync(
+    path.join(browserModuleOutput, "dialogBuilder.js")
+);
+const dialogBundleHash = createHash("sha256")
+    .update(dialogBundle)
+    .digest("hex")
+    .slice(0, 16);
+const dialogBundleName = `dialogBuilder-${dialogBundleHash}.js`;
+
+fs.writeFileSync(path.join(browserModuleOutput, dialogBundleName), dialogBundle);
+
+// Preload the versioned resource in the shell so each dialog iframe can reuse
+// it from the HTTP cache. A new build gets a new URL when its code changes.
+for (const relativePath of [
+    "src/base-app/pages/dialogBuilder.html",
+    "src/shell-web/pages/shell.html"
+]) {
+    const source = fs.readFileSync(path.join(sourceRoot, relativePath), "utf8");
+    const outputPath = path.join(outputRoot, relativePath);
+
+    fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+    fs.writeFileSync(outputPath, source.replaceAll(
+        "/browser-esm/dialogBuilder.js",
+        `/browser-esm/${dialogBundleName}`
+    ));
+}
+
 const browserReferenceRoots = [
     path.join(sourceRoot, "src", "shell-web", "pages"),
     path.join(sourceRoot, "src", "base-app", "pages")

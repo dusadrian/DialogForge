@@ -1417,7 +1417,14 @@ const createWebProductDevServer = function(options) {
             }
 
             if (pathname.startsWith("/browser-esm/")) {
-                serveFile(response, resolveSafeFile(rootDir, pathname));
+                const headers = /^\/browser-esm\/dialogBuilder-[a-f0-9]{16}\.js$/.test(pathname)
+                    ? {
+                        "Cache-Control": "public, max-age=31536000, immutable",
+                        "Pragma": null
+                    }
+                    : {};
+
+                serveFile(response, resolveSafeFile(rootDir, pathname), headers);
                 return;
             }
 

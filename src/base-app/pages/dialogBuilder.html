@@ -4,6 +4,19 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <script>
+      if (typeof require !== 'function') {
+        for (const href of [
+          '/browser-esm/dialogBuilder.js',
+          '/api/product-dialog-runtime.js'
+        ]) {
+          const preload = document.createElement('link');
+          preload.rel = 'modulepreload';
+          preload.href = href;
+          document.head.appendChild(preload);
+        }
+      }
+    </script>
     <link rel="stylesheet" type="text/css" href="./dialogBuilder.css">
     <link rel="stylesheet" href="./shared/dmSelect.css">
     <link rel="stylesheet" href="./shared/appCodicon.css">
@@ -35,22 +48,9 @@
     <script>
       (function () {
         if (typeof require !== 'function') {
-          const importMap = document.createElement('script');
-          importMap.type = 'importmap';
-          importMap.textContent = JSON.stringify({
-            imports: {
-              sortablejs: '/vendor/sortablejs/sortable.esm.js'
-            }
-          });
-          document.head.appendChild(importMap);
-
           const script = document.createElement('script');
           script.type = 'module';
-          script.textContent = [
-            "await import('/browser-esm/src/shell-web/browserPreloadBridge.js');",
-            "await import('/api/product-dialog-runtime.js');",
-            "await import('/browser-esm/src/dialog-runtime/renderer/modules/dialogBuilderInterface.js');"
-          ].join('\n');
+          script.src = '/browser-esm/dialogBuilder.js';
           document.body.appendChild(script);
           return;
         }
