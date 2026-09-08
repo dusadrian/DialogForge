@@ -30,6 +30,7 @@ const browserModuleOutput = path.join(outputRoot, "browser-esm");
 esbuild.buildSync({
     stdin: {
         contents: [
+            "import './src/base-app/pages/shared/plotViewportInteractions.js';",
             "await import('./src/shell-web/browserPreloadBridge');",
             "await import('/api/product-dialog-runtime.js');",
             "await import('./src/dialog-runtime/renderer/modules/dialogBuilderInterface');"
@@ -56,6 +57,40 @@ const dialogBundleName = `dialogBuilder-${dialogBundleHash}.js`;
 
 fs.writeFileSync(path.join(browserModuleOutput, dialogBundleName), dialogBundle);
 
+esbuild.buildSync({
+    stdin: {
+        contents: [
+            "@import './src/base-app/pages/dialogBuilder.css';",
+            "@import './src/base-app/pages/shared/dmSelect.css';",
+            "@import './src/base-app/pages/shared/appCodicon.css';"
+        ].join("\n"),
+        loader: "css",
+        resolveDir: sourceRoot,
+        sourcefile: "dialogBuilderBrowser.css"
+    },
+    outfile: path.join(browserModuleOutput, "dialogBuilder.css"),
+    bundle: true,
+    assetNames: "dialog-assets/[name]-[hash]",
+    loader: {
+        ".svg": "file",
+        ".ttf": "file"
+    }
+});
+
+const dialogStylesheet = fs.readFileSync(
+    path.join(browserModuleOutput, "dialogBuilder.css")
+);
+const dialogStylesheetHash = createHash("sha256")
+    .update(dialogStylesheet)
+    .digest("hex")
+    .slice(0, 16);
+const dialogStylesheetName = `dialogBuilder-${dialogStylesheetHash}.css`;
+
+fs.writeFileSync(
+    path.join(browserModuleOutput, dialogStylesheetName),
+    dialogStylesheet
+);
+
 // Preload the versioned resource in the shell so each dialog iframe can reuse
 // it from the HTTP cache. A new build gets a new URL when its code changes.
 for (const relativePath of [
@@ -66,10 +101,18 @@ for (const relativePath of [
     const outputPath = path.join(outputRoot, relativePath);
 
     fs.mkdirSync(path.dirname(outputPath), { recursive: true });
-    fs.writeFileSync(outputPath, source.replaceAll(
-        "/browser-esm/dialogBuilder.js",
-        `/browser-esm/${dialogBundleName}`
-    ));
+    fs.writeFileSync(
+        outputPath,
+        source
+            .replaceAll(
+                "/browser-esm/dialogBuilder.js",
+                `/browser-esm/${dialogBundleName}`
+            )
+            .replaceAll(
+                "/browser-esm/dialogBuilder.css",
+                `/browser-esm/${dialogStylesheetName}`
+            )
+    );
 }
 
 const browserReferenceRoots = [

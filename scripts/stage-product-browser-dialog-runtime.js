@@ -2,6 +2,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const { createHash } = require("crypto");
 const esbuild = require("esbuild");
 
 
@@ -150,6 +151,31 @@ const stageProductBrowserDialogRuntime = function(options) {
         fallbackSource: "export default {};\n",
         coreSdkEntryPath
     });
+
+    const productRuntime = fs.readFileSync(outputPath);
+    const productRuntimeHash = createHash("sha256")
+        .update(productRuntime)
+        .digest("hex")
+        .slice(0, 16);
+    const productRuntimeName = `customJSRuntime-${productRuntimeHash}.js`;
+
+    fs.writeFileSync(
+        path.join(path.dirname(outputPath), productRuntimeName),
+        productRuntime
+    );
+
+    for (const relativePath of [
+        "src/base-app/pages/dialogBuilder.html",
+        "src/shell-web/pages/shell.html"
+    ]) {
+        const htmlPath = path.join(options.outputDir, relativePath);
+        const html = fs.readFileSync(htmlPath, "utf8");
+
+        fs.writeFileSync(htmlPath, html.replaceAll(
+            "/api/product-dialog-runtime.js",
+            `/browser-product/dialogs/${productRuntimeName}`
+        ));
+    }
     buildBrowserModule({
         sourcePath: path.join(
             options.productPath,

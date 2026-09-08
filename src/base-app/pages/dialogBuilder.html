@@ -8,18 +8,18 @@
       if (typeof require !== 'function') {
         for (const href of [
           '/browser-esm/dialogBuilder.js',
+          '/browser-esm/dialogBuilder.css',
           '/api/product-dialog-runtime.js'
         ]) {
           const preload = document.createElement('link');
-          preload.rel = 'modulepreload';
+          preload.rel = href.endsWith('.css') ? 'preload' : 'modulepreload';
+          if (href.endsWith('.css')) preload.as = 'style';
           preload.href = href;
           document.head.appendChild(preload);
         }
       }
     </script>
-    <link rel="stylesheet" type="text/css" href="./dialogBuilder.css">
-    <link rel="stylesheet" href="./shared/dmSelect.css">
-    <link rel="stylesheet" href="./shared/appCodicon.css">
+    <link rel="stylesheet" href="/browser-esm/dialogBuilder.css">
 </head>
 <body>
     <div id="paper"></div>
@@ -44,7 +44,6 @@
         <span class="codicon codicon-insert" aria-hidden="true"></span>
       </button>
     </div>
-    <script src="./shared/plotViewportInteractions.js"></script>
     <script>
       (function () {
         if (typeof require !== 'function') {

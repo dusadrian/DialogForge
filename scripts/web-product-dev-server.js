@@ -1411,13 +1411,27 @@ const createWebProductDevServer = function(options) {
                 return;
             }
 
+            if (
+                /^\/browser-product\/dialogs\/customJSRuntime-[a-f0-9]{16}\.js$/.test(pathname)
+            ) {
+                serveFile(response, resolveSafeFile(rootDir, pathname), {
+                    "Cache-Control": "public, max-age=31536000, immutable",
+                    "Pragma": null
+                });
+                return;
+            }
+
             if (pathname.startsWith("/tests/fixtures/")) {
                 serveFile(response, resolveSafeFile(sourceRoot, pathname));
                 return;
             }
 
             if (pathname.startsWith("/browser-esm/")) {
-                const headers = /^\/browser-esm\/dialogBuilder-[a-f0-9]{16}\.js$/.test(pathname)
+                const hasVersionedName = (
+                    /^\/browser-esm\/dialogBuilder-[a-f0-9]{16}\.(?:css|js)$/.test(pathname)
+                    || pathname.startsWith("/browser-esm/dialog-assets/")
+                );
+                const headers = hasVersionedName
                     ? {
                         "Cache-Control": "public, max-age=31536000, immutable",
                         "Pragma": null
