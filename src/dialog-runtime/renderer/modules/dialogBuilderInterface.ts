@@ -6,6 +6,7 @@ import { dialogRuntimeEventChannels } from "../../dialogRuntimeIpc";
 
 const runtime = createDialogRuntime();
 let pendingWorkspacePollTimer: number | null = null;
+let preparedDialogId = "";
 
 const asRecord = function(value: unknown): Record<string, unknown> {
     return value && typeof value === "object" && !Array.isArray(value)
@@ -36,17 +37,39 @@ coms.on(dialogRuntimeEventChannels.created, async (value: unknown) => {
         throw new Error("Dialog payload does not contain a normalized runtime schema.");
     }
 
-    const build = runtime.build(String(args.dialogID || ""), data);
+    const dialogId = String(args.dialogID || "");
+    const prepareOnly = args.prepareOnly === true;
+
+    if (prepareOnly) {
+        await runtime.build(dialogId, data, true);
+        preparedDialogId = dialogId;
+        await document.fonts.ready;
+        coms.sendTo("main", dialogRuntimeEventChannels.created, {
+            name: dialogId,
+            prepared: true
+        });
+        return;
+    }
+
+    const wasPrepared = preparedDialogId === dialogId;
+    preparedDialogId = "";
+    const build = wasPrepared
+        ? runtime.activatePrepared()
+        : runtime.build(dialogId, data);
 
     if (args.workspaceData && typeof args.workspaceData === "object") {
         runtime.incommingDataFromR(asRecord(args.workspaceData));
     }
 
-    if (args.lastState) {
+    if (args.lastState && !wasPrepared) {
         runtime.restoreDialogState(asDialogState(args.lastState));
     }
 
     await build;
+
+    if (args.lastState && wasPrepared) {
+        runtime.restoreDialogState(asDialogState(args.lastState));
+    }
 
     coms.sendTo("main", dialogRuntimeEventChannels.created, {
         name: String(args.dialogID || ""),

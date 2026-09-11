@@ -32,6 +32,7 @@ const webRStartupProgressStages: Record<string, WebRStartupProgressStage> = {
     "Running application startup tasks...": { start: 94, end: 96 },
     "Reading WebR workspace...": { start: 96, end: 98 },
     "Loading launch dataset...": { start: 98, end: 99 },
+    "Preparing dialogs...": { start: 99, end: 99 },
     "WebR ready": { start: 100, end: 100 }
 };
 

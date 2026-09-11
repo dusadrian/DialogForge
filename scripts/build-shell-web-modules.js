@@ -277,9 +277,9 @@ const sharedDialogContainerSource = fs.readFileSync(
 
 requireSourceContract(browserShellSource, [
     "createRuntimeDialogDatasetResolver(manager)",
-    "readDialogContentSizeFromSource(dialogPayload)",
+    "readDialogContentSizeFromSource(entry.payload)",
     "state.dialogPayloads.get(frame)",
-    "state.dialogPayloads.set(result.frame, dialogPayload)",
+    "state.dialogPayloads.set(entry.surface.frame, entry.payload)",
     "createDatasetEditorWarmCache(manager)"
 ], "Browser dialogs and the Data Editor must reuse shared prepared data:");
 

@@ -134,6 +134,7 @@ export interface BrowserPreloadChannelBridgeOptions {
     openScriptEditorWithCode(code: string): Promise<void>;
     appendMessage(text: string, className?: string): void;
     clearDialogOpeningCover(name: string): void;
+    handleDialogPrepared?(name: string, sourceWindow: Window | null): void;
     handleDialogBrowserReady(sourceWindow: Window | null): Promise<void>;
     updateScriptDirtyState(input: Record<string, unknown>): void;
     handleScriptBrowserReady(): void;
@@ -489,6 +490,10 @@ export const createBrowserPreloadChannelBridge = function(
             }
 
             if (channel === dialogRuntimeEventChannels.created) {
+                if (input.prepared === true) {
+                    options.handleDialogPrepared?.(String(input.name || ""), sourceWindow);
+                    return;
+                }
                 options.clearDialogOpeningCover(String(input.name || ""));
                 return;
             }
