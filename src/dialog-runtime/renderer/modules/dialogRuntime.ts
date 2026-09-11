@@ -227,6 +227,7 @@ export function createDialogRuntime() {
     runtime,
     parseDependencies,
     resetEventHandlers: function(): void {
+      customJSRuntime.reset(runtime);
       try {
         runtime.events.removeAllListeners();
         runtimeEvents.register();
@@ -244,9 +245,14 @@ export function createDialogRuntime() {
   return {
     build(
       dialogID: string,
-      dialogSpec: RuntimeDialogSchema
+      dialogSpec: RuntimeDialogSchema,
+      prepareOnly = false
     ): Promise<void> {
-      return runtimeBuildController.build(dialogID, dialogSpec);
+      return runtimeBuildController.build(dialogID, dialogSpec, prepareOnly);
+    },
+
+    activatePrepared(): Promise<void> {
+      return runtimeBuildController.activatePrepared();
     },
 
     changeDialogState(data: Record<string, Record<string, unknown>>, saveCurrent: boolean) {

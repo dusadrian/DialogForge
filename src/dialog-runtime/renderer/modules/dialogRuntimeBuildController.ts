@@ -91,11 +91,13 @@ export function createDialogRuntimeBuildController(options: DialogRuntimeBuildCo
   } = options;
 
   let canvasResize: DialogCanvasResizeController | null = null;
+  let preparedDialog: RuntimeDialogSchema | null = null;
 
   return {
     async build(
       dialogID: string,
-      dialogSpec: RuntimeDialogSchema
+      dialogSpec: RuntimeDialogSchema,
+      prepareOnly = false
     ): Promise<void> {
       resetEventHandlers();
 
@@ -148,8 +150,21 @@ export function createDialogRuntimeBuildController(options: DialogRuntimeBuildCo
       }
 
       runtime.makeCommand();
+      preparedDialog = prepareOnly ? dialogSpec : null;
+      if (prepareOnly) {
+        return;
+      }
       await setupCustomJS(dialogSpec, runtime);
       root.focus({ preventScroll: true });
+    },
+    async activatePrepared(): Promise<void> {
+      const dialogSpec = preparedDialog;
+      preparedDialog = null;
+
+      if (dialogSpec) {
+        await setupCustomJS(dialogSpec, runtime);
+        root.focus({ preventScroll: true });
+      }
     }
   };
 }

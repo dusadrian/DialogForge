@@ -20,6 +20,8 @@ export interface BrowserFrameSurfaceDefinition {
     width: number;
     height: number;
     hidden?: boolean;
+    prepared?: boolean;
+    retainOnClose?: boolean;
     role?: string;
     ariaModal?: boolean;
     frameTitle?: string;
@@ -61,6 +63,7 @@ export interface BrowserFrameSurfaceControllerOptions {
 export interface BrowserFrameSurfaceController {
     open(definition: BrowserFrameSurfaceDefinition): BrowserFrameSurfaceResult;
     close(id: string): void;
+    show(id: string): void;
     get(id: string): BrowserFrameSurfaceResult | null;
 }
 
@@ -79,6 +82,7 @@ export interface BrowserModelessSurfaceController {
 
 
 interface StoredSurface extends BrowserFrameSurfaceResult {
+    retainOnClose?: boolean;
     onClose?: () => void;
     activateFromFrame?: () => void;
     installFrameActivation?: () => void;
@@ -116,6 +120,9 @@ const applySurfaceDefinition = function(
     );
     stored.layer.dataset.surfaceId = definition.id;
     stored.layer.style.display = hidden ? "none" : "";
+    stored.layer.style.visibility = definition.prepared ? "hidden" : "";
+    stored.layer.inert = definition.prepared === true;
+    stored.retainOnClose = definition.retainOnClose;
 
     stored.shell.className = joinClasses(
         definition.shellClass,
@@ -261,14 +268,21 @@ export const createBrowserFrameSurfaceController = function(
     const surfaces = createAuxiliarySurfaceRegistry<StoredSurface>();
 
     const close = function(id: string): void {
-        const stored = surfaces.delete(id);
+        const stored = surfaces.get(id);
 
         if (!stored) {
             return;
         }
 
-        stored.frameActivationCleanup?.();
-        stored.layer.remove();
+        if (stored.retainOnClose) {
+            stored.layer.style.visibility = "hidden";
+            stored.layer.inert = true;
+        }
+        else {
+            surfaces.delete(id);
+            stored.frameActivationCleanup?.();
+            stored.layer.remove();
+        }
         stored.onClose?.();
     };
 
@@ -284,7 +298,7 @@ export const createBrowserFrameSurfaceController = function(
 
         if (existing) {
             applySurfaceDefinition(existing, definition);
-            if (shouldActivateAuxiliarySurface(definition)) {
+            if (!definition.prepared && shouldActivateAuxiliarySurface(definition)) {
                 definition.onActivate?.(existing.layer);
                 existing.frame.focus();
             }
@@ -345,7 +359,7 @@ export const createBrowserFrameSurfaceController = function(
         });
         options.installResizable?.(shell, [rightHandle, bottomHandle, cornerHandle]);
 
-        if (shouldActivateAuxiliarySurface(definition)) {
+        if (!definition.prepared && shouldActivateAuxiliarySurface(definition)) {
             definition.onActivate?.(layer);
             frame.focus();
         }
@@ -356,6 +370,15 @@ export const createBrowserFrameSurfaceController = function(
     return {
         open,
         close,
+        show: function(id: string): void {
+            const stored = surfaces.get(id);
+
+            if (stored) {
+                stored.layer.style.visibility = "";
+                stored.layer.inert = false;
+                stored.frame.focus();
+            }
+        },
         get: function(id: string): BrowserFrameSurfaceResult | null {
             const stored = surfaces.get(id);
 

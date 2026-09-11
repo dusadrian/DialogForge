@@ -29,6 +29,7 @@ interface ProfileCustomJSGlobal {
 }
 
 const registeredProfileCustomJSModules = new Set<ProfileCustomJSModule>();
+const activeDatasetListeners = new WeakMap<object, ((payload: unknown) => void) | null>();
 
 export const registerProfileCustomJSModule = function(
   module: ProfileCustomJSModule | null | undefined
@@ -85,6 +86,11 @@ const extendApiFromProfile = async (
 };
 
 const customJSRuntime = {
+    reset(objects: object): void {
+        if (activeDatasetListeners.has(objects)) {
+            activeDatasetListeners.set(objects, null);
+        }
+    },
   async setup(
     dialogSpec: DialogScriptValue,
     objects: DialogScriptValue,
@@ -1849,7 +1855,13 @@ const customJSRuntime = {
     });
 
     try {
-      coms.on('activeDataset:changed', (payload: DialogScriptValue) => {
+      if (!activeDatasetListeners.has(objects)) {
+        activeDatasetListeners.set(objects, null);
+        coms.on('activeDataset:changed', (payload: unknown) => {
+          activeDatasetListeners.get(objects)?.(payload);
+        });
+      }
+      activeDatasetListeners.set(objects, (payload: unknown) => {
         const next = setCachedActiveDataset(payload && typeof payload === 'object'
           ? (payload as Record<string, unknown>).name
           : payload);

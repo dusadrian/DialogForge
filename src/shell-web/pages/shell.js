@@ -318,6 +318,7 @@ const state = {
     dialogOpeningActivityId: "",
     dialogWorkspaceDataPromises: new WeakMap(),
     dialogPayloads: new WeakMap(),
+    preparedDialogs: new Map(),
     dialogSessionController: null,
     workspaceMetadataRefreshPromise: null,
     workspaceMetadataReady: false,
@@ -877,10 +878,18 @@ const browserPreloadChannelBridge = createBrowserPreloadChannelBridge({
 
         const dialogId = String(input?.name || "").trim();
 
+        if (state.preparedDialogs.get(dialogId)?.surface?.layer.inert) {
+            return;
+        }
+
         browserDialogSessions().updateState(dialogId, input?.changes);
     },
     handleDialogCommandUpdate: async function (text, sourceWindow) {
         const dialogId = readBrowserDialogIdForSourceWindow(sourceWindow);
+
+        if (state.preparedDialogs.get(dialogId)?.surface?.layer.inert) {
+            return;
+        }
 
         browserDialogSessions().updateCommand(dialogId, text);
     },
@@ -899,12 +908,27 @@ const browserPreloadChannelBridge = createBrowserPreloadChannelBridge({
     clearDialogOpeningCover: function (dialogId = "") {
         clearDialogOpeningCover(dialogId);
     },
+    handleDialogPrepared(dialogId, sourceWindow) {
+        const entry = state.preparedDialogs.get(dialogId);
+
+        if (entry?.surface?.frame.contentWindow === sourceWindow) {
+            entry.prepared = true;
+            entry.resolvePrepared?.();
+        }
+    },
     async handleDialogBrowserReady(sourceWindow) {
         const frames = Array.from(document.querySelectorAll(".dialogforge-web-dialog__frame"));
         const frame = frames.find((candidate) => candidate.contentWindow === sourceWindow);
         const dialogId = frame?.closest(".dialogforge-web-dialog-layer")?.dataset.dialogId || "";
 
         browserZoomAdapter.postToWindow(sourceWindow);
+        const entry = state.preparedDialogs.get(dialogId);
+
+        if (entry) {
+            prepareBrowserDialogControls(entry);
+            entry.resolveFrameReady();
+            return;
+        }
         await postSharedDialogCreatedEvent(
             frame,
             dialogId,
@@ -1268,6 +1292,9 @@ const browserDialogExternalCallHost = function () {
 
 const notifyBrowserDialogsWorkspaceChanged = function () {
     document.querySelectorAll(".dialogforge-web-dialog__frame").forEach((frame) => {
+        if (frame.closest(".dialogforge-web-dialog-layer")?.inert) {
+            return;
+        }
         frame.contentWindow?.postMessage({
             source: "dialogforge.web-host",
             kind: "event",
@@ -1373,6 +1400,9 @@ const refreshBrowserConsoleStateChips = function (dataset = state.activeDatasetN
 
 const notifyBrowserDialogsStateChanged = function (dataset = state.activeDatasetName) {
     document.querySelectorAll(".dialogforge-web-dialog__frame").forEach((frame) => {
+        if (frame.closest(".dialogforge-web-dialog-layer")?.inert) {
+            return;
+        }
         frame.contentWindow?.postMessage({
             source: "dialogforge.web-host",
             kind: "event",
@@ -3482,6 +3512,8 @@ const ensureRuntime = async function () {
             setRuntimeStatus("Loading launch dataset...");
         }
         await loadMoodleLaunchDataset(runtime);
+        setRuntimeStatus("Preparing dialogs...");
+        await prepareBrowserDialogs();
         setRuntimeStatus("WebR ready");
         prewarmPlotInfrastructure(runtime);
         void cleanupWebRDefaultPlotFile(runtime);
@@ -3870,6 +3902,7 @@ const stopWebRRuntime = async function (message) {
     state.runtimeReady = false;
     state.runtimeStarting = false;
     state.loadedRuntimePackages.clear();
+    state.runtimePackageAdapter = null;
     state.runtimeSession = null;
     state.runtimeSessionRuntime = null;
     state.runtimeControlClient?.detach?.();
@@ -4115,7 +4148,7 @@ const closeDialogLayerForMessage = function (message, sourceWindow) {
 
     if (
         (surfaceId && state.commandPreviewDialogId === surfaceId)
-        || !document.querySelector(".dialogforge-web-dialog-layer[data-dialog-id]")
+        || !document.querySelector(".dialogforge-web-dialog-layer[data-dialog-id]:not([inert])")
     ) {
         updateCommandPane("").catch((error) => {
             appendTranscript(error instanceof Error ? error.message : String(error), "web-transcript__line--stderr");
@@ -4318,23 +4351,7 @@ const postSharedDialogCreatedEvent = async function (frame, dialogId, dialogPayl
             }
 
             const workspaceData = readBrowserDialogWorkspaceData();
-            const dialogSource = Object.assign({}, payload.source || {});
-            const dialogProperties = Object.assign(
-                {},
-                dialogSource.properties || {}
-            );
-            const packageRequirements = Array.isArray(
-                payload.runtimeRequirements?.rPackages
-            )
-                ? payload.runtimeRequirements.rPackages
-                : [];
-
-            dialogProperties.rPackageRequirements = packageRequirements;
-            dialogSource.properties = dialogProperties;
-
-            if (payload.actions && !dialogSource.customJS) {
-                dialogSource.customJS = String(payload.actions || "");
-            }
+            const dialogSource = readBrowserDialogSource(payload);
 
             postBrowserPreloadEvent(frame.contentWindow, dialogRuntimeEventChannels.created, {
                 dialogID: cleanId,
@@ -4583,23 +4600,162 @@ const ensureDialogRuntimePackages = function (dialogPayload) {
     return browserRuntimePackages().ensureDialogPackages(dialogPayload);
 };
 
-const openDialog = async function (dialog) {
-    showDialogOpeningCover(dialog);
+const readBrowserDialogSource = function (payload) {
+    const source = Object.assign({}, payload.source || {});
+    source.properties = Object.assign({}, source.properties || {}, {
+        rPackageRequirements: payload.runtimeRequirements?.rPackages || []
+    });
 
-    let dialogPayload;
-    let contentSize;
+    if (payload.actions && !source.customJS) {
+        source.customJS = String(payload.actions);
+    }
 
-    try {
+    return source;
+};
+
+const prepareBrowserDialogControls = function (entry) {
+    entry.prepared = false;
+    entry.surface.layer.dataset.dialogPrepared = "false";
+    entry.controlsReady = new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => {
+            reject(new Error(`Dialog preparation timed out: ${entry.dialog.id}`));
+        }, 30000);
+        entry.resolvePrepared = function () {
+            clearTimeout(timeout);
+            entry.surface.layer.dataset.dialogPrepared = "true";
+            resolve();
+        };
+    });
+    // Closing prepares the controls again without running dataset bindings.
+    // Keep failures observable even when nobody is currently opening the dialog.
+    entry.controlsReady.catch((error) => console.error(error));
+    state.dialogWorkspaceDataPromises.delete(entry.surface.frame);
+    postBrowserPreloadEvent(entry.surface.frame.contentWindow, dialogRuntimeEventChannels.created, {
+        dialogID: entry.dialog.id,
+        data: readBrowserDialogSource(entry.payload),
+        prepareOnly: true
+    });
+};
+
+const prepareBrowserDialog = function (dialog) {
+    const existing = state.preparedDialogs.get(dialog.id);
+
+    if (existing) {
+        return existing.loading;
+    }
+
+    const entry = { dialog, prepared: false };
+    entry.frameReady = new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => {
+            reject(new Error(`Dialog renderer did not start: ${dialog.id}`));
+        }, 30000);
+        entry.resolveFrameReady = function () {
+            clearTimeout(timeout);
+            resolve();
+        };
+    });
+    entry.frameReady.catch((error) => console.error(error));
+    state.preparedDialogs.set(dialog.id, entry);
+    entry.loading = (async function () {
         const response = await fetch(`/api/dialog/${encodeURIComponent(dialog.id)}`);
-
         if (!response.ok) {
             throw new Error(await response.text());
         }
 
-        dialogPayload = await response.json();
-        contentSize = readDialogContentSizeFromSource(dialogPayload);
+        entry.payload = await response.json();
+        const size = readDialogContentSizeFromSource(entry.payload);
+        entry.surface = browserFrameSurfaces().open({
+            id: dialog.id,
+            title: dialog.label || dialog.id,
+            src: `/src/base-app/pages/dialogBuilder.html?dialog=${encodeURIComponent(dialog.id)}`,
+            width: size.width,
+            height: size.height + 32,
+            prepared: true,
+            retainOnClose: true,
+            role: "dialog",
+            ariaModal: true,
+            storageKey: `dialog.${dialog.id}`,
+            onClose() {
+                const openCount = document.querySelectorAll(
+                    ".dialogforge-web-dialog-layer[data-dialog-id]:not([inert])"
+                ).length;
+                browserDialogSessions().closeWindow(dialog.id, openCount);
+                prepareBrowserDialogControls(entry);
+            },
+            onFrameLoad() {
+                browserZoomAdapter.postToWindow(entry.surface.frame.contentWindow);
+            }
+        });
+        entry.surface.layer.dataset.dialogId = dialog.id;
+        state.dialogPayloads.set(entry.surface.frame, entry.payload);
+        return entry;
+    })();
+    return entry.loading;
+};
 
-        await ensureDialogRuntimePackages(dialogPayload);
+const prepareBrowserDialogs = async function () {
+    const dialogs = [
+        ...(state.composition?.sharedDialogs || []),
+        ...(state.composition?.productDialogs || [])
+    ];
+    const preparations = await Promise.allSettled(dialogs.map(prepareBrowserDialog));
+
+    for (const preparation of preparations) {
+        if (preparation.status === "rejected") {
+            console.error(preparation.reason);
+            continue;
+        }
+
+        const entry = preparation.value;
+        try {
+            await ensureDialogRuntimePackages(entry.payload);
+            entry.packageError = null;
+        }
+        catch (error) {
+            entry.packageError = error;
+        }
+    }
+    const controls = preparations
+        .filter((result) => result.status === "fulfilled")
+        .map(async ({ value: entry }) => {
+            await entry.frameReady;
+            await entry.controlsReady;
+        });
+    const results = await Promise.allSettled(controls);
+
+    for (const result of results) {
+        if (result.status === "rejected") {
+            console.error(result.reason);
+        }
+    }
+};
+
+const openDialog = async function (dialog) {
+    try {
+        if (!state.runtimeReady || state.runtimeStarting) {
+            await (state.runtimeStartPromise || ensureRuntime());
+        }
+
+        const entry = await prepareBrowserDialog(dialog);
+        await entry.frameReady;
+        await entry.controlsReady;
+
+        if (entry.packageError) {
+            // A package may have been updated since startup.
+            await ensureDialogRuntimePackages(entry.payload);
+            entry.packageError = null;
+        }
+
+        if (!entry.surface.layer.inert) {
+            entry.surface.frame.focus();
+            return;
+        }
+
+        browserFrameSurfaces().show(dialog.id);
+        if (!state.workspaceMetadataReady) {
+            showDialogOpeningCover(dialog);
+        }
+        await postSharedDialogCreatedEvent(entry.surface.frame, dialog.id, entry.payload);
     }
     catch (error) {
         const message = error instanceof Error
@@ -4621,34 +4777,7 @@ const openDialog = async function (dialog) {
             message,
             "web-transcript__line--stderr"
         );
-        return;
     }
-
-    const result = browserFrameSurfaces().open({
-        id: dialog.id,
-        title: dialog.label || dialog.id,
-        src: `/src/base-app/pages/dialogBuilder.html?dialog=${encodeURIComponent(dialog.id)}`,
-        width: contentSize.width,
-        height: contentSize.height + 32,
-        role: "dialog",
-        ariaModal: true,
-        frameTitle: dialog.label || dialog.id,
-        storageKey: `dialog.${dialog.id}`,
-        onClose: function () {
-            const openDialogCount = document.querySelectorAll(
-                ".dialogforge-web-dialog-layer[data-dialog-id]"
-            ).length;
-
-            browserDialogSessions().closeWindow(dialog.id, openDialogCount);
-        },
-        onFrameLoad: function () {
-            browserZoomAdapter.postToWindow(result.frame.contentWindow);
-        }
-    });
-
-    result.layer.dataset.dialogId = dialog.id;
-    state.dialogPayloads.set(result.frame, dialogPayload);
-    result.frame.focus();
 };
 
 installBrowserShellEventBindings({
