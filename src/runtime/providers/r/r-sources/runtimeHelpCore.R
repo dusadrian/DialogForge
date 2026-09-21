@@ -11,18 +11,19 @@ help_files <- function(topic, package = NULL) {
 
     help <- tryCatch({
         if (is.null(package)) {
-            utils::help(
+            do.call(utils::help, list(
                 topic = topic,
                 help_type = "html",
                 try.all.packages = TRUE
-            )
+            ))
         }
         else {
-            utils::help(
+            # help() otherwise treats the symbol `package` as a package name.
+            do.call(utils::help, list(
                 topic = topic,
                 package = package,
                 help_type = "html"
-            )
+            ))
         }
     }, error = function(error) NULL)
 

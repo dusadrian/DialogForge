@@ -29,6 +29,7 @@ export interface WebRPackageLibraryPolicy {
 }
 
 export interface WebRPackageLibraryManifest {
+    contentHash?: string;
     available?: boolean;
     mountpoint?: string;
     recommendedPackages?: string[];
@@ -140,11 +141,15 @@ export const createWebRPackageLibraryCacheKey = function(
     manifest: WebRPackageLibraryManifest,
     metadata: unknown
 ): string {
-    return [
+    const parts = [
         String(manifest.metadataUrl || ""),
         String(manifest.dataUrl || ""),
         createWebRPackageLibraryMetadataHash(metadata)
-    ].join("|");
+    ];
+    if (manifest.contentHash) {
+        parts.unshift(manifest.contentHash);
+    }
+    return parts.join("|");
 };
 
 
