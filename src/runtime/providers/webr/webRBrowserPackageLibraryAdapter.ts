@@ -14,6 +14,8 @@ import type {
 } from "webr";
 
 export interface BrowserPackageLibraryManifest {
+    contentHash?: string;
+    deferred?: BrowserPackageLibraryManifest;
     available?: boolean;
     metadataUrl?: string;
     dataUrl?: string;

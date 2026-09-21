@@ -7,6 +7,7 @@ const path = require("path");
 const url = require("url");
 const zlib = require("zlib");
 const childProcess = require("child_process");
+const { readSplitLibraryManifest, downloadSplitLibrary } = require("./web-package-library-profiles");
 
 
 const productWebRLibraryAssets = [
@@ -483,6 +484,7 @@ const ensureProductWebRLibrary = async function(productPath) {
         touchDownloadedAsset(targetPath, releaseAsset);
     }
 
+    await downloadSplitLibrary(libraryDir, releaseAssets, downloadFile);
     return libraryDir;
 };
 
@@ -815,6 +817,13 @@ const createWebRPackageLibraryApiManifest = function(
     } = require(path.join(rootDir, "src/runtime/providers/webr/webRPackageLibraryPolicy"));
 
     const configuration = readProductWebRLibraryRelease(productPath);
+
+    if (available) {
+        const split = readSplitLibraryManifest(findProductWebRLibraryDir(productPath));
+        if (split) {
+            return { ...createAvailableWebRPackageLibraryManifest(configuration), ...split };
+        }
+    }
 
     return available
         ? createAvailableWebRPackageLibraryManifest(configuration)

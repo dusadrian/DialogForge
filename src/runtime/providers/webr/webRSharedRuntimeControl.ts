@@ -51,6 +51,7 @@ export interface WebRSharedRuntimeControlOptions {
     fetchSource(path: string): Promise<string>;
     fetchProductSource?(): Promise<string>;
     runRuntimeOperation<T>(action: () => Promise<T>): Promise<T>;
+    prepareRequest?(request: RRuntimeControlRequest): Promise<void>;
     graphicsReceived?(images: unknown[]): Promise<void> | void;
     promptReceived?(input: {
         parentId: string;
@@ -265,6 +266,7 @@ export const installWebRSharedRuntimeControl = async function(
                 const capturesGraphics = request.method === "execute_input"
                     && isRPlotCommand(String(request.params?.code || ""));
                 const text = await options.runRuntimeOperation(async function() {
+                    await options.prepareRequest?.(request);
                     if (interactive) {
                         return executeInteractiveRuntimeMethod(
                             options,

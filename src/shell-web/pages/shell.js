@@ -3306,6 +3306,8 @@ const renderComposition = function () {
     state.console?.toolbar?.render?.();
 };
 
+const deferredPackageLibraries = new WeakMap();
+
 const mountProductPackageLibrary = async function (runtime, preparation) {
     setRuntimeStatus("Mounting WebR package library...");
     const { manifest, prepared } = await preparation;
@@ -3322,6 +3324,22 @@ const mountProductPackageLibrary = async function (runtime, preparation) {
     }, prepared);
 
     window.dialogForgeWebRPackageLibraryMountSource = result.source || "";
+    if (manifest.deferred?.available) {
+        let loading = null;
+        deferredPackageLibraries.set(runtime, function () {
+            if (!loading) {
+                loading = mountBrowserProductPackageLibrary(runtime, manifest.deferred, {
+                    // Dialog/command activities already own their progress cover.
+                    setStatus() {},
+                    progressFromStage() { return 0; }
+                }).catch((error) => {
+                    loading = null;
+                    throw error;
+                });
+            }
+            return loading;
+        });
+    }
     setRuntimeStatus("Mounting WebR package library...");
 
     return result;
@@ -3466,6 +3484,26 @@ const ensureRuntime = async function () {
         setRuntimeStatus("Loading shared R runtime services...");
         state.runtimeControlClient = await installWebRSharedRuntimeControl({
             runtime,
+            async prepareRequest(request) {
+                // Background workspace polling and hidden dialog preparation
+                // remain startup-only. Evaluate requests include the package
+                // compatibility check performed on opening a dialog.
+                const method = request.method;
+                if (
+                    method === "execute_input"
+                    || (method === "evaluate_code" && !state.runtimeStarting)
+                    || method === "show_help_topic"
+                    || method === "search_help_topic"
+                    || method.startsWith("workspace.dataset_")
+                    || method === "workspace.import_file_preview"
+                    || method === "runtime.run_script_file"
+                    || method === "runtime.load_workspace_file"
+                    || method === "runtime.load_serialized_object"
+                    || method === "load_workspace"
+                ) {
+                    await deferredPackageLibraries.get(runtime)?.();
+                }
+            },
             runRuntimeOperation: function (action) {
                 return state.runtimeOperationQueue.run(action);
             },
