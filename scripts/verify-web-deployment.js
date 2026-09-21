@@ -133,6 +133,61 @@ const verifyComposition = function(result) {
 };
 
 
+// The shell requests WebR and Monaco under a content-stamped prefix so those
+// trees can be cached permanently. The unstamped /webr/ and /monaco/ paths
+// above still answer, so a build whose stamp and server disagree would break
+// every runtime asset while the checks above still pass. Verify the prefix the
+// shell actually asks for, and that it really is served as immutable.
+const verifyStampedRuntimeAssets = async function() {
+    const shell = await fetchEndpoint("/");
+    const bundlePath = shell.body
+        .toString("utf8")
+        .match(/\/browser-esm\/shell-[a-f0-9]{16}\.js/);
+
+    if (!bundlePath) {
+        throw new Error("/ did not reference a content-hashed shell bundle");
+    }
+
+    const bundle = await fetchEndpoint(bundlePath[0]);
+
+    assertOkEndpoint(bundle);
+
+    const stamped = bundle.body.toString("utf8").match(
+        /["'`](\/(?:webr|monaco)-[0-9a-f]{16})\//g
+    );
+
+    if (!stamped) {
+        throw new Error(
+            `${bundlePath[0]} does not request WebR or Monaco under a stamped prefix`
+        );
+    }
+
+    const prefixes = Array.from(new Set(stamped.map((entry) => {
+        return entry.slice(1, -1);
+    })));
+
+    for (const prefix of prefixes) {
+        const probe = prefix.startsWith("/webr-")
+            ? `${prefix}/webr.js`
+            : `${prefix}/vs/loader.js`;
+        const result = await fetchEndpoint(probe);
+
+        assertOkEndpoint(result);
+
+        const cacheControl = String(result.headers["cache-control"] || "");
+
+        if (!cacheControl.includes("immutable")) {
+            throw new Error(
+                `${probe} returned cache-control ${cacheControl || "<missing>"}; `
+                + "expected an immutable policy"
+            );
+        }
+
+        console.log(`OK ${probe} (immutable)`);
+    }
+};
+
+
 const verifyBrowserIsolation = async function() {
     const { chromium } = require("playwright");
     const browser = await chromium.launch();
@@ -171,6 +226,8 @@ const main = async function() {
 
         console.log(`OK ${endpoint}`);
     }
+
+    await verifyStampedRuntimeAssets();
 
     if (runBrowserCheck) {
         await verifyBrowserIsolation();

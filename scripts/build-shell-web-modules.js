@@ -24,6 +24,86 @@ childProcess.execFileSync(process.execPath, [
 
 const browserModuleOutput = path.join(outputRoot, "browser-esm");
 
+// The WebR runtime and Monaco are the two heaviest asset trees the browser
+// downloads, and they only change when their package changes. Serving them
+// under a prefix stamped with their own content lets them be cached
+// permanently: an unchanged tree keeps its cache across deployments, and any
+// change moves every URL at once so no client can hold a stale runtime.
+const listFilesRecursively = function(root) {
+    if (!fs.existsSync(root)) {
+        return [];
+    }
+
+    return fs.readdirSync(root, { withFileTypes: true }).flatMap(function(entry) {
+        const entryPath = path.join(root, entry.name);
+
+        return entry.isDirectory()
+            ? listFilesRecursively(entryPath)
+            : [entryPath];
+    });
+};
+
+// Mirrors findRuntimeDependencyRoot in the web product server: the staged copy
+// under the build output is what actually gets served when it exists.
+const findServedDependencyRoot = function(packageName, packageSubPath) {
+    const stagedRoot = path.join(
+        outputRoot,
+        "node_modules",
+        packageName,
+        packageSubPath
+    );
+
+    return fs.existsSync(stagedRoot)
+        ? stagedRoot
+        : path.join(sourceRoot, "node_modules", packageName, packageSubPath);
+};
+
+const stampedAssetTrees = {
+    webr: findServedDependencyRoot("webr", "dist"),
+    monaco: findServedDependencyRoot("monaco-editor", "min")
+};
+const assetStampDigest = createHash("sha256");
+
+Object.entries(stampedAssetTrees).forEach(function([name, root]) {
+    assetStampDigest.update(name);
+
+    listFilesRecursively(root).sort().forEach(function(filePath) {
+        assetStampDigest.update(path.relative(root, filePath));
+        assetStampDigest.update(fs.readFileSync(filePath));
+    });
+});
+
+const assetStamp = assetStampDigest.digest("hex").slice(0, 16);
+
+// Anchored to the opening quote so it only rewrites URLs, never the
+// src/runtime/providers/webr/ segment inside a module path. Only the
+// unstamped prefix matches, so rewriting is idempotent.
+const unstampedAssetUrl = /(["'`])\/(webr|monaco)\//g;
+const stampAssetUrls = function(source) {
+    return source.replaceAll(unstampedAssetUrl, `$1/$2-${assetStamp}/`);
+};
+
+// consoleSyntax.js holds every Monaco URL and is loaded unbundled by the
+// script editor frame as well as bundled into the shell, so the whole emitted
+// tree is stamped rather than just the bundles.
+listFilesRecursively(browserModuleOutput)
+    .filter(function(filePath) {
+        return filePath.endsWith(".js");
+    })
+    .forEach(function(filePath) {
+        const source = fs.readFileSync(filePath, "utf8");
+        const stamped = stampAssetUrls(source);
+
+        if (stamped !== source) {
+            fs.writeFileSync(filePath, stamped);
+        }
+    });
+
+fs.writeFileSync(
+    path.join(browserModuleOutput, "asset-stamp.json"),
+    `${JSON.stringify({ assetStamp }, null, 4)}\n`
+);
+
 // Keep the shared renderer and preload bridge together. Loading their source
 // module graph over HTTP adds a network round trip at every dependency level.
 // The product extension must still initialize before the renderer starts.
@@ -56,6 +136,110 @@ const dialogBundleHash = createHash("sha256")
 const dialogBundleName = `dialogBuilder-${dialogBundleHash}.js`;
 
 fs.writeFileSync(path.join(browserModuleOutput, dialogBundleName), dialogBundle);
+
+// The shell entry is the same problem one level up: it pulls 298 modules over
+// HTTP, seven import levels deep, and a level is only discovered once the
+// previous one has parsed. That is round trips, not bytes, so it hurts most on
+// exactly the slow connections we care about. Bundle it like the dialog
+// renderer above.
+//
+// shell.js is the only module that imports by served URL rather than by
+// relative path, so its own specifiers are rewritten to the emitted modules
+// and everything below it resolves on disk. /api/* is generated per product by
+// the web server and /webr/* resolves its own worker relative to itself, so
+// both stay URLs.
+const shellEntrySource = path.join(sourceRoot, "src/shell-web/pages/shell.js");
+const shellExternalModules = [
+    "/api/product-contribution.js",
+    `/webr-${assetStamp}/webr.js`
+];
+const shellEntryPath = path.join(browserModuleOutput, "shellEntry.generated.js");
+
+// Two Node-only modules hang off lazy require() calls the browser never
+// evaluates: it routes imports and dialog sources through its own adapters.
+// Unbundled, those requires were simply never reached. Bundled, esbuild has to
+// resolve their "fs" and "path" imports, so point them at stubs that keep the
+// same failure if a dead path is ever taken in a browser.
+const nodeStubs = {
+    fs: ["existsSync", "readFileSync"],
+    path: ["dirname", "isAbsolute", "join", "relative", "resolve"]
+};
+const nodeStubPaths = Object.fromEntries(
+    Object.entries(nodeStubs).map(function([moduleName, members]) {
+        const stubPath = path.join(
+            browserModuleOutput,
+            `node-${moduleName}-stub.generated.js`
+        );
+
+        fs.writeFileSync(stubPath, [
+            "const unavailable = function() {",
+            `    throw new Error("Node ${moduleName} is not available in the browser shell.");`,
+            "};",
+            "",
+            ...members.map(function(member) {
+                return `export const ${member} = unavailable;`;
+            }),
+            ...(moduleName === "path" ? ['export const sep = "/";'] : []),
+            `export default { ${members.join(", ")}${
+                moduleName === "path" ? ", sep" : ""
+            } };`,
+            ""
+        ].join("\n"));
+
+        return [moduleName, stubPath];
+    })
+);
+
+fs.writeFileSync(
+    shellEntryPath,
+    stampAssetUrls(fs.readFileSync(shellEntrySource, "utf8")).replaceAll(
+        /(["'])\/browser-esm\/([^"']+)\1/g,
+        function(match, quote, modulePath) {
+            const requested = modulePath.split(/[?#]/)[0];
+            const candidates = path.extname(requested)
+                ? [requested]
+                : [`${requested}.js`, path.join(requested, "index.js")];
+            const resolved = candidates.find(function(candidate) {
+                return fs.existsSync(path.join(browserModuleOutput, candidate));
+            });
+
+            if (!resolved) {
+                throw new Error(
+                    `shell.js imports a module that was not emitted: /browser-esm/${modulePath}`
+                );
+            }
+
+            return `${quote}./${resolved}${quote}`;
+        }
+    )
+);
+
+esbuild.buildSync({
+    entryPoints: [shellEntryPath],
+    outfile: path.join(browserModuleOutput, "shell.js"),
+    bundle: true,
+    format: "esm",
+    platform: "browser",
+    target: "es2022",
+    // preact stays on the page importmap so the shell and the dialog renderer
+    // keep sharing one copy.
+    external: ["preact", "preact/hooks", ...shellExternalModules],
+    alias: nodeStubPaths
+});
+
+fs.rmSync(shellEntryPath, { force: true });
+Object.values(nodeStubPaths).forEach(function(stubPath) {
+    fs.rmSync(stubPath, { force: true });
+});
+
+const shellBundle = fs.readFileSync(path.join(browserModuleOutput, "shell.js"));
+const shellBundleHash = createHash("sha256")
+    .update(shellBundle)
+    .digest("hex")
+    .slice(0, 16);
+const shellBundleName = `shell-${shellBundleHash}.js`;
+
+fs.writeFileSync(path.join(browserModuleOutput, shellBundleName), shellBundle);
 
 esbuild.buildSync({
     stdin: {
@@ -91,6 +275,38 @@ fs.writeFileSync(
     dialogStylesheet
 );
 
+// The shell's service worker keeps the heavy runtime in Cache Storage, which
+// persistent storage exempts from the automatic eviction the HTTP cache is
+// subject to. The UI build id updates the worker when bundles change; the
+// independent asset stamp keeps unchanged runtime files across those updates.
+const serviceWorkerBuildId = createHash("sha256")
+    .update([assetStamp, shellBundleName, dialogBundleName, dialogStylesheetName].join("\u0000"))
+    .digest("hex")
+    .slice(0, 16);
+const serviceWorkerSource = fs.readFileSync(
+    path.join(sourceRoot, "src/shell-web/serviceWorker.js"),
+    "utf8"
+);
+
+if (!serviceWorkerSource.includes("DIALOGFORGE_BUILD_ID")) {
+    throw new Error(
+        "src/shell-web/serviceWorker.js no longer carries the DIALOGFORGE_BUILD_ID placeholder."
+    );
+}
+
+if (!serviceWorkerSource.includes("DIALOGFORGE_RUNTIME_STAMP")) {
+    throw new Error(
+        "src/shell-web/serviceWorker.js no longer carries the DIALOGFORGE_RUNTIME_STAMP placeholder."
+    );
+}
+
+fs.writeFileSync(
+    path.join(outputRoot, "sw.js"),
+    serviceWorkerSource
+        .replaceAll("DIALOGFORGE_BUILD_ID", serviceWorkerBuildId)
+        .replaceAll("DIALOGFORGE_RUNTIME_STAMP", assetStamp)
+);
+
 // Preload the versioned resource in the shell so each dialog iframe can reuse
 // it from the HTTP cache. A new build gets a new URL when its code changes.
 for (const relativePath of [
@@ -111,6 +327,10 @@ for (const relativePath of [
             .replaceAll(
                 "/browser-esm/dialogBuilder.css",
                 `/browser-esm/${dialogStylesheetName}`
+            )
+            .replaceAll(
+                "/src/shell-web/pages/shell.js",
+                `/browser-esm/${shellBundleName}`
             )
     );
 }

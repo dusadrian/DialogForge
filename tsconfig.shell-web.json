@@ -46,6 +46,7 @@
         "src/shell-web/browserCompositionClient.ts",
         "src/base-app/i18n/localeDisplayName.ts",
         "src/shell-web/browserDataEditorSurface.ts",
+        "src/shell-web/browserDurableAssetCache.ts",
         "src/shell-web/browserDialogSurface.ts",
         "src/runtime/providers/webr/webRBrowserPackageLibraryAdapter.ts",
         "src/runtime/providers/webr/webRPackageLibraryPolicy.ts",

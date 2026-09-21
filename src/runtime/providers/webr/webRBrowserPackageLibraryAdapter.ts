@@ -27,6 +27,11 @@ export interface BrowserPackageLibraryMountResult {
     source?: "persistent-idbfs" | "workerfs-image";
 }
 
+export interface PreparedBrowserPackageLibrary {
+    metadata: unknown;
+    blob: Blob;
+}
+
 const persistentLibraryMarkerFile = ".dialogforge-webr-library-cache-key";
 const temporaryPackageLibraryMountpoint = "/.dialogforge-package-library-source";
 
@@ -537,12 +542,10 @@ export const readBrowserProductPackageLibraryBlob = async function(
     return blob;
 };
 
-export const mountBrowserProductPackageLibrary = async function(
-    runtime: WebR,
+export const prepareBrowserProductPackageLibrary = async function(
     manifest: BrowserPackageLibraryManifest,
     progress: WebRPackageLibraryProgress
-): Promise<BrowserPackageLibraryMountResult> {
-    const mountpoint = normalizeMountpoint(manifest.mountpoint);
+): Promise<PreparedBrowserPackageLibrary> {
     const metadataResponse = await fetch(String(manifest.metadataUrl || ""));
 
     if (!metadataResponse.ok) {
@@ -550,6 +553,27 @@ export const mountBrowserProductPackageLibrary = async function(
     }
 
     const metadata = await metadataResponse.json();
+    return {
+        metadata,
+        blob: await readBrowserProductPackageLibraryBlob(manifest, metadata, progress)
+    };
+};
+
+export const mountBrowserProductPackageLibrary = async function(
+    runtime: WebR,
+    manifest: BrowserPackageLibraryManifest,
+    progress: WebRPackageLibraryProgress,
+    prepared?: PreparedBrowserPackageLibrary
+): Promise<BrowserPackageLibraryMountResult> {
+    const mountpoint = normalizeMountpoint(manifest.mountpoint);
+    let metadata = prepared?.metadata;
+    if (!prepared) {
+        const response = await fetch(String(manifest.metadataUrl || ""));
+        if (!response.ok) {
+            throw new Error("Product WebR package library bundle could not be loaded.");
+        }
+        metadata = await response.json();
+    }
     const cacheKey = createWebRPackageLibraryCacheKey(manifest, metadata);
 
     setWebRPackageLibraryProgress(progress, "checkingCache");
@@ -572,7 +596,7 @@ export const mountBrowserProductPackageLibrary = async function(
         };
     }
 
-    const blob = await readBrowserProductPackageLibraryBlob(
+    const blob = prepared?.blob || await readBrowserProductPackageLibraryBlob(
         manifest,
         metadata,
         progress
