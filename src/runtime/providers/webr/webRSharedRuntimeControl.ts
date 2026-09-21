@@ -219,13 +219,18 @@ const executeInteractiveRuntimeMethod = async function(
 export const installWebRSharedRuntimeControl = async function(
     options: WebRSharedRuntimeControlOptions
 ): Promise<WebRSharedRuntimeControlClient> {
+    // Fetch independently, then evaluate in the established dependency order.
+    // Serial network requests added one round trip for every runtime source.
+    const [sources, productSource] = await Promise.all([
+        Promise.all(runtimeControlSourceNames.map((name) => options.fetchSource(name))),
+        options.fetchProductSource ? options.fetchProductSource() : Promise.resolve("")
+    ]);
+
     await options.runRuntimeOperation(function() {
         return options.runtime.evalRVoid(createRuntimeEnvironmentCommand());
     });
 
-    for (const sourceName of runtimeControlSourceNames) {
-        const source = await options.fetchSource(sourceName);
-
+    for (const source of sources) {
         await options.runRuntimeOperation(function() {
             return options.runtime.evalRVoid(
                 evaluateRuntimeSourceCommand(source)
@@ -233,16 +238,12 @@ export const installWebRSharedRuntimeControl = async function(
         });
     }
 
-    if (options.fetchProductSource) {
-        const productSource = await options.fetchProductSource();
-
-        if (productSource.trim()) {
-            await options.runRuntimeOperation(function() {
-                return options.runtime.evalRVoid(
-                    evaluateRuntimeSourceCommand(productSource)
-                );
-            });
-        }
+    if (productSource.trim()) {
+        await options.runRuntimeOperation(function() {
+            return options.runtime.evalRVoid(
+                evaluateRuntimeSourceCommand(productSource)
+            );
+        });
     }
 
     let attached = true;

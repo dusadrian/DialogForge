@@ -5,6 +5,7 @@ const https = require("https");
 const http = require("http");
 const path = require("path");
 const url = require("url");
+const zlib = require("zlib");
 const childProcess = require("child_process");
 
 
@@ -612,6 +613,7 @@ const contentTypes = {
     ".map": "application/json; charset=utf-8",
     ".mjs": "text/javascript; charset=utf-8",
     ".png": "image/png",
+    ".R": "text/plain; charset=utf-8",
     ".svg": "image/svg+xml; charset=utf-8",
     ".ttf": "font/ttf",
     ".wasm": "application/wasm"
@@ -867,6 +869,64 @@ const createBuildManifest = function(rootDir, productPath) {
 };
 
 
+// This server is the production server: internal/deployment runs it under
+// systemd behind a reverse proxy that only terminates TLS. Nothing else on the
+// path compresses, so a slow connection pays for every uncompressed byte.
+const compressibleContentType = new RegExp([
+    "^text/",
+    "^image/svg\\+xml",
+    "^font/(?:ttf|otf)",
+    "^application/(?:javascript|json|wasm|manifest\\+json)"
+].join("|"));
+const compressionThreshold = 1024;
+const largeBodyThreshold = 4 * 1024 * 1024;
+
+
+const readAcceptedEncoding = function(request) {
+    const accepted = String(
+        request && request.headers
+            ? request.headers["accept-encoding"] || ""
+            : ""
+    );
+
+    if (/(?:^|,)\s*br\s*(?:;|,|$)/.test(accepted)) {
+        return "br";
+    }
+
+    if (/(?:^|,)\s*gzip\s*(?:;|,|$)/.test(accepted)) {
+        return "gzip";
+    }
+
+    return "";
+};
+
+
+const compressBody = function(body, encoding) {
+    if (encoding === "gzip") {
+        return zlib.gzipSync(body, { level: 6 });
+    }
+
+    // Brotli past quality 9 costs far more time than it saves bytes. The
+    // 17 MB R.wasm takes 0.7s at quality 9 and 29s at quality 11 to save a
+    // further 0.3 MB, so large bodies drop to quality 5 and stay under 0.2s.
+    return zlib.brotliCompressSync(body, {
+        params: {
+            [zlib.constants.BROTLI_PARAM_QUALITY]: (
+                body.length > largeBodyThreshold ? 5 : 9
+            ),
+            [zlib.constants.BROTLI_PARAM_SIZE_HINT]: body.length
+        }
+    });
+};
+
+
+const isCompressibleResponse = function(contentType, body) {
+    return Boolean(body)
+        && body.length >= compressionThreshold
+        && compressibleContentType.test(String(contentType || ""));
+};
+
+
 const send = function(response, status, headers, body) {
     const responseHeaders = Object.assign({
         "Cache-Control": "no-store, max-age=0",
@@ -882,8 +942,29 @@ const send = function(response, status, headers, body) {
         }
     }
 
+    let payload = Buffer.isBuffer(body) || body === undefined || body === null
+        ? body
+        : Buffer.from(String(body));
+
+    if (isCompressibleResponse(responseHeaders["Content-Type"], payload)) {
+        responseHeaders.Vary = "Accept-Encoding";
+
+        const encoding = responseHeaders["Content-Encoding"]
+            ? ""
+            : readAcceptedEncoding(response.req);
+
+        if (encoding) {
+            payload = compressBody(payload, encoding);
+            responseHeaders["Content-Encoding"] = encoding;
+        }
+    }
+
+    if (payload) {
+        responseHeaders["Content-Length"] = String(payload.length);
+    }
+
     response.writeHead(status, responseHeaders);
-    response.end(body);
+    response.end(payload);
 };
 
 
@@ -1073,6 +1154,33 @@ const resolveSafeFile = function(root, requestPath) {
 };
 
 
+// Compressing the staged runtime assets is the single largest transfer win,
+// and they only change when the product is rebuilt. Each file is therefore
+// compressed at most once per build and kept for every later request.
+const compressedFileCache = new Map();
+const compressedFileCacheLimit = 256;
+
+
+const readCompressedFile = function(filePath, stats, body, encoding) {
+    const key = `${filePath}\u0000${stats.mtimeMs}\u0000${stats.size}\u0000${encoding}`;
+    const cached = compressedFileCache.get(key);
+
+    if (cached) {
+        return cached;
+    }
+
+    const compressed = compressBody(body, encoding);
+
+    if (compressedFileCache.size >= compressedFileCacheLimit) {
+        compressedFileCache.delete(compressedFileCache.keys().next().value);
+    }
+
+    compressedFileCache.set(key, compressed);
+
+    return compressed;
+};
+
+
 const serveFile = function(response, filePath, headers = {}) {
     if (!filePath || !fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
         send(response, 404, {
@@ -1081,10 +1189,61 @@ const serveFile = function(response, filePath, headers = {}) {
         return;
     }
 
-    send(response, 200, Object.assign({
-        "Content-Type": contentTypes[path.extname(filePath)] || "application/octet-stream",
-        "Cross-Origin-Resource-Policy": "same-origin"
-    }, headers), fs.readFileSync(filePath));
+    const stats = fs.statSync(filePath);
+    const contentType = contentTypes[path.extname(filePath)]
+        || "application/octet-stream";
+    const encoding = (compressibleContentType.test(contentType) || path.extname(filePath) === ".so")
+        && stats.size >= compressionThreshold
+        ? readAcceptedEncoding(response.req)
+        : "";
+    // The validator covers the encoding too, so a shared cache can never hand
+    // a brotli body to a client that only accepts gzip.
+    const etag = `"${stats.mtimeMs.toString(36)}-${stats.size.toString(36)}${
+        encoding ? `-${encoding}` : ""
+    }"`;
+    const fileHeaders = Object.assign({
+        "Content-Type": contentType,
+        "Cross-Origin-Resource-Policy": "same-origin",
+        "Cache-Control": "public, max-age=0, must-revalidate",
+        "ETag": etag,
+        "Pragma": null
+    }, headers);
+
+    if (String(response.req?.headers?.["if-none-match"] || "") === etag) {
+        send(response, 304, Object.assign({}, fileHeaders, {
+            "Content-Type": null
+        }), null);
+        return;
+    }
+
+    const body = fs.readFileSync(filePath);
+
+    if (!encoding) {
+        send(response, 200, fileHeaders, body);
+        return;
+    }
+
+    send(response, 200, Object.assign({}, fileHeaders, {
+        "Content-Encoding": encoding,
+        "Vary": "Accept-Encoding"
+    }), readCompressedFile(filePath, stats, body, encoding));
+};
+
+
+// The web build stamps the WebR and Monaco URLs it emits with a hash of those
+// trees' own contents. Reading the same stamp here lets a stamped request be
+// cached permanently while the plain /webr/ and /monaco/ paths keep
+// revalidating for deployment checks and any direct consumer.
+const readAssetStamp = function(rootDir) {
+    const stampPath = path.join(rootDir, "browser-esm", "asset-stamp.json");
+
+    if (!fs.existsSync(stampPath)) {
+        return "";
+    }
+
+    const stamp = String(readJson(stampPath, {}).assetStamp || "");
+
+    return /^[0-9a-f]{16}$/.test(stamp) ? stamp : "";
 };
 
 
@@ -1125,6 +1284,10 @@ const createWebProductDevServer = function(options) {
     const preactRoot = findRuntimeDependencyRoot(rootDir, sourceRoot, "preact");
     const iroRoot = findRuntimeDependencyRoot(rootDir, sourceRoot, "@jaames/iro", "dist");
     const productWebRLibraryDir = findProductWebRLibraryDir(productPath);
+    const assetStamp = readAssetStamp(rootDir);
+    const stampedAssetPrefix = assetStamp
+        ? new RegExp(`^/(webr|monaco)-${assetStamp}/`)
+        : null;
     const webEntryPaths = readProductWebEntryPaths(productPath);
     const launchPolicy = readProductWebLaunchPolicy(productPath);
     const launchDataRoot = resolveLaunchDataRoot(launchPolicy);
@@ -1132,6 +1295,18 @@ const createWebProductDevServer = function(options) {
     return http.createServer((request, response) => {
         const parsed = url.parse(request.url || "/", true);
         const pathname = parsed.pathname || "/";
+        const isStampedAsset = Boolean(
+            stampedAssetPrefix && stampedAssetPrefix.test(pathname)
+        );
+        const assetPathname = isStampedAsset
+            ? pathname.replace(stampedAssetPrefix, "/$1/")
+            : pathname;
+        const assetHeaders = isStampedAsset
+            ? {
+                "Cache-Control": "public, max-age=31536000, immutable",
+                "Pragma": null
+            }
+            : {};
 
         try {
             if (webEntryPaths.includes(pathname) || pathname === launchPolicy.startPath) {
@@ -1151,6 +1326,16 @@ const createWebProductDevServer = function(options) {
                     response,
                     path.join(rootDir, "src/shell-web/pages/shell.html")
                 );
+                return;
+            }
+
+            // Served from the root so its scope covers the whole origin, and
+            // left on the revalidating default so a new build's worker is
+            // picked up on the next visit.
+            if (pathname === "/sw.js") {
+                serveFile(response, path.join(rootDir, "sw.js"), {
+                    "Content-Type": "text/javascript; charset=utf-8"
+                });
                 return;
             }
 
@@ -1319,16 +1504,20 @@ const createWebProductDevServer = function(options) {
                 return;
             }
 
-            if (pathname.startsWith("/webr/")) {
-                if (pathname === "/webr/loader.js") {
-                    serveFile(response, path.join(webrRoot, "webr.js"));
+            if (assetPathname.startsWith("/webr/")) {
+                if (assetPathname === "/webr/loader.js") {
+                    serveFile(
+                        response,
+                        path.join(webrRoot, "webr.js"),
+                        assetHeaders
+                    );
                     return;
                 }
 
                 serveFile(response, resolveSafeFile(
                     webrRoot,
-                    pathname.replace(/^\/webr\//, "")
-                ));
+                    assetPathname.replace(/^\/webr\//, "")
+                ), assetHeaders);
                 return;
             }
 
@@ -1347,11 +1536,11 @@ const createWebProductDevServer = function(options) {
                 return;
             }
 
-            if (pathname.startsWith("/monaco/")) {
+            if (assetPathname.startsWith("/monaco/")) {
                 serveFile(response, resolveSafeFile(
                     monacoRoot,
-                    pathname.replace(/^\/monaco\//, "")
-                ));
+                    assetPathname.replace(/^\/monaco\//, "")
+                ), assetHeaders);
                 return;
             }
 
@@ -1428,7 +1617,8 @@ const createWebProductDevServer = function(options) {
 
             if (pathname.startsWith("/browser-esm/")) {
                 const hasVersionedName = (
-                    /^\/browser-esm\/dialogBuilder-[a-f0-9]{16}\.(?:css|js)$/.test(pathname)
+                    /^\/browser-esm\/(?:dialogBuilder|shell)-[a-f0-9]{16}\.(?:css|js)$/
+                        .test(pathname)
                     || pathname.startsWith("/browser-esm/dialog-assets/")
                 );
                 const headers = hasVersionedName
