@@ -100,7 +100,9 @@ const assertSigningBrokerUsesProductOutput = function() {
     if (!actionSource.includes("DIALOGFORGE_RELEASE_REPOSITORY:")
         || !actionSource.includes("DIALOGFORGE_RELEASE_TAG:")
         || !packageProductSource.includes("process.env.DIALOGFORGE_RELEASE_REPOSITORY")
-        || !packageProductSource.includes("process.env.DIALOGFORGE_RELEASE_TAG")) {
+        || !packageProductSource.includes("process.env.DIALOGFORGE_RELEASE_TAG")
+        || !packageProductSource.includes("process.env.DIALOGFORGE_RELEASE_CHANNEL")
+        || !packageProductSource.includes("--config.publish.channel")) {
         fail("Release packaging must configure updater metadata for brokered builds.");
     }
     const signingStep = actionSource.indexOf("- name: Sign Windows artifacts");
