@@ -88,6 +88,7 @@
         "src/runtime/providers/webr/webRHelpDocument.ts",
         "src/runtime/providers/webr/webRRuntimePackageAdapter.ts",
         "src/shell-web/browserRuntimeProgressAdapter.ts",
+        "src/shell-web/browserDeferredPackageLibrary.ts",
         "src/shell-web/browserSharedPageBridge.ts",
         "src/shell-web/browserShellEventBindings.ts",
         "src/runtime/providers/webr/webRStartupProgress.ts",
