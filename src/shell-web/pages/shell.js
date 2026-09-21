@@ -269,6 +269,9 @@ import {
     createBrowserRuntimeProgressController
 } from "/browser-esm/src/shell-web/browserRuntimeProgressAdapter.js";
 import {
+    createBrowserDeferredPackageLibrary
+} from "/browser-esm/src/shell-web/browserDeferredPackageLibrary.js";
+import {
     installBrowserShellEventBindings
 } from "/browser-esm/src/shell-web/browserShellEventBindings.js";
 import {
@@ -3325,20 +3328,17 @@ const mountProductPackageLibrary = async function (runtime, preparation) {
 
     window.dialogForgeWebRPackageLibraryMountSource = result.source || "";
     if (manifest.deferred?.available) {
-        let loading = null;
-        deferredPackageLibraries.set(runtime, function () {
-            if (!loading) {
-                loading = mountBrowserProductPackageLibrary(runtime, manifest.deferred, {
-                    // Dialog/command activities already own their progress cover.
-                    setStatus() {},
-                    progressFromStage() { return 0; }
-                }).catch((error) => {
-                    loading = null;
-                    throw error;
-                });
+        deferredPackageLibraries.set(runtime, createBrowserDeferredPackageLibrary({
+            runtime,
+            manifest: manifest.deferred,
+            progress: browserRuntimeProgress(),
+            canPrefetch() {
+                return state.runtime === runtime && state.runtimeReady
+                    && !state.runtimeStarting
+                    && !document.body.classList.contains("console-runtime-busy")
+                    && !document.body.classList.contains("console-cover-visible");
             }
-            return loading;
-        });
+        }));
     }
     setRuntimeStatus("Mounting WebR package library...");
 
@@ -3501,7 +3501,7 @@ const ensureRuntime = async function () {
                     || method === "runtime.load_serialized_object"
                     || method === "load_workspace"
                 ) {
-                    await deferredPackageLibraries.get(runtime)?.();
+                    await deferredPackageLibraries.get(runtime)?.ensureMounted();
                 }
             },
             runRuntimeOperation: function (action) {
@@ -3612,6 +3612,9 @@ const ensureRuntime = async function () {
         state.runtimeStartPromise = null;
         state.runtimeStarting = false;
         notifyConsoleSession();
+        if (state.runtimeReady) {
+            deferredPackageLibraries.get(state.runtime)?.schedulePrefetch();
+        }
     }
 };
 
@@ -3979,6 +3982,7 @@ const restartBrowserRuntime = async function (action) {
 };
 
 const stopWebRRuntime = async function (message) {
+    deferredPackageLibraries.get(state.runtime)?.dispose();
     await stopBrowserWebRRuntime(state.runtime);
 
     state.runtime = null;

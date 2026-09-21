@@ -47,9 +47,29 @@ the first dialog package check, console execution, Import, dataset operation,
 or help request. Mounting is serialized with runtime operations and does not
 attach packages. Dialog opening retains the existing compatibility checks and
 visible library commands. Hidden dialog preparation and workspace polling do
-not fetch the deferred image. Both images use their own content hash and persist
+not fetch the deferred image. After readiness and three seconds without input,
+the browser may prepare/cache it during idle time, without mounting it or
+attaching packages. Automatic prefetch waits while offline or doing active
+runtime/progress work. It runs in background tabs and on all connection types,
+including data-saving and slow connections. A requesting action
+shares an in-flight preparation and shows the existing console progress panel
+through download, decompression, caching and mounting. Failed prefetches are
+retried only on demand; runtime stop cancels scheduled prefetch and closes its
+progress activity. Nested activity completion restores the previous cover.
+This is the user-approved departure from strictly demand-only downloading;
+the startup readiness boundary and on-demand attachment remain unchanged.
+Both images use their own content hash and persist
 independently across browser restarts and application rebuilds. Legacy products
 without a split manifest continue using the complete library image.
+
+Idle-prefetch acceptance (local rendered browser, 2026-09-21): readiness preceded
+the background request; simulated data-saving/2G did not prevent prefetch;
+foreground execution joined the one in-flight download and displayed the
+existing cover. Under throttling, the determinate bar advanced with received
+bytes. Completed prefetch was reused by Frequency table, with attachment only
+on opening. Full browser reopen transferred no package archives. Background
+and foreground download failures both recovered on demand, with no stuck
+cover; an offline background tab resumed prefetch after an online event.
 
 The architecture overview and product parity documents live under `internal/`
 in this checkout rather than the `docs/` paths named by AGENTS.md. They and the
