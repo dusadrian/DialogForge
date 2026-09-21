@@ -15,6 +15,7 @@ export interface BrowserRuntimeProgressController {
     setStatus(text: unknown, progress?: number): void;
     progressFromStage(message: unknown, fraction?: number): number | null;
     beginActivity(message: unknown): () => void;
+    beginProgressActivity(message: unknown): BrowserRuntimeProgressActivity;
     runActivity<Result>(
         message: unknown,
         action: () => Promise<Result>
@@ -22,12 +23,17 @@ export interface BrowserRuntimeProgressController {
     setActivityMessage(message: unknown): void;
 }
 
+export interface BrowserRuntimeProgressActivity {
+    update(message: unknown, progress?: number): void;
+    end(): void;
+}
+
 export const createBrowserRuntimeProgressController = function(
     options: BrowserRuntimeProgressControllerOptions
 ): BrowserRuntimeProgressController {
     let runtimeProgressValue = 4;
     let runtimeProgressTrickleTimer = 0;
-    let activityCount = 0;
+    const activities: Array<{ message: string; progress?: number }> = [];
 
     const setIndeterminateProgress = function(indeterminate: boolean): void {
         const coverProgress = options.document.getElementById("consoleCoverProgress");
@@ -99,7 +105,7 @@ export const createBrowserRuntimeProgressController = function(
             runtimeProgressValue
         );
 
-        if (activityCount > 0) {
+        if (activities.length > 0) {
             return;
         }
 
@@ -125,45 +131,68 @@ export const createBrowserRuntimeProgressController = function(
         options.onStatusChange?.();
     };
 
-    const setActivityMessage = function(message: unknown): void {
-        if (activityCount < 1) {
+    const renderActivity = function(): void {
+        stopRuntimeProgressTrickle();
+        const activity = activities[activities.length - 1];
+
+        if (!activity) {
+            setIndeterminateProgress(false);
+            options.document.body.classList.remove("console-cover-visible");
+            options.onStatusChange?.();
             return;
         }
 
         const coverMessage = options.document.getElementById("consoleCoverMessage");
-
         if (coverMessage) {
-            coverMessage.textContent = String(message || "Working...").trim() || "Working...";
+            coverMessage.textContent = activity.message;
+        }
+        runtimeProgressValue = 0;
+        writeRuntimeProgress(activity.progress ?? 4);
+        setIndeterminateProgress(activity.progress === undefined);
+        options.document.body.classList.add("console-cover-visible");
+        options.onStatusChange?.();
+    };
+
+    const setActivityMessage = function(message: unknown): void {
+        const activity = activities[activities.length - 1];
+        if (activity) {
+            activity.message = String(message || "Working...").trim() || "Working...";
+            renderActivity();
         }
     };
 
-    const beginActivity = function(message: unknown): () => void {
-        activityCount += 1;
-        runtimeProgressValue = 4;
-        setActivityMessage(message);
-        writeRuntimeProgress(runtimeProgressValue);
-        stopRuntimeProgressTrickle();
-        setIndeterminateProgress(true);
-        options.document.body.classList.add("console-cover-visible");
-        options.onStatusChange?.();
+    const beginProgressActivity = function(message: unknown): BrowserRuntimeProgressActivity {
+        const activity = {
+            message: String(message || "Working...").trim() || "Working...",
+            progress: undefined as number | undefined
+        };
+        activities.push(activity);
+        renderActivity();
 
-        let finished = false;
-
-        return function(): void {
-            if (finished) {
-                return;
-            }
-
-            finished = true;
-            activityCount = Math.max(0, activityCount - 1);
-
-            if (activityCount === 0) {
-                stopRuntimeProgressTrickle();
-                setIndeterminateProgress(false);
-                options.document.body.classList.remove("console-cover-visible");
-                options.onStatusChange?.();
+        return {
+            update(message, progress) {
+                if (!activities.includes(activity)) {
+                    return;
+                }
+                activity.message = String(message || "Working...").trim() || "Working...";
+                activity.progress = progress;
+                if (activities[activities.length - 1] === activity) {
+                    renderActivity();
+                }
+            },
+            end() {
+                const index = activities.indexOf(activity);
+                if (index < 0) {
+                    return;
+                }
+                activities.splice(index, 1);
+                renderActivity();
             }
         };
+    };
+
+    const beginActivity = function(message: unknown): () => void {
+        return beginProgressActivity(message).end;
     };
 
     const runActivity = async function<Result>(
@@ -184,6 +213,7 @@ export const createBrowserRuntimeProgressController = function(
         setStatus,
         progressFromStage,
         beginActivity,
+        beginProgressActivity,
         runActivity,
         setActivityMessage
     };
