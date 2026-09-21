@@ -219,10 +219,14 @@ const readEnvironmentAutoUpdatePolicy = function () {
     const releaseTag = String(
         process.env.DIALOGFORGE_RELEASE_TAG || ""
     ).trim();
+    const releaseChannel = String(
+        process.env.DIALOGFORGE_RELEASE_CHANNEL || ""
+    ).trim();
     if (releaseRepository && releaseTag) {
         return {
             provider: "generic",
-            url: `https://github.com/${releaseRepository}/releases/download/${releaseTag}`
+            url: `https://github.com/${releaseRepository}/releases/download/${releaseTag}`,
+            channel: releaseChannel || undefined
         };
     }
 
@@ -648,6 +652,9 @@ const main = function () {
                 "--config.publish.provider=generic",
                 `--config.publish.url=${autoUpdatePolicy.url}`
             );
+            if (autoUpdatePolicy.channel) {
+                builderArgs.push(`--config.publish.channel=${autoUpdatePolicy.channel}`);
+            }
         }
         if (!sign && selection.platform === "macos") {
             builderArgs.push("--config.mac.identity=-", "--config.mac.hardenedRuntime=false");
