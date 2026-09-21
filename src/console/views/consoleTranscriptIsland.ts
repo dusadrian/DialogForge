@@ -185,7 +185,9 @@ const calculateVisibleRange = function(
     let start = 0;
     let top = 0;
 
-    while (start < keys.length) {
+    // Keep the last row mounted when scrolling passes stale height estimates.
+    // Otherwise no row remains to measure and the viewport oscillates empty/full.
+    while (start < keys.length - 1) {
         const nextHeight = measuredHeight(heights, keys[start], items[start]);
         if (top + nextHeight >= wantedTop) {
             break;

@@ -1,3 +1,26 @@
+# Console result printing and flicker
+
+Visible R results now dispatch `base::print` from `.GlobalEnv`, so S3 print
+methods defined by sourced user code are found in both native R and WebR.
+Arguments are quoted to preserve language objects as values. The shared
+interactive and query paths use the same helper; visibility and output capture
+remain unchanged.
+
+The shared console virtualizer retains its last row when scrolling exceeds
+cached height estimates. Previously a newly expanded output could remove every
+row before measurement, collapse the viewport, and repeatedly remount and remove
+the transcript. The existing DOM, row renderers, styling and scrolling policy
+are preserved.
+
+Rendered acceptance on 2026-09-21 used the supplied `analyticInduction.R` and
+`stokke` example in native DialogQCA, native DialogR, and local WebR. Output shows
+`S1: adv*~inc + adv*shd*rev`, both coverage rows at 0.5, and solution coverage 1.
+The original native flicker alternated empty/full on successive animation frames
+(123 empty frames out of 247). Explicitly printing the full list after the fix
+remains stable and returns to the bottom prompt; native DialogR recorded zero
+empty frames across 1,577 samples. These are local rendered checks, not published
+release validation.
+
 # Browser dialog preparation
 
 The browser host prepares registered shared and product dialogs after WebR
