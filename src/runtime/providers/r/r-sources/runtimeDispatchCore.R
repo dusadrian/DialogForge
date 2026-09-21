@@ -71,6 +71,13 @@ if (!exists("current_activity_id", inherits = FALSE)) {
 }
 
 
+runtime_print_visible_value <- function(value) {
+    # Sourced S3 methods live in the user workspace, outside DialogApp's
+    # enclosing search path. Quote arguments so language objects stay values.
+    do.call(base::print, list(value), quote = TRUE, envir = .GlobalEnv)
+}
+
+
 runtime_eval_code_text <- function(code) {
     withCallingHandlers({
         captured <- utils::capture.output({
@@ -87,7 +94,7 @@ runtime_eval_code_text <- function(code) {
             }
             else {
                 paste(
-                    utils::capture.output(print(result$value)),
+                    utils::capture.output(runtime_print_visible_value(result$value)),
                     collapse = "\n"
                 )
             }
@@ -165,7 +172,7 @@ runtime_capture_input <- function(code, parent_id, output_width = NULL) {
             value <- withVisible(eval(parse(text = code), envir = .GlobalEnv))
 
             if (isTRUE(value$visible)) {
-                print(value$value)
+                runtime_print_visible_value(value$value)
             }
             trace(paste0("execute_input:eval-done parent=", parent_id))
 

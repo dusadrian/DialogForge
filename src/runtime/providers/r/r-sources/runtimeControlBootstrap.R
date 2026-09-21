@@ -270,7 +270,10 @@ eval_code_text <- function(code) {
             value_text <- if (is.character(result$value) && length(result$value) == 1L) {
                 as.character(result$value)
             } else {
-                paste(utils::capture.output(print(result$value)), collapse = "\n")
+                paste(
+                    utils::capture.output(runtime_print_visible_value(result$value)),
+                    collapse = "\n"
+                )
             }
         }
 
