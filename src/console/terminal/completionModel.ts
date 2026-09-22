@@ -186,6 +186,9 @@ export const createCompletionModel = function(
         registerCommandInput,
         ingestObjectNames: function(names: string[]): void {
             knowledge.ingestObjectNames(names);
+        },
+        ingestRuntimeSymbols: function(names: string[]): void {
+            knowledge.ingestTerminalSymbols(names);
         }
     };
 };

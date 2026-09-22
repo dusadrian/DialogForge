@@ -238,16 +238,45 @@ runtime_workspace_changed_datasets_json <- function(changes) {
 }
 
 
+runtime_workspace_dataset_copy_json <- function(copy) {
+    paste0(
+        "{\"source\":", json_str(as.character(copy$source %||% "")),
+        ",\"target\":", json_str(as.character(copy$target %||% "")),
+        "}"
+    )
+}
+
+
+runtime_workspace_dataset_copies_json <- function(copies) {
+    copies <- copies %||% list()
+
+    if (!length(copies)) {
+        return("[]")
+    }
+
+    paste0(
+        "[",
+        paste(
+            vapply(copies, runtime_workspace_dataset_copy_json, character(1)),
+            collapse = ","
+        ),
+        "]"
+    )
+}
+
+
 runtime_workspace_datasets_json <- function(datasets) {
     datasets <- datasets %||% list(
         added = character(0),
         removed = character(0),
-        changed = list()
+        changed = list(),
+        copied = list()
     )
     fields <- c(
         paste0("\"added\":", json_strv(as.character(datasets$added %||% character(0)))),
         paste0("\"removed\":", json_strv(as.character(datasets$removed %||% character(0)))),
-        paste0("\"changed\":", runtime_workspace_changed_datasets_json(datasets$changed))
+        paste0("\"changed\":", runtime_workspace_changed_datasets_json(datasets$changed)),
+        paste0("\"copied\":", runtime_workspace_dataset_copies_json(datasets$copied))
     )
 
     paste0("{", paste(fields, collapse = ","), "}")
@@ -414,9 +443,55 @@ emit_prompt_state_event <- function() {
 
 
 runtime_workspace_change_for_code <- function(code = "") {
-    if (!isTRUE(code_may_mutate_workspace(code))) return(NULL)
+    if (!isTRUE(code_may_mutate_workspace(code))) {
+        return(NULL)
+    }
 
-    collect_workspace_update(workspace_index_get("last_state"))
+    previous_state <- workspace_index_get("last_state")
+    assignment <- runtime_simple_workspace_copy(code)
+
+    if (!is.null(assignment)) {
+        copied <- workspace_copy_cached_state(
+            previous_state,
+            assignment$source,
+            assignment$target
+        )
+
+        if (!is.null(copied)) {
+            return(copied)
+        }
+    }
+
+    collect_workspace_update(previous_state)
+}
+
+
+runtime_simple_workspace_copy <- function(code = "") {
+    expressions <- tryCatch(
+        parse(text = as.character(code %||% ""), keep.source = FALSE),
+        error = function(error) expression()
+    )
+
+    if (length(expressions) != 1L) {
+        return(NULL)
+    }
+
+    expression <- expressions[[1L]]
+
+    if (
+        !is.call(expression) ||
+        length(expression) != 3L ||
+        !is.element(as.character(expression[[1L]]), c("<-", "=")) ||
+        !is.symbol(expression[[2L]]) ||
+        !is.symbol(expression[[3L]])
+    ) {
+        return(NULL)
+    }
+
+    list(
+        target = as.character(expression[[2L]]),
+        source = as.character(expression[[3L]])
+    )
 }
 
 
@@ -429,7 +504,8 @@ runtime_workspace_update_has_changes <- function(update = NULL) {
         length(update$removed %||% character(0)) > 0L ||
         length(datasets$added %||% character(0)) > 0L ||
         length(datasets$removed %||% character(0)) > 0L ||
-        length(datasets$changed %||% list()) > 0L
+        length(datasets$changed %||% list()) > 0L ||
+        length(datasets$copied %||% list()) > 0L
 }
 
 

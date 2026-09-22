@@ -1,10 +1,45 @@
 import type {
-    CompletionModel
+    CompletionModel,
+    RuntimeCompletionSuggestion
 } from "./completionTypes";
 import type * as Monaco from "monaco-editor";
 
 
 let completionProviderDisposable: Monaco.IDisposable | null = null;
+const localSuggestionRuntimeWaitMs = 50;
+
+
+const readRuntimeSuggestionsWithinLocalWait = async function(
+    pending: Promise<RuntimeCompletionSuggestion[]>
+): Promise<{
+    suggestions: RuntimeCompletionSuggestion[];
+    completed: boolean;
+}> {
+    let timeout: ReturnType<typeof setTimeout> | null = null;
+    const result = await Promise.race([
+        pending.then((suggestions) => ({
+            suggestions,
+            completed: true
+        })),
+        new Promise<{
+            suggestions: RuntimeCompletionSuggestion[];
+            completed: boolean;
+        }>((resolve) => {
+            timeout = setTimeout(() => {
+                resolve({
+                    suggestions: [],
+                    completed: false
+                });
+            }, localSuggestionRuntimeWaitMs);
+        })
+    ]);
+
+    if (timeout) {
+        clearTimeout(timeout);
+    }
+
+    return result;
+};
 
 
 export const clearConsoleCompletionProvider = function(): void {
@@ -55,16 +90,39 @@ export const registerConsoleCompletionProvider = function(
                             completionModel.getLocalCompletionSuggestions(
                                 context
                             ) || [];
-                        const runtimeSuggestions =
+                        const pendingRuntimeSuggestions =
                             completionModel.getRuntimeCompletionSuggestions
-                                ? await completionModel
-                                    .getRuntimeCompletionSuggestions(
-                                        context,
-                                        text,
-                                        text.length + 1,
-                                        3200
-                                    )
-                                : [];
+                                ? completionModel.getRuntimeCompletionSuggestions(
+                                    context,
+                                    text,
+                                    text.length + 1,
+                                    3200
+                                )
+                                : Promise.resolve([]);
+                        let runtimeSuggestions: RuntimeCompletionSuggestion[];
+
+                        if (
+                            context.mode === "symbol"
+                            && localSuggestions.length > 0
+                        ) {
+                            const runtimeResult =
+                                await readRuntimeSuggestionsWithinLocalWait(
+                                    pendingRuntimeSuggestions
+                                );
+
+                            runtimeSuggestions = runtimeResult.suggestions;
+
+                            if (!runtimeResult.completed) {
+                                void pendingRuntimeSuggestions.then((items) => {
+                                    completionModel.ingestRuntimeSymbols(
+                                        items.map((item) => item.label)
+                                    );
+                                }).catch(() => undefined);
+                            }
+                        }
+                        else {
+                            runtimeSuggestions = await pendingRuntimeSuggestions;
+                        }
                         const token = String(context.token || "");
                         const replaceText = context.mode === "path"
                             ? String(context.replaceText || token)

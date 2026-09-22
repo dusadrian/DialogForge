@@ -11,8 +11,6 @@ import type {
     RuntimeToolController
 } from "../../../provider-contract/runtimeProvider";
 import {
-    asRuntimeControlArray,
-    asRuntimeControlObject,
     parseRuntimeControlResultObject
 } from "../protocol/runtimeControlEvents";
 import type {
@@ -29,80 +27,6 @@ export interface RToolControllerOptions {
     createRequestId(prefix: string): string;
     checkPackageVersion(packageName: string): Promise<string>;
 }
-
-
-const defaultCompletionPackages = [
-    "base",
-    "stats",
-    "utils",
-    "graphics",
-    "grDevices",
-    "methods"
-];
-
-
-const hasOpenStringCompletionContext = function(code: string): boolean {
-    let quote = "";
-    let escaped = false;
-
-    for (let index = 0; index < code.length; index += 1) {
-        const character = code[index];
-
-        if (escaped) {
-            escaped = false;
-            continue;
-        }
-
-        if (character === "\\") {
-            escaped = true;
-            continue;
-        }
-
-        if (!quote) {
-            if (character === "\"" || character === "'") {
-                quote = character;
-            }
-
-            continue;
-        }
-
-        if (character === quote) {
-            quote = "";
-        }
-    }
-
-    return Boolean(quote);
-};
-
-
-const hasContextualCompletionRequest = function(code: string): boolean {
-    return code.includes("$") || hasOpenStringCompletionContext(code);
-};
-
-
-const addCompletionLabels = function(
-    labels: Map<string, { label: string; kind: string }>,
-    source: unknown,
-    prefix: string
-): void {
-    asRuntimeControlArray(source).forEach((entry) => {
-        const item = asRuntimeControlObject(entry);
-        const label = String(
-            item.label
-            || item.name
-            || item.value
-            || entry
-            || ""
-        ).trim();
-
-        if (label && (!prefix || label.startsWith(prefix))) {
-            labels.set(label, {
-                label,
-                kind: String(item.kind || "symbol").trim() || "symbol"
-            });
-        }
-    });
-};
 
 
 export const createRToolController = function(
@@ -233,24 +157,6 @@ export const createRToolController = function(
 
             addRuntimeCompletionItems(workspacePayload.items);
             addRuntimeCompletionItems(workspacePayload.symbols);
-
-            const packages = request.packageName
-                || hasContextualCompletionRequest(code)
-                ? []
-                : defaultCompletionPackages;
-
-            for (const packageName of packages) {
-                const packagePayload = await readCompletionPayload({
-                    prefix,
-                    package: packageName
-                });
-
-                addCompletionLabels(
-                    completionItems,
-                    packagePayload.exports,
-                    prefix
-                );
-            }
 
             const items = Array.from(completionItems.values()).sort(
                 (left, right) => left.label.localeCompare(right.label)

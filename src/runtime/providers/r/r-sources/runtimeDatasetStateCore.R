@@ -507,6 +507,180 @@ workspace_state_from_snapshot <- function(snapshot) {
 }
 
 
+workspace_copy_select_state <- function(select, source_name, target_name) {
+    select <- select %||% list(
+        list = character(0),
+        matrix = character(0),
+        vector = character(0)
+    )
+
+    for (kind in c("list", "matrix", "vector")) {
+        values <- as.character(select[[kind]] %||% character(0))
+
+        if (is.element(source_name, values)) {
+            select[[kind]] <- unique(c(values, target_name))
+        }
+    }
+
+    select
+}
+
+
+workspace_copy_cached_state <- function(
+    previous_state,
+    source_name,
+    target_name
+) {
+    previous_state <- previous_state %||% list()
+    source_name <- as.character(source_name %||% "")
+    target_name <- as.character(target_name %||% "")
+    signatures <- previous_state$signatures %||% list()
+    variables <- previous_state$variables %||% list()
+    dataset_states <- previous_state$datasetStates %||% list()
+
+    if (
+        !nzchar(source_name) ||
+        !nzchar(target_name) ||
+        identical(source_name, target_name) ||
+        is.null(signatures[[source_name]]) ||
+        is.null(variables[[source_name]]) ||
+        !is.null(signatures[[target_name]]) ||
+        !exists(source_name, envir = .GlobalEnv, inherits = FALSE) ||
+        !exists(target_name, envir = .GlobalEnv, inherits = FALSE) ||
+        !identical(
+            get(source_name, envir = .GlobalEnv, inherits = FALSE),
+            get(target_name, envir = .GlobalEnv, inherits = FALSE)
+        )
+    ) {
+        return(NULL)
+    }
+
+    updated_at <- runtime_time_ms()
+    entry <- variables[[source_name]]
+    entry$access_key <- target_name
+    entry$display_name <- target_name
+    entry$updated_time <- updated_at
+    variables[[target_name]] <- entry
+    signatures[[target_name]] <- signatures[[source_name]]
+    copied_datasets <- list()
+    source_dataset <- dataset_states[[source_name]]
+
+    if (!is.null(source_dataset)) {
+        source_dataset$name <- target_name
+        dataset_states[[target_name]] <- source_dataset
+        copied_datasets[[1L]] <- list(
+            source = source_name,
+            target = target_name
+        )
+    }
+
+    list(
+        update = list(
+            added = list(entry),
+            updated = list(),
+            removed = character(0),
+            datasets = list(
+                added = if (is.null(source_dataset)) {
+                    character(0)
+                }
+                else {
+                    target_name
+                },
+                removed = character(0),
+                changed = list(),
+                copied = copied_datasets
+            ),
+            objectCount = as.integer(length(runtime_global_names())),
+            updatedAt = updated_at
+        ),
+        state = list(
+            signatures = signatures,
+            variables = variables,
+            datasetStates = dataset_states,
+            select = workspace_copy_select_state(
+                previous_state$select,
+                source_name,
+                target_name
+            ),
+            searchPath = previous_state$searchPath %||% search(),
+            objectCount = as.integer(length(runtime_global_names())),
+            updatedAt = updated_at
+        )
+    )
+}
+
+
+workspace_remove_cached_state <- function(previous_state, removed_names) {
+    previous_state <- previous_state %||% list()
+    removed_names <- unique(as.character(removed_names %||% character(0)))
+    removed_names <- removed_names[nzchar(removed_names)]
+    signatures <- previous_state$signatures %||% list()
+    variables <- previous_state$variables %||% list()
+    dataset_states <- previous_state$datasetStates %||% list()
+    known_names <- union(names(signatures), names(variables))
+    still_exists <- vapply(
+        removed_names,
+        exists,
+        logical(1),
+        envir = .GlobalEnv,
+        inherits = FALSE
+    )
+
+    if (
+        !length(removed_names) ||
+        !all(vapply(removed_names, is.element, logical(1), known_names)) ||
+        any(still_exists)
+    ) {
+        return(NULL)
+    }
+
+    removed_datasets <- intersect(removed_names, names(dataset_states))
+
+    for (name in removed_names) {
+        signatures[[name]] <- NULL
+        variables[[name]] <- NULL
+        dataset_states[[name]] <- NULL
+    }
+
+    select <- previous_state$select %||% list()
+
+    for (kind in c("list", "matrix", "vector")) {
+        select[[kind]] <- setdiff(
+            as.character(select[[kind]] %||% character(0)),
+            removed_names
+        )
+    }
+
+    updated_at <- runtime_time_ms()
+    object_count <- as.integer(length(runtime_global_names()))
+
+    list(
+        update = list(
+            added = list(),
+            updated = list(),
+            removed = removed_names,
+            datasets = list(
+                added = character(0),
+                removed = removed_datasets,
+                changed = list(),
+                copied = list()
+            ),
+            objectCount = object_count,
+            updatedAt = updated_at
+        ),
+        state = list(
+            signatures = signatures,
+            variables = variables,
+            datasetStates = dataset_states,
+            select = select,
+            searchPath = previous_state$searchPath %||% search(),
+            objectCount = object_count,
+            updatedAt = updated_at
+        )
+    )
+}
+
+
 workspace_dataset_change_entries <- function(
     name,
     value,

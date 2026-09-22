@@ -1438,6 +1438,11 @@ const applyBrowserWorkspaceUpdate = async function (update, snapshot) {
     effects.forEach((effect) => {
         state.dataEditor.cache.delete(effect.name);
 
+        if (effect.copiedFrom) {
+            warmCache?.copy(effect.copiedFrom, effect.name);
+            return;
+        }
+
         if (effect.preview) {
             warmCache?.invalidatePreview(effect.name);
         }
@@ -1599,6 +1604,9 @@ const renderWorkspacePane = function () {
 
     state.workspacePane.setSnapshot(readWorkspacePaneSnapshot());
     state.workspacePane.setActiveDataset(state.activeDatasetName);
+    state.console?.completionModel?.ingestObjectNames(
+        filterRInternalCompletionSymbols(workspaceObjectNames())
+    );
 };
 
 const workspaceDatasetNames = function () {

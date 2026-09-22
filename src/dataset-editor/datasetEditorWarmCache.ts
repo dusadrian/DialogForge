@@ -338,6 +338,117 @@ export const createDatasetEditorWarmCache = function(runtime: DatasetEditorWarmC
         invalidateVariableMetadata(objectName);
     };
 
+    const copy = function(
+        sourceNameInput: unknown,
+        targetNameInput: unknown
+    ): void {
+        const sourceName = String(sourceNameInput || "").trim();
+        const targetName = String(targetNameInput || "").trim();
+
+        if (!sourceName || !targetName || sourceName === targetName) {
+            return;
+        }
+
+        previewCache.delete(targetName);
+        previewWarmups.delete(targetName);
+        variableMetadataCache.delete(targetName);
+        variableMetadataWarmups.delete(targetName);
+        variableMetadataPatches.delete(targetName);
+
+        const preview = previewCache.get(sourceName);
+
+        if (preview) {
+            previewCache.set(targetName, {
+                ...preview,
+                objectName: targetName
+            });
+        }
+
+        const metadata = variableMetadataCache.get(sourceName);
+
+        if (metadata) {
+            variableMetadataCache.set(targetName, {
+                ...metadata,
+                name: targetName,
+                items: metadata.items.slice()
+            });
+        }
+
+        const patches = variableMetadataPatches.get(sourceName);
+
+        if (patches) {
+            variableMetadataPatches.set(targetName, new Map(patches));
+        }
+
+        const previewWarmup = previewWarmups.get(sourceName);
+
+        if (previewWarmup) {
+            let promise: Promise<TabularPreviewSnapshot | null>;
+
+            promise = previewWarmup.promise.then(function(result) {
+                const copied = result
+                    ? { ...result, objectName: targetName }
+                    : null;
+
+                if (
+                    copied
+                    && previewWarmups.get(targetName)?.promise === promise
+                ) {
+                    previewCache.set(targetName, copied);
+                }
+
+                return copied;
+            }).finally(function() {
+                if (previewWarmups.get(targetName)?.promise === promise) {
+                    previewWarmups.delete(targetName);
+                }
+            });
+
+            previewWarmups.set(targetName, {
+                objectName: targetName,
+                columnCount: previewWarmup.columnCount,
+                promise
+            });
+        }
+
+        const metadataWarmup = variableMetadataWarmups.get(sourceName);
+
+        if (metadataWarmup) {
+            let promise: Promise<VariableMetadataBatchResult | null>;
+
+            promise = metadataWarmup.promise.then(function(result) {
+                const copied = result
+                    ? {
+                        ...result,
+                        name: targetName,
+                        items: result.items.slice()
+                    }
+                    : null;
+
+                if (
+                    copied
+                    && variableMetadataWarmups.get(targetName)?.promise === promise
+                ) {
+                    variableMetadataCache.set(targetName, copied);
+                }
+
+                return copied;
+            }).finally(function() {
+                if (
+                    variableMetadataWarmups.get(targetName)?.promise === promise
+                ) {
+                    variableMetadataWarmups.delete(targetName);
+                }
+            });
+
+            variableMetadataWarmups.set(targetName, {
+                objectName: targetName,
+                count: metadataWarmup.count,
+                promise
+            });
+        }
+    };
+
     const patchVariableMetadata = function(
         objectNameInput: unknown,
         variableNameInput: unknown,
@@ -665,6 +776,7 @@ export const createDatasetEditorWarmCache = function(runtime: DatasetEditorWarmC
     };
 
     return {
+        copy,
         invalidate,
         invalidatePreview,
         invalidateVariableMetadata,

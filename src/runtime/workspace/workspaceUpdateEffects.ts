@@ -10,6 +10,7 @@ export interface WorkspaceDatasetCacheEffect {
     variableMetadataStructure: boolean;
     variableNames: string[];
     removed: boolean;
+    copiedFrom: string;
 }
 
 
@@ -32,7 +33,8 @@ const ensureEffect = function(
             variableMetadata: false,
             variableMetadataStructure: false,
             variableNames: [],
-            removed: false
+            removed: false,
+            copiedFrom: ""
         };
         effects.set(cleanName, effect);
     }
@@ -45,6 +47,14 @@ export const createWorkspaceDatasetCacheEffects = function(
     update: WorkspaceUpdate
 ): WorkspaceDatasetCacheEffect[] {
     const effects = new Map<string, WorkspaceDatasetCacheEffect>();
+
+    update.datasets.copied.forEach(function(copy) {
+        const effect = ensureEffect(effects, copy.target);
+
+        if (effect) {
+            effect.copiedFrom = copy.source;
+        }
+    });
 
     update.datasets.added.forEach(function(name) {
         const effect = ensureEffect(effects, name);
