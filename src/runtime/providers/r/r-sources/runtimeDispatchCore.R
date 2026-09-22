@@ -679,7 +679,17 @@ runtime_workspace_remove <- function(params) {
         }
     }
 
-    runtime_workspace_delta()
+    change <- workspace_remove_cached_state(
+        workspace_index_get("last_state"),
+        targets
+    )
+
+    if (is.null(change)) {
+        runtime_workspace_delta()
+    }
+    else {
+        workspace_index_set("last_state", change$state)
+    }
 
     list(ok = TRUE, result = runtime_cached_workspace_snapshot())
 }

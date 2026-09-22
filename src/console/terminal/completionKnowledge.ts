@@ -209,6 +209,10 @@ export class CompletionKnowledge {
     }
 
     public ingestObjectNames(names: string[]): void {
+        this.ingestTerminalSymbols(names);
+    }
+
+    public ingestTerminalSymbols(names: string[]): void {
         names.forEach((name) => {
             const normalized = String(name || "").trim();
 

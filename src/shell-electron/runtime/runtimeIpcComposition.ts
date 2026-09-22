@@ -132,6 +132,11 @@ export const createRuntimeIpcComposition = function(
                 .objectName;
 
             effects.forEach(function(effect) {
+                if (effect.copiedFrom) {
+                    warmCache.copy(effect.copiedFrom, effect.name);
+                    return;
+                }
+
                 if (effect.preview) {
                     warmCache.invalidatePreview(effect.name);
                 }

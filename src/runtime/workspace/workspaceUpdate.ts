@@ -1,5 +1,6 @@
 import type {
     RuntimeCapability,
+    WorkspaceDatasetCopy,
     WorkspaceDatasetChange,
     WorkspaceObjectSnapshot,
     WorkspaceUpdate
@@ -191,6 +192,21 @@ const normalizeDatasetChange = function(
 };
 
 
+const normalizeDatasetCopy = function(
+    value: unknown
+): WorkspaceDatasetCopy | null {
+    const record = recordFromValue(value);
+    const source = String(record.source || "").trim();
+    const target = String(record.target || "").trim();
+
+    if (!source || !target) {
+        return null;
+    }
+
+    return { source, target };
+};
+
+
 export const createWorkspaceUpdate = function(value: unknown): WorkspaceUpdate {
     const record = recordFromValue(value);
     const datasets = recordFromValue(record.datasets);
@@ -209,6 +225,11 @@ export const createWorkspaceUpdate = function(value: unknown): WorkspaceUpdate {
             (entry): entry is WorkspaceDatasetChange => Boolean(entry)
         )
         : [];
+    const copied = Array.isArray(datasets.copied)
+        ? datasets.copied.map(normalizeDatasetCopy).filter(
+            (entry): entry is WorkspaceDatasetCopy => Boolean(entry)
+        )
+        : [];
 
     return {
         added,
@@ -217,7 +238,8 @@ export const createWorkspaceUpdate = function(value: unknown): WorkspaceUpdate {
         datasets: {
             added: stringArray(datasets.added),
             removed: stringArray(datasets.removed),
-            changed
+            changed,
+            copied
         },
         objectCount: Number(record.objectCount || 0) || 0,
         updatedAt: Number(record.updatedAt || 0) || 0
@@ -237,6 +259,7 @@ export const workspaceUpdateHasChanges = function(
             || update.datasets.added.length > 0
             || update.datasets.removed.length > 0
             || update.datasets.changed.length > 0
+            || update.datasets.copied.length > 0
         )
     );
 };

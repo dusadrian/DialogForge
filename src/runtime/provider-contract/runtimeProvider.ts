@@ -142,6 +142,12 @@ export interface WorkspaceDatasetChange {
 }
 
 
+export interface WorkspaceDatasetCopy {
+    source: string;
+    target: string;
+}
+
+
 export interface WorkspaceUpdate {
     added: WorkspaceObjectSnapshot[];
     updated: WorkspaceObjectSnapshot[];
@@ -150,6 +156,7 @@ export interface WorkspaceUpdate {
         added: string[];
         removed: string[];
         changed: WorkspaceDatasetChange[];
+        copied: WorkspaceDatasetCopy[];
     };
     objectCount: number;
     updatedAt: number;

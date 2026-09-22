@@ -61,4 +61,5 @@ export interface CompletionModel {
     ): Promise<RuntimeCompletionSuggestion[]>;
     registerCommandInput(input: string): void;
     ingestObjectNames(names: string[]): void;
+    ingestRuntimeSymbols(names: string[]): void;
 }
