@@ -30,6 +30,41 @@ const webRuntimeDependencies = [
     "webr"
 ];
 
+const assertCanonicalDialogStylesheet = function () {
+    const dialogHtml = fs.readFileSync(
+        path.join(sourceRoot, "src/base-app/pages/dialogBuilder.html"),
+        "utf8"
+    );
+    const dialogCss = fs.readFileSync(
+        path.join(sourceRoot, "src/base-app/pages/dialogBuilder.css"),
+        "utf8"
+    );
+
+    [
+        "@import url('./shared/dmSelect.css');",
+        "@import url('./shared/appCodicon.css');"
+    ].forEach((expectedImport) => {
+        if (!dialogCss.includes(expectedImport)) {
+            throw new Error(
+                "The canonical dialog stylesheet must own its shared imports: "
+                + expectedImport
+            );
+        }
+    });
+
+    if (!dialogHtml.includes('href="./dialogBuilder.css"')) {
+        throw new Error(
+            "Desktop and web dialogs must load the same canonical stylesheet."
+        );
+    }
+
+    if (dialogHtml.includes("/browser-esm/dialogBuilder.css")) {
+        throw new Error(
+            "Dialogs must not load a separate browser-only stylesheet bundle."
+        );
+    }
+};
+
 
 /**
  * @param {string} sourcePath
@@ -175,6 +210,7 @@ const walk = function (dirPath) {
         }
     });
 };
+assertCanonicalDialogStylesheet();
 cleanGeneratedAssetDirectories();
 ["src", "scripts", "schemas"].forEach((dirName) => {
     walk(path.join(sourceRoot, dirName));

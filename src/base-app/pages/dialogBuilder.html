@@ -8,18 +8,16 @@
       if (typeof require !== 'function') {
         for (const href of [
           '/browser-esm/dialogBuilder.js',
-          '/browser-esm/dialogBuilder.css',
           '/api/product-dialog-runtime.js'
         ]) {
           const preload = document.createElement('link');
-          preload.rel = href.endsWith('.css') ? 'preload' : 'modulepreload';
-          if (href.endsWith('.css')) preload.as = 'style';
+          preload.rel = 'modulepreload';
           preload.href = href;
           document.head.appendChild(preload);
         }
       }
     </script>
-    <link rel="stylesheet" href="/browser-esm/dialogBuilder.css">
+    <link rel="stylesheet" href="./dialogBuilder.css">
 </head>
 <body>
     <div id="paper"></div>

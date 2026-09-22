@@ -17,8 +17,7 @@ const runtimeReadyTimeout = 120000;
 
 const immutableAssetPattern = new RegExp([
     "^/(?:webr|monaco)-[0-9a-f]{16}/",
-    "^/browser-esm/(?:dialogBuilder|shell)-[0-9a-f]{16}\\.(?:css|js)$",
-    "^/browser-esm/dialog-assets/",
+    "^/browser-esm/(?:dialogBuilder|shell)-[0-9a-f]{16}\\.js$",
     "^/browser-product/dialogs/customJSRuntime-[0-9a-f]{16}\\.js$"
 ].join("|"));
 
