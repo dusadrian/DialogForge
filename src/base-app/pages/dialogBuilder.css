@@ -1,3 +1,6 @@
+@import url('./shared/dmSelect.css');
+@import url('./shared/appCodicon.css');
+
 @font-face {
     font-family: 'Inter';
     src: url('../../assets/fonts/Inter/Inter-Regular.ttf') format('truetype');

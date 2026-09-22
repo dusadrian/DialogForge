@@ -1626,9 +1626,8 @@ const createWebProductDevServer = function(options) {
 
             if (pathname.startsWith("/browser-esm/")) {
                 const hasVersionedName = (
-                    /^\/browser-esm\/(?:dialogBuilder|shell)-[a-f0-9]{16}\.(?:css|js)$/
+                    /^\/browser-esm\/(?:dialogBuilder|shell)-[a-f0-9]{16}\.js$/
                         .test(pathname)
-                    || pathname.startsWith("/browser-esm/dialog-assets/")
                 );
                 const headers = hasVersionedName
                     ? {

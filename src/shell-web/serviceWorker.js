@@ -27,8 +27,7 @@ const runtimeAssetPattern = new RegExp(`^/(?:webr|monaco)-${runtimeStamp}/`);
 // can never go stale: a changed asset is a different URL.
 const immutableAssetPattern = new RegExp([
     "^/(?:webr|monaco)-[0-9a-f]{16}/",
-    "^/browser-esm/(?:dialogBuilder|shell)-[0-9a-f]{16}\\.(?:css|js)$",
-    "^/browser-esm/dialog-assets/",
+    "^/browser-esm/(?:dialogBuilder|shell)-[0-9a-f]{16}\\.js$",
     "^/browser-product/dialogs/customJSRuntime-[0-9a-f]{16}\\.js$",
     "^/vendor/dialogforge-iroh/"
 ].join("|"));

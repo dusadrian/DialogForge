@@ -241,46 +241,26 @@ const shellBundleName = `shell-${shellBundleHash}.js`;
 
 fs.writeFileSync(path.join(browserModuleOutput, shellBundleName), shellBundle);
 
-esbuild.buildSync({
-    stdin: {
-        contents: [
-            "@import './src/base-app/pages/dialogBuilder.css';",
-            "@import './src/base-app/pages/shared/dmSelect.css';",
-            "@import './src/base-app/pages/shared/appCodicon.css';"
-        ].join("\n"),
-        loader: "css",
-        resolveDir: sourceRoot,
-        sourcefile: "dialogBuilderBrowser.css"
-    },
-    outfile: path.join(browserModuleOutput, "dialogBuilder.css"),
-    bundle: true,
-    assetNames: "dialog-assets/[name]-[hash]",
-    loader: {
-        ".svg": "file",
-        ".ttf": "file"
-    }
+const dialogStylesheetFiles = [
+    "src/base-app/pages/dialogBuilder.css",
+    "src/base-app/pages/shared/dmSelect.css",
+    "src/base-app/pages/shared/appCodicon.css"
+];
+const dialogStylesheetDigest = createHash("sha256");
+
+dialogStylesheetFiles.forEach(function(relativePath) {
+    dialogStylesheetDigest.update(relativePath);
+    dialogStylesheetDigest.update(fs.readFileSync(path.join(sourceRoot, relativePath)));
 });
 
-const dialogStylesheet = fs.readFileSync(
-    path.join(browserModuleOutput, "dialogBuilder.css")
-);
-const dialogStylesheetHash = createHash("sha256")
-    .update(dialogStylesheet)
-    .digest("hex")
-    .slice(0, 16);
-const dialogStylesheetName = `dialogBuilder-${dialogStylesheetHash}.css`;
-
-fs.writeFileSync(
-    path.join(browserModuleOutput, dialogStylesheetName),
-    dialogStylesheet
-);
+const dialogStylesheetHash = dialogStylesheetDigest.digest("hex").slice(0, 16);
 
 // The shell's service worker keeps the heavy runtime in Cache Storage, which
 // persistent storage exempts from the automatic eviction the HTTP cache is
 // subject to. The UI build id updates the worker when bundles change; the
 // independent asset stamp keeps unchanged runtime files across those updates.
 const serviceWorkerBuildId = createHash("sha256")
-    .update([assetStamp, shellBundleName, dialogBundleName, dialogStylesheetName].join("\u0000"))
+    .update([assetStamp, shellBundleName, dialogBundleName, dialogStylesheetHash].join("\u0000"))
     .digest("hex")
     .slice(0, 16);
 const serviceWorkerSource = fs.readFileSync(
@@ -307,8 +287,8 @@ fs.writeFileSync(
         .replaceAll("DIALOGFORGE_RUNTIME_STAMP", assetStamp)
 );
 
-// Preload the versioned resource in the shell so each dialog iframe can reuse
-// it from the HTTP cache. A new build gets a new URL when its code changes.
+// Preload the versioned JavaScript in the shell so each dialog iframe can
+// reuse it from the HTTP cache. Both hosts load the canonical source CSS.
 for (const relativePath of [
     "src/base-app/pages/dialogBuilder.html",
     "src/shell-web/pages/shell.html"
@@ -323,10 +303,6 @@ for (const relativePath of [
             .replaceAll(
                 "/browser-esm/dialogBuilder.js",
                 `/browser-esm/${dialogBundleName}`
-            )
-            .replaceAll(
-                "/browser-esm/dialogBuilder.css",
-                `/browser-esm/${dialogStylesheetName}`
             )
             .replaceAll(
                 "/src/shell-web/pages/shell.js",
