@@ -175,6 +175,10 @@ export const createTerminalConsoleEditorInputView = (deps: {
       navigateHistory,
       getCompletionModel: deps.getCompletionModel,
       adjustFontSize: deps.adjustFontSize,
+      cancelPendingSubmission: () => (
+        submissionController?.cancelPending() || false
+      ),
+      isRuntimeBusy: sessionController.getRuntimeBusy,
       interruptExecution: deps.interruptExecution,
       scrollToPrompt: deps.scrollToPrompt,
       clearInput: inputStateController.clear,

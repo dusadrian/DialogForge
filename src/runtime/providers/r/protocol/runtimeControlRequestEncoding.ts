@@ -24,6 +24,21 @@ const encodeArray = function(value: unknown): string {
 };
 
 
+const encodeRecord = function(value: unknown): {
+    names: string;
+    values: string;
+} {
+    const entries = value && typeof value === "object" && !Array.isArray(value)
+        ? Object.entries(value as Record<string, unknown>)
+        : [];
+
+    return {
+        names: entries.map(([name]) => name).join(arrayParamSeparator),
+        values: entries.map(([, entry]) => String(entry ?? "")).join(arrayParamSeparator)
+    };
+};
+
+
 const encodeCategories = function(value: unknown): {
     values: string;
     labels: string;
@@ -108,6 +123,7 @@ export const encodeRuntimeControlRequest = function(
     );
     const categories = encodeCategories(params.categories);
     const missingRange = encodeMissingRange(params.missingRange);
+    const coreSelections = encodeRecord(params.coreSelections);
 
     return JSON.stringify({
         prefix: safeEncode(dedicatedRuntimeRequestPrefix),
@@ -157,6 +173,20 @@ export const encodeRuntimeControlRequest = function(
         variableNames: safeEncode(encodeArray(params.variableNames)),
         xVariableName: safeEncode(params.xVariableName),
         yVariableName: safeEncode(params.yVariableName),
+        solutionName: safeEncode(params.solutionName),
+        branch: safeEncode(params.branch),
+        model: safeEncode(params.model),
+        ambiguity: safeEncode(params.ambiguity),
+        title: safeEncode(params.title),
+        legend: safeEncode(
+            params.legend === false
+                ? "0"
+                : params.legend === true
+                    ? "1"
+                    : ""
+        ),
+        coreSelectionNames: safeEncode(coreSelections.names),
+        coreSelectionValues: safeEncode(coreSelections.values),
         thresholds: safeEncode(encodeArray(params.thresholds)),
         thresholdNames: safeEncode(encodeArray(params.thresholdNames)),
         variant: safeEncode(params.variant),

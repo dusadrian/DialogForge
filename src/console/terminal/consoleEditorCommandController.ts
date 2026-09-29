@@ -14,6 +14,8 @@ export interface ConsoleEditorCommandBindings {
     navigateHistory(direction: ConsoleHistoryDirection): boolean;
     getCompletionModel?(): CompletionModel | undefined;
     adjustFontSize?(delta: number): number | void;
+    cancelPendingSubmission?(): boolean;
+    isRuntimeBusy?(): boolean;
     interruptExecution?(): Promise<void> | void;
     scrollToPrompt?(): void;
     clearInput(): void;
@@ -484,6 +486,18 @@ export const wireConsoleEditorCommands = function(
             }
             catch {}
             bindings.disarmEscapeClear();
+            return;
+        }
+
+        if (bindings.cancelPendingSubmission?.()) {
+            bindings.disarmEscapeClear();
+            bindings.clearInput();
+            return;
+        }
+
+        if (bindings.isRuntimeBusy?.()) {
+            bindings.disarmEscapeClear();
+            void Promise.resolve(bindings.interruptExecution?.());
             return;
         }
 

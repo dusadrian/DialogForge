@@ -2,6 +2,8 @@ export interface MainWindowInputBindings {
     hideDatasetContextMenu(): void;
     openDeveloperDiagnostics(): void;
     focusConsolePrompt(): void;
+    isRuntimeBusy(): boolean;
+    interruptRuntime(): Promise<void> | void;
     getDatasetCommand(event: KeyboardEvent): string | null;
     executeDatasetCommand(command: string): void;
 }
@@ -32,6 +34,10 @@ export const bindMainWindowInput = function(
 
         if (event.key === "Escape") {
             bindings.hideDatasetContextMenu();
+            if (!event.defaultPrevented && bindings.isRuntimeBusy()) {
+                event.preventDefault();
+                void bindings.interruptRuntime();
+            }
             return;
         }
 

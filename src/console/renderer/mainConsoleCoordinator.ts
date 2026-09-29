@@ -63,14 +63,24 @@ export const createMainConsoleCoordinator = function(
     bindings: MainConsoleCoordinatorBindings
 ) {
     let surface: ReturnType<typeof createConsoleSurface> | null = null;
+    let interruptPending = false;
 
     const interrupt = async function(): Promise<void> {
-        await bindings.executeRuntimeMethod({
-            method: "runtime.interrupt",
-            params: {},
-            source: "base-app.console-input"
-        });
-        bindings.session.setRuntimeBusy(false);
+        if (interruptPending) {
+            return;
+        }
+
+        interruptPending = true;
+        try {
+            await bindings.executeRuntimeMethod({
+                method: "runtime.interrupt",
+                params: {},
+                source: "base-app.console-input"
+            });
+        }
+        finally {
+            interruptPending = false;
+        }
     };
 
     const checkCodeFragmentComplete = async function(

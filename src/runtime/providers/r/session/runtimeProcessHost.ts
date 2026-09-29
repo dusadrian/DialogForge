@@ -366,7 +366,7 @@ export const createRRuntimeProcessHost = function(
         start: async function(
             snapshot: RuntimeSessionSnapshot
         ): Promise<RuntimeSessionSnapshot> {
-            if (client && meta && child && !child.killed) {
+            if (client && meta && child && child.exitCode === null && child.signalCode === null) {
                 return Object.assign({}, snapshot, {
                     status: "ready",
                     connection: "runtime-control",
@@ -398,7 +398,7 @@ export const createRRuntimeProcessHost = function(
             return stoppedSnapshot(snapshot);
         },
         interrupt: function(): boolean | null {
-            if (!child || child.killed) {
+            if (!child || child.exitCode !== null || child.signalCode !== null) {
                 return null;
             }
 

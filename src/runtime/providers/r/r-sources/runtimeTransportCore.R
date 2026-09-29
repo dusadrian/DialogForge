@@ -172,6 +172,16 @@ runtime_transport_dedicated_params <- function(raw) {
         variableNames = runtime_transport_vector(raw, "variableNames"),
         xVariableName = runtime_transport_value(raw, "xVariableName"),
         yVariableName = runtime_transport_value(raw, "yVariableName"),
+        solutionName = runtime_transport_value(raw, "solutionName"),
+        branch = runtime_transport_value(raw, "branch"),
+        model = runtime_transport_value(raw, "model"),
+        ambiguity = runtime_transport_value(raw, "ambiguity"),
+        title = runtime_transport_value(raw, "title"),
+        legend = runtime_transport_flag(raw, "legend", default = TRUE),
+        coreSelections = stats::setNames(
+            runtime_transport_vector(raw, "coreSelectionValues"),
+            runtime_transport_vector(raw, "coreSelectionNames")
+        ),
         thresholds = runtime_transport_numeric_vector(raw, "thresholds"),
         thresholdNames = runtime_transport_vector(raw, "thresholdNames"),
         variant = runtime_transport_value(raw, "variant"),

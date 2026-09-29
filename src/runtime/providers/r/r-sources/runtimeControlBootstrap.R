@@ -587,6 +587,9 @@ write_meta(list(
 
 if (identical(session_kind, "dedicated")) {
     repeat {
-        safe(process_once())
+        tryCatch(
+            suspendInterrupts(safe(process_once())),
+            interrupt = function(condition) invisible(NULL)
+        )
     }
 }

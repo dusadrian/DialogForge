@@ -71,6 +71,8 @@ export interface RuntimeSessionSnapshot {
     connection: string;
     message: string;
     startupOutput?: string;
+    workspaceRestored?: boolean;
+    workspaceRestoreMessage?: string;
     transport?: RuntimeTransportSnapshot;
 }
 

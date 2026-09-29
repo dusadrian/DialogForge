@@ -37,6 +37,7 @@ export interface ConsoleEditorSubmissionBindings {
 
 export interface ConsoleEditorSubmissionController {
     submit(): Promise<void>;
+    cancelPending(): boolean;
     isBusy(): boolean;
     isSubmitting(): boolean;
     activeCommandStartAt(): number;
@@ -54,6 +55,7 @@ export const createConsoleEditorSubmissionController = function(
     let busy = false;
     let submitting = false;
     let commandStartAt = 0;
+    let submissionGeneration = 0;
 
     const debugLog = function(message: string, data?: unknown): void {
         try {
@@ -139,9 +141,16 @@ export const createConsoleEditorSubmissionController = function(
             sessionPhase
         });
         submitting = true;
+        const generation = submissionGeneration + 1;
+        submissionGeneration = generation;
 
         try {
             const fragmentStatus = await bindings.checkFragment(code);
+
+            if (generation !== submissionGeneration) {
+                debugLog("editorInput:onEnter:cancelled");
+                return;
+            }
 
             debugLog("editorInput:onEnter:fragmentStatus", {
                 status: String(fragmentStatus || "")
@@ -180,6 +189,10 @@ export const createConsoleEditorSubmissionController = function(
             }
         }
         finally {
+            if (generation !== submissionGeneration) {
+                return;
+            }
+
             submitting = false;
             busy = false;
             bindings.requestFocus();
@@ -201,6 +214,17 @@ export const createConsoleEditorSubmissionController = function(
 
     return {
         submit,
+        cancelPending: function(): boolean {
+            if (!submitting || busy) {
+                return false;
+            }
+
+            submissionGeneration += 1;
+            submitting = false;
+            bindings.refreshInteractivity();
+
+            return true;
+        },
         isBusy: function(): boolean {
             return busy;
         },

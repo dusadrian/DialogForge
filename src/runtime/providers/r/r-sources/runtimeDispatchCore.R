@@ -167,7 +167,7 @@ runtime_capture_input <- function(code, parent_id, output_width = NULL) {
     }, add = TRUE)
 
     result <- tryCatch({
-        withCallingHandlers({
+        allowInterrupts(withCallingHandlers({
             trace(paste0("execute_input:eval-start parent=", parent_id))
             value <- withVisible(eval(parse(text = code), envir = .GlobalEnv))
 
@@ -185,7 +185,7 @@ runtime_capture_input <- function(code, parent_id, output_width = NULL) {
             tryInvokeRestart("muffleWarning")
         }, error = function(error) {
             app_env$dialog_record_traceback()
-        })
+        }))
     }, interrupt = function(interrupt) {
         list(ok = TRUE, interrupted = TRUE)
     }, error = function(error) {

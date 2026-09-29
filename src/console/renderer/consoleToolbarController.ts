@@ -30,6 +30,7 @@ export interface ConsoleToolbarControllerOptions {
     renderTranscript(): void;
     setInputText(value: string): void;
     focusInput(): void;
+    interruptRuntime?(): Promise<void> | void;
     restartRuntime(
         action: "clean" | "restore"
     ): Promise<RuntimeSessionSnapshot>;
@@ -104,10 +105,13 @@ export const createConsoleToolbarController = function(
         action: "clean" | "restore"
     ): Promise<void> {
         await options.appendRestartMessage?.(action, "starting");
-        options.clearTranscriptIdentity();
         let snapshot: RuntimeSessionSnapshot;
 
         try {
+            if (options.isRuntimeBusy()) {
+                await options.interruptRuntime?.();
+            }
+
             snapshot = await options.restartRuntime(action);
         }
         catch (error) {
@@ -119,6 +123,7 @@ export const createConsoleToolbarController = function(
             throw error;
         }
 
+        options.clearTranscriptIdentity();
         options.applyRuntimeSession(snapshot);
         options.refreshRuntimeEvents();
         options.refreshPrompts();
@@ -133,7 +138,11 @@ export const createConsoleToolbarController = function(
             return;
         }
 
-        await options.appendRestartMessage?.(action, "completed");
+        await options.appendRestartMessage?.(
+            action,
+            "completed",
+            snapshot.workspaceRestoreMessage
+        );
     };
 
     return {

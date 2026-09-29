@@ -536,11 +536,13 @@ const consoleToolbar = createConsoleToolbarController({
     },
     setInputText: setVisibleCommandText,
     focusInput: focusVisibleCommandInput,
+    interruptRuntime: interruptConsoleExecution,
     restartRuntime: (action) => {
         return dialogForge.restartRuntime(action);
     },
     appendRestartMessage: appendConsoleRestartMessage,
     applyRuntimeSession: (snapshot) => {
+        setConsoleRuntimeBusy(false);
         renderRuntimeSession(snapshot);
         renderConsoleStatus(snapshot);
     },
@@ -1363,6 +1365,8 @@ const mainUiBindingController = createMainUiBindingController({
             mainConsoleCoordinator.scrollToBottom();
             focusVisibleCommandInputAfterPromptLayout();
         },
+        isRuntimeBusy: consoleSessionState.isRuntimeBusy,
+        interruptRuntime: interruptConsoleExecution,
         getDatasetCommand: function(event): string | null {
             const target = event.target as HTMLElement | null;
 
