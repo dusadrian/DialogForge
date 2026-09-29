@@ -140,6 +140,7 @@ runtime_transport_dedicated_params <- function(raw) {
         outputWidth = runtime_transport_integer(raw, "outputWidth"),
         timeoutMs = runtime_transport_number(raw, "timeoutMs"),
         sessionId = runtime_transport_number(raw, "sessionId"),
+        diagnosticSession = runtime_transport_value(raw, "diagnosticSession"),
         topic = runtime_transport_value(raw, "topic"),
         package = runtime_transport_value(raw, "package"),
         prefix = runtime_transport_value(raw, "requestPrefix"),
@@ -318,6 +319,7 @@ runtime_transport_workspace_json <- function(snapshot) {
         )),
         "},\"variables\":", json_variables(snapshot$variables %||% list()),
         ",\"objectCount\":", as.character(count),
+        ",\"workspaceRevision\":", json_workspace_revision(snapshot$workspaceRevision),
         ",\"diagnostics\":{",
         "\"snapshotStartedMs\":", json_num(diagnostics$snapshotStartedMs),
         ",\"snapshotCompletedMs\":", json_num(diagnostics$snapshotCompletedMs),
@@ -435,6 +437,9 @@ runtime_transport_response_payload <- function(output, result_json, dedicated) {
             ",\"error\":", json_str(output$error %||% ""),
             ",\"mode\":", json_str(output$mode %||% ""),
             ",\"events\":", events_json,
+            if (!is.null(output$diagnostics_json)) {
+                paste0(",\"diagnostics\":", output$diagnostics_json)
+            } else "",
             "}"
         ))
     }

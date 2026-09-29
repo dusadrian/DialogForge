@@ -93,6 +93,8 @@ export const createRuntimeWorkspaceControllers = function(
     const workspaceMutationController = createRuntimeWorkspaceMutationController({
         providerWorkspaceController: options.providerWorkspaceController,
         fallbackState: options.fallbackTabularState,
+        getWorkspaceGeneration: options.workspaceState.getGeneration,
+        markWorkspaceStale: options.workspaceState.markStale,
         listProviderObjects: options.listProviderWorkspaceObjects,
         listImportedTables: options.listImportedTables,
         getSnapshot: options.getSnapshot
@@ -102,6 +104,10 @@ export const createRuntimeWorkspaceControllers = function(
         workspaceListController,
         workspaceMutationController,
         activeDatasetController,
+        getWorkspaceGeneration: options.workspaceState.getGeneration,
+        getWorkspaceSnapshot: function() {
+            return options.workspaceState.createSnapshot(options.getSnapshot());
+        },
         getSnapshot: options.getSnapshot,
         recordRuntimeEvent: options.recordRuntimeEvent
     });

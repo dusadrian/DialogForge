@@ -353,6 +353,7 @@ export const createDatasetViewerCellUpdateBatchResult = function(
         providerId: string;
         objectName: string;
         results: CellUpdateResult[];
+        workspaceReconciliation?: CellUpdateBatchResult["workspaceReconciliation"];
     }
 ): CellUpdateBatchResult {
     const updated = input.results.filter((result) => {
@@ -367,6 +368,7 @@ export const createDatasetViewerCellUpdateBatchResult = function(
         updated,
         failed,
         results: input.results,
+        workspaceReconciliation: input.workspaceReconciliation,
         message: `${updated} cell${updated === 1 ? "" : "s"} updated.`,
         updatedAt: new Date().toISOString()
     };

@@ -16,6 +16,7 @@ import {
     type RRuntimeControlMeta
 } from "../protocol/runtimeControlClient";
 import type { RRuntimeLaunchPlan } from "./runtimeLaunchPlan";
+import { createRuntimeControlDiagnostics } from "../protocol/runtimeControlDiagnostics";
 
 
 export interface RRuntimeProcessHostOptions {
@@ -191,9 +192,13 @@ export const createRRuntimeProcessHost = function(
         generation: number
     ): Promise<RuntimeSessionSnapshot> {
         let activePlan: RRuntimeLaunchPlan;
+        const diagnostics = createRuntimeControlDiagnostics("native");
+        const lifecycleRequest = { id: "lifecycle", method: "runtime.start" };
+        diagnostics.record(lifecycleRequest, "startup.started");
 
         try {
             activePlan = await options.createLaunchPlan();
+            diagnostics.record(lifecycleRequest, "startup.plan_ready");
         } catch (error) {
             return Object.assign({}, snapshot, {
                 status: "failed",
@@ -226,6 +231,7 @@ export const createRRuntimeProcessHost = function(
             detached: process.platform !== "win32",
             stdio: "pipe"
         });
+        diagnostics.record(lifecycleRequest, "startup.spawned", spawnedChild.pid || 0);
         let activeProcessOutput = "";
         let startupProcessOutput = "";
         let startupProcessOutputClosed = false;
@@ -234,6 +240,10 @@ export const createRRuntimeProcessHost = function(
             chunk: Buffer | string
         ): void {
             const text = String(chunk || "");
+            diagnostics.record(
+                lifecycleRequest, `process.${streamName}`,
+                diagnostics.enabled ? Buffer.byteLength(text) : 0
+            );
 
             activeProcessOutput += text;
 
@@ -349,10 +359,13 @@ export const createRRuntimeProcessHost = function(
         }
 
         meta = nextMeta;
+        diagnostics.record(lifecycleRequest, "startup.runtime_ready", Number(meta.pid || 0));
         replaceClient(createRuntimeControlClient(meta, {
-            onEvent: options.onRuntimeEvent
+            onEvent: options.onRuntimeEvent,
+            diagnostics
         }));
         await waitForStartupOutputDrain();
+        diagnostics.record(lifecycleRequest, "startup.ready");
 
         return Object.assign({}, snapshot, {
             status: "ready",

@@ -12,6 +12,7 @@ export const createWorkspaceSnapshot = function(input: Partial<WorkspaceSnapshot
         status: input.status || "unknown",
         providerId: input.providerId || "",
         objects: input.objects || [],
+        workspaceRevision: input.workspaceRevision,
         message: input.message || "",
         refreshedAt: new Date().toISOString()
     };

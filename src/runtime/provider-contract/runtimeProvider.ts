@@ -78,6 +78,7 @@ export interface RuntimeSessionSnapshot {
 
 
 export interface VisibleCommandRequest {
+    activityId?: string;
     kind: "commands.visible";
     text: string;
     source: string;
@@ -124,6 +125,7 @@ export interface WorkspaceObjectSnapshot {
 
 
 export interface WorkspaceSnapshot {
+    workspaceRevision?: WorkspaceUpdate["workspaceRevision"];
     status: string;
     providerId: string;
     objects: WorkspaceObjectSnapshot[];
@@ -151,6 +153,11 @@ export interface WorkspaceDatasetCopy {
 
 
 export interface WorkspaceUpdate {
+    // Receipt for a baseline already committed by this runtime session.
+    workspaceRevision?: {
+        session: string;
+        sequence: number;
+    };
     added: WorkspaceObjectSnapshot[];
     updated: WorkspaceObjectSnapshot[];
     removed: string[];
@@ -279,12 +286,14 @@ export interface CellUpdateResult {
     };
     transcriptEvents: TranscriptEvent[];
     workspaceUpdate?: WorkspaceUpdate | null;
+    workspaceReconciliation?: WorkspaceReconciliation;
     message: string;
     updatedAt: string;
 }
 
 
 export interface CellUpdateBatchResult {
+    workspaceReconciliation?: WorkspaceReconciliation;
     status: string;
     providerId: string;
     objectName: string;
@@ -313,6 +322,7 @@ export interface ColumnRenameResult {
     toName: string;
     transcriptEvents: TranscriptEvent[];
     workspaceUpdate?: WorkspaceUpdate | null;
+    workspaceReconciliation?: WorkspaceReconciliation;
     message: string;
     updatedAt: string;
 }
@@ -337,6 +347,7 @@ export interface ColumnInsertResult {
     columnCount?: number;
     transcriptEvents: TranscriptEvent[];
     workspaceUpdate?: WorkspaceUpdate | null;
+    workspaceReconciliation?: WorkspaceReconciliation;
     message: string;
     updatedAt: string;
 }
@@ -358,6 +369,7 @@ export interface ColumnRemoveResult {
     columnCount?: number;
     transcriptEvents: TranscriptEvent[];
     workspaceUpdate?: WorkspaceUpdate | null;
+    workspaceReconciliation?: WorkspaceReconciliation;
     message: string;
     updatedAt: string;
 }
@@ -380,6 +392,7 @@ export interface RowNameUpdateResult {
     name: string;
     transcriptEvents: TranscriptEvent[];
     workspaceUpdate?: WorkspaceUpdate | null;
+    workspaceReconciliation?: WorkspaceReconciliation;
     message: string;
     updatedAt: string;
 }
@@ -404,6 +417,7 @@ export interface RowInsertResult {
     rowCount?: number;
     transcriptEvents: TranscriptEvent[];
     workspaceUpdate?: WorkspaceUpdate | null;
+    workspaceReconciliation?: WorkspaceReconciliation;
     message: string;
     updatedAt: string;
 }
@@ -425,6 +439,7 @@ export interface RowRemoveResult {
     rowCount?: number;
     transcriptEvents: TranscriptEvent[];
     workspaceUpdate?: WorkspaceUpdate | null;
+    workspaceReconciliation?: WorkspaceReconciliation;
     message: string;
     updatedAt: string;
 }
@@ -451,6 +466,7 @@ export interface RowSortResult {
     command?: string;
     transcriptEvents: TranscriptEvent[];
     workspaceUpdate?: WorkspaceUpdate | null;
+    workspaceReconciliation?: WorkspaceReconciliation;
     message: string;
     updatedAt: string;
 }
@@ -526,6 +542,7 @@ export interface VariableMetadataUpdateResult {
     label: string;
     transcriptEvents: TranscriptEvent[];
     workspaceUpdate?: WorkspaceUpdate | null;
+    workspaceReconciliation?: WorkspaceReconciliation;
     message: string;
     updatedAt: string;
 }
@@ -570,6 +587,7 @@ export interface ValueLabelUpdateResult {
     }>;
     transcriptEvents: TranscriptEvent[];
     workspaceUpdate?: WorkspaceUpdate | null;
+    workspaceReconciliation?: WorkspaceReconciliation;
     message: string;
     updatedAt: string;
 }
@@ -614,6 +632,7 @@ export interface DeclaredMissingUpdateResult {
     }>;
     transcriptEvents: TranscriptEvent[];
     workspaceUpdate?: WorkspaceUpdate | null;
+    workspaceReconciliation?: WorkspaceReconciliation;
     message: string;
     updatedAt: string;
 }
@@ -656,6 +675,7 @@ export interface ImportResult {
     overwrite: boolean;
     transcriptEvents: TranscriptEvent[];
     workspaceUpdate?: WorkspaceUpdate | null;
+    workspaceReconciliation?: WorkspaceReconciliation;
     message: string;
     importedAt: string;
 }
@@ -982,9 +1002,16 @@ export interface RuntimeCommandController {
 }
 
 
+export type WorkspaceReconciliation = "unchanged" | "changed" | "not_checked" | "failed";
+
+
 export interface RuntimeCommandExecutionResult {
+    activityId?: string;
     transcriptEvents: TranscriptEvent[];
     workspaceUpdate: WorkspaceUpdate | null;
+    // Only an explicit unchanged result may suppress the missing-update fallback.
+    // Omitted values retain compatibility with providers that do not report it.
+    workspaceReconciliation?: WorkspaceReconciliation;
 }
 
 
@@ -994,6 +1021,10 @@ export interface RuntimeEventController {
 
 
 export interface RuntimeWorkspaceController {
+    readWorkspaceSnapshot?: (
+        snapshot: RuntimeSessionSnapshot,
+        options?: WorkspaceListOptions
+    ) => Promise<WorkspaceSnapshot>;
     listWorkspaceObjects: (
         snapshot: RuntimeSessionSnapshot,
         options?: WorkspaceListOptions
@@ -1008,9 +1039,16 @@ export interface RuntimeWorkspaceController {
         request?: Partial<TabularPreviewRequest>
     ) => Promise<TabularPreviewSnapshot | null>;
     inspectObject?: (objectName: string, snapshot: RuntimeSessionSnapshot) => Promise<ObjectInspectionResult | null>;
-    removeWorkspaceObjects?: (objectNames: string[], snapshot: RuntimeSessionSnapshot) => Promise<WorkspaceObjectSnapshot[]>;
-    renameWorkspaceObject?: (request: WorkspaceRenameRequest, snapshot: RuntimeSessionSnapshot) => Promise<WorkspaceObjectSnapshot[]>;
-    clearWorkspace?: (snapshot: RuntimeSessionSnapshot) => Promise<WorkspaceObjectSnapshot[]>;
+    // Snapshot results preserve freshness receipts; arrays support legacy providers.
+    removeWorkspaceObjects?: (
+        objectNames: string[], snapshot: RuntimeSessionSnapshot
+    ) => Promise<WorkspaceSnapshot | WorkspaceObjectSnapshot[]>;
+    renameWorkspaceObject?: (
+        request: WorkspaceRenameRequest, snapshot: RuntimeSessionSnapshot
+    ) => Promise<WorkspaceSnapshot | WorkspaceObjectSnapshot[]>;
+    clearWorkspace?: (
+        snapshot: RuntimeSessionSnapshot
+    ) => Promise<WorkspaceSnapshot | WorkspaceObjectSnapshot[]>;
     completeVisibleCommand?: (
         request: VisibleCommandRequest,
         snapshot: RuntimeSessionSnapshot

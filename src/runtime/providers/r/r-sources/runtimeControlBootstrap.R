@@ -369,6 +369,8 @@ runtime_dispatch_request <- function(request) {
         ))
     }
 
+    previous_diagnostics <- runtime_diagnostic_begin(request$params)
+    on.exit(runtime_diagnostics <<- previous_diagnostics, add = TRUE)
     trace(paste0("request:dispatch-start id=", request$id, " method=", method))
     output <- tryCatch(
         eval_method(method, request$params),
@@ -393,6 +395,7 @@ runtime_dispatch_request <- function(request) {
         isTRUE(output$ok)
     ))
     safe(flush_completion_queue())
+    output$diagnostics_json <- runtime_diagnostic_json()
 
     output
 }

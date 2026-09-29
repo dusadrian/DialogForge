@@ -9,9 +9,30 @@ runtime_global_names <- function() {
 
 
 runtime_global_object <- function(name) {
-    tryCatch(
-        get(name, envir = .GlobalEnv, inherits = FALSE),
-        error = function(error) NULL
+    get(name, envir = .GlobalEnv, inherits = FALSE)
+}
+
+
+workspace_active_binding_entry <- function(name, updated_at) {
+    if (!bindingIsActive(name, .GlobalEnv)) {
+        return(NULL)
+    }
+
+    runtime_diagnostic_count("active_bindings_skipped")
+    list(
+        access_key = name,
+        display_name = name,
+        display_value = "<active binding; value not evaluated>",
+        display_type = "active binding",
+        type_info = "active binding",
+        kind = "binding",
+        length = 0L,
+        size = 0,
+        has_children = FALSE,
+        has_viewer = FALSE,
+        is_truncated = FALSE,
+        signature = "active-binding:not-evaluated",
+        updated_time = updated_at
     )
 }
 
@@ -194,6 +215,7 @@ dataset_column_metadata_signature <- function(column) {
 
 
 dataset_column_hash <- function(column) {
+    runtime_diagnostic_count("column_hashes")
     workspace_value_hash(column)
 }
 
@@ -234,6 +256,7 @@ dataset_state_current <- function(name, value, previous_dataset = NULL) {
         return(NULL)
     }
 
+    runtime_diagnostic_count("dataset_hashes")
     object_hash <- tryCatch(
         workspace_value_hash(value),
         error = function(error) ""
@@ -526,6 +549,107 @@ workspace_copy_select_state <- function(select, source_name, target_name) {
 }
 
 
+workspace_stored_value_is_inspectable <- function(value, standard_classes = FALSE) {
+    pending <- list(value)
+    inspected <- 0L
+    supported_classes <- list("data.frame")
+
+    if (isTRUE(standard_classes)) {
+        supported_classes <- c(supported_classes, list(
+            "factor", c("ordered", "factor"), "Date",
+            c("POSIXct", "POSIXt"), "difftime"
+        ))
+    }
+
+    while (length(pending)) {
+        index <- length(pending)
+        current <- .subset2(pending, index)
+        pending[index] <- NULL
+        inspected <- inspected + 1L
+
+        if (inspected > 4096L) {
+            return(FALSE)
+        }
+
+        # Only inspect stored values, never class methods or reference contents.
+        if (
+            isS4(current) ||
+            !is.element(typeof(current), c(
+                "NULL", "logical", "integer", "double", "complex",
+                "character", "raw", "list"
+            )) ||
+            (is.object(current) && !any(vapply(
+                supported_classes, identical, logical(1),
+                attr(current, "class", exact = TRUE)
+            )))
+        ) {
+            return(FALSE)
+        }
+
+        stored_attributes <- attributes(current)
+        stored_values <- if (typeof(current) == "list") {
+            unclass(current)
+        }
+        else {
+            list()
+        }
+
+        if (
+            inspected + length(pending) + length(stored_attributes) +
+                length(stored_values) > 4096L
+        ) {
+            return(FALSE)
+        }
+
+        for (attribute in stored_attributes) {
+            pending[length(pending) + 1L] <- list(attribute)
+        }
+
+        for (index in seq_along(stored_values)) {
+            pending[length(pending) + 1L] <- list(.subset2(stored_values, index))
+        }
+    }
+
+    TRUE
+}
+
+
+workspace_copy_value_is_reusable <- function(value) {
+    workspace_stored_value_is_inspectable(value)
+}
+
+
+workspace_restricted_variable <- function(name, value, updated_at) {
+    if (workspace_stored_value_is_inspectable(value, standard_classes = TRUE)) {
+        return(NULL)
+    }
+
+    classes <- attr(value, "class", exact = TRUE)
+    type <- typeof(value)
+
+    if (typeof(classes) == "character" && is.null(attributes(classes))) {
+        type <- paste(classes, collapse = "/")
+    }
+
+    runtime_diagnostic_count("restricted_objects_skipped")
+    list(
+        access_key = name,
+        display_name = name,
+        display_value = "",
+        display_type = type,
+        type_info = type,
+        kind = if (is.function(value)) "function" else "other",
+        length = 0L,
+        size = 0,
+        has_children = FALSE,
+        has_viewer = FALSE,
+        is_truncated = FALSE,
+        signature = paste0("restricted:", type),
+        updated_time = updated_at
+    )
+}
+
+
 workspace_copy_cached_state <- function(
     previous_state,
     source_name,
@@ -547,6 +671,8 @@ workspace_copy_cached_state <- function(
         !is.null(signatures[[target_name]]) ||
         !exists(source_name, envir = .GlobalEnv, inherits = FALSE) ||
         !exists(target_name, envir = .GlobalEnv, inherits = FALSE) ||
+        bindingIsActive(source_name, .GlobalEnv) ||
+        bindingIsActive(target_name, .GlobalEnv) ||
         !identical(
             get(source_name, envir = .GlobalEnv, inherits = FALSE),
             get(target_name, envir = .GlobalEnv, inherits = FALSE)
@@ -557,6 +683,12 @@ workspace_copy_cached_state <- function(
 
     updated_at <- runtime_time_ms()
     entry <- variables[[source_name]]
+    source_value <- get(source_name, envir = .GlobalEnv, inherits = FALSE)
+
+    if (!workspace_copy_value_is_reusable(source_value)) {
+        return(NULL)
+    }
+
     entry$access_key <- target_name
     entry$display_name <- target_name
     entry$updated_time <- updated_at
@@ -710,6 +842,9 @@ workspace_variable_change_signature <- function(name, value, dataset_state = NUL
 
 
 collect_workspace_update <- function(previous_state = NULL) {
+    runtime_diagnostic_count("workspace_scans")
+    runtime_diagnostic_mark("reconciliation.started")
+    on.exit(runtime_diagnostic_mark("reconciliation.finished"), add = TRUE)
     previous_state <- previous_state %||% list(
         signatures = list(),
         variables = list(),
@@ -734,9 +869,36 @@ collect_workspace_update <- function(previous_state = NULL) {
     updated_at <- runtime_time_ms()
 
     for (name in object_names) {
+        binding_entry <- workspace_active_binding_entry(name, updated_at)
+
+        if (!is.null(binding_entry)) {
+            signatures[[name]] <- binding_entry$signature
+            variables[[name]] <- binding_entry
+
+            if (is.null(previous_signatures[[name]])) {
+                added[[length(added) + 1L]] <- binding_entry
+            }
+            else if (!identical(previous_signatures[[name]], binding_entry$signature)) {
+                updated[[length(updated) + 1L]] <- binding_entry
+            }
+            next
+        }
+
         value <- runtime_global_object(name)
 
-        if (is.null(value)) {
+        restricted_entry <- workspace_restricted_variable(name, value, updated_at)
+
+        if (!is.null(restricted_entry)) {
+            signatures[[name]] <- restricted_entry$signature
+            variables[[name]] <- restricted_entry
+
+            if (is.null(previous_signatures[[name]])) {
+                added[[length(added) + 1L]] <- restricted_entry
+            }
+            else {
+                # Opaque contents cannot establish equality with the old value.
+                updated[[length(updated) + 1L]] <- restricted_entry
+            }
             next
         }
 
@@ -817,7 +979,7 @@ collect_workspace_update <- function(previous_state = NULL) {
             next
         }
 
-        if (!is.element(name, object_names)) {
+        if (!is.element(name, names(dataset_states))) {
             removed_datasets <- c(removed_datasets, name)
         }
     }
@@ -915,6 +1077,9 @@ workspace_dataset_summary <- function(value, dataset_state = NULL) {
 
 
 workspace_snapshot <- function() {
+    runtime_diagnostic_count("workspace_scans")
+    runtime_diagnostic_mark("reconciliation.started")
+    on.exit(runtime_diagnostic_mark("reconciliation.finished"), add = TRUE)
     started_at <- runtime_time_ms()
     object_names <- runtime_global_names()
     data_frames <- list()
@@ -933,9 +1098,19 @@ workspace_snapshot <- function() {
     previous_dataset_states <- previous_state$datasetStates %||% list()
 
     for (name in object_names) {
+        binding_entry <- workspace_active_binding_entry(name, updated_at)
+
+        if (!is.null(binding_entry)) {
+            variables[[length(variables) + 1L]] <- binding_entry
+            next
+        }
+
         value <- runtime_global_object(name)
 
-        if (is.null(value)) {
+        restricted_entry <- workspace_restricted_variable(name, value, updated_at)
+
+        if (!is.null(restricted_entry)) {
+            variables[[length(variables) + 1L]] <- restricted_entry
             next
         }
 

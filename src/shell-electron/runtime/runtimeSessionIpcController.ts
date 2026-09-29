@@ -4,7 +4,8 @@ import type {
 } from "electron";
 
 import {
-    createVisibleCommandRequest
+    createVisibleCommandRequest,
+    createTranscriptEvent
 } from "../../runtime/commands/commandProtocol";
 import {
     createProductCommandRequest
@@ -83,6 +84,21 @@ export interface RuntimeSessionIpcControllerOptions {
 export const createRuntimeSessionIpcController = function(
     options: RuntimeSessionIpcControllerOptions
 ): void {
+    const reportUncertainWorkspaceChange = function(snapshot: WorkspaceSnapshot): void {
+        if (snapshot.status !== "uncertain") {
+            return;
+        }
+
+        options.sendTranscriptEvents([createTranscriptEvent("output", {
+            kind: "workspace.mutation",
+            source: "workspace",
+            text: ""
+        }, {
+            id: `workspace-warning-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+            streamName: "warning",
+            message: `Warning: ${snapshot.message}\n`
+        })]);
+    };
     options.ipcMain.handle(runtimeSessionIpcChannels.get, async () => {
         return options.runtimeSessionManager.getSnapshot();
     });
@@ -152,6 +168,7 @@ export const createRuntimeSessionIpcController = function(
                 .removeWorkspaceObjects(input?.objectNames || []);
 
             options.sendWorkspaceSnapshot(snapshot);
+            reportUncertainWorkspaceChange(snapshot);
             options.sendActiveDataset(options.runtimeSessionManager.getActiveDataset());
             await options.broadcastRuntimeEvents();
 
@@ -171,6 +188,7 @@ export const createRuntimeSessionIpcController = function(
                 .renameWorkspaceObject(createWorkspaceRenameRequest(input || {}));
 
             options.sendWorkspaceSnapshot(snapshot);
+            reportUncertainWorkspaceChange(snapshot);
             options.sendActiveDataset(options.runtimeSessionManager.getActiveDataset());
             await options.broadcastRuntimeEvents();
 
@@ -184,6 +202,7 @@ export const createRuntimeSessionIpcController = function(
         const snapshot = await options.runtimeSessionManager.clearWorkspace();
 
         options.sendWorkspaceSnapshot(snapshot);
+        reportUncertainWorkspaceChange(snapshot);
         options.sendActiveDataset(options.runtimeSessionManager.getActiveDataset());
         await options.broadcastRuntimeEvents();
 

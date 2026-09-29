@@ -2,6 +2,7 @@ import type {
     RuntimeSessionSnapshot,
     RuntimeWorkspaceController,
     WorkspaceListOptions,
+    WorkspaceObjectSnapshot,
     WorkspaceRenameRequest,
     WorkspaceSnapshot
 } from "../provider-contract/runtimeProvider";
@@ -28,6 +29,8 @@ export interface RuntimeWorkspaceOperationControllerOptions {
     workspaceMutationController: RuntimeWorkspaceMutationController;
     activeDatasetController: RuntimeActiveDatasetController;
     getSnapshot(): RuntimeSessionSnapshot;
+    getWorkspaceSnapshot?(): WorkspaceSnapshot;
+    getWorkspaceGeneration?(): number;
     recordRuntimeEvent(
         type: string,
         objectName: string,
@@ -67,12 +70,28 @@ export const createRuntimeWorkspaceOperationController = function(
             return unavailable();
         }
 
+        const generation = options.getWorkspaceGeneration?.();
         const workspace = await options.workspaceListController.list(
             listOptions
         );
+
+        if (generation !== options.getWorkspaceGeneration?.()) {
+            return unavailable();
+        }
+
+        if (workspace.status !== "ready") {
+            return workspace;
+        }
         const objects = options.activeDatasetController.rememberWorkspaceObjects(
-            workspace.objects
+            workspace.objects,
+            workspace.workspaceRevision
         );
+
+        const acceptedWorkspace = options.getWorkspaceSnapshot?.();
+
+        if (acceptedWorkspace && acceptedWorkspace.status !== "ready") {
+            return acceptedWorkspace;
+        }
 
         options.activeDatasetController.reconcileAfterWorkspaceRefresh(
             objects,
@@ -81,16 +100,76 @@ export const createRuntimeWorkspaceOperationController = function(
 
         return createWorkspaceSnapshot({
             status: workspace.status,
+            workspaceRevision: acceptedWorkspace?.workspaceRevision || workspace.workspaceRevision,
             providerId: snapshot.providerId,
             objects,
             message: workspace.message
         });
     };
 
+    const acceptMutationWorkspace = function(
+        result: WorkspaceSnapshot | WorkspaceObjectSnapshot[]
+    ): WorkspaceSnapshot {
+        const workspace = Array.isArray(result)
+            ? createWorkspaceSnapshot({
+                status: "ready",
+                providerId: options.getSnapshot().providerId,
+                objects: result
+            })
+            : result;
+
+        if (workspace.status !== "ready") {
+            return workspace;
+        }
+
+        const objects = options.activeDatasetController.rememberWorkspaceObjects(
+            workspace.objects,
+            workspace.workspaceRevision
+        );
+
+        return options.getWorkspaceSnapshot?.() || createWorkspaceSnapshot({
+            ...workspace,
+            objects
+        });
+    };
+
+    const performWorkspaceMutation = async function(
+        operation: "remove" | "rename" | "clear",
+        mutate: () => Promise<WorkspaceSnapshot | WorkspaceObjectSnapshot[]>
+    ): Promise<WorkspaceSnapshot | WorkspaceObjectSnapshot[]> {
+        const generation = options.getWorkspaceGeneration?.();
+
+        try {
+            return await mutate();
+        }
+        catch (error) {
+            if (generation !== options.getWorkspaceGeneration?.()) {
+                return unavailable();
+            }
+
+            const message = "The workspace change could not be confirmed. "
+                + "It may already have been applied. Displayed objects may be stale. "
+                + "Run another command to refresh the workspace before trying the change again.";
+
+            options.recordRuntimeEvent(
+                "workspace.mutation.uncertain", operation, message,
+                { operation, error: error instanceof Error ? error.message : String(error) }
+            );
+
+            return createWorkspaceSnapshot({
+                ...options.getWorkspaceSnapshot?.(),
+                providerId: options.getSnapshot().providerId,
+                status: "uncertain",
+                message
+            });
+        }
+    };
+
     return {
         listWorkspaceObjects,
         removeWorkspaceObjects: async function(objectNames) {
             const snapshot = options.getSnapshot();
+            const generation = options.getWorkspaceGeneration?.();
             const names = Array.from(new Set(objectNames.map((name) => {
                 return String(name || "").trim();
             }).filter(Boolean)));
@@ -119,9 +198,22 @@ export const createRuntimeWorkspaceOperationController = function(
                 }));
             }
 
-            const objects = await options.workspaceMutationController.remove(names);
-            options.activeDatasetController.clearIfRemoved(names);
-            options.activeDatasetController.rememberWorkspaceObjects(objects);
+            const result = await performWorkspaceMutation("remove", () => {
+                return options.workspaceMutationController.remove(names);
+            });
+
+            if (generation !== options.getWorkspaceGeneration?.()) {
+                return unavailable();
+            }
+            const workspace = acceptMutationWorkspace(result);
+
+            if (workspace.status !== "ready") {
+                return workspace;
+            }
+
+            options.activeDatasetController.clearIfRemoved(names.filter((name) => {
+                return !workspace.objects.some((object) => object.name === name);
+            }));
             options.recordRuntimeEvent(
                 "workspace.object.removed",
                 names.join(", "),
@@ -130,14 +222,13 @@ export const createRuntimeWorkspaceOperationController = function(
             );
 
             return createWorkspaceSnapshot({
-                status: "ready",
-                providerId: snapshot.providerId,
-                objects,
+                ...workspace,
                 message: "Workspace object(s) removed."
             });
         },
         renameWorkspaceObject: async function(request) {
             const snapshot = options.getSnapshot();
+            const generation = options.getWorkspaceGeneration?.();
             const oldName = String(request.oldName || "").trim();
             const newName = String(request.newName || "").trim();
 
@@ -155,15 +246,27 @@ export const createRuntimeWorkspaceOperationController = function(
             }
 
             if (oldName === newName) {
+                const workspace = await listWorkspaceObjects();
+
+                if (workspace.status !== "ready") {
+                    return workspace;
+                }
+
                 return createWorkspaceSnapshot({
-                    status: "ready",
-                    providerId: snapshot.providerId,
-                    objects: (await listWorkspaceObjects()).objects,
+                    ...workspace,
                     message: "Workspace object already has the requested name."
                 });
             }
 
-            const currentObjects = (await listWorkspaceObjects()).objects;
+            const currentWorkspace = await listWorkspaceObjects();
+
+            if (generation !== options.getWorkspaceGeneration?.()) {
+                return unavailable();
+            }
+            if (currentWorkspace.status !== "ready") {
+                return currentWorkspace;
+            }
+            const currentObjects = currentWorkspace.objects;
             const currentNames = new Set(currentObjects.map((object) => {
                 return object.name;
             }));
@@ -197,14 +300,29 @@ export const createRuntimeWorkspaceOperationController = function(
                 }));
             }
 
-            const objects = await options.workspaceMutationController.rename({
-                oldName,
-                newName,
-                source: request.source
+            const result = await performWorkspaceMutation("rename", () => {
+                return options.workspaceMutationController.rename({
+                    oldName,
+                    newName,
+                    source: request.source
+                });
             });
-            options.activeDatasetController.rename(oldName, newName);
 
-            options.activeDatasetController.rememberWorkspaceObjects(objects);
+            if (generation !== options.getWorkspaceGeneration?.()) {
+                return unavailable();
+            }
+            const workspace = acceptMutationWorkspace(result);
+
+            if (workspace.status !== "ready") {
+                return workspace;
+            }
+
+            if (
+                !workspace.objects.some((object) => object.name === oldName)
+                && workspace.objects.some((object) => object.name === newName)
+            ) {
+                options.activeDatasetController.rename(oldName, newName);
+            }
             options.recordRuntimeEvent(
                 "workspace.object.renamed",
                 oldName + " -> " + newName,
@@ -217,26 +335,43 @@ export const createRuntimeWorkspaceOperationController = function(
             );
 
             return createWorkspaceSnapshot({
-                status: "ready",
-                providerId: snapshot.providerId,
-                objects,
+                ...workspace,
                 message: "Workspace object renamed."
             });
         },
         clearWorkspace: async function() {
             const snapshot = options.getSnapshot();
+            const generation = options.getWorkspaceGeneration?.();
 
             if (snapshot.status !== "ready") {
                 return unavailable();
             }
 
-            const previousNames = (await listWorkspaceObjects()).objects.map((object) => {
-                return object.name;
+            const previousWorkspace = await listWorkspaceObjects();
+
+            if (generation !== options.getWorkspaceGeneration?.()) {
+                return unavailable();
+            }
+            if (previousWorkspace.status !== "ready") {
+                return previousWorkspace;
+            }
+            const previousNames = previousWorkspace.objects.map((object) => object.name);
+            const result = await performWorkspaceMutation("clear", () => {
+                return options.workspaceMutationController.clear();
             });
 
-            const objects = await options.workspaceMutationController.clear();
-            options.activeDatasetController.clearIfRemoved(previousNames);
-            options.activeDatasetController.rememberWorkspaceObjects(objects);
+            if (generation !== options.getWorkspaceGeneration?.()) {
+                return unavailable();
+            }
+            const workspace = acceptMutationWorkspace(result);
+
+            if (workspace.status !== "ready") {
+                return workspace;
+            }
+
+            options.activeDatasetController.clearIfRemoved(previousNames.filter((name) => {
+                return !workspace.objects.some((object) => object.name === name);
+            }));
             options.recordRuntimeEvent(
                 "workspace.cleared",
                 "",
@@ -245,9 +380,7 @@ export const createRuntimeWorkspaceOperationController = function(
             );
 
             return createWorkspaceSnapshot({
-                status: "ready",
-                providerId: snapshot.providerId,
-                objects,
+                ...workspace,
                 message: "Workspace cleared."
             });
         }

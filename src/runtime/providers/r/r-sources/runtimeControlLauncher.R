@@ -27,6 +27,7 @@ local({
 
   source_runtime_file(file.path(runtime_r_dir, "backend.R"))
   source_runtime_file(file.path(runtime_r_dir, "runtimePrelude.R"))
+  source_runtime_file(file.path(runtime_r_dir, "runtimeDiagnostics.R"))
   source_runtime_file(file.path(runtime_r_dir, "runtimeWorkspaceCore.R"))
   source_runtime_file(file.path(runtime_r_dir, "runtimeDatasetStateCore.R"))
   source_runtime_file(file.path(runtime_r_dir, "runtimeDatasetCore.R"))

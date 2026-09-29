@@ -299,6 +299,7 @@ export const createRTabularMetadataController = function(
                 label: request.label,
                 transcriptEvents,
                 workspaceUpdate: commandResult.workspaceUpdate,
+                workspaceReconciliation: commandResult.workspaceReconciliation,
                 message: failed
                     ? "R visible variable-metadata command failed."
                     : "R visible variable-metadata command updated metadata."
@@ -359,6 +360,7 @@ export const createRTabularMetadataController = function(
                 labels: request.labels,
                 transcriptEvents,
                 workspaceUpdate: commandResult.workspaceUpdate,
+                workspaceReconciliation: commandResult.workspaceReconciliation,
                 message: failed
                     ? "R visible value-label command failed."
                     : "R visible value-label command updated value labels."
@@ -404,6 +406,7 @@ export const createRTabularMetadataController = function(
                 values: request.values,
                 transcriptEvents,
                 workspaceUpdate: commandResult.workspaceUpdate,
+                workspaceReconciliation: commandResult.workspaceReconciliation,
                 message: failed
                     ? "R visible declared-missing command failed."
                     : "R visible declared-missing command updated declared missing values."

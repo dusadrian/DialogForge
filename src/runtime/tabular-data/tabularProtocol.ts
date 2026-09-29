@@ -155,6 +155,7 @@ export const createCellUpdateResult = function(input: Partial<CellUpdateResult>)
             : undefined,
         transcriptEvents: input.transcriptEvents || [],
         workspaceUpdate: input.workspaceUpdate,
+        workspaceReconciliation: input.workspaceReconciliation,
         message: input.message || "",
         updatedAt: new Date().toISOString()
     };
@@ -290,6 +291,7 @@ export const createVariableMetadataUpdateResult = function(
         label: input.label !== undefined ? input.label : (metadataKey === "label" ? value : ""),
         transcriptEvents: input.transcriptEvents || [],
         workspaceUpdate: input.workspaceUpdate,
+        workspaceReconciliation: input.workspaceReconciliation,
         message: input.message || "",
         updatedAt: new Date().toISOString()
     };
@@ -336,6 +338,7 @@ export const createValueLabelUpdateResult = function(input: Partial<ValueLabelUp
         labels: input.labels || [],
         transcriptEvents: input.transcriptEvents || [],
         workspaceUpdate: input.workspaceUpdate,
+        workspaceReconciliation: input.workspaceReconciliation,
         message: input.message || "",
         updatedAt: new Date().toISOString()
     };
@@ -382,6 +385,7 @@ export const createDeclaredMissingUpdateResult = function(input: Partial<Declare
         values: input.values || [],
         transcriptEvents: input.transcriptEvents || [],
         workspaceUpdate: input.workspaceUpdate,
+        workspaceReconciliation: input.workspaceReconciliation,
         message: input.message || "",
         updatedAt: new Date().toISOString()
     };
@@ -422,6 +426,7 @@ export const createColumnRenameResult = function(input: Partial<ColumnRenameResu
         toName: input.toName || "",
         transcriptEvents: input.transcriptEvents || [],
         workspaceUpdate: input.workspaceUpdate,
+        workspaceReconciliation: input.workspaceReconciliation,
         message: input.message || "",
         updatedAt: new Date().toISOString()
     };
@@ -453,6 +458,7 @@ export const createColumnInsertResult = function(input: Partial<ColumnInsertResu
         columnCount: Number.isFinite(columnCount) ? columnCount : undefined,
         transcriptEvents: input.transcriptEvents || [],
         workspaceUpdate: input.workspaceUpdate,
+        workspaceReconciliation: input.workspaceReconciliation,
         message: input.message || "",
         updatedAt: new Date().toISOString()
     };
@@ -480,6 +486,7 @@ export const createColumnRemoveResult = function(input: Partial<ColumnRemoveResu
         columnCount: Number.isFinite(columnCount) ? columnCount : undefined,
         transcriptEvents: input.transcriptEvents || [],
         workspaceUpdate: input.workspaceUpdate,
+        workspaceReconciliation: input.workspaceReconciliation,
         message: input.message || "",
         updatedAt: new Date().toISOString()
     };
@@ -522,6 +529,7 @@ export const createRowInsertResult = function(input: Partial<RowInsertResult>): 
         rowCount: Number.isFinite(rowCount) ? rowCount : undefined,
         transcriptEvents: input.transcriptEvents || [],
         workspaceUpdate: input.workspaceUpdate,
+        workspaceReconciliation: input.workspaceReconciliation,
         message: input.message || "",
         updatedAt: new Date().toISOString()
     };
@@ -550,6 +558,7 @@ export const createRowRemoveResult = function(input: Partial<RowRemoveResult>): 
         rowCount: Number.isFinite(rowCount) ? rowCount : undefined,
         transcriptEvents: input.transcriptEvents || [],
         workspaceUpdate: input.workspaceUpdate,
+        workspaceReconciliation: input.workspaceReconciliation,
         message: input.message || "",
         updatedAt: new Date().toISOString()
     };
@@ -582,6 +591,7 @@ export const createRowSortResult = function(input: Partial<RowSortResult>): RowS
         command: input.command || "",
         transcriptEvents: input.transcriptEvents || [],
         workspaceUpdate: input.workspaceUpdate,
+        workspaceReconciliation: input.workspaceReconciliation,
         message: input.message || "",
         updatedAt: new Date().toISOString()
     };
@@ -599,6 +609,7 @@ export const createRowNameUpdateResult = function(input: Partial<RowNameUpdateRe
         name: input.name || "",
         transcriptEvents: input.transcriptEvents || [],
         workspaceUpdate: input.workspaceUpdate,
+        workspaceReconciliation: input.workspaceReconciliation,
         message: input.message || "",
         updatedAt: new Date().toISOString()
     };

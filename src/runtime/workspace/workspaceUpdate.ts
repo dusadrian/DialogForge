@@ -3,6 +3,7 @@ import type {
     WorkspaceDatasetCopy,
     WorkspaceDatasetChange,
     WorkspaceObjectSnapshot,
+    WorkspaceSnapshot,
     WorkspaceUpdate
 } from "../provider-contract/runtimeProvider";
 import {
@@ -14,6 +15,39 @@ const recordFromValue = function(value: unknown): Record<string, unknown> {
     return value && typeof value === "object" && !Array.isArray(value)
         ? value as Record<string, unknown>
         : {};
+};
+
+// Recovery must also replace renderer rows and invalidate dataset caches whose
+// intervening changes may never have reached this application.
+export const createWorkspaceRecoveryUpdate = function(
+    previous: WorkspaceSnapshot,
+    current: WorkspaceSnapshot
+): WorkspaceUpdate {
+    const currentNames = new Set(current.objects.map((object) => object.name));
+    const tables = current.objects.filter((object) => object.kind === "table");
+    const tableNames = new Set(tables.map((object) => object.name));
+
+    return {
+        workspaceRevision: current.workspaceRevision,
+        added: [],
+        updated: current.objects,
+        removed: previous.objects.filter((object) => !currentNames.has(object.name))
+            .map((object) => object.name),
+        datasets: {
+            added: [],
+            removed: previous.objects.filter((object) => {
+                return object.kind === "table" && !tableNames.has(object.name);
+            }).map((object) => object.name),
+            changed: tables.map((object) => ({
+                name: object.name,
+                kind: "dataset_structure_changed",
+                columns: [], rows: [], schemaChanged: true
+            })),
+            copied: []
+        },
+        objectCount: current.objects.length,
+        updatedAt: Date.now()
+    };
 };
 
 
@@ -209,6 +243,8 @@ const normalizeDatasetCopy = function(
 
 export const createWorkspaceUpdate = function(value: unknown): WorkspaceUpdate {
     const record = recordFromValue(value);
+    const revision = recordFromValue(record.workspaceRevision);
+    const sequence = Number(revision.sequence);
     const datasets = recordFromValue(record.datasets);
     const added = Array.isArray(record.added)
         ? record.added.map(normalizeWorkspaceUpdateObject).filter(
@@ -232,6 +268,10 @@ export const createWorkspaceUpdate = function(value: unknown): WorkspaceUpdate {
         : [];
 
     return {
+        ...(typeof revision.session === "string" && revision.session.length > 0
+            && Number.isSafeInteger(sequence) && sequence > 0
+            ? { workspaceRevision: { session: revision.session, sequence } }
+            : {}),
         added,
         updated,
         removed: stringArray(record.removed),
@@ -269,7 +309,9 @@ const mergeWorkspaceObject = function(
     previous: WorkspaceObjectSnapshot | undefined,
     next: WorkspaceObjectSnapshot
 ): WorkspaceObjectSnapshot {
-    if (!previous) {
+    if (!previous || (next.kind && next.kind !== previous.kind)) {
+        // Retyping replaces the object, including its former table metadata
+        // and capabilities. They cannot be inherited from the old value.
         return next;
     }
 

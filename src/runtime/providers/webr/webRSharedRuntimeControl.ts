@@ -6,6 +6,7 @@ import type {
 import {
     encodeRuntimeControlRequest
 } from "../r/protocol/runtimeControlRequestEncoding";
+import { createRuntimeControlDiagnostics } from "../r/protocol/runtimeControlDiagnostics";
 import {
     isRPlotCommand
 } from "../r/commands/rCommandIntents";
@@ -18,6 +19,7 @@ import {
 const runtimeControlSourceNames = [
     "backend.R",
     "runtimePrelude.R",
+    "runtimeDiagnostics.R",
     "runtimeWorkspaceCore.R",
     "runtimeDatasetStateCore.R",
     "runtimeDatasetCore.R",
@@ -117,12 +119,15 @@ const executeRuntimeMethodCommand = function(
         `    .method <- ${JSON.stringify(request.method)}`,
         "    .runtime_env <- as.environment(\"DialogApp\")",
         "    .params <- .runtime_env$runtime_transport_dedicated_params(.raw)",
+        "    .previous_diagnostics <- .runtime_env$runtime_diagnostic_begin(.params)",
+        "    on.exit(.runtime_env$runtime_diagnostics <- .previous_diagnostics, add = TRUE)",
         "    .runtime_env$runtime_begin_event_collection()",
         "    .result <- .runtime_env$eval_method(.method, .params)",
         // Electron flushes this queue from its runtime loop. WebR executes one
         // request at a time, so its transport must flush before collecting the
         // APP events or the terminal idle state and next prompt are withheld.
         "    .runtime_env$flush_completion_queue()",
+        "    .result$diagnostics_json <- .runtime_env$runtime_diagnostic_json()",
         "    .events <- .runtime_env$runtime_take_collected_events()",
         "    .result$events_json <- paste0(",
         "        \"[\", paste(.events, collapse = \",\"), \"]\"",
@@ -220,12 +225,16 @@ const executeInteractiveRuntimeMethod = async function(
 export const installWebRSharedRuntimeControl = async function(
     options: WebRSharedRuntimeControlOptions
 ): Promise<WebRSharedRuntimeControlClient> {
+    const diagnostics = createRuntimeControlDiagnostics("webr");
+    const startupRequest = { id: "lifecycle", method: "runtime.start" };
+    diagnostics.record(startupRequest, "startup.started");
     // Fetch independently, then evaluate in the established dependency order.
     // Serial network requests added one round trip for every runtime source.
     const [sources, productSource] = await Promise.all([
         Promise.all(runtimeControlSourceNames.map((name) => options.fetchSource(name))),
         options.fetchProductSource ? options.fetchProductSource() : Promise.resolve("")
     ]);
+    diagnostics.record(startupRequest, "startup.sources_ready");
 
     await options.runRuntimeOperation(function() {
         return options.runtime.evalRVoid(createRuntimeEnvironmentCommand());
@@ -238,6 +247,7 @@ export const installWebRSharedRuntimeControl = async function(
             );
         });
     }
+    diagnostics.record(startupRequest, "startup.helpers_ready");
 
     if (productSource.trim()) {
         await options.runRuntimeOperation(function() {
@@ -248,9 +258,16 @@ export const installWebRSharedRuntimeControl = async function(
     }
 
     let attached = true;
+    let workspaceEpoch = 0;
+    diagnostics.record(startupRequest, "startup.ready");
 
     return {
+        getWorkspaceEpoch: () => workspaceEpoch,
         execute: async function(request) {
+            if (request.method !== "workspace.update" && request.method !== "workspace.snapshot") {
+                workspaceEpoch += 1;
+            }
+            request = diagnostics.prepare(request);
             if (!attached) {
                 return {
                     id: request.id,
@@ -266,10 +283,18 @@ export const installWebRSharedRuntimeControl = async function(
                 const capturesGraphics = request.method === "execute_input"
                     && isRPlotCommand(String(request.params?.code || ""));
                 const text = await options.runRuntimeOperation(async function() {
+                    diagnostics.record(request, "request.dequeued");
                     await options.prepareRequest?.(request);
+                    diagnostics.record(request, "request.sent");
                     if (interactive) {
                         return executeInteractiveRuntimeMethod(
-                            options,
+                            {
+                                ...options,
+                                promptReceived: async function(input) {
+                                    diagnostics.record(request, "prompt.requested");
+                                    await options.promptReceived?.(input);
+                                }
+                            },
                             request,
                             command
                         );
@@ -289,6 +314,14 @@ export const installWebRSharedRuntimeControl = async function(
                     return options.runtime.evalRString(command);
                 });
                 const result = JSON.parse(String(text || "").trim());
+                diagnostics.record(
+                    request, "response.received",
+                    diagnostics.enabled ? new TextEncoder().encode(text).byteLength : 0
+                );
+                diagnostics.receiveDiagnostics(request, result?.diagnostics);
+                for (const event of Array.isArray(result?.events) ? result.events : []) {
+                    diagnostics.receiveEvent(request, event);
+                }
 
                 return {
                     id: request.id,
@@ -307,6 +340,7 @@ export const installWebRSharedRuntimeControl = async function(
                 };
             }
             catch (error) {
+                diagnostics.record(request, "request.failed");
                 return {
                     id: request.id,
                     method: request.method,
@@ -316,8 +350,12 @@ export const installWebRSharedRuntimeControl = async function(
                         : String(error)
                 };
             }
+            finally {
+                diagnostics.record(request, "response.resolved");
+            }
         },
         detach: function() {
+            workspaceEpoch += 1;
             attached = false;
         }
     };

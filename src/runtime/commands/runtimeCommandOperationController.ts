@@ -15,11 +15,13 @@ import type {
 import {
     createProductCommandResult
 } from "../product-commands/productCommandProtocol";
+import { workspaceUpdateHasChanges } from "../workspace/workspaceUpdate";
 
 
 export interface RuntimeCommandOperationControllerOptions {
     commandExecutionController: RuntimeCommandExecutionController;
     getSnapshot(): RuntimeSessionSnapshot;
+    getWorkspaceGeneration?(): number;
     recordRuntimeEvent(
         type: string,
         objectName: string,
@@ -30,6 +32,7 @@ export interface RuntimeCommandOperationControllerOptions {
         request: VisibleCommandRequest
     ): Promise<WorkspaceUpdate | null>;
     applyWorkspaceUpdate(update: WorkspaceUpdate): void;
+    invalidateWorkspace?(): void;
 }
 
 
@@ -65,14 +68,56 @@ export const createRuntimeCommandOperationController = function(
                 };
             }
 
+            const generation = options.getWorkspaceGeneration?.();
             const result = await options.commandExecutionController
                 .executeVisibleCommand(request);
-            const workspaceUpdate = result.workspaceUpdate
-                || await options.completeVisibleCommand?.(request)
-                || null;
 
-            if (workspaceUpdate) {
+            if (generation !== options.getWorkspaceGeneration?.()) {
+                return { ...result, workspaceUpdate: null, workspaceReconciliation: "not_checked" };
+            }
+            let workspaceUpdate = result.workspaceUpdate;
+            let workspaceReconciliation = result.workspaceReconciliation;
+
+            if (result.workspaceReconciliation === "failed") {
+                options.invalidateWorkspace?.();
+                options.recordRuntimeEvent(
+                    "workspace.reconciliation.failed",
+                    "",
+                    "Workspace refresh failed; the last displayed values may be stale.",
+                    { source: request.source }
+                );
+            }
+            else if (!workspaceUpdate && result.workspaceReconciliation !== "unchanged") {
+                try {
+                    workspaceUpdate = await options.completeVisibleCommand?.({
+                        ...request,
+                        activityId: result.activityId
+                    }) || null;
+                }
+                catch {
+                    workspaceUpdate = null;
+                }
+
+                if (generation !== options.getWorkspaceGeneration?.()) {
+                    return { ...result, workspaceUpdate: null, workspaceReconciliation: "not_checked" };
+                }
+
+                if (!workspaceUpdate && options.completeVisibleCommand) {
+                    workspaceReconciliation = "failed";
+                    options.invalidateWorkspace?.();
+                }
+            }
+
+            if (workspaceUpdate && (
+                workspaceUpdate.workspaceRevision || workspaceUpdateHasChanges(workspaceUpdate)
+            )) {
+                if (generation !== options.getWorkspaceGeneration?.()) {
+                    return { ...result, workspaceUpdate: null, workspaceReconciliation: "not_checked" };
+                }
                 options.applyWorkspaceUpdate(workspaceUpdate);
+            }
+
+            if (workspaceUpdateHasChanges(workspaceUpdate)) {
                 options.recordRuntimeEvent(
                     "workspace.update",
                     "",
@@ -85,6 +130,7 @@ export const createRuntimeCommandOperationController = function(
 
             return {
                 ...result,
+                workspaceReconciliation,
                 workspaceUpdate
             };
         },

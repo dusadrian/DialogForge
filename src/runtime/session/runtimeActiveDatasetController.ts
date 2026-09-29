@@ -1,7 +1,8 @@
 import type {
     ActiveDatasetSnapshot,
     RuntimeSessionSnapshot,
-    WorkspaceObjectSnapshot
+    WorkspaceObjectSnapshot,
+    WorkspaceUpdate
 } from "../provider-contract/runtimeProvider";
 import type {
     RuntimeWorkspaceState
@@ -21,7 +22,10 @@ export interface RuntimeActiveDatasetControllerOptions {
 
 
 export interface RuntimeActiveDatasetController {
-    rememberWorkspaceObjects(objects: WorkspaceObjectSnapshot[]): WorkspaceObjectSnapshot[];
+    rememberWorkspaceObjects(
+        objects: WorkspaceObjectSnapshot[],
+        revision?: WorkspaceUpdate["workspaceRevision"]
+    ): WorkspaceObjectSnapshot[];
     reconcileAfterWorkspaceRefresh(
         objects: WorkspaceObjectSnapshot[],
         reason: string
@@ -90,8 +94,8 @@ export const createRuntimeActiveDatasetController = function(
     };
 
     return {
-        rememberWorkspaceObjects: function(objects) {
-            return options.workspaceState.remember(objects);
+        rememberWorkspaceObjects: function(objects, revision) {
+            return options.workspaceState.remember(objects, revision);
         },
         reconcileAfterWorkspaceRefresh,
         selectFromWorkspace: function(objects, objectName, reason) {

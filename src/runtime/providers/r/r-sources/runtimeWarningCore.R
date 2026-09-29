@@ -130,33 +130,6 @@ package_loading_warning_diagnostics <- function(code = "", warning_text = "") {
 }
 
 
-code_may_mutate_workspace <- function(code = "") {
-    code <- as.character(code %||% "")
-
-    if (!nzchar(trimws(code))) return(FALSE)
-
-    patterns <- c(
-        "(^|[^[:alnum:]_.])(<-|<<-)([^[:alnum:]_]|$)",
-        "(^|[^[:alnum:]_.]):=([^[:alnum:]_]|$)",
-        paste0(
-            "(^|[^[:alnum:]_.])",
-            "(assign|delayedAssign|rm|remove|load|source|sys\\.source|",
-            "set|setattr|setnames|setcolorder|setorderv|setkey|setDT|",
-            "unlockBinding|lockBinding)\\s*\\("
-        ),
-        paste0(
-            "(^|[^[:alnum:]_.])",
-            "(data|data\\.|read\\.[[:alnum:]_.]+|write\\.[[:alnum:]_.]+)",
-            "\\s*\\("
-        )
-    )
-
-    any(vapply(patterns, function(pattern) {
-        grepl(pattern, code, perl = TRUE)
-    }, logical(1)))
-}
-
-
 runtime_startup_capture <- function(expression, environment) {
     warnings <- character(0)
     messages <- character(0)

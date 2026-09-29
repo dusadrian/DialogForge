@@ -33,6 +33,14 @@ runtime_event_identity <- function(type) {
 
 runtime_event_payload <- function(type, fields, parent_id = NULL) {
     identity <- runtime_event_identity(type)
+    runtime_diagnostic_count("events")
+
+    if (identical(type, "stream")) {
+        runtime_diagnostic_mark("output.event_generated", event_seq)
+    }
+    else if (identical(type, "completion")) {
+        runtime_diagnostic_mark("completion.generated", event_seq)
+    }
     parts <- c(
         paste0("\"type\":", json_str(type)),
         paste0("\"id\":", json_str(identity$id))
@@ -69,6 +77,10 @@ push_event <- function(line) {
     line <- as.character(line %||% "")
 
     if (!nzchar(line)) return(invisible(NULL))
+
+    if (!is.null(runtime_diagnostics)) {
+        runtime_diagnostic_count("event_bytes", nchar(line, type = "bytes"))
+    }
 
     if (!is.null(runtime_collected_events)) {
         runtime_collected_events <<- c(runtime_collected_events, line)
@@ -168,7 +180,12 @@ emit_state_event <- function(state, parent_id = "") {
 }
 
 
-emit_completion_event <- function(state, parent_id = "") {
+emit_completion_event <- function(
+    state,
+    parent_id = "",
+    workspace_reconciliation = "not_checked",
+    workspace_update = NULL
+) {
     state <- as.character(state %||% "")
     parent_id <- runtime_event_parent_id(parent_id)
 
@@ -176,7 +193,12 @@ emit_completion_event <- function(state, parent_id = "") {
 
     push_event(runtime_event_payload(
         "completion",
-        paste0("\"state\":", json_str(state)),
+        c(
+            paste0("\"state\":", json_str(state)),
+            paste0("\"workspaceReconciliation\":", json_str(workspace_reconciliation)),
+            paste0("\"workspaceRevision\":", json_workspace_revision(workspace_update$workspaceRevision)),
+            paste0("\"workspaceObjectCount\":", json_num(workspace_update$objectCount %||% 0))
+        ),
         parent_id
     ))
 }
@@ -283,6 +305,18 @@ runtime_workspace_datasets_json <- function(datasets) {
 }
 
 
+json_workspace_revision <- function(revision) {
+    if (is.null(revision)) {
+        return("null")
+    }
+
+    paste0(
+        "{\"session\":", json_str(revision$session),
+        ",\"sequence\":", json_num(revision$sequence), "}"
+    )
+}
+
+
 json_workspace_update <- function(update) {
     count <- suppressWarnings(as.integer(update$objectCount %||% 0L))
 
@@ -291,6 +325,7 @@ json_workspace_update <- function(update) {
     }
 
     fields <- c(
+        paste0("\"workspaceRevision\":", json_workspace_revision(update$workspaceRevision)),
         paste0("\"added\":", json_variables(update$added %||% list())),
         paste0("\"updated\":", json_variables(update$updated %||% list())),
         paste0("\"removed\":", json_strv(as.character(update$removed %||% character(0)))),
@@ -442,13 +477,20 @@ emit_prompt_state_event <- function() {
 }
 
 
-runtime_workspace_change_for_code <- function(code = "") {
-    if (!isTRUE(code_may_mutate_workspace(code))) {
+runtime_workspace_change_for_code <- function(code = "", allow_cached_copy = TRUE) {
+    if (!nzchar(trimws(as.character(code %||% "")))) {
         return(NULL)
     }
 
+    # Arbitrary calls can change global objects, including through print methods.
+    # Syntax identifies the existing copy fast path, not proof of no mutation.
     previous_state <- workspace_index_get("last_state")
-    assignment <- runtime_simple_workspace_copy(code)
+    assignment <- if (isTRUE(allow_cached_copy) && !isTRUE(workspace_reconciliation_failed)) {
+        runtime_simple_workspace_copy(code)
+    }
+    else {
+        NULL
+    }
 
     if (!is.null(assignment)) {
         copied <- workspace_copy_cached_state(
@@ -509,6 +551,40 @@ runtime_workspace_update_has_changes <- function(update = NULL) {
 }
 
 
+runtime_reconcile_command_workspace <- function(code, allow_cached_copy) {
+    for (attempt in seq_len(2L)) {
+        if (attempt == 2L) {
+            runtime_diagnostic_mark("reconciliation.retry")
+        }
+
+        result <- tryCatch({
+            change <- runtime_workspace_change_for_code(
+                code,
+                allow_cached_copy = isTRUE(allow_cached_copy) && attempt == 1L
+            )
+
+            if (!is.null(change)) {
+                change <- runtime_commit_workspace_change(change)
+            }
+
+            list(change = change, failed = FALSE)
+        }, error = function(error) {
+            list(change = NULL, failed = TRUE)
+        }, interrupt = function(interrupt) {
+            list(change = NULL, failed = TRUE)
+        })
+
+        if (!isTRUE(result$failed)) {
+            return(result)
+        }
+
+        runtime_diagnostic_mark("reconciliation.failed")
+    }
+
+    result
+}
+
+
 queue_completion_event <- function(
     state,
     parent_id = "",
@@ -521,7 +597,23 @@ queue_completion_event <- function(
 
     if (!nzchar(state) || !nzchar(parent_id)) return(invisible(NULL))
 
-    workspace_change <- runtime_workspace_change_for_code(workspace_code)
+    reconciliation <- runtime_reconcile_command_workspace(
+        workspace_code,
+        allow_cached_copy = identical(state, "idle")
+    )
+    workspace_change <- reconciliation$change
+
+    if (isTRUE(reconciliation$failed)) {
+        workspace_reconciliation_failed <<- TRUE
+        emit_stream_event(
+            paste(
+                "Warning: Workspace refresh failed; displayed values may be stale.",
+                "Refresh the workspace or run another command to retry."
+            ),
+            "warning",
+            parent_id
+        )
+    }
     emit_workspace <- runtime_workspace_update_has_changes(
         workspace_change$update %||% NULL
     )
@@ -532,6 +624,7 @@ queue_completion_event <- function(
         emit_prompt_state = isTRUE(emit_prompt_state),
         emit_workspace = isTRUE(emit_workspace),
         emit_plot = isTRUE(emit_plot),
+        workspace_failed = isTRUE(reconciliation$failed),
         workspace_update = workspace_change
     )
 
@@ -542,7 +635,13 @@ queue_completion_event <- function(
 runtime_emit_queued_workspace_update <- function(item, parent_id) {
     workspace_change <- item$workspace_update
 
-    if (is.null(workspace_change)) return(invisible(NULL))
+    if (isTRUE(item$workspace_failed)) {
+        return("failed")
+    }
+
+    if (is.null(workspace_change)) {
+        return("not_checked")
+    }
 
     if (isTRUE(item$emit_workspace)) {
         emit_workspace_update_event(
@@ -551,12 +650,11 @@ runtime_emit_queued_workspace_update <- function(item, parent_id) {
         )
     }
 
-    workspace_index_set(
-        "last_state",
-        workspace_change$state %||% workspace_index_get("last_state")
-    )
+    if (isTRUE(item$emit_workspace)) {
+        return("changed")
+    }
 
-    invisible(NULL)
+    "unchanged"
 }
 
 
@@ -573,7 +671,10 @@ flush_completion_queue <- function() {
 
         if (!nzchar(parent_id) || !nzchar(state)) next
 
-        runtime_emit_queued_workspace_update(item, parent_id)
+        workspace_reconciliation <- runtime_emit_queued_workspace_update(
+            item,
+            parent_id
+        )
 
         if (isTRUE(item$emit_plot)) {
             sync_httpgd_plot(parent_id)
@@ -583,7 +684,12 @@ flush_completion_queue <- function() {
             emit_prompt_state_event()
         }
 
-        emit_completion_event(state, parent_id)
+        emit_completion_event(
+            state,
+            parent_id,
+            workspace_reconciliation,
+            item$workspace_update$update
+        )
     }
 
     invisible(TRUE)

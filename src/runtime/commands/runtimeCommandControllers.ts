@@ -44,6 +44,8 @@ export interface RuntimeCommandControllersOptions {
         >[0]
     ): Promise<WorkspaceUpdate | null>;
     applyWorkspaceUpdate(update: WorkspaceUpdate): void;
+    invalidateWorkspace?(): void;
+    getWorkspaceGeneration?(): number;
 }
 
 
@@ -74,6 +76,8 @@ export const createRuntimeCommandControllers = function(
         getSnapshot: options.getSnapshot,
         recordRuntimeEvent: options.recordRuntimeEvent,
         completeVisibleCommand: options.completeVisibleCommand,
+        invalidateWorkspace: options.invalidateWorkspace,
+        getWorkspaceGeneration: options.getWorkspaceGeneration,
         applyWorkspaceUpdate: options.applyWorkspaceUpdate
     });
 

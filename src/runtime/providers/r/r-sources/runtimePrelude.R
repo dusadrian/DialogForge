@@ -36,6 +36,39 @@ workspace_index_set <- function(key, value) {
 }
 
 
+workspace_revision_session <- paste0(
+    Sys.getpid(), "-", format(Sys.time(), "%Y%m%d%H%M%OS6", tz = "UTC")
+)
+workspace_revision_sequence <- 0
+workspace_reconciliation_failed <- FALSE
+
+
+# All successful baseline writes pass through this owner. An empty delta still
+# receives a receipt; no receipt is issued for a failed workspace check.
+runtime_commit_workspace_change <- function(change) {
+    if (is.null(change$state)) {
+        stop("Workspace reconciliation did not produce a baseline.")
+    }
+
+    revision <- list(
+        session = workspace_revision_session,
+        sequence = workspace_revision_sequence + 1
+    )
+    change$state$workspaceRevision <- revision
+
+    if (!is.null(change$update)) {
+        change$update$workspaceRevision <- revision
+    }
+
+    workspace_index_set("last_state", change$state)
+    workspace_revision_sequence <<- revision$sequence
+    workspace_reconciliation_failed <<- FALSE
+    runtime_diagnostic_mark("workspace.committed", revision$sequence)
+
+    change
+}
+
+
 meta_path <- as.character(opts$meta_path %||% "")
 events_path <- as.character(opts$events_path %||% "")
 trace_path <- as.character(opts$trace_path %||% "")

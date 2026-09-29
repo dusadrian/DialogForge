@@ -32,6 +32,7 @@ export const requiredRuntimeSourceFileNames = [
     "backend.R",
     "dependencies.R",
     "runtimePrelude.R",
+    "runtimeDiagnostics.R",
     "runtimeWorkspaceCore.R",
     "runtimeDatasetStateCore.R",
     "runtimeDatasetCore.R",

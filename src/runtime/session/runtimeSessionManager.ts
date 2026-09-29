@@ -52,7 +52,8 @@ import {
     createRuntimeWorkspaceControllers
 } from "../workspace/runtimeWorkspaceControllers";
 import {
-    workspaceUpdateHasChanges
+    workspaceUpdateHasChanges,
+    createWorkspaceRecoveryUpdate
 } from "../workspace/workspaceUpdate";
 import {
     createRuntimeStartupTaskExecutionController
@@ -65,6 +66,7 @@ import type {
     RuntimeProvider,
     RuntimeSessionManager,
     RuntimeSessionSnapshot,
+    WorkspaceReconciliation,
     WorkspaceUpdate
 } from "../provider-contract/runtimeProvider";
 
@@ -142,8 +144,12 @@ export const createRuntimeSessionManager = function(
                         );
                 }
                 : undefined,
+        invalidateWorkspace: function() {
+            runtimeWorkspaceState.markStale();
+        },
+        getWorkspaceGeneration: runtimeWorkspaceState.getGeneration,
         applyWorkspaceUpdate: function(update) {
-            if (!workspaceUpdateHasChanges(update)) {
+            if (!update.workspaceRevision && !workspaceUpdateHasChanges(update)) {
                 return;
             }
 
@@ -305,7 +311,35 @@ export const createRuntimeSessionManager = function(
     const executeVisibleCommandWithEffects:
         RuntimeSessionManager["executeVisibleCommandWithEffects"] =
         async function(request) {
-            return commandOperationController.executeVisibleCommand(request);
+            const generation = runtimeWorkspaceState.getGeneration();
+            const result = await commandOperationController.executeVisibleCommand(request);
+
+            if (
+                generation === runtimeWorkspaceState.getGeneration()
+                && runtimeWorkspaceState.needsFullSnapshot()
+                && result.workspaceReconciliation !== "failed"
+            ) {
+                try {
+                    const previous = runtimeWorkspaceState.createSnapshot(getSnapshot());
+                    const recovered = await listWorkspaceObjects();
+
+                    if (
+                        generation === runtimeWorkspaceState.getGeneration()
+                        && recovered.status === "ready"
+                    ) {
+                        return {
+                            ...result,
+                            workspaceUpdate: createWorkspaceRecoveryUpdate(previous, recovered)
+                        };
+                    }
+                }
+                catch {
+                    // Preserve the command result and stale baseline. Never
+                    // replay a command to recover a missing workspace snapshot.
+                }
+            }
+
+            return result;
         };
 
     const executeVisibleCommand:
@@ -327,17 +361,20 @@ export const createRuntimeSessionManager = function(
     const refreshWorkspaceAfterMutation = async function<T extends {
         status: string;
         workspaceUpdate?: WorkspaceUpdate | null;
+        workspaceReconciliation?: WorkspaceReconciliation;
         results?: Array<{
             workspaceUpdate?: WorkspaceUpdate | null;
+            workspaceReconciliation?: WorkspaceReconciliation;
         }>;
     }>(
-        result: T,
-        successfulStatuses: string[] = ["updated"]
+        pendingResult: Promise<T>
     ): Promise<T> {
-        if (!successfulStatuses.includes(result.status)) {
-            return result;
-        }
+        const generation = runtimeWorkspaceState.getGeneration();
+        const result = await pendingResult;
 
+        if (generation !== runtimeWorkspaceState.getGeneration()) {
+            return { ...result, workspaceUpdate: null, workspaceReconciliation: "not_checked" };
+        }
         let appliedUpdate = false;
         const updates = [
             result.workspaceUpdate,
@@ -345,7 +382,7 @@ export const createRuntimeSessionManager = function(
         ];
 
         updates.forEach(function(update) {
-            if (!workspaceUpdateHasChanges(update)) {
+            if (!update || (!update.workspaceRevision && !workspaceUpdateHasChanges(update))) {
                 return;
             }
 
@@ -357,11 +394,40 @@ export const createRuntimeSessionManager = function(
             appliedUpdate = true;
         });
 
-        if (provider.workspaceController?.commitWorkspaceMutation) {
-            const update = await provider.workspaceController
-                .commitWorkspaceMutation(getSnapshot());
+        // Each returned mutation needs its own commit receipt. A receipt for
+        // one member must not suppress reconciliation of an uncommitted member.
+        const mutations = result.results?.length ? result.results : [result];
+        const failedReconciliation = mutations.some((entry) => {
+            return entry.workspaceReconciliation === "failed";
+        });
 
-            if (workspaceUpdateHasChanges(update)) {
+        if (failedReconciliation) {
+            runtimeWorkspaceState.markStale();
+            return { ...result, workspaceReconciliation: "failed" };
+        }
+
+        const alreadyCommitted = mutations.every((entry) => {
+            return Boolean(entry.workspaceUpdate?.workspaceRevision)
+                || entry.workspaceReconciliation === "unchanged";
+        });
+
+        if (!alreadyCommitted && provider.workspaceController?.commitWorkspaceMutation) {
+            let update: WorkspaceUpdate | null = null;
+
+            try {
+                update = await provider.workspaceController
+                    .commitWorkspaceMutation(getSnapshot());
+            }
+            catch {
+                // The mutation already ran. A failed refresh must not change
+                // its execution result or encourage callers to repeat it.
+            }
+
+            if (generation !== runtimeWorkspaceState.getGeneration()) {
+                return { ...result, workspaceUpdate: null, workspaceReconciliation: "not_checked" };
+            }
+
+            if (update && (update.workspaceRevision || workspaceUpdateHasChanges(update))) {
                 const objects = runtimeWorkspaceState.applyUpdate(update);
                 activeDatasetController.reconcileAfterWorkspaceRefresh(
                     objects,
@@ -369,8 +435,12 @@ export const createRuntimeSessionManager = function(
                 );
                 appliedUpdate = true;
             }
+            else {
+                runtimeWorkspaceState.markStale();
+                return { ...result, workspaceReconciliation: "failed" };
+            }
         }
-        else if (!appliedUpdate) {
+        else if (!alreadyCommitted && !appliedUpdate) {
             await listWorkspaceObjects();
         }
 
@@ -435,56 +505,55 @@ export const createRuntimeSessionManager = function(
 
     const writeCell: RuntimeSessionManager["writeCell"] = async function(request) {
         return refreshWorkspaceAfterMutation(
-            await cellMutationExecutionController.writeCell(request)
+            cellMutationExecutionController.writeCell(request)
         );
     };
 
     const writeCells: RuntimeSessionManager["writeCells"] = async function(requests) {
         return refreshWorkspaceAfterMutation(
-            await cellMutationExecutionController.writeCells(requests),
-            ["updated", "partial"]
+            cellMutationExecutionController.writeCells(requests)
         );
     };
 
     const renameColumn: RuntimeSessionManager["renameColumn"] = async function(request) {
         return refreshWorkspaceAfterMutation(
-            await columnMutationOperationController.renameColumn(request)
+            columnMutationOperationController.renameColumn(request)
         );
     };
 
     const insertColumn: RuntimeSessionManager["insertColumn"] = async function(request) {
         return refreshWorkspaceAfterMutation(
-            await columnMutationOperationController.insertColumn(request)
+            columnMutationOperationController.insertColumn(request)
         );
     };
 
     const removeColumn: RuntimeSessionManager["removeColumn"] = async function(request) {
         return refreshWorkspaceAfterMutation(
-            await columnMutationOperationController.removeColumn(request)
+            columnMutationOperationController.removeColumn(request)
         );
     };
 
     const insertRow: RuntimeSessionManager["insertRow"] = async function(request) {
         return refreshWorkspaceAfterMutation(
-            await rowMutationOperationController.insertRow(request)
+            rowMutationOperationController.insertRow(request)
         );
     };
 
     const removeRow: RuntimeSessionManager["removeRow"] = async function(request) {
         return refreshWorkspaceAfterMutation(
-            await rowMutationOperationController.removeRow(request)
+            rowMutationOperationController.removeRow(request)
         );
     };
 
     const sortRows: RuntimeSessionManager["sortRows"] = async function(request: RowSortRequest) {
         return refreshWorkspaceAfterMutation(
-            await rowMutationOperationController.sortRows(request)
+            rowMutationOperationController.sortRows(request)
         );
     };
 
     const updateRowName: RuntimeSessionManager["updateRowName"] = async function(request) {
         return refreshWorkspaceAfterMutation(
-            await rowMutationOperationController.updateRowName(request)
+            rowMutationOperationController.updateRowName(request)
         );
     };
 
@@ -494,7 +563,7 @@ export const createRuntimeSessionManager = function(
 
     const writeVariableMetadata: RuntimeSessionManager["writeVariableMetadata"] = async function(request) {
         return refreshWorkspaceAfterMutation(
-            await variableMetadataOperationController.writeVariableMetadata(request)
+            variableMetadataOperationController.writeVariableMetadata(request)
         );
     };
 
@@ -504,7 +573,7 @@ export const createRuntimeSessionManager = function(
 
     const writeValueLabels: RuntimeSessionManager["writeValueLabels"] = async function(request) {
         return refreshWorkspaceAfterMutation(
-            await labelStateOperationController.writeValueLabels(request)
+            labelStateOperationController.writeValueLabels(request)
         );
     };
 
@@ -514,14 +583,13 @@ export const createRuntimeSessionManager = function(
 
     const writeDeclaredMissing: RuntimeSessionManager["writeDeclaredMissing"] = async function(request) {
         return refreshWorkspaceAfterMutation(
-            await labelStateOperationController.writeDeclaredMissing(request)
+            labelStateOperationController.writeDeclaredMissing(request)
         );
     };
 
     const importData: RuntimeSessionManager["importData"] = async function(request) {
         return refreshWorkspaceAfterMutation(
-            await importOperationController.importData(request),
-            ["imported"]
+            importOperationController.importData(request)
         );
     };
 
@@ -543,7 +611,7 @@ export const createRuntimeSessionManager = function(
 
     const executeInvisibleMutation: RuntimeSessionManager["executeInvisibleMutation"] = async function(request) {
         return refreshWorkspaceAfterMutation(
-            await capabilityRequestController.executeInvisibleMutation(request)
+            capabilityRequestController.executeInvisibleMutation(request)
         );
     };
 

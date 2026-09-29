@@ -1526,9 +1526,16 @@ const executeWorkspaceRemove = async function (name) {
         return;
     }
 
+    if (!window.confirm(`Remove workspace object "${objectName}"?`)) {
+        return;
+    }
+
     const previousDatasetNames = workspaceDatasetNames();
 
     state.workspaceSnapshot = await manager.removeWorkspaceObjects([objectName]);
+    if (state.workspaceSnapshot.status === "uncertain") {
+        appendTranscript(`Warning: ${state.workspaceSnapshot.message}\n`);
+    }
     state.workspaceMetadataReady = true;
     selectActiveDatasetAfterWorkspaceRefresh(previousDatasetNames);
     renderWorkspacePane();
@@ -1544,9 +1551,16 @@ const executeWorkspaceClear = async function () {
         return;
     }
 
+    if (!window.confirm("Clear all visible objects from the workspace?")) {
+        return;
+    }
+
     const previousDatasetNames = workspaceDatasetNames();
 
     state.workspaceSnapshot = await manager.clearWorkspace();
+    if (state.workspaceSnapshot.status === "uncertain") {
+        appendTranscript(`Warning: ${state.workspaceSnapshot.message}\n`);
+    }
     state.workspaceMetadataReady = true;
     selectActiveDatasetAfterWorkspaceRefresh(previousDatasetNames);
     renderWorkspacePane();
@@ -1658,7 +1672,7 @@ const selectActiveDatasetAfterWorkspaceRefresh = function (previousDatasetNames 
         return;
     }
 
-    if (workspaceObjectByName(state.activeDatasetName)) {
+    if (datasetNames.includes(state.activeDatasetName)) {
         return;
     }
 

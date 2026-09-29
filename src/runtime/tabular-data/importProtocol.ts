@@ -49,6 +49,7 @@ export const createImportResult = function(input: Partial<ImportResult>): Import
         overwrite: Boolean(input.overwrite),
         transcriptEvents: input.transcriptEvents || [],
         workspaceUpdate: input.workspaceUpdate,
+        workspaceReconciliation: input.workspaceReconciliation,
         message: input.message || "",
         importedAt: new Date().toISOString()
     };

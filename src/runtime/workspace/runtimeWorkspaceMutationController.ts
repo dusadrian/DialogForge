@@ -2,7 +2,8 @@ import type {
     RuntimeSessionSnapshot,
     RuntimeWorkspaceController,
     WorkspaceObjectSnapshot,
-    WorkspaceRenameRequest
+    WorkspaceRenameRequest,
+    WorkspaceSnapshot
 } from "../provider-contract/runtimeProvider";
 import type {
     RuntimeFallbackTabularState
@@ -15,15 +16,17 @@ export interface RuntimeWorkspaceMutationControllerOptions {
     listProviderObjects(): WorkspaceObjectSnapshot[];
     listImportedTables(): WorkspaceObjectSnapshot[];
     getSnapshot(): RuntimeSessionSnapshot;
+    getWorkspaceGeneration(): number;
+    markWorkspaceStale(requireSnapshot?: boolean): void;
 }
 
 
 export interface RuntimeWorkspaceMutationController {
     canFallbackRemove(objectNames: string[]): boolean;
-    remove(objectNames: string[]): Promise<WorkspaceObjectSnapshot[]>;
+    remove(objectNames: string[]): Promise<WorkspaceSnapshot | WorkspaceObjectSnapshot[]>;
     canFallbackRename(objectName: string): boolean;
-    rename(request: WorkspaceRenameRequest): Promise<WorkspaceObjectSnapshot[]>;
-    clear(): Promise<WorkspaceObjectSnapshot[]>;
+    rename(request: WorkspaceRenameRequest): Promise<WorkspaceSnapshot | WorkspaceObjectSnapshot[]>;
+    clear(): Promise<WorkspaceSnapshot | WorkspaceObjectSnapshot[]>;
 }
 
 
@@ -36,49 +39,74 @@ export const createRuntimeWorkspaceMutationController = function(
         );
     };
 
+    const runWorkspaceMutation = async function(
+        mutate: () => Promise<WorkspaceSnapshot | WorkspaceObjectSnapshot[]>
+    ): Promise<WorkspaceSnapshot | WorkspaceObjectSnapshot[]> {
+        const generation = options.getWorkspaceGeneration();
+
+        try {
+            return await mutate();
+        }
+        catch (error) {
+            // The provider may have applied the edit before its snapshot failed.
+            // Preserve the error and do not retry a potentially completed edit.
+            if (generation === options.getWorkspaceGeneration()) {
+                options.markWorkspaceStale(true);
+            }
+
+            throw error;
+        }
+    };
+
     return {
         canFallbackRemove: function(objectNames): boolean {
             return objectNames.every((name) => {
                 return options.fallbackState.has(name);
             });
         },
-        remove: async function(objectNames) {
-            if (options.providerWorkspaceController?.removeWorkspaceObjects) {
-                return options.providerWorkspaceController.removeWorkspaceObjects(
-                    objectNames,
-                    options.getSnapshot()
-                );
-            }
+        remove: function(objectNames) {
+            return runWorkspaceMutation(async function() {
+                if (options.providerWorkspaceController?.removeWorkspaceObjects) {
+                    return options.providerWorkspaceController.removeWorkspaceObjects(
+                        objectNames,
+                        options.getSnapshot()
+                    );
+                }
 
-            objectNames.forEach((name) => {
-                options.fallbackState.remove(name);
+                objectNames.forEach((name) => {
+                    options.fallbackState.remove(name);
+                });
+
+                return listComposedObjects();
             });
-
-            return listComposedObjects();
         },
         canFallbackRename: function(objectName): boolean {
             return options.fallbackState.has(objectName);
         },
-        rename: async function(request) {
-            if (options.providerWorkspaceController?.renameWorkspaceObject) {
-                return options.providerWorkspaceController.renameWorkspaceObject(
-                    request,
-                    options.getSnapshot()
-                );
-            }
+        rename: function(request) {
+            return runWorkspaceMutation(async function() {
+                if (options.providerWorkspaceController?.renameWorkspaceObject) {
+                    return options.providerWorkspaceController.renameWorkspaceObject(
+                        request,
+                        options.getSnapshot()
+                    );
+                }
 
-            options.fallbackState.move(request.oldName, request.newName);
-            return listComposedObjects();
+                options.fallbackState.move(request.oldName, request.newName);
+                return listComposedObjects();
+            });
         },
-        clear: async function() {
-            if (options.providerWorkspaceController?.clearWorkspace) {
-                return options.providerWorkspaceController.clearWorkspace(
-                    options.getSnapshot()
-                );
-            }
+        clear: function() {
+            return runWorkspaceMutation(async function() {
+                if (options.providerWorkspaceController?.clearWorkspace) {
+                    return options.providerWorkspaceController.clearWorkspace(
+                        options.getSnapshot()
+                    );
+                }
 
-            options.fallbackState.clear();
-            return options.listProviderObjects();
+                options.fallbackState.clear();
+                return options.listProviderObjects();
+            });
         }
     };
 };

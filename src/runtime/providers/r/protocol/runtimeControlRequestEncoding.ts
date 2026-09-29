@@ -135,6 +135,7 @@ export const encodeRuntimeControlRequest = function(
         outputWidth: safeEncode(params.outputWidth),
         timeoutMs: safeEncode(params.timeoutMs),
         sessionId: safeEncode(params.sessionId),
+        diagnosticSession: safeEncode(params.diagnosticSession),
         topic: safeEncode(params.topic),
         package: safeEncode(params.package),
         requestPrefix: safeEncode(params.prefix),

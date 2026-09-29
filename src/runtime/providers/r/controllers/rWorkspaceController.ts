@@ -5,6 +5,7 @@ import {
 } from "../../../tabular-data/tabularProtocol";
 import {
     createObjectInspectionResult,
+    createWorkspaceSnapshot,
     createWorkspaceObject
 } from "../../../workspace/workspaceProtocol";
 import {
@@ -19,6 +20,7 @@ import type {
     TabularPreviewSnapshot,
     VisibleCommandRequest,
     WorkspaceUpdate,
+    WorkspaceSnapshot,
     WorkspaceObjectSnapshot
 } from "../../../provider-contract/runtimeProvider";
 import {
@@ -36,9 +38,6 @@ import type {
     RRuntimeControlClient
 } from "../protocol/runtimeControlClient";
 import { coerceRuntimeCellValue } from "../tabular/runtimeTabularValues";
-import {
-    rCodeMayMutateWorkspace
-} from "../commands/rCommandIntents";
 
 
 export interface RWorkspaceControllerOptions {
@@ -51,13 +50,53 @@ export interface RWorkspaceControllerOptions {
 export const createRWorkspaceController = function(
     options: RWorkspaceControllerOptions
 ): RuntimeWorkspaceController {
+    let pendingRefresh: {
+        client: RRuntimeControlClient;
+        epoch: number;
+        promise: Promise<WorkspaceUpdate>;
+    } | null = null;
+
+    const reconcileWorkspace = function(): Promise<WorkspaceUpdate> {
+        const client = options.getClient();
+
+        if (!client) {
+            return Promise.reject(new Error("Workspace runtime is unavailable."));
+        }
+
+        // Any intervening runtime operation advances the epoch. Never let an
+        // older in-flight refresh satisfy a request made after another command.
+        const epoch = client.getWorkspaceEpoch?.();
+
+        if (pendingRefresh?.client === client && epoch === pendingRefresh.epoch) {
+            return pendingRefresh.promise;
+        }
+
+        const promise = client.execute({
+            id: options.createRequestId("workspace-update"),
+            method: "workspace.update",
+            params: { timeoutMs: 10000 }
+        }).then((result) => {
+            if (!result.ok || options.getClient() !== client) {
+                throw new Error("Workspace refresh did not complete in the current session.");
+            }
+
+            return createRWorkspaceUpdate(result.result);
+        }).finally(() => {
+            if (pendingRefresh?.promise === promise) {
+                pendingRefresh = null;
+            }
+        });
+
+        if (epoch !== undefined) {
+            pendingRefresh = { client, epoch, promise };
+        }
+
+        return promise;
+    };
+
     const completeVisibleCommand = async function(
         request: VisibleCommandRequest
     ): Promise<WorkspaceUpdate | null> {
-        if (!rCodeMayMutateWorkspace(request.text)) {
-            return null;
-        }
-
         options.onVisibleWorkspaceRefresh?.();
 
         const client = options.getClient();
@@ -71,58 +110,51 @@ export const createRWorkspaceController = function(
             method: "workspace.complete_visible_command",
             params: {
                 code: request.text,
+                parentId: request.activityId,
                 timeoutMs: 10000
             }
         });
 
-        if (!result.ok) {
+        if (!result.ok || options.getClient() !== client) {
             return null;
         }
 
         const update = createRWorkspaceUpdate(result.result);
 
-        return workspaceUpdateHasChanges(update) ? update : null;
+        return update.workspaceRevision || workspaceUpdateHasChanges(update) ? update : null;
     };
 
-    const readWorkspaceObjects = async function(
+    const readWorkspaceSnapshot = async function(
+        snapshot: RuntimeSessionSnapshot,
         listOptions?: WorkspaceListOptions
-    ): Promise<WorkspaceObjectSnapshot[]> {
+    ): Promise<WorkspaceSnapshot> {
         const client = options.getClient();
 
         if (!client) {
-            return [];
+            throw new Error("Workspace runtime is unavailable.");
         }
 
-        if (
-            listOptions?.detectChanges === true
-            && listOptions.forceRefresh !== true
-        ) {
-            await client.execute({
-                id: options.createRequestId("workspace-update"),
-                method: "workspace.update",
-                params: {
-                    timeoutMs: 10000
-                }
-            });
+        if (listOptions?.detectChanges === true || listOptions?.forceRefresh === true) {
+            await reconcileWorkspace();
         }
 
         const result = await client.execute({
             id: options.createRequestId("workspace"),
             method: "workspace.snapshot",
             params: {
-                forceRefresh: listOptions?.forceRefresh === true,
+                forceRefresh: false,
                 timeoutMs: 5000
             }
         });
 
-        if (!result.ok) {
-            return [];
+        if (!result.ok || options.getClient() !== client) {
+            throw new Error("Workspace snapshot is unavailable.");
         }
 
         const payload = parseRuntimeControlResultObject(result.result);
         const dataframes = asRuntimeControlObject(payload.dataframe);
 
-        return asRuntimeControlArray(payload.variables).map((entry) => {
+        const objects = asRuntimeControlArray(payload.variables).map((entry) => {
             const variable = asRuntimeControlObject(entry);
             const name = String(
                 variable.access_key
@@ -149,6 +181,14 @@ export const createRWorkspaceController = function(
         }).filter(
             (object): object is WorkspaceObjectSnapshot => Boolean(object)
         );
+
+        return createWorkspaceSnapshot({
+            status: "ready",
+            providerId: snapshot.providerId,
+            objects,
+            workspaceRevision: createRWorkspaceUpdate(payload).workspaceRevision,
+            message: "Workspace objects were read from the runtime provider."
+        });
     };
 
     const readTabularSchema = async function(
@@ -170,7 +210,7 @@ export const createRWorkspaceController = function(
             }
         });
 
-        if (!result.ok) {
+        if (!result.ok || options.getClient() !== client) {
             return null;
         }
 
@@ -245,7 +285,7 @@ export const createRWorkspaceController = function(
             }
         });
 
-        if (!result.ok) {
+        if (!result.ok || options.getClient() !== client) {
             return null;
         }
 
@@ -316,8 +356,9 @@ export const createRWorkspaceController = function(
     };
 
     return {
-        listWorkspaceObjects: async function(_snapshot, listOptions) {
-            return readWorkspaceObjects(listOptions);
+        readWorkspaceSnapshot,
+        listWorkspaceObjects: async function(snapshot, listOptions) {
+            return (await readWorkspaceSnapshot(snapshot, listOptions)).objects;
         },
         readTabularSchema,
         readTabularPreview,
@@ -389,14 +430,14 @@ export const createRWorkspaceController = function(
                 message: "R runtime-control returned object inspection."
             });
         },
-        removeWorkspaceObjects: async function(objectNames: string[]) {
+        removeWorkspaceObjects: async function(objectNames: string[], snapshot) {
             const client = options.getClient();
 
             if (!client) {
-                return [];
+                throw new Error("Workspace runtime is unavailable.");
             }
 
-            await client.execute({
+            const result = await client.execute({
                 id: options.createRequestId("workspace-remove"),
                 method: "workspace.remove",
                 params: {
@@ -405,13 +446,17 @@ export const createRWorkspaceController = function(
                 }
             });
 
-            return readWorkspaceObjects();
+            if (!result.ok || options.getClient() !== client) {
+                throw new Error(String(result.error || "Workspace mutation did not complete."));
+            }
+
+            return readWorkspaceSnapshot(snapshot);
         },
-        renameWorkspaceObject: async function(request) {
+        renameWorkspaceObject: async function(request, snapshot) {
             const client = options.getClient();
 
             if (!client) {
-                return [];
+                throw new Error("Workspace runtime is unavailable.");
             }
 
             const result = await client.execute({
@@ -430,16 +475,20 @@ export const createRWorkspaceController = function(
                 );
             }
 
-            return readWorkspaceObjects();
+            if (!result.ok || options.getClient() !== client) {
+                throw new Error(String(result.error || "Workspace mutation did not complete."));
+            }
+
+            return readWorkspaceSnapshot(snapshot);
         },
-        clearWorkspace: async function() {
+        clearWorkspace: async function(snapshot) {
             const client = options.getClient();
 
             if (!client) {
-                return [];
+                throw new Error("Workspace runtime is unavailable.");
             }
 
-            await client.execute({
+            const result = await client.execute({
                 id: options.createRequestId("workspace-clear"),
                 method: "workspace.clear",
                 params: {
@@ -447,27 +496,13 @@ export const createRWorkspaceController = function(
                 }
             });
 
-            return readWorkspaceObjects();
-        },
-        completeVisibleCommand,
-        commitWorkspaceMutation: async function() {
-            const client = options.getClient();
-
-            if (!client) {
-                return null;
+            if (!result.ok || options.getClient() !== client) {
+                throw new Error(String(result.error || "Workspace mutation did not complete."));
             }
 
-            const result = await client.execute({
-                id: options.createRequestId("workspace-mutation-update"),
-                method: "workspace.update",
-                params: {
-                    timeoutMs: 5000
-                }
-            });
-
-            return result.ok
-                ? createRWorkspaceUpdate(result.result)
-                : null;
-        }
+            return readWorkspaceSnapshot(snapshot);
+        },
+        completeVisibleCommand,
+        commitWorkspaceMutation: reconcileWorkspace
     };
 };

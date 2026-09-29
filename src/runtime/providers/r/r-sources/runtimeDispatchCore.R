@@ -125,6 +125,8 @@ runtime_output_width <- function(value) {
 
 
 runtime_capture_input <- function(code, parent_id, output_width = NULL) {
+    runtime_diagnostic_mark("evaluation.started")
+    on.exit(runtime_diagnostic_mark("evaluation.finished"), add = TRUE)
     warnings <- character(0)
     messages <- character(0)
     output <- character(0)
@@ -330,7 +332,7 @@ runtime_execute_input <- function(params) {
     runtime_emit_input_result(result, code, parent_id, visible)
 
     if (result$interrupted) {
-        return(runtime_finish_input("interrupted", parent_id, visible))
+        return(runtime_finish_input("interrupted", parent_id, visible, code))
     }
 
     if (!result$ok) {
@@ -342,7 +344,7 @@ runtime_execute_input <- function(params) {
             )
         }
 
-        return(runtime_finish_input("error", parent_id, visible))
+        return(runtime_finish_input("error", parent_id, visible, code))
     }
 
     runtime_finish_input(
@@ -618,13 +620,18 @@ runtime_check_completeness <- function(params) {
 runtime_refresh_workspace_index <- function() {
     snapshot <- workspace_snapshot()
     workspace_index_set("last_snapshot", snapshot)
-    workspace_index_set("last_state", workspace_state_from_snapshot(snapshot))
+    change <- runtime_commit_workspace_change(list(state = workspace_state_from_snapshot(snapshot)))
+    snapshot$workspaceRevision <- change$state$workspaceRevision
 
     snapshot
 }
 
 
 runtime_cached_workspace_snapshot <- function() {
+    if (isTRUE(workspace_reconciliation_failed)) {
+        runtime_workspace_delta()
+    }
+
     state <- workspace_index_get("last_state")
 
     if (is.null(state)) {
@@ -647,6 +654,10 @@ runtime_cached_workspace_snapshot <- function() {
             vector = character(0)
         ),
         variables = variables,
+        workspaceRevision = list(
+            session = workspace_revision_session,
+            sequence = workspace_revision_sequence
+        ),
         datasetStates = dataset_states,
         objectCount = as.integer(state$objectCount %||% length(variables)),
         diagnostics = list(
@@ -679,16 +690,20 @@ runtime_workspace_remove <- function(params) {
         }
     }
 
-    change <- workspace_remove_cached_state(
-        workspace_index_get("last_state"),
-        targets
-    )
+    change <- NULL
+
+    if (!isTRUE(workspace_reconciliation_failed)) {
+        change <- workspace_remove_cached_state(
+            workspace_index_get("last_state"),
+            targets
+        )
+    }
 
     if (is.null(change)) {
         runtime_workspace_delta()
     }
     else {
-        workspace_index_set("last_state", change$state)
+        runtime_commit_workspace_change(change)
     }
 
     list(ok = TRUE, result = runtime_cached_workspace_snapshot())
@@ -754,10 +769,7 @@ runtime_workspace_clear <- function() {
 
 runtime_workspace_delta <- function() {
     change <- collect_workspace_update(workspace_index_get("last_state"))
-    workspace_index_set(
-        "last_state",
-        change$state %||% workspace_index_get("last_state")
-    )
+    change <- runtime_commit_workspace_change(change)
 
     list(
         ok = TRUE,
@@ -780,7 +792,10 @@ runtime_commit_workspace_mutation <- function() {
 
 
 runtime_complete_visible_workspace <- function(params) {
-    change <- runtime_workspace_change_for_code(params$code %||% "")
+    change <- runtime_workspace_change_for_code(
+        params$code %||% "",
+        allow_cached_copy = FALSE
+    )
 
     if (is.null(change)) {
         return(list(
@@ -802,10 +817,7 @@ runtime_complete_visible_workspace <- function(params) {
         ))
     }
 
-    workspace_index_set(
-        "last_state",
-        change$state %||% workspace_index_get("last_state")
-    )
+    change <- runtime_commit_workspace_change(change)
 
     list(ok = TRUE, result = change$update %||% list())
 }

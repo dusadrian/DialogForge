@@ -22,7 +22,13 @@ export interface RuntimeWorkspaceSelection {
 
 export interface RuntimeWorkspaceState {
     invalidate(): void;
-    remember(objects: WorkspaceObjectSnapshot[]): WorkspaceObjectSnapshot[];
+    getGeneration(): number;
+    markStale(requireSnapshot?: boolean): void;
+    needsFullSnapshot(): boolean;
+    remember(
+        objects: WorkspaceObjectSnapshot[],
+        revision?: WorkspaceUpdate["workspaceRevision"]
+    ): WorkspaceObjectSnapshot[];
     applyUpdate(update: WorkspaceUpdate): WorkspaceObjectSnapshot[];
     getObjects(): WorkspaceObjectSnapshot[] | null;
     createSnapshot(session: RuntimeSessionSnapshot): WorkspaceSnapshot;
@@ -66,6 +72,11 @@ const isReadableTabularObject = function(
 export const createRuntimeWorkspaceState = function(
     providerId: string
 ): RuntimeWorkspaceState {
+    let stale = false;
+    let requiresSnapshot = false;
+    let generation = 0;
+    let revision: WorkspaceUpdate["workspaceRevision"];
+    const retiredSessions = new Set<string>();
     let objects: WorkspaceObjectSnapshot[] | null = null;
     let activeDataset = createActiveDatasetSnapshot({
         status: "none",
@@ -149,29 +160,95 @@ export const createRuntimeWorkspaceState = function(
 
     return {
         invalidate: function(): void {
+            generation += 1;
+            if (revision) {
+                retiredSessions.add(revision.session);
+            }
+            revision = undefined;
+            stale = false;
+            requiresSnapshot = false;
             objects = null;
         },
-        remember: function(nextObjects) {
+        getGeneration: function() {
+            return generation;
+        },
+        markStale: function(requireSnapshot = false): void {
+            // Retain the last baseline so a later committed delta can recover it.
+            stale = true;
+            requiresSnapshot = requiresSnapshot || requireSnapshot;
+        },
+        needsFullSnapshot: function(): boolean {
+            return requiresSnapshot;
+        },
+        remember: function(nextObjects, nextRevision) {
+            if (nextRevision) {
+                // A snapshot from before a failed check cannot prove recovery.
+                // Recovery must carry a later authoritative commit receipt.
+                if (
+                    retiredSessions.has(nextRevision.session)
+                    || (revision && revision.session !== nextRevision.session)
+                    || (revision?.session === nextRevision.session
+                        && nextRevision.sequence < revision.sequence)
+                    || (stale && revision?.session === nextRevision.session
+                        && nextRevision.sequence === revision.sequence)
+                ) {
+                    return cloneWorkspaceObjects(objects || []);
+                }
+                revision = nextRevision;
+            }
             objects = cloneWorkspaceObjects(nextObjects);
+            stale = false;
+            requiresSnapshot = false;
 
             return nextObjects;
         },
         applyUpdate: function(update) {
+            // An uncertain mutation may have committed a delta we never received.
+            // A later empty delta cannot repair that missing baseline.
+            if (requiresSnapshot) {
+                return cloneWorkspaceObjects(objects || []);
+            }
+            const nextRevision = update.workspaceRevision;
+
+            if (nextRevision) {
+                if (
+                    retiredSessions.has(nextRevision.session)
+                    || (revision?.session === nextRevision.session
+                        && nextRevision.sequence <= revision.sequence)
+                ) {
+                    return cloneWorkspaceObjects(objects || []);
+                }
+
+                if (revision && revision.session !== nextRevision.session) {
+                    // A different session is admitted only after lifecycle
+                    // invalidation, never by a delayed event alone.
+                    return cloneWorkspaceObjects(objects || []);
+                }
+                revision = nextRevision;
+            }
+
             objects = applyWorkspaceUpdateToObjects(objects || [], update);
+
+            if (update.workspaceRevision) {
+                stale = false;
+            }
 
             return cloneWorkspaceObjects(objects);
         },
         getObjects: function() {
-            return objects === null ? null : cloneWorkspaceObjects(objects);
+            return objects === null || stale ? null : cloneWorkspaceObjects(objects);
         },
         createSnapshot: function(session) {
             return createWorkspaceSnapshot({
-                status: session.status === "ready" && objects !== null
+                status: session.status === "ready" && objects !== null && !stale
                     ? "ready"
                     : "unavailable",
                 providerId: session.providerId,
                 objects: cloneWorkspaceObjects(objects || []),
-                message: objects !== null
+                workspaceRevision: revision,
+                message: stale
+                    ? "Workspace refresh failed; displayed values may be stale."
+                    : objects !== null
                     ? "Last workspace objects read from the runtime provider."
                     : "Workspace objects have not been read from the runtime provider."
             });

@@ -33,6 +33,15 @@ export const createRuntimeWorkspaceListController = function(
             const snapshot = options.getSnapshot();
 
             if (options.providerWorkspaceController) {
+                if (options.providerWorkspaceController.readWorkspaceSnapshot) {
+                    const workspace = await options.providerWorkspaceController
+                        .readWorkspaceSnapshot(snapshot, listOptions);
+
+                    return createWorkspaceSnapshot({
+                        ...workspace,
+                        objects: workspace.objects.concat(options.listImportedTables())
+                    });
+                }
                 const objects = (
                     await options.providerWorkspaceController.listWorkspaceObjects(
                         snapshot,

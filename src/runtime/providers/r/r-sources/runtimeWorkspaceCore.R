@@ -235,7 +235,11 @@ workspace_digest_func <- tryCatch({
 
 
 workspace_value_hash <- function(value) {
+    runtime_diagnostic_count("value_hashes")
     if (is.function(workspace_digest_func)) {
+        # digest owns this serialization internally; do not serialize again
+        # solely to turn an unavailable byte count into a misleading estimate.
+        runtime_diagnostic_count("digest_serialization_calls")
         hash <- tryCatch(
             workspace_digest_func(
                 value,
@@ -253,6 +257,7 @@ workspace_value_hash <- function(value) {
         error = function(error) raw(0)
     )
 
+    runtime_diagnostic_count("fallback_serialized_bytes", length(raw_value))
     if (!length(raw_value)) "" else workspace_hash_raw(raw_value)
 }
 

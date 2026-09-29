@@ -165,6 +165,7 @@ export const createRuntimeIpcComposition = function(
                         workspaceUpdateChangesDialogVariables(effects)
                 }
             );
+            bridge.sendActiveDataset(options.runtimeSessionManager.getActiveDataset());
 
             const activeEffect = effects.find(function(effect) {
                 return effect.name === activeDataset && !effect.removed;

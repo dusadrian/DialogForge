@@ -121,6 +121,7 @@ export const createRTabularMutationController = function(
                 toName: request.toName,
                 transcriptEvents,
                 workspaceUpdate: commandResult.workspaceUpdate,
+                workspaceReconciliation: commandResult.workspaceReconciliation,
                 message: failed
                     ? "R visible column rename command failed."
                     : "R visible column rename command updated the column."
@@ -171,6 +172,7 @@ export const createRTabularMutationController = function(
                 columnName: request.newName,
                 transcriptEvents,
                 workspaceUpdate: commandResult.workspaceUpdate,
+                workspaceReconciliation: commandResult.workspaceReconciliation,
                 message: failed
                     ? "R visible column insert command failed."
                     : "R visible column insert command inserted the column."
@@ -226,6 +228,7 @@ export const createRTabularMutationController = function(
                 columnName: request.columnName,
                 transcriptEvents,
                 workspaceUpdate: commandResult.workspaceUpdate,
+                workspaceReconciliation: commandResult.workspaceReconciliation,
                 message: failed
                     ? "R visible column remove command failed."
                     : "R visible column remove command removed the column."
@@ -280,6 +283,7 @@ export const createRTabularMutationController = function(
                     : request.rowIndex,
                 transcriptEvents,
                 workspaceUpdate: commandResult.workspaceUpdate,
+                workspaceReconciliation: commandResult.workspaceReconciliation,
                 message: failed
                     ? "R visible row insert command failed."
                     : "R visible row insert command inserted the row."
@@ -341,6 +345,7 @@ export const createRTabularMutationController = function(
                 rowIndex: request.rowIndex,
                 transcriptEvents,
                 workspaceUpdate: commandResult.workspaceUpdate,
+                workspaceReconciliation: commandResult.workspaceReconciliation,
                 message: failed
                     ? "R visible row remove command failed."
                     : "R visible row remove command removed the row."
@@ -394,6 +399,7 @@ export const createRTabularMutationController = function(
                 direction: request.direction,
                 transcriptEvents,
                 workspaceUpdate: commandResult.workspaceUpdate,
+                workspaceReconciliation: commandResult.workspaceReconciliation,
                 message: failed
                     ? "R visible row sort command failed."
                     : "R visible row sort command sorted the rows."
@@ -456,6 +462,7 @@ export const createRTabularMutationController = function(
                 name: request.name,
                 transcriptEvents,
                 workspaceUpdate: commandResult.workspaceUpdate,
+                workspaceReconciliation: commandResult.workspaceReconciliation,
                 message: failed
                     ? "R visible row-name update command failed."
                     : "R visible row-name update command updated the row name."
@@ -508,6 +515,7 @@ export const createRTabularMutationController = function(
                 value: request.value,
                 transcriptEvents,
                 workspaceUpdate: commandResult.workspaceUpdate,
+                workspaceReconciliation: commandResult.workspaceReconciliation,
                 message: failed
                     ? "R visible cell update command failed."
                     : "R visible cell update command updated the cell."

@@ -60,14 +60,34 @@ const isCommentOnlyRInput = function(commandText: string): boolean {
 };
 
 
-const workspaceUpdateFromEvents = function(events: unknown[] | undefined) {
+const workspaceUpdateFromEvents = function(
+    events: unknown[] | undefined,
+    parentId: string
+) {
     const workspaceEvent = asRuntimeControlArray(events).find((event) => {
-        return String(asRuntimeControlObject(event).type || "") ===
-            "workspace_update";
+        const value = asRuntimeControlObject(event);
+
+        return value.type === "workspace_update" && value.parent_id === parentId;
     });
 
     if (!workspaceEvent) {
-        return null;
+        const completion = asRuntimeControlArray(events).find((event) => {
+            const value = asRuntimeControlObject(event);
+
+            return value.type === "completion" && value.parent_id === parentId;
+        });
+        const value = asRuntimeControlObject(completion);
+
+        if (value.workspaceReconciliation !== "unchanged") {
+            return null;
+        }
+
+        const receipt = createRWorkspaceUpdate({
+            workspaceRevision: value.workspaceRevision,
+            objectCount: value.workspaceObjectCount
+        });
+
+        return receipt.workspaceRevision ? receipt : null;
     }
 
     const update = createRWorkspaceUpdate(
@@ -75,6 +95,25 @@ const workspaceUpdateFromEvents = function(events: unknown[] | undefined) {
     );
 
     return workspaceUpdateHasChanges(update) ? update : null;
+};
+
+
+const workspaceReconciliationFromEvents = function(
+    events: unknown[] | undefined,
+    parentId: string
+): RuntimeCommandExecutionResult["workspaceReconciliation"] {
+    const completion = asRuntimeControlArray(events).find((event) => {
+        const value = asRuntimeControlObject(event);
+
+        return value.type === "completion" && value.parent_id === parentId;
+    });
+    const outcome = asRuntimeControlObject(completion).workspaceReconciliation;
+
+    if (outcome === "unchanged" || outcome === "changed" || outcome === "failed") {
+        return outcome;
+    }
+
+    return "not_checked";
 };
 
 
@@ -94,7 +133,9 @@ export const createRVisibleCommandExecutor = function(
                             state: "idle"
                         })
                     ],
-                    workspaceUpdate: null
+                    workspaceUpdate: null,
+                    // No R code was executed for blank or comment-only input.
+                    workspaceReconciliation: "unchanged"
                 };
             }
 
@@ -128,6 +169,15 @@ export const createRVisibleCommandExecutor = function(
                 options.onExecutionFinished?.();
             });
 
+            if (options.getClient() !== client) {
+                return {
+                    activityId: parentId,
+                    transcriptEvents: [],
+                    workspaceUpdate: null,
+                    workspaceReconciliation: "not_checked"
+                };
+            }
+
             options.onRuntimeControlEvents?.(result.events, snapshot);
 
             const transcriptEvents: TranscriptEvent[] =
@@ -139,8 +189,13 @@ export const createRVisibleCommandExecutor = function(
 
             if (result.ok && transcriptEvents.length > 0) {
                 return {
+                    activityId: parentId,
                     transcriptEvents,
-                    workspaceUpdate: workspaceUpdateFromEvents(result.events)
+                    workspaceUpdate: workspaceUpdateFromEvents(result.events, parentId),
+                    workspaceReconciliation: workspaceReconciliationFromEvents(
+                        result.events,
+                        parentId
+                    )
                 };
             }
 
@@ -153,6 +208,7 @@ export const createRVisibleCommandExecutor = function(
                         )
                     })
                 ],
+                activityId: parentId,
                 workspaceUpdate: null
             };
         }

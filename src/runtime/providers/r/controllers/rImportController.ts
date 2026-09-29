@@ -75,6 +75,7 @@ export const createRImportController = function(
                     overwrite: request.overwrite,
                     transcriptEvents,
                     workspaceUpdate: commandResult.workspaceUpdate,
+                    workspaceReconciliation: commandResult.workspaceReconciliation,
                     message: failed
                         ? "R visible import command failed."
                         : "R visible import command imported the file."

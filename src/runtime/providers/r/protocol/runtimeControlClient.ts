@@ -3,6 +3,7 @@ import * as net from "net";
 import {
     encodeRuntimeControlRequest
 } from "./runtimeControlRequestEncoding";
+import { createRuntimeControlDiagnostics } from "./runtimeControlDiagnostics";
 
 
 export interface RRuntimeControlMeta {
@@ -35,10 +36,12 @@ export interface RRuntimeControlResponse {
 
 export interface RRuntimeControlClientOptions {
     onEvent?: (event: unknown) => void;
+    diagnostics?: ReturnType<typeof createRuntimeControlDiagnostics>;
 }
 
 
 export interface RRuntimeControlClient {
+    getWorkspaceEpoch?(): number;
     execute(
         request: RRuntimeControlRequest
     ): Promise<RRuntimeControlResponse>;
@@ -47,6 +50,7 @@ export interface RRuntimeControlClient {
 
 
 interface PendingRuntimeRequest {
+    request: RRuntimeControlRequest;
     method: string;
     parentId: string;
     collectEvents: boolean;
@@ -112,6 +116,8 @@ export const createRuntimeControlClient = function(
     meta: RRuntimeControlMeta,
     options: RRuntimeControlClientOptions = {}
 ): RRuntimeControlClient {
+    const diagnostics = options.diagnostics || createRuntimeControlDiagnostics("native");
+    let workspaceEpoch = 0;
     let socket: net.Socket | null = null;
     let connectPromise: Promise<void> | null = null;
     let receiveBuffer = "";
@@ -126,6 +132,7 @@ export const createRuntimeControlClient = function(
         if (parentId) {
             collectors.forEach((item) => {
                 if (item.parentId === parentId) {
+                    diagnostics.receiveEvent(item.request, event);
                     item.events.push(event);
                 }
             });
@@ -136,6 +143,7 @@ export const createRuntimeControlClient = function(
             runtimeEventType(event) === "prompt_state"
             && collectors.length === 1
         ) {
+            diagnostics.receiveEvent(collectors[0].request, event);
             collectors[0].events.push(event);
         }
     };
@@ -146,6 +154,7 @@ export const createRuntimeControlClient = function(
                 clearTimeout(item.timeout);
             }
             pending.delete(id);
+            diagnostics.record(item.request, "request.failed");
             item.resolve({
                 id,
                 method: item.method,
@@ -172,6 +181,14 @@ export const createRuntimeControlClient = function(
                         const item = id ? pending.get(id) : null;
 
                         if (item) {
+                            diagnostics.record(
+                                item.request, "response.received",
+                                diagnostics.enabled ? Buffer.byteLength(line) : 0
+                            );
+                            diagnostics.receiveDiagnostics(item.request, message.diagnostics);
+                            for (const event of Array.isArray(message.events) ? message.events : []) {
+                                diagnostics.receiveEvent(item.request, event);
+                            }
                             if (item.timeout) {
                                 clearTimeout(item.timeout);
                             }
@@ -189,7 +206,9 @@ export const createRuntimeControlClient = function(
                             collectRuntimeEvent(message);
                             options.onEvent?.(message);
                         }
-                    } catch {}
+                    } catch {
+                        diagnostics.record({ id: "transport", method: "runtime.transport" }, "frame.delivery_failed", 1);
+                    }
                 }
 
                 index = receiveBuffer.indexOf("\n");
@@ -241,7 +260,12 @@ export const createRuntimeControlClient = function(
     };
 
     return {
+        getWorkspaceEpoch: () => workspaceEpoch,
         execute: async function(request: RRuntimeControlRequest): Promise<RRuntimeControlResponse> {
+            if (request.method !== "workspace.update" && request.method !== "workspace.snapshot") {
+                workspaceEpoch += 1;
+            }
+            request = diagnostics.prepare(request);
             const requestedTimeoutMs = Number(request.params?.timeoutMs);
             const timeoutMs = Number.isFinite(requestedTimeoutMs) && requestedTimeoutMs > 0
                 ? Math.max(250, requestedTimeoutMs)
@@ -268,6 +292,7 @@ export const createRuntimeControlClient = function(
                         ? null
                         : setTimeout(() => {
                             pending.delete(request.id);
+                            diagnostics.record(request, "request.timed_out");
                             resolve({
                                 id: request.id,
                                 method: request.method,
@@ -277,6 +302,7 @@ export const createRuntimeControlClient = function(
                         }, timeoutMs + 120);
 
                     pending.set(request.id, {
+                        request,
                         method: request.method,
                         parentId: String(request.params?.parentId || "").trim(),
                         collectEvents: request.method === "execute_input",
@@ -286,7 +312,12 @@ export const createRuntimeControlClient = function(
                     });
 
                     try {
-                        activeSocket.write(`${encodeRuntimeControlRequest(request, String(meta.token || ""))}\n`);
+                        const frame = `${encodeRuntimeControlRequest(request, String(meta.token || ""))}\n`;
+                        diagnostics.record(
+                            request, "request.sent",
+                            diagnostics.enabled ? Buffer.byteLength(frame) : 0
+                        );
+                        activeSocket.write(frame);
                     } catch {
                         if (timeout) {
                             clearTimeout(timeout);
@@ -307,9 +338,12 @@ export const createRuntimeControlClient = function(
                     ok: false,
                     error: error instanceof Error ? error.message : String(error)
                 };
+            } finally {
+                diagnostics.record(request, "response.resolved");
             }
         },
         detach: function(): void {
+            workspaceEpoch += 1;
             failPending("runtime-session-detached");
             if (socket) {
                 try {
