@@ -1,0 +1,18 @@
+Package: dialogforgeruntime
+Type: Package
+Title: Shared R Runtime Support for DialogForge
+Version: 0.1.1
+Authors@R: person("Adrian", "Dusa", role = c("aut", "cre", "cph"),
+    email = "dusa.adrian@unibuc.ro")
+Description: Non-evaluating object and binding inspection, physical graphics
+    device observation, scoped frontend console input, bounded runtime transport
+    and ordered output capture for DialogForge. Native R and WebAssembly R build
+    the same source files. Runtime policy and lifecycle remain caller owned.
+License: file LICENSE
+Encoding: UTF-8
+Depends: R (>= 4.5.0)
+NeedsCompilation: yes
+Packaged: 2026-10-05 03:52:13 UTC; runner
+Author: Adrian Dusa [aut, cre, cph]
+Maintainer: Adrian Dusa <dusa.adrian@unibuc.ro>
+Built: R 4.6.1; aarch64-apple-darwin23; 2026-10-05 03:52:13 UTC; unix

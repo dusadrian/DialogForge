@@ -22,8 +22,7 @@ const fixture = async function(response, { responseText, ...controlOptions } = {
     };
     const client = await installWebRSharedRuntimeControl({
         ...controlOptions,
-        runtime, fetchSource: async () => "", fetchInspectionArchive: async () => new Uint8Array(),
-        fetchTransportArchive: async () => new Uint8Array(),
+        runtime, fetchSource: async () => "", fetchHelperArchive: async () => new Uint8Array(),
         runRuntimeOperation: (action) => action()
     });
     return { client, command: () => lastCommand, commands };
@@ -150,8 +149,7 @@ const main = async function() {
         }
     };
     const drainedClient = await installWebRSharedRuntimeControl({
-        runtime, fetchSource: async () => "", fetchInspectionArchive: async () => new Uint8Array(),
-        fetchTransportArchive: async () => new Uint8Array(),
+        runtime, fetchSource: async () => "", fetchHelperArchive: async () => new Uint8Array(),
         graphicsReceived: (images) => receivedImages.push(...images),
         runRuntimeOperation: (action) => action()
     });
@@ -168,8 +166,8 @@ const main = async function() {
     for (const fault of [Error("private-response-path-and-secret"), "private-non-error-secret"]) {
         responseReadFailure = fault;
         const reader = await installWebRSharedRuntimeControl({
-            runtime, fetchSource: async () => "", fetchInspectionArchive: async () => new Uint8Array(),
-            fetchTransportArchive: async () => new Uint8Array(), runRuntimeOperation: action => action()
+            runtime, fetchSource: async () => "", fetchHelperArchive: async () => new Uint8Array(),
+            runRuntimeOperation: action => action()
         });
         const evaluationsBefore = responseEvaluations;
         const unlinksBefore = responseUnlinks;
@@ -189,8 +187,8 @@ const main = async function() {
     responseReadFailure = null;
     responseUnlinkFailure = true;
     const cleanupReader = await installWebRSharedRuntimeControl({
-        runtime, fetchSource: async () => "", fetchInspectionArchive: async () => new Uint8Array(),
-        fetchTransportArchive: async () => new Uint8Array(), runRuntimeOperation: action => action()
+        runtime, fetchSource: async () => "", fetchHelperArchive: async () => new Uint8Array(),
+        runRuntimeOperation: action => action()
     });
     for (const id of ["cleanup-fault", "after-cleanup-fault"]) {
         assert.equal((await cleanupReader.execute({ id, method: "execute_input", params: { parentId: id } })).ok, true,
@@ -201,8 +199,8 @@ const main = async function() {
 
     corruptResponseEncoding = true;
     const encodingReader = await installWebRSharedRuntimeControl({
-        runtime, fetchSource: async () => "", fetchInspectionArchive: async () => new Uint8Array(),
-        fetchTransportArchive: async () => new Uint8Array(), runRuntimeOperation: action => action()
+        runtime, fetchSource: async () => "", fetchHelperArchive: async () => new Uint8Array(),
+        runRuntimeOperation: action => action()
     });
     const invalidEncoding = await encodingReader.execute({ id: "encoding-read-fault", method: "execute_input",
         params: { parentId: "encoding-read-fault" } });
@@ -218,8 +216,8 @@ const main = async function() {
     for (const failure of [Error("private-sdk-evaluation-error"), "private-sdk-non-error", null, undefined]) {
         sdkEvaluationFailure = failure;
         const evaluationReader = await installWebRSharedRuntimeControl({
-            runtime, fetchSource: async () => "", fetchInspectionArchive: async () => new Uint8Array(),
-            fetchTransportArchive: async () => new Uint8Array(), runRuntimeOperation: action => action()
+            runtime, fetchSource: async () => "", fetchHelperArchive: async () => new Uint8Array(),
+            runRuntimeOperation: action => action()
         });
         const beforeEvaluation = responseEvaluations;
         const beforeRead = responseFileReads;
@@ -238,8 +236,8 @@ const main = async function() {
     sdkEvaluationFailureEnabled = false;
     oversizedResponse = true;
     const oversizedReader = await installWebRSharedRuntimeControl({
-        runtime, fetchSource: async () => "", fetchInspectionArchive: async () => new Uint8Array(),
-        fetchTransportArchive: async () => new Uint8Array(), runRuntimeOperation: action => action()
+        runtime, fetchSource: async () => "", fetchHelperArchive: async () => new Uint8Array(),
+        runRuntimeOperation: action => action()
     });
     const tooLarge = await oversizedReader.execute({ id: "oversized-read-fault", method: "execute_input",
         params: { parentId: "oversized-read-fault" } });
@@ -253,8 +251,8 @@ const main = async function() {
 
     missingResponseSize = true;
     const missingSizeReader = await installWebRSharedRuntimeControl({
-        runtime, fetchSource: async () => "", fetchInspectionArchive: async () => new Uint8Array(),
-        fetchTransportArchive: async () => new Uint8Array(), runRuntimeOperation: action => action()
+        runtime, fetchSource: async () => "", fetchHelperArchive: async () => new Uint8Array(),
+        runRuntimeOperation: action => action()
     });
     const readsBefore = responseFileReads;
     const missingSize = await missingSizeReader.execute({ id: "missing-size", method: "execute_input",
@@ -268,8 +266,7 @@ const main = async function() {
     retentionStream = true;
     const liveRetentionClient = await installWebRSharedRuntimeControl({
         maxRetainedEventBytes: 1,
-        runtime, fetchSource: async () => "", fetchInspectionArchive: async () => new Uint8Array(),
-        fetchTransportArchive: async () => new Uint8Array(),
+        runtime, fetchSource: async () => "", fetchHelperArchive: async () => new Uint8Array(),
         runRuntimeOperation: (action) => action()
     });
     const liveRetention = await liveRetentionClient.execute({

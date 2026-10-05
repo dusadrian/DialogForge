@@ -78,10 +78,10 @@ check_low_level_graphics_retirement <- function(runtime) {
 
 inspection_library <- Sys.getenv("DIALOGFORGE_TEST_INSPECTION_LIBRARY")
 if (!nzchar(inspection_library)) {
-    inspection_library <- file.path(root, "dist/r-inspection/native",
+    inspection_library <- file.path(root, "dist/r-runtime/native",
         paste(R.version$platform, getRversion(), sep = "-"))
 }
-inspection <- loadNamespace("dialogforgeinspect", lib.loc = inspection_library)
+inspection <- loadNamespace("dialogforgeruntime", lib.loc = inspection_library)
 
 check_graphics_observation_cleanup <- function() {
     grDevices::pdf(NULL)

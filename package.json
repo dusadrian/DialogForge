@@ -8,8 +8,12 @@
     "author": "Adrian Dusa",
     "license": "SEE LICENSE IN LICENSE",
     "scripts": {
-    "build": "tsc -p tsconfig.json && node scripts/verify-dataset-metadata-cache.js && node scripts/copy-static.js && node scripts/generate-core-sdk.js && node dist/scripts/package-product-if-requested.js",
+        "build": "node scripts/native-r-helper-artifacts.js --prepare && tsc -p tsconfig.json && node scripts/verify-dataset-metadata-cache.js && node scripts/copy-static.js && node scripts/generate-core-sdk.js && node dist/scripts/package-product-if-requested.js",
         "build:web": "node scripts/build-web.js",
+        "bundle:r-helper:native": "node scripts/native-r-helper-artifacts.js --bundle",
+        "build:r-helper:native": "node scripts/build-native-r-helper-release.js",
+        "import:r-helper:native": "node scripts/native-r-helper-artifacts.js --import",
+        "build:r-helper:webr": "node scripts/web-r-helper-artifacts.js --bundle",
         "sdk:core": "node scripts/generate-core-sdk.js",
         "generate:live-script-words": "node scripts/generate-live-script-short-code-words.js",
         "test:r-package-compatibility": "node scripts/test-r-package-compatibility.js",
@@ -47,17 +51,22 @@
         "webr": "^0.6.0"
     },
     "build": {
+        "afterPack": "./scripts/prepare-product-runtime.js",
+        "afterSign": "./scripts/finalize-product-runtime.js",
         "directories": {
             "output": "build/output"
         },
         "files": [
             "dist/**/*",
+            "!dist/r-runtime/native-retired-*/**/*",
+            "!dist/r-runtime/native-stage-*/**/*",
+            "!dist/r-runtime/source-*/**/*",
             "package.json",
             "product/**/*"
         ],
         "asar": true,
         "asarUnpack": [
-            "dist/r-inspection/native/**/*",
+            "dist/r-runtime/native/**/*",
             "dist/src/runtime/providers/r/r-sources/**/*",
             "product/runtime/runtimeControlProfile.R",
             "dist/node_modules/@number0/**/*.node"

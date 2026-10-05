@@ -1,0 +1,21 @@
+binding_info            Read a Binding Without Evaluating It
+closure_is_compiled     Inspect a Closure's Stored Compilation State
+match_stored_names      Match Ordinary Inspection Names Without Package
+                        Dispatch
+observe_graphics_device
+                        Observe the Lifetime of a Physical Graphics
+                        Device
+open_output_capture     Experimental Native Output Journal Connections
+read_bounded_runtime_request
+                        Read One Bounded Native Runtime Request
+read_runtime_console_line
+                        Read one bounded line through the host console
+rebind_compiled_closure
+                        Bind a Compiled Control Closure to Its Runtime
+stored_graph_is_inspectable
+                        Check Stored Contents Before Automatic
+                        Inspection
+stored_list_fields      Read Stored List Fields Without Dispatch
+with_runtime_console_input
+                        Evaluate with a scoped runtime console input
+                        owner

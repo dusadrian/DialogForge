@@ -1,5 +1,6 @@
 import {
     spawn,
+    spawnSync,
     type ChildProcessWithoutNullStreams
 } from "child_process";
 import * as fs from "fs";
@@ -459,7 +460,16 @@ export const createRRuntimeProcessHost = function(
                 }
             }
 
-            return child.kill("SIGINT");
+            if (process.platform === "win32" && child.pid && plan) {
+                // Windows kill(SIGINT) terminates the process. Signal the
+                // task-owned frontend event so R raises its normal interrupt.
+                const result = spawnSync(plan.command, ["--interrupt-pid", String(child.pid)], {
+                    env: plan.env, windowsHide: true, timeout: 2000, stdio: "ignore"
+                });
+                return !result.error && result.status === 0;
+            }
+
+            return false;
         }
     };
 };

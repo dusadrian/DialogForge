@@ -3,7 +3,7 @@
 local({
     runtime <- new.env(parent = baseenv())
     runtime$runtime_inspection_library <- Sys.getenv("DIALOGFORGE_TEST_INSPECTION_LIBRARY", unset = file.path(
-        "dist/r-inspection/native", paste(R.version$platform, getRversion(), sep = "-")
+        "dist/r-runtime/native", paste(R.version$platform, getRversion(), sep = "-")
     ))
     sys.source(
         "src/runtime/providers/r/r-sources/runtimeBindingInspection.R",

@@ -21,7 +21,7 @@ exports.checkActualPromptRetirement = async function(options) {
     const observations = [];
     for (const reader of [
         'readline("retired prompt: ")',
-        'loadNamespace("dialogforgetransport")$read_runtime_console_line("retired raw prompt: ")'
+        'loadNamespace("dialogforgeruntime")$read_runtime_console_line("retired raw prompt: ")'
     ]) {
         await options.preparePrompt();
         const old = options.begin([

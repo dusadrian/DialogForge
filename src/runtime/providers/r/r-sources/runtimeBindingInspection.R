@@ -16,7 +16,7 @@ runtime_binding_info <- local({
         stop("DialogForge binding-inspection library is not configured.")
     }
     namespace <- tryCatch(
-        loadNamespace("dialogforgeinspect", lib.loc = runtime_inspection_library),
+        loadNamespace("dialogforgeruntime", lib.loc = runtime_inspection_library),
         error = function(error) {
             stop(paste0(
                 "DialogForge binding-inspection helper could not be loaded from ",
@@ -25,49 +25,49 @@ runtime_binding_info <- local({
             ), call. = FALSE)
         }
     )
-    if (!identical(as.character(getNamespaceVersion(namespace)), "0.4.3")) {
+    if (!identical(as.character(getNamespaceVersion(namespace)), "0.1.1")) {
         stop("DialogForge binding-inspection helper version mismatch; rebuild the helper.")
     }
     get("binding_info", envir = namespace, inherits = FALSE)
 })
 
 runtime_stored_graph_is_inspectable <- get(
-    "stored_graph_is_inspectable", envir = asNamespace("dialogforgeinspect"),
+    "stored_graph_is_inspectable", envir = asNamespace("dialogforgeruntime"),
     inherits = FALSE
 )
 
 runtime_control_closure_is_compiled <- get(
-    "closure_is_compiled", envir = asNamespace("dialogforgeinspect"),
+    "closure_is_compiled", envir = asNamespace("dialogforgeruntime"),
     inherits = FALSE
 )
 
 runtime_rebind_compiled_control_closure <- get(
-    "rebind_compiled_closure", envir = asNamespace("dialogforgeinspect"),
+    "rebind_compiled_closure", envir = asNamespace("dialogforgeruntime"),
     inherits = FALSE
 )
 
 runtime_stored_list_fields <- get(
-    "stored_list_fields", envir = asNamespace("dialogforgeinspect"),
+    "stored_list_fields", envir = asNamespace("dialogforgeruntime"),
     inherits = FALSE
 )
 
 runtime_observe_graphics_device <- get(
-    "observe_graphics_device", envir = asNamespace("dialogforgeinspect"),
+    "observe_graphics_device", envir = asNamespace("dialogforgeruntime"),
     inherits = FALSE
 )
 
 runtime_graphics_device_is_current <- get(
-    "graphics_device_is_current", envir = asNamespace("dialogforgeinspect"),
+    "graphics_device_is_current", envir = asNamespace("dialogforgeruntime"),
     inherits = FALSE
 )
 
 runtime_graphics_device_is_open <- get(
-    "graphics_device_is_open", envir = asNamespace("dialogforgeinspect"),
+    "graphics_device_is_open", envir = asNamespace("dialogforgeruntime"),
     inherits = FALSE
 )
 
 runtime_match_stored_names <- get(
-    "match_stored_names", envir = asNamespace("dialogforgeinspect"),
+    "match_stored_names", envir = asNamespace("dialogforgeruntime"),
     inherits = FALSE
 )
 

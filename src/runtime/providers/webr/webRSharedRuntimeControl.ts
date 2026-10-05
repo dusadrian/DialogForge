@@ -90,9 +90,7 @@ export interface WebRSharedRuntimeControlOptions {
     runtime: WebRSharedRuntimeControlRuntime;
     fetchSource(path: string): Promise<string>;
     fetchControlCompilationCache?(): Promise<Uint8Array | null>;
-    fetchInspectionArchive?(rVersion: string): Promise<Uint8Array>;
-    fetchTransportArchive?(rVersion: string): Promise<Uint8Array>;
-    fetchOutputArchive?(rVersion: string): Promise<Uint8Array>;
+    fetchHelperArchive?(rVersion: string): Promise<Uint8Array>;
     fetchProductSource?(): Promise<string>;
     runRuntimeOperation<T>(action: () => Promise<T>, waitBeforeNext?: () => Promise<void>): Promise<T>;
     prepareRequest?(request: RRuntimeControlRequest): Promise<void>;
@@ -425,61 +423,45 @@ export const installWebRSharedRuntimeControl = async function(
     await options.runRuntimeOperation(async function() {
         const runtime = options.runtime;
         if (!runtime.FS?.writeFile) {
-            throw new Error("WebR cannot stage the required binding-inspection helper.");
+            throw new Error("WebR cannot stage the required runtime helper package.");
         }
         const version = await runtime.evalRString("as.character(getRversion())");
         if (!/^\d+\.\d+\.\d+$/.test(version)) {
-            throw new Error("Unsupported WebR version for binding inspection.");
+            throw new Error("Unsupported WebR version for the runtime helper package.");
         }
-        const directory = await runtime.evalRString('tempfile("dialogforge-inspection-")');
-        const library = `${directory}/library`;
-        await runtime.evalRVoid(`dir.create(${JSON.stringify(library)}, recursive = TRUE)`);
-        const helpers = [
-            { name: "dialogforgeinspect_0.4.3", directory: "r-inspection", variable: "runtime_inspection_library",
-                library,
-                fetchArchive: options.fetchInspectionArchive,
-                failureMessage: "Build and serve the WebR binding-inspection helper before startup." },
-            { name: "dialogforgetransport_0.0.4", directory: "r-transport-prototype", variable: "runtime_transport_library",
-                library,
-                fetchArchive: options.fetchTransportArchive,
-                failureMessage: "Build and serve the WebR host-console transport helper before startup." },
-            ...(options.orderedOutput && options.fetchOutputArchive ? [{
-                name: "dialogforgeoutput_0.0.1", directory: "r-output-prototype",
-                variable: "runtime_output_library", library: options.orderedOutput.library,
-                fetchArchive: options.fetchOutputArchive,
-                failureMessage: "Build and serve the WebR ordered-output helper before startup."
-            }] : [])
-        ];
-        for (const helper of helpers) {
-            const archive = helper.fetchArchive ? await helper.fetchArchive(version) : await (async function() {
-                const response = await fetch(`/${helper.directory}/webr/${version}/${helper.name}.tgz`);
-                if (!response.ok) {
-                    throw new Error(helper.failureMessage);
-                }
-                return new Uint8Array(await response.arrayBuffer());
-            })();
-            const archivePath = `${directory}/${helper.name}.tgz`;
-            let stagingCompleted = false;
-            try {
-                await runtime.FS.writeFile(archivePath, archive);
-                await runtime.evalRVoid([
-                    `dir.create(${JSON.stringify(helper.library)}, recursive = TRUE, showWarnings = FALSE)`,
-                    `utils::untar(${JSON.stringify(archivePath)}, exdir = ${JSON.stringify(helper.library)}, tar = "internal")`,
-                    `assign(${JSON.stringify(helper.variable)}, ${JSON.stringify(helper.library)}, envir = as.environment("DialogApp"))`
-                ].join("\n"));
-                stagingCompleted = true;
+        const directory = await runtime.evalRString('tempfile("dialogforge-runtime-")');
+        const library = options.orderedOutput?.library || `${directory}/library`;
+        await runtime.evalRVoid(`dir.create(${JSON.stringify(directory)}, recursive = TRUE)`);
+        const archive = options.fetchHelperArchive ? await options.fetchHelperArchive(version) : await (async function() {
+            const response = await fetch(`/r-runtime/webr/${version}/dialogforgeruntime_0.1.1.tgz`);
+            if (!response.ok) {
+                throw new Error("Build and serve the WebR runtime helper package before startup.");
             }
-            finally {
-                try {
-                    await runtime.FS.unlink?.(archivePath);
-                }
-                catch (error) {
-                    diagnostics.record(startupRequest, "startup.helper_archive_release_failed");
-                    // Keep the required write/extraction failure as the cause.
-                    // Successful staging still requires its existing cleanup.
-                    if (stagingCompleted) {
-                        throw error;
-                    }
+            return new Uint8Array(await response.arrayBuffer());
+        })();
+        const archivePath = `${directory}/dialogforgeruntime_0.1.1.tgz`;
+        let stagingCompleted = false;
+        try {
+            await runtime.FS.writeFile(archivePath, archive);
+            await runtime.evalRVoid([
+                `dir.create(${JSON.stringify(library)}, recursive = TRUE, showWarnings = FALSE)`,
+                `utils::untar(${JSON.stringify(archivePath)}, exdir = ${JSON.stringify(library)}, tar = "internal")`,
+                ...["runtime_inspection_library", "runtime_transport_library", "runtime_output_library"].map(variable =>
+                    `assign(${JSON.stringify(variable)}, ${JSON.stringify(library)}, envir = as.environment("DialogApp"))`
+                )
+            ].join("\n"));
+            stagingCompleted = true;
+        }
+        finally {
+            try {
+                await runtime.FS.unlink?.(archivePath);
+            }
+            catch (error) {
+                diagnostics.record(startupRequest, "startup.helper_archive_release_failed");
+                // Keep the required write/extraction failure as the cause.
+                // Successful staging still requires its existing cleanup.
+                if (stagingCompleted) {
+                    throw error;
                 }
             }
         }

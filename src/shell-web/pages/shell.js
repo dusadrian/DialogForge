@@ -3582,12 +3582,12 @@ const ensureRuntime = async function () {
                     directory: `${outputDirectory}/captures`,
                     sessionId: outputSessionId
                 },
-                fetchOutputArchive: async function (version) {
+                fetchHelperArchive: async function (version) {
                     const response = await fetch(
-                        `/r-output-prototype/webr/${version}/dialogforgeoutput_0.0.1.tgz`
+                        `/r-runtime/webr/${version}/dialogforgeruntime_0.1.0.tgz`
                     );
                     if (!response.ok) {
-                        throw new Error("The WebR ordered-output helper could not be loaded.");
+                        throw new Error("The WebR runtime helper package could not be loaded.");
                     }
                     return new Uint8Array(await response.arrayBuffer());
                 },

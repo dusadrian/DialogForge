@@ -6,6 +6,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
 const { spawnSync } = require("node:child_process");
+const { readArtifactFileHashes } = require("./r-helper-artifact-files");
 
 const root = path.resolve(__dirname, "..");
 const output = process.argv[2];
@@ -17,6 +18,7 @@ const directory = fs.mkdtempSync(path.join(output, "native-platform-"));
 const library = path.join(directory, "library");
 fs.mkdirSync(library);
 const r = process.env.DIALOGFORGE_BUILD_R || "R";
+let evaluationHost = r;
 const report = { startedAt: new Date().toISOString(), root,
     scope: "Native R ABI/shared-source cases, not product UI or release acceptance",
     directory, identity: null, fingerprints: {}, builds: [], results: [], error: null };
@@ -30,7 +32,7 @@ const fingerprint = function(relative) {
 };
 const run = function(label, arguments_, options = {}) {
     const started = Date.now();
-    const result = spawnSync(r, arguments_, {
+    const result = spawnSync(options.evaluation ? evaluationHost : r, arguments_, {
         cwd: options.cwd || root, env: { ...env, ...options.env },
         encoding: "utf8", timeout: 60000, maxBuffer: 4 * 1024 * 1024
     });
@@ -53,7 +55,8 @@ const build = function(packageName, sourceInput) {
             continue;
         }
         for (const file of fs.readdirSync(sectionPath)) {
-            if (/\.(c|h|R)$/.test(file) || ["DESCRIPTION", "NAMESPACE"].includes(file)) {
+            if (/\.(c|h|R|rc|manifest)$/.test(file)
+                || ["DESCRIPTION", "NAMESPACE", "Makevars.win"].includes(file)) {
                 const fullPath = path.join(sectionPath, file);
                 const key = sourceInput ? "external-declared/" + path.join(section, file)
                     : path.join(relative, section, file);
@@ -93,10 +96,28 @@ try {
         'if (requireNamespace("declared", quietly=TRUE)) cat("declared=", as.character(packageVersion("declared")), "\\n")']);
     report.declaredIdentity = declared.stdout.trim();
     const hasDeclared = declared.entry.status === "passed" && /declared= /.test(declared.stdout);
-    for (const name of ["dialogforgeinspect", "dialogforgeoutput", "dialogforgetransport"]) {
-        build(name);
+    build("dialogforgeruntime");
+    report.helperFiles = readArtifactFileHashes(path.join(library, "dialogforgeruntime"));
+    if (process.platform === "win32") {
+        const rHome = spawnSync(r, ["--vanilla", "--slave", "-e", "cat(R.home())"], {
+            encoding: "utf8", env
+        });
+        if (rHome.status !== 0 || !rHome.stdout.trim()) {
+            throw Error("Cannot identify the selected Windows R installation.");
+        }
+        env.R_HOME = rHome.stdout.trim();
+        for (const key of Object.keys(env).filter(name => name.toLowerCase() === "path")) {
+            const value = env[key];
+            delete env[key];
+            env.PATH = path.join(env.R_HOME, "bin/x64") + ";"
+                + path.join(env.R_HOME, "bin") + ";" + value;
+        }
+        evaluationHost = path.join(library, "dialogforgeruntime/libs/x64/dialogforge-r-host.exe");
+        if (!fs.existsSync(evaluationHost)) {
+            throw Error("Windows qualification requires the installed, version-pinned console host.");
+        }
     }
-    const probe = "src/runtime/providers/r/native/dialogforgeinspect/tests/altrepprobe.c";
+    const probe = "src/runtime/providers/r/native/dialogforgeruntime/tests/altrepprobe.c";
     fingerprint(probe);
     fs.copyFileSync(path.join(root, probe), path.join(directory, "altrepprobe.c"));
     const probeBuild = run("build-altrep-probe", ["CMD", "SHLIB", "altrepprobe.c"], { cwd: directory });
@@ -115,7 +136,9 @@ try {
                 reason: "Offline native image has no declared package; this required case is not passed" });
             continue;
         }
-        const result = run(script, ["--vanilla", "--slave", "--file=" + path.join(root, "scripts", script)]);
+        const result = run(script, ["--vanilla", "--slave", "--file=" + path.join(root, "scripts", script)], {
+            evaluation: true
+        });
         report.results.push(result.entry);
     }
     const sources = "src/runtime/providers/r/r-sources";
@@ -132,12 +155,38 @@ try {
     }
     report.results.push(run("check-runtime-startup-compilation-cached", ["--vanilla", "--slave",
         "--file=" + path.join(root, "scripts/check-runtime-startup-compilation.R")], {
-        env: { DIALOGFORGE_TEST_CONTROL_CACHE: "1", DIALOGFORGE_TEST_CONTROL_CACHE_PATH: cachePath }
+        env: { DIALOGFORGE_TEST_CONTROL_CACHE: "1", DIALOGFORGE_TEST_CONTROL_CACHE_PATH: cachePath },
+        evaluation: true
     }).entry);
+    const physicalCases = ["check-native-console-input.js"];
+    if (process.platform === "win32") {
+        physicalCases.push("check-windows-console-host.js");
+    }
+    for (const name of physicalCases) {
+        fingerprint("scripts/" + name);
+        const started = Date.now();
+        const result = spawnSync(process.execPath, [path.join(root, "scripts", name)], {
+            cwd: root, env: { ...env, DIALOGFORGE_R_BINARY: evaluationHost },
+            encoding: "utf8", timeout: 60000, maxBuffer: 4 * 1024 * 1024
+        });
+        const log = `${++sequence}-${name}.log`;
+        fs.writeFileSync(path.join(directory, log), (result.stdout || "") + (result.stderr || ""));
+        report.results.push({ name, status: result.status === 0 ? "passed" : "failed",
+            durationMs: Date.now() - started, exitCode: result.status, log });
+        console.log((result.status === 0 ? "passed: " : "failed: ") + name);
+    }
     report.declaredBranchesAvailable = hasDeclared;
 } catch (error) {
     report.error = String(error);
 } finally {
+    try {
+        if (report.helperFiles && JSON.stringify(report.helperFiles) !== JSON.stringify(
+            readArtifactFileHashes(path.join(library, "dialogforgeruntime")))) {
+            report.error = "The tested helper payload changed during native acceptance.";
+        }
+    } catch (error) {
+        report.error = "The tested helper payload could not be fingerprinted: " + String(error);
+    }
     report.finishedAt = new Date().toISOString();
     const failed = report.error || [...report.builds, ...report.results].some(entry => entry.status === "failed");
     report.status = failed ? "failed" : report.results.some(entry => entry.status === "prerequisite-unavailable")

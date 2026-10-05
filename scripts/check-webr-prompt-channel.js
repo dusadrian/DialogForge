@@ -78,8 +78,7 @@ const main = async function() {
     let reply;
     const liveEvents = [];
     const client = await installWebRSharedRuntimeControl({
-        runtime, fetchSource: async () => "", fetchInspectionArchive: async () => new Uint8Array(),
-        fetchTransportArchive: async () => new Uint8Array(),
+        runtime, fetchSource: async () => "", fetchHelperArchive: async () => new Uint8Array(),
         runRuntimeOperation: (action, waitBeforeNext) => queue.run(action, waitBeforeNext),
         runtimeEventReceived: function(event, request, orderedOutput) {
             assert.equal(request.id, "hidden-function");

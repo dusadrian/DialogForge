@@ -229,6 +229,33 @@ const main = async function() {
                 delete child.pid;
             }
         }
+        const platformDescriptor = Object.getOwnPropertyDescriptor(process, "platform");
+        const originalSpawnSync = childProcess.spawnSync;
+        const windowsChild = children.at(-1);
+        const interruptCalls = [];
+        windowsChild.pid = 4242;
+        try {
+            Object.defineProperty(process, "platform", { value: "win32" });
+            childProcess.spawnSync = (command, args, options) => {
+                interruptCalls.push({ command, args, options });
+                return { status: 0 };
+            };
+            assert.equal(host.interrupt(), true);
+            assert.equal(interruptCalls[0].command, "unused");
+            assert.deepEqual(interruptCalls[0].args, ["--interrupt-pid", "4242"]);
+            assert.equal(interruptCalls[0].options.windowsHide, true);
+            assert.equal(interruptCalls[0].options.timeout, 2000);
+            assert.equal(windowsChild.killed, false,
+                "Windows Interrupt must signal the owned host, not terminate R.");
+            childProcess.spawnSync = () => ({ status: 1 });
+            assert.equal(host.interrupt(), false);
+            childProcess.spawnSync = () => ({ status: null, error: Error("host unavailable") });
+            assert.equal(host.interrupt(), false);
+        } finally {
+            Object.defineProperty(process, "platform", platformDescriptor);
+            childProcess.spawnSync = originalSpawnSync;
+            delete windowsChild.pid;
+        }
         children.at(-1).emit("exit", 9, null);
         assert.equal(unexpectedExits.length, 1,
             "An unexpected exit after accepted startup must still reach crash recovery.");

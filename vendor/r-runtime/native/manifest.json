@@ -1,0 +1,42 @@
+{
+    "format": 1,
+    "packageName": "dialogforgeruntime",
+    "packageVersion": "0.1.1",
+    "targets": [
+        {
+            "platform": "darwin",
+            "arch": "arm64",
+            "runtimePlatform": "aarch64-apple-darwin23",
+            "runtimeVersion": "4.6.1",
+            "receiptSha256": "31d3eb6b38c2e6f7c0e3f7c8f48332867d6f4e6f87a889279e1b51bb394d8083"
+        },
+        {
+            "platform": "linux",
+            "arch": "arm64",
+            "runtimePlatform": "aarch64-unknown-linux-gnu",
+            "runtimeVersion": "4.6.1",
+            "receiptSha256": "1b5a5d9905ec66a0121a99ccf27e7af9afc04baa70ff62323889d63711b91834"
+        },
+        {
+            "platform": "darwin",
+            "arch": "x64",
+            "runtimePlatform": "x86_64-apple-darwin20",
+            "runtimeVersion": "4.6.1",
+            "receiptSha256": "952cff142ec9db704ce9364876accd234a0cba12a98814d6c6003b9455330e7b"
+        },
+        {
+            "platform": "linux",
+            "arch": "x64",
+            "runtimePlatform": "x86_64-pc-linux-gnu",
+            "runtimeVersion": "4.6.1",
+            "receiptSha256": "f8738b2517038028978080a8ac3c6f2623bee5c70cfae149f3cf4a2fba5bf597"
+        },
+        {
+            "platform": "win32",
+            "arch": "x64",
+            "runtimePlatform": "x86_64-w64-mingw32",
+            "runtimeVersion": "4.6.1",
+            "receiptSha256": "0e0d906fe8ae54ac32dfb6d3497d2f65834819962a955dbed1ca29fe7f2fef9e"
+        }
+    ]
+}

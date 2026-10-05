@@ -9,7 +9,7 @@ local({
     runtime <- new.env(parent = globalenv())
     runtime$opts <- list()
     runtime$runtime_inspection_library <- Sys.getenv("DIALOGFORGE_TEST_INSPECTION_LIBRARY", unset = file.path(
-        "dist/r-inspection/native", paste(R.version$platform, getRversion(), sep = "-")
+        "dist/r-runtime/native", paste(R.version$platform, getRversion(), sep = "-")
     ))
     sources <- "src/runtime/providers/r/r-sources"
     for (file in c(

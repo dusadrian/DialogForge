@@ -78,7 +78,7 @@ const main = async function() {
             DIALOGFORGE_BOUNDED_INPUT_PROTOTYPE: groupedInput ? "0" : "1", DIALOGFORGE_ORDERED_OUTPUT_PROTOTYPE: "0",
             DM_RUNTIME_CONTROL_COMPILATION_CACHE: path.join(root, "dist/src/runtime/providers/r/r-sources/runtime-control-cache.rds"),
             DIALOGFORGE_TRANSPORT_LIBRARY: process.env.DIALOGFORGE_TRANSPORT_LIBRARY
-                || path.join(root, "dist/r-transport-prototype/native/aarch64-apple-darwin23-4.6.1") }
+                || path.join(root, "dist/r-runtime/native/aarch64-apple-darwin23-4.6.1") }
     });
     plan.env.DM_RUNTIME_CONTROL_MAX_PAYLOAD = "4096";
     const responseClose = process.env.DIALOGFORGE_TEST_R_RESPONSE_CLOSE === "1";

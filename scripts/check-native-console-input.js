@@ -4,12 +4,12 @@ const assert = require("node:assert/strict");
 const path = require("node:path");
 const { spawnSync } = require("node:child_process");
 const library = process.env.DIALOGFORGE_TRANSPORT_LIBRARY || path.resolve(
-    __dirname, "../dist/r-transport-prototype/native/aarch64-apple-darwin23-4.6.1"
+    __dirname, "../dist/r-runtime/native/aarch64-apple-darwin23-4.6.1"
 );
 const rBinary = process.env.DIALOGFORGE_R_BINARY || "R";
 const run = function(input, code = 'cat(encodeString(helper$read_runtime_console_line("fixture: ", 512L), quote="\\\"")); stopifnot(!base::interactive())') {
     return spawnSync(rBinary, ["--vanilla", "--quiet", "--no-readline", "-e",
-        `tryCatch({ helper <- loadNamespace("dialogforgetransport", lib.loc=${JSON.stringify(library)}); `
+        `tryCatch({ helper <- loadNamespace("dialogforgeruntime", lib.loc=${JSON.stringify(library)}); `
             + code + '; q(save="no", status=0) }, error=function(error) { message(conditionMessage(error)); q(save="no", status=1) })'
     ], { input, encoding: "utf8", timeout: 5000 });
 };

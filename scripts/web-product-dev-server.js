@@ -1605,15 +1605,7 @@ const createWebProductDevServer = function(options) {
                 return;
             }
 
-            if (/^\/r-inspection\/webr\/\d+\.\d+\.\d+\/dialogforgeinspect_0\.4\.3\.tgz$/.test(pathname)) {
-                serveFile(response, resolveSafeFile(rootDir, pathname));
-                return;
-            }
-            if (/^\/r-transport-prototype\/webr\/\d+\.\d+\.\d+\/dialogforgetransport_0\.0\.4\.tgz$/.test(pathname)) {
-                serveFile(response, resolveSafeFile(rootDir, pathname));
-                return;
-            }
-            if (/^\/r-output-prototype\/webr\/\d+\.\d+\.\d+\/dialogforgeoutput_0\.0\.1\.tgz$/.test(pathname)) {
+            if (/^\/r-runtime\/webr\/\d+\.\d+\.\d+\/dialogforgeruntime_0\.1\.0\.tgz$/.test(pathname)) {
                 serveFile(response, resolveSafeFile(rootDir, pathname));
                 return;
             }

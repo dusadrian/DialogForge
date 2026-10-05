@@ -31,7 +31,7 @@ tryCatch({
     for (host in c("native", "worker")) {
         runtime <- new.env(parent = globalenv())
         runtime$runtime_inspection_library <- Sys.getenv("DIALOGFORGE_TEST_INSPECTION_LIBRARY", unset = file.path(
-            "dist/r-inspection/native", paste(R.version$platform, getRversion(), sep = "-")
+            "dist/r-runtime/native", paste(R.version$platform, getRversion(), sep = "-")
         ))
         runtime$opts <- list()
         for (name in c(

@@ -1,0 +1,18 @@
+Copyright (c) 2025-2026, Adrian Dusa
+
+This internal consolidation retains the original component notices; it does not
+relicense the components or declare a new public distribution licence.
+
+Inspection component: src/binding-info.c, src/stored-graph.c, src/stored-list.c,
+src/graphics-device.c, R/binding-info.R and their inspection documentation and
+fixtures retain the terms reproduced in LICENSE-inspection.
+
+Transport component: src/bounded-input.c, R/bounded-input.R and its transport
+documentation retain their original GNU General Public License version 3 terms.
+
+Output component: src/output-capture.c, R/output-capture.R and its output
+documentation retain their original GNU General Public License version 3 terms.
+
+Any public release of the consolidated package requires the copyright holder's
+explicit decision about a consistent distribution licence. This consolidation
+is not publication or a change to the rights granted by the existing notices.

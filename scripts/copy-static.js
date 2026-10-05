@@ -7,6 +7,8 @@ const {
     packagedRuntimeDependencies
 } = require("./packagedRuntimeDependencies");
 const { ensureNativeIrohBinding } = require("./nativeIrohBinding");
+const { assertWebRHelperArtifacts } = require("./web-r-helper-artifacts");
+const { prepareNativeRHelperArtifacts, assertNativeRHelperArtifacts } = require("./native-r-helper-artifacts");
 const parentDir = path.resolve(__dirname, "..");
 const runningFromDist = path.basename(parentDir) === "dist";
 const sourceRoot = path.resolve(
@@ -125,6 +127,11 @@ const isWebRuntimePath = function (entryPath) {
         || entryPath === path.join(sourceRoot, "scripts", "web-product-dev-server.js");
 };
 const cleanGeneratedAssetDirectories = function () {
+    // These generated packages were consolidated into r-runtime. Never stage
+    // an obsolete independent helper beside the single current package.
+    ["r-inspection", "r-transport-prototype", "r-output-prototype"].forEach((directory) => {
+        removeGeneratedDirectory(path.join(rootDir, directory));
+    });
     removeGeneratedDirectory(path.join(rootDir, "shared"));
     removeGeneratedDirectory(path.join(rootDir, "src/assets"));
     removeGeneratedDirectory(path.join(rootDir, "src/base-app/assets"));
@@ -162,10 +169,8 @@ const copyPackageJson = function () {
             ...sourcePackage.build,
             files: [
                 "scripts/**/*",
-                "r-inspection/native/**/*",
-                "r-transport-prototype/native/**/*",
-                "r-output-prototype/native/**/*",
-                ...(includeWebRuntime ? ["r-inspection/webr/**/*", "r-transport-prototype/webr/**/*", "r-output-prototype/webr/**/*"] : []),
+                "r-runtime/native/**/*",
+                ...(includeWebRuntime ? ["r-runtime/webr/**/*"] : []),
                 "src/**/*",
                 ...(includeWebRuntime ? ["browser-esm/**/*"] : [
                     "!src/shell-web/**/*",
@@ -183,9 +188,7 @@ const copyPackageJson = function () {
                 "package.json"
             ],
             asarUnpack: [
-                "r-inspection/native/**/*",
-                "r-transport-prototype/native/**/*",
-                "r-output-prototype/native/**/*",
+                "r-runtime/native/**/*",
                 "src/runtime/providers/r/r-sources/**/*",
                 "product/runtime/runtimeControlProfile.R",
                 "node_modules/@number0/**/*.node"
@@ -218,6 +221,13 @@ const walk = function (dirPath) {
         }
     });
 };
+if (includeWebRuntime) {
+    assertWebRHelperArtifacts(sourceRoot, path.join(sourceRoot, "dist"));
+} else {
+    // Validate and stage before clearing any existing generated app assets.
+    prepareNativeRHelperArtifacts(sourceRoot, rootDir);
+    assertNativeRHelperArtifacts(sourceRoot, rootDir, process.platform, process.arch);
+}
 assertCanonicalDialogStylesheet();
 cleanGeneratedAssetDirectories();
 ["src", "scripts", "schemas"].forEach((dirName) => {
@@ -237,9 +247,7 @@ else if (cacheBuild.error || cacheBuild.status !== 0) {
 }
 copyPackageJson();
 for (const helper of [
-    { directory: "r-inspection", hosts: includeWebRuntime ? ["native", "webr"] : ["native"] },
-    { directory: "r-transport-prototype", hosts: includeWebRuntime ? ["native", "webr"] : ["native"] },
-    { directory: "r-output-prototype", hosts: includeWebRuntime ? ["native", "webr"] : ["native"] }
+    { directory: "r-runtime", hosts: includeWebRuntime ? ["webr"] : [] }
 ]) {
     for (const host of helper.hosts) {
         const helperSource = path.join(sourceRoot, "dist", helper.directory, host);
@@ -248,6 +256,11 @@ for (const helper of [
             copyDirectory(helperSource, helperTarget);
         }
     }
+}
+if (includeWebRuntime) {
+    assertWebRHelperArtifacts(sourceRoot, rootDir);
+} else {
+    assertNativeRHelperArtifacts(sourceRoot, rootDir, process.platform, process.arch);
 }
 // Intel macOS carries a self-built iroh binding inside @number0/iroh, so it has
 // to be in place before that package is staged.
