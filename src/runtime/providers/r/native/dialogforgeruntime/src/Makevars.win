@@ -5,5 +5,8 @@ all: $(SHLIB) dialogforge-r-host.exe
 dialogforge-r-host.exe: windows-console-host.o windows-console-host-resource.o
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LIBR)
 
+windows-console-host.o: windows-console-host.c console-host.h
+	$(CC) $(ALL_CPPFLAGS) $(ALL_CFLAGS) -c $< -o $@
+
 windows-console-host-resource.o: windows-console-host.rc windows-console-host.manifest
 	$(BINPREF)windres -i windows-console-host.rc -o $@

@@ -8,6 +8,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <io.h>
+#include <fcntl.h>
 #include <R.h>
 #include <Rinternals.h>
 #define LibExtern __declspec(dllimport) extern
@@ -131,6 +133,9 @@ static void df_interrupt_name(char *name, size_t capacity, unsigned long pid)
 
 int main(int argc, char **argv)
 {
+    /* Write UTF-8 bytes without CRT newline translation, like the other hosts. */
+    _setmode(_fileno(stdout), _O_BINARY);
+    _setmode(_fileno(stderr), _O_BINARY);
     char event_name[80];
     if (argc == 2 && !strcmp(argv[1], "--version")) {
         printf("R version " R_MAJOR "." R_MINOR " (DialogForge Windows console host)\n");
