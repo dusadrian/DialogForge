@@ -1,0 +1,148 @@
+name: Build and upload pinned R helper binaries
+
+on:
+  workflow_dispatch:
+    inputs:
+      r_versions:
+        description: Exact R versions as a JSON array. No release/latest aliases.
+        required: true
+        default: '["4.6.1"]'
+        type: string
+      release_tag:
+        description: Existing draft pre-release tag pointing to the selected source commit.
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: r-helper-release-${{ inputs.release_tag }}
+  cancel-in-progress: false
+
+jobs:
+  configure:
+    runs-on: ubuntu-24.04
+    outputs:
+      versions: ${{ steps.identity.outputs.versions }}
+      count: ${{ steps.identity.outputs.count }}
+    steps:
+      - name: Validate exact R versions and the existing draft pre-release
+        id: identity
+        env:
+          GH_TOKEN: ${{ github.token }}
+          R_VERSIONS: ${{ inputs.r_versions }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const { execFileSync } = require('node:child_process');
+          const versions = JSON.parse(process.env.R_VERSIONS);
+          if (!Array.isArray(versions) || versions.length < 1 || versions.length > 4
+              || versions.some(version => typeof version !== 'string' || !/^\d+\.\d+\.\d+$/.test(version))
+              || new Set(versions).size !== versions.length
+              || !/^r-runtime-helpers-[a-zA-Z0-9_.-]+$/.test(process.env.RELEASE_TAG)) {
+              throw new Error('Use one to four distinct exact R versions and a helper release tag.');
+          }
+          const gh = args => execFileSync('gh', args, { encoding: 'utf8' }).trim();
+          const repo = process.env.GITHUB_REPOSITORY;
+          const tag = process.env.RELEASE_TAG;
+          const release = JSON.parse(gh(['release', 'view', tag, '--repo', repo, '--json', 'isDraft,isPrerelease']));
+          if (!release.isDraft || !release.isPrerelease
+              || gh(['api', `repos/${repo}/commits/${tag}`, '--jq', '.sha']) !== process.env.GITHUB_SHA) {
+              throw new Error('The draft pre-release must be pinned to this workflow source commit.');
+          }
+          fs.appendFileSync(process.env.GITHUB_OUTPUT,
+              `versions=${JSON.stringify(versions)}\ncount=${versions.length * 5}\n`);
+          NODE
+
+  qualify:
+    needs: configure
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, macos-15-intel, windows-2025, ubuntu-24.04, ubuntu-24.04-arm]
+        r: ${{ fromJSON(needs.configure.outputs.versions) }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - name: Check out the canonical source without Windows newline conversion
+        uses: actions/checkout@v5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+
+      - name: Set up the exact R version and compiler
+        uses: r-lib/actions/setup-r@f9a764fea8d5c63df6ef9a5c7795bf7deb5d7e05 # v2
+        with:
+          r-version: ${{ matrix.r }}
+          use-public-rspm: false
+
+      - name: Check out pinned declared source for the measurement-level cases
+        uses: actions/checkout@v5
+        with:
+          repository: dusadrian/declared
+          ref: 6b53c3862a081322e0edc1a4ff58a36b66dc7d28
+          path: helper-test-declared
+
+      - name: Build the same helper source and run canonical native ABI acceptance
+        shell: bash
+        env:
+          REQUIRED_R_VERSION: ${{ matrix.r }}
+        run: |
+          set -euo pipefail
+          export DIALOGFORGE_TEST_DECLARED_SOURCE="$GITHUB_WORKSPACE/helper-test-declared"
+          node scripts/build-native-r-helper-release.js \
+            "$REQUIRED_R_VERSION" "$RUNNER_TEMP/helper-evidence" "$RUNNER_TEMP/helper-bundle"
+
+      - name: Archive only the qualified binary and pinned manifest
+        shell: bash
+        run: |
+          node scripts/publish-r-helper-release.js --pack \
+            "$RUNNER_TEMP/helper-bundle" "$RUNNER_TEMP/helper-release"
+
+      - name: Retain qualified release archives
+        uses: actions/upload-artifact@v4
+        with:
+          name: r-helper-${{ matrix.os }}-${{ matrix.r }}
+          path: ${{ runner.temp }}/helper-release
+          if-no-files-found: error
+
+      - name: Retain acceptance evidence, including failed attempts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: r-qualification-evidence-${{ matrix.os }}-${{ matrix.r }}
+          path: ${{ runner.temp }}/helper-evidence
+          if-no-files-found: ignore
+
+  upload:
+    needs: [configure, qualify]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+      - name: Collect the complete qualified target matrix
+        uses: actions/download-artifact@v4
+        with:
+          pattern: r-helper-*
+          merge-multiple: true
+          path: ${{ runner.temp }}/helper-release
+      - name: Upload immutable binaries, source and checksums to the draft pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          TARGET_COUNT: ${{ needs.configure.outputs.count }}
+        run: |
+          node scripts/publish-r-helper-release.js --upload \
+            "$RUNNER_TEMP/helper-release" "$RELEASE_TAG" "$TARGET_COUNT"
+
+# Only an entirely passed matrix reaches the draft release. Public publication
+# is a separate maintainer decision, including the package's licence gate.
+# Existing assets are never overwritten; source and exact R versions are pinned.

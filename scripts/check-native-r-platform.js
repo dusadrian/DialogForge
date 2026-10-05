@@ -6,6 +6,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
 const { spawnSync } = require("node:child_process");
+const { readArtifactFileHashes } = require("./r-helper-artifact-files");
 
 const root = path.resolve(__dirname, "..");
 const output = process.argv[2];
@@ -94,6 +95,7 @@ try {
     report.declaredIdentity = declared.stdout.trim();
     const hasDeclared = declared.entry.status === "passed" && /declared= /.test(declared.stdout);
     build("dialogforgeruntime");
+    report.helperFiles = readArtifactFileHashes(path.join(library, "dialogforgeruntime"));
     const probe = "src/runtime/providers/r/native/dialogforgeruntime/tests/altrepprobe.c";
     fingerprint(probe);
     fs.copyFileSync(path.join(root, probe), path.join(directory, "altrepprobe.c"));
@@ -136,6 +138,14 @@ try {
 } catch (error) {
     report.error = String(error);
 } finally {
+    try {
+        if (report.helperFiles && JSON.stringify(report.helperFiles) !== JSON.stringify(
+            readArtifactFileHashes(path.join(library, "dialogforgeruntime")))) {
+            report.error = "The tested helper payload changed during native acceptance.";
+        }
+    } catch (error) {
+        report.error = "The tested helper payload could not be fingerprinted: " + String(error);
+    }
     report.finishedAt = new Date().toISOString();
     const failed = report.error || [...report.builds, ...report.results].some(entry => entry.status === "failed");
     report.status = failed ? "failed" : report.results.some(entry => entry.status === "prerequisite-unavailable")
