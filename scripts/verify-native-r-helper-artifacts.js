@@ -25,6 +25,7 @@ write(helper + "/DESCRIPTION", "Package: dialogforgeruntime\nVersion: 0.1.0\n");
 write(helper + "/src/helper.c", "/* Canonical fixture */\n");
 write(helper + "/R/helper.R", "# Canonical fixture\n");
 write("scripts/check-r-runtime-helper.R", "# Native acceptance fixture\n");
+write("scripts/check-native-console-input.js", "// Physical console acceptance fixture\n");
 write("scripts/check-native-r-platform.js", "// Native runner fixture\n");
 write("src/runtime/providers/r/r-sources/runtimePrelude.R", "# Shared runtime fixture\n");
 const reportPath = path.join(root, "evidence/results.json");
@@ -37,13 +38,13 @@ const report = {
     identity: "R version 4.6.1\naarch64-apple-darwin23",
     finishedAt: "2026-10-04T00:00:00Z",
     builds: [{ name: "install-dialogforgeruntime", status: "passed", exitCode: 0 }],
-    results: ["check-r-runtime-helper.R", "check-runtime-startup-compilation-cached"]
+    results: ["check-r-runtime-helper.R", "check-runtime-startup-compilation-cached", "check-native-console-input.js"]
         .map(name => ({ name, status: "passed", exitCode: 0 })),
     helperFiles: readArtifactFileHashes(path.join(root, installed)),
     fingerprints: {}
 };
 for (const relative of [helper + "/DESCRIPTION", helper + "/src/helper.c", helper + "/R/helper.R",
-    "scripts/check-r-runtime-helper.R", "scripts/check-native-r-platform.js",
+    "scripts/check-r-runtime-helper.R", "scripts/check-native-r-platform.js", "scripts/check-native-console-input.js",
     "src/runtime/providers/r/r-sources/runtimePrelude.R"]) {
     report.fingerprints[relative] = fileSha256(path.join(root, relative));
 }

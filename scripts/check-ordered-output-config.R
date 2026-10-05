@@ -8,7 +8,7 @@ sys.source(file.path(
 
 rejects <- function(action) inherits(tryCatch(action(), error = identity), "error")
 calls <- 0L
-version <- "0.1.0"
+version <- "0.1.1"
 namespace <- new.env(parent = emptyenv())
 namespace$open_output_capture <- function(path) path
 namespace$seal_output_capture <- function(capture) 1
@@ -37,7 +37,7 @@ stopifnot(rejects(function() fixture$runtime_create_ordered_output_config("missi
 stopifnot(rejects(function() fixture$runtime_create_ordered_output_config("library", "capture", "")))
 version <- "other"
 stopifnot(rejects(function() fixture$runtime_create_ordered_output_config("library", "capture", "session")))
-version <- "0.1.0"
+version <- "0.1.1"
 namespace$seal_output_capture <- NULL
 stopifnot(rejects(function() fixture$runtime_create_ordered_output_config("library", "capture", "session")))
 

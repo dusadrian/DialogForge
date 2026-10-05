@@ -254,6 +254,10 @@ const bundleNativeRHelperArtifacts = function(sourceRoot, reportPath, bundleRoot
     }
     const requiredCases = fs.readdirSync(path.join(sourceRoot, "scripts"))
         .filter(name => /^check-.*\.R$/.test(name));
+    requiredCases.push("check-native-console-input.js");
+    if (String(report.identity).includes("mingw")) {
+        requiredCases.push("check-windows-console-host.js");
+    }
     for (const name of [...requiredCases, "check-runtime-startup-compilation-cached"]) {
         if (!report.results.some(entry => entry.name === name && entry.status === "passed")) {
             throw new Error("Native acceptance report is missing a required case: " + name);
@@ -264,7 +268,7 @@ const bundleNativeRHelperArtifacts = function(sourceRoot, reportPath, bundleRoot
             const relative = path.relative(path.join(sourceRoot, sourceRelativePath), file).split(path.sep).join("/");
             // These are the implementation files built and fingerprinted by
             // the ABI runner. Package-only R CMD check tests are a separate suite.
-            return /^(src\/.*\.(c|h)|R\/.*\.R|DESCRIPTION|NAMESPACE|tests\/altrepprobe\.c)$/.test(relative);
+            return /^(src\/.*\.(c|h|R|rc|manifest)|src\/Makevars\.win|R\/.*\.R|DESCRIPTION|NAMESPACE|tests\/altrepprobe\.c)$/.test(relative);
         })
         .concat(listArtifactFiles(path.join(sourceRoot, "src/runtime/providers/r/r-sources"))
             .filter(file => file.endsWith(".R")))

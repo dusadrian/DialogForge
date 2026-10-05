@@ -1,6 +1,7 @@
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
+import { resolveWindowsRConsoleHost } from "./windowsRConsoleHost";
 
 
 export interface RRuntimeLaunchPlanOptions {
@@ -341,16 +342,19 @@ export const createRRuntimeLaunchPlan = function(options: RRuntimeLaunchPlanOpti
         path.join(rootDir, "dist", "r-runtime", "native")
     ].find((candidate) => fs.existsSync(toUnpackedAsarPath(candidate)))
         || path.join(rootDir, "dist", "r-runtime", "native"));
+    const nativeHost = platform === "win32"
+        ? resolveWindowsRConsoleHost(command, runtimeEnv, helperRoot)
+        : { command, env: runtimeEnv };
 
     return {
-        command,
+        command: nativeHost.command,
         args: [
             "--no-save",
             "-e",
             createSourceLauncherExpression(launcherPath)
         ],
         cwd: workingDirectory,
-        env: Object.assign({}, runtimeEnv, {
+        env: Object.assign({}, nativeHost.env, {
             DM_RUNTIME_CONTROL_LAUNCHER: launcherPath,
             DM_RUNTIME_CONTROL_META: paths.metaPath,
             DM_RUNTIME_EVENTS: paths.eventsPath,

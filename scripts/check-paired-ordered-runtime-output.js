@@ -1822,7 +1822,7 @@ const runWebR = async function() {
             else if (/^\/r-(inspection|output-prototype)\/webr\/4\.6\.0\/dialogforge(inspect_0\.4\.3|output_0\.0\.1)\.tgz$/.test(pathname)) {
                 file = path.join(root, "dist", pathname.slice(1));
             }
-            else if (pathname === "/r-runtime/webr/4.6.0/dialogforgeruntime_0.1.0.tgz") {
+            else if (pathname === "/r-runtime/webr/4.6.0/dialogforgeruntime_0.1.1.tgz") {
                 file = path.join(root, "dist", pathname.slice(1));
             }
             else if (pathname === "/control-cache.rds") {

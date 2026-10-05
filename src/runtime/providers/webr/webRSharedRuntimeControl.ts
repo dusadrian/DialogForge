@@ -433,13 +433,13 @@ export const installWebRSharedRuntimeControl = async function(
         const library = options.orderedOutput?.library || `${directory}/library`;
         await runtime.evalRVoid(`dir.create(${JSON.stringify(directory)}, recursive = TRUE)`);
         const archive = options.fetchHelperArchive ? await options.fetchHelperArchive(version) : await (async function() {
-            const response = await fetch(`/r-runtime/webr/${version}/dialogforgeruntime_0.1.0.tgz`);
+            const response = await fetch(`/r-runtime/webr/${version}/dialogforgeruntime_0.1.1.tgz`);
             if (!response.ok) {
                 throw new Error("Build and serve the WebR runtime helper package before startup.");
             }
             return new Uint8Array(await response.arrayBuffer());
         })();
-        const archivePath = `${directory}/dialogforgeruntime_0.1.0.tgz`;
+        const archivePath = `${directory}/dialogforgeruntime_0.1.1.tgz`;
         let stagingCompleted = false;
         try {
             await runtime.FS.writeFile(archivePath, archive);

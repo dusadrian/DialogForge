@@ -1,0 +1,9 @@
+OBJECTS = binding-info.o bounded-input.o graphics-device.o init.o output-capture.o stored-graph.o stored-list.o
+
+all: $(SHLIB) dialogforge-r-host.exe
+
+dialogforge-r-host.exe: windows-console-host.o windows-console-host-resource.o
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LIBR)
+
+windows-console-host-resource.o: windows-console-host.rc windows-console-host.manifest
+	$(BINPREF)windres -i windows-console-host.rc -o $@

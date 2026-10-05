@@ -6,7 +6,7 @@ local({
     else {
         loadNamespace("dialogforgeruntime", lib.loc = library)
     }
-    stopifnot(identical(as.character(getNamespaceVersion(helper)), "0.1.0"))
+    stopifnot(identical(as.character(getNamespaceVersion(helper)), "0.1.1"))
     exports <- c(
         "binding_info", "closure_is_compiled", "rebind_compiled_closure",
         "stored_list_fields", "stored_graph_is_inspectable",
