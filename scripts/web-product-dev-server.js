@@ -1605,7 +1605,7 @@ const createWebProductDevServer = function(options) {
                 return;
             }
 
-            if (/^\/r-runtime\/webr\/\d+\.\d+\.\d+\/dialogforgeruntime_0\.1\.0\.tgz$/.test(pathname)) {
+            if (/^\/r-runtime\/webr\/\d+\.\d+\.\d+\/dialogforgeruntime_\d+\.\d+\.\d+\.tgz$/.test(pathname)) {
                 serveFile(response, resolveSafeFile(rootDir, pathname));
                 return;
             }

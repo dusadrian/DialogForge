@@ -109,7 +109,7 @@ const main = async function() {
                 return;
             }
             if (
-                /^\/r-runtime\/webr\/\d+\.\d+\.\d+\/dialogforgeruntime_0\.1\.0\.tgz$/.test(pathname)
+                /^\/r-runtime\/webr\/\d+\.\d+\.\d+\/dialogforgeruntime_\d+\.\d+\.\d+\.tgz$/.test(pathname)
             ) {
                 response.setHeader("Content-Type", "application/octet-stream");
                 response.end(await fs.readFile(path.join(rootDir, "dist", pathname.slice(1))));

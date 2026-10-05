@@ -44,6 +44,100 @@ const main = async function() {
     queue.retire();
     assert.equal(queue.isRetired(), true, "Startup must see retirement before shell state is cleared.");
 
+    // A split library's second image is still part of startup. Neither the
+    // console nor its first command may become the package readiness barrier.
+    let releaseLibrary;
+    let libraryStarted;
+    let startupReady = false;
+    const libraryGate = new Promise((resolve) => { releaseLibrary = resolve; });
+    const mounting = new Promise((resolve) => { libraryStarted = resolve; });
+    class StartupLibraryWebR {
+        constructor() { this.FS = { mkdir: async () => {} }; }
+        async init() {}
+        async flush() { return []; }
+        async evalRVoid() {}
+        async close() {}
+    }
+    const preparedStartup = startBrowserWebRRuntime({
+        workingDirectoryPath: "/fixture", setStatus: () => {},
+        importWebRModule: async () => ({ WebR: StartupLibraryWebR }),
+        mountPackageLibrary: async function() {
+            libraryStarted();
+            await libraryGate;
+        }
+    }).then(() => { startupReady = true; });
+    await mounting;
+    assert.equal(startupReady, false, "Startup waits for the entire shipped library.");
+    releaseLibrary();
+    await preparedStartup;
+    assert.equal(startupReady, true);
+
+    const shell = fs.readFileSync(path.join(__dirname, "../src/shell-web/pages/shell.js"), "utf8");
+    assert.match(shell, /\[manifest, manifest\?\.deferred\]/,
+        "Both split images must be prepared by the startup path.");
+    assert.doesNotMatch(shell, /deferredPackageLibraries|schedulePrefetch|async prepareRequest\(/,
+        "Commands must not perform first-use library preparation.");
+    assert.doesNotMatch(shell, /fetchHelperArchive:/,
+        "The shell must use the shared loader's pinned helper, not a second versioned URL.");
+    const readyPosition = shell.indexOf('setRuntimeStatus("WebR ready")');
+    for (const preparation of [
+        "run: () => dialogPreparation",
+        "run: () => prewarmWebRGraphicsCapture(runtime)"
+    ]) {
+        const position = shell.indexOf(preparation);
+        assert.ok(position >= 0 && readyPosition > position,
+            "Startup preparation must finish before the ready status.");
+    }
+    assert.ok(
+        shell.indexOf("const dialogPreparation =")
+            < shell.indexOf("run: () => startBrowserWebRRuntime({"),
+        "Dialog resources start loading alongside worker initialization."
+    );
+
+    // Exercise the actual shell preparation function: independent frames must
+    // start together, but neither an unfinished control nor a failure may be
+    // mistaken for readiness.
+    const preparationSource = shell.slice(
+        shell.indexOf("const prepareBrowserDialogs ="),
+        shell.indexOf("const openDialog =")
+    );
+    const createPreparation = new Function(
+        "state", "prepareBrowserDialog",
+        `${preparationSource}\nreturn prepareBrowserDialogs;`
+    );
+    for (const failControls of [false, true]) {
+        const started = [];
+        const release = [];
+        let finished = false;
+        const prepare = createPreparation({ composition: {
+            sharedDialogs: [{ id: "shared" }],
+            productDialogs: [{ id: "product" }]
+        } }, async function(dialog) {
+            started.push(dialog.id);
+            return {
+                frameReady: Promise.resolve(),
+                controlsReady: new Promise((resolve, reject) => {
+                    release.push({ resolve, reject });
+                })
+            };
+        });
+        const pending = prepare().then(() => { finished = true; });
+        const completion = failControls
+            ? assert.rejects(pending, /controls failed/) : pending;
+        await Promise.resolve();
+        assert.deepEqual(started, ["shared", "product"]);
+        release[1].resolve();
+        await Promise.resolve();
+        assert.equal(finished, false, "All dialog controls remain part of the barrier.");
+        if (failControls) {
+            release[0].reject(new Error("controls failed"));
+        } else {
+            release[0].resolve();
+        }
+        await completion;
+        assert.equal(finished, !failControls);
+    }
+
     for (const failure of ["init", "mount", "working-directory", "shim", "none"]) {
         const closed = [];
         const commands = [];

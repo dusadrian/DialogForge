@@ -335,9 +335,6 @@ import {
     createBrowserRuntimeProgressController
 } from "/browser-esm/src/shell-web/browserRuntimeProgressAdapter.js";
 import {
-    createBrowserDeferredPackageLibrary
-} from "/browser-esm/src/shell-web/browserDeferredPackageLibrary.js";
-import {
     installBrowserShellEventBindings
 } from "/browser-esm/src/shell-web/browserShellEventBindings.js";
 import {
@@ -3376,37 +3373,20 @@ const renderComposition = function () {
     state.console?.toolbar?.render?.();
 };
 
-const deferredPackageLibraries = new WeakMap();
-
 const mountProductPackageLibrary = async function (runtime, preparation) {
     setRuntimeStatus("Mounting WebR package library...");
-    const { manifest, prepared } = await preparation;
+    const libraries = await preparation;
+    let result = { mounted: false };
 
-    if (!manifest?.available) {
-        return {
-            mounted: false
-        };
+    // Split images are a delivery format, not separate readiness phases.
+    // Every shipped package must be mounted before accepting console input.
+    for (const { manifest, prepared } of libraries) {
+        result = await mountBrowserProductPackageLibrary(runtime, manifest, {
+            setStatus: setRuntimeStatus,
+            progressFromStage: runtimeProgressFromStage
+        }, prepared);
     }
-
-    const result = await mountBrowserProductPackageLibrary(runtime, manifest, {
-        setStatus: setRuntimeStatus,
-        progressFromStage: runtimeProgressFromStage
-    }, prepared);
-
     window.dialogForgeWebRPackageLibraryMountSource = result.source || "";
-    if (manifest.deferred?.available) {
-        deferredPackageLibraries.set(runtime, createBrowserDeferredPackageLibrary({
-            runtime,
-            manifest: manifest.deferred,
-            progress: browserRuntimeProgress(),
-            canPrefetch() {
-                return state.runtime === runtime && state.runtimeReady
-                    && !state.runtimeStarting
-                    && !document.body.classList.contains("console-runtime-busy")
-                    && !document.body.classList.contains("console-cover-visible");
-            }
-        }));
-    }
     setRuntimeStatus("Mounting WebR package library...");
 
     return result;
@@ -3517,21 +3497,32 @@ const ensureRuntime = async function () {
         let reportLibraryProgress = false;
         const packageLibraryPreparation = (async function () {
             const manifest = await fetchBrowserJsonIfAvailable("/api/webr-package-library");
-            const prepared = manifest?.available
-                ? await prepareBrowserProductPackageLibrary(manifest, {
+            const libraries = [manifest, manifest?.deferred]
+                .filter((library) => library?.available);
+            return Promise.all(libraries.map(async function (library) {
+                const prepared = await prepareBrowserProductPackageLibrary(library, {
                     setStatus(message, progress) {
                         if (reportLibraryProgress && isCurrentStartup()) {
                             setRuntimeStatus(message, progress);
                         }
                     },
                     progressFromStage: runtimeProgressFromStage
-                })
-                : undefined;
-            return { manifest, prepared };
+                });
+                return { manifest: library, prepared };
+            }));
         })();
         // The mount awaits and reports failures; observe early rejections
         // while WebR is still initializing as well.
         packageLibraryPreparation.catch(() => {});
+
+        // Preparation builds the shared controls without running dialog actions
+        // or querying R. Overlap its resource loads with worker initialization;
+        // the readiness barrier below still waits for every frame and control.
+        const dialogPreparation = runOwnedRuntimeStartupStage({
+            isCurrent: isCurrentStartup,
+            run: () => prepareBrowserDialogs()
+        });
+        dialogPreparation.catch(() => {});
 
         const runtime = await runOwnedRuntimeStartupStage({
             isCurrent: isCurrentStartup,
@@ -3582,15 +3573,6 @@ const ensureRuntime = async function () {
                     directory: `${outputDirectory}/captures`,
                     sessionId: outputSessionId
                 },
-                fetchHelperArchive: async function (version) {
-                    const response = await fetch(
-                        `/r-runtime/webr/${version}/dialogforgeruntime_0.1.0.tgz`
-                    );
-                    if (!response.ok) {
-                        throw new Error("The WebR runtime helper package could not be loaded.");
-                    }
-                    return new Uint8Array(await response.arrayBuffer());
-                },
                 outputJournalForRequest: function (request) {
                     return createWebROutputJournalReader({
                         path: `${outputDirectory}/captures/capture-${++outputCaptureSequence}.bin`,
@@ -3608,26 +3590,6 @@ const ensureRuntime = async function () {
                             state.console.recordTranscriptEvents(events);
                         }
                     });
-                },
-                async prepareRequest(request) {
-                    // Background workspace polling and hidden dialog preparation
-                    // remain startup-only. Evaluate requests include the package
-                    // compatibility check performed on opening a dialog.
-                    const method = request.method;
-                    if (
-                        method === "execute_input"
-                        || (method === "evaluate_code" && !state.runtimeStarting)
-                        || method === "show_help_topic"
-                        || method === "search_help_topic"
-                        || method.startsWith("workspace.dataset_")
-                        || method === "workspace.import_file_preview"
-                        || method === "runtime.run_script_file"
-                        || method === "runtime.load_workspace_file"
-                        || method === "runtime.load_serialized_object"
-                        || method === "load_workspace"
-                    ) {
-                        await deferredPackageLibraries.get(runtime)?.ensureMounted();
-                    }
                 },
                 runRuntimeOperation: function (action, waitBeforeNext) {
                     return operationQueue.run(action, waitBeforeNext);
@@ -3723,10 +3685,10 @@ const ensureRuntime = async function () {
                 continue;
             }
 
-            // Package-only startup checks initialize every namespace (and
-            // WebR may download absent packages). Dialogs and package actions
-            // already check their own requirements when requested. Keep real
-            // startup commands and workspace tasks on the readiness path.
+            // Retain the existing package-only task policy. Product lists may
+            // contain native transport dependencies unavailable in WebR.
+            // All shipped images are already mounted; actions still inspect
+            // their actual requirements through the shared package controller.
             if (
                 (task.rPackages || []).length > 0
                 && !(task.commands || []).length
@@ -3770,10 +3732,26 @@ const ensureRuntime = async function () {
             isCurrent: isCurrentStartup,
             run: () => loadMoodleLaunchDataset(runtime)
         });
+        setRuntimeStatus("Preparing dialogs...");
+        await runOwnedRuntimeStartupStage({
+            isCurrent: isCurrentStartup,
+            run: () => dialogPreparation
+        });
+        setRuntimeStatus("Preparing graphics...");
+        prewarmPlotViewerModal();
+        await runOwnedRuntimeStartupStage({
+            isCurrent: isCurrentStartup,
+            run: async function () {
+                if (!await waitForPlotViewerFrameReady(30000)) {
+                    throw new Error("Plot renderer did not finish startup.");
+                }
+            }
+        });
+        await runOwnedRuntimeStartupStage({
+            isCurrent: isCurrentStartup,
+            run: () => prewarmWebRGraphicsCapture(runtime)
+        });
         setRuntimeStatus("WebR ready");
-        void prepareBrowserDialogs();
-        prewarmPlotInfrastructure(runtime);
-        void cleanupWebRDefaultPlotFile(runtime);
 
         return runtime;
     })();
@@ -3782,14 +3760,22 @@ const ensureRuntime = async function () {
     try {
         return await pendingStartup;
     }
+    catch (error) {
+        if (state.runtimeStartPromise === pendingStartup) {
+            try {
+                await stopWebRRuntime("WebR startup failed.");
+            }
+            catch (cleanupError) {
+                console.error(cleanupError);
+            }
+        }
+        throw error;
+    }
     finally {
         if (state.runtimeStartPromise === pendingStartup) {
             state.runtimeStartPromise = null;
             state.runtimeStarting = false;
             notifyConsoleSession();
-            if (state.runtimeReady) {
-                deferredPackageLibraries.get(state.runtime)?.schedulePrefetch();
-            }
         }
     }
 };
@@ -4197,7 +4183,6 @@ const stopWebRRuntime = async function (message) {
         resource,
         release: async function (owned) {
             await owned.session?.runtimeSessionManager.stop();
-            deferredPackageLibraries.get(owned.runtime)?.dispose();
             await stopBrowserWebRRuntime(owned.runtime);
         },
         isCurrent: function (owned) {
@@ -5059,26 +5044,11 @@ const prepareBrowserDialogs = async function () {
         ...(state.composition?.sharedDialogs || []),
         ...(state.composition?.productDialogs || [])
     ];
-    for (const dialog of dialogs) {
-        // Yield before each hidden renderer so menus and the console remain
-        // responsive. Opening a dialog shares this same preparation promise.
-        await new Promise((resolve) => {
-            if (window.requestIdleCallback) {
-                window.requestIdleCallback(resolve, { timeout: 1000 });
-            }
-            else {
-                setTimeout(resolve, 50);
-            }
-        });
-        try {
-            const entry = await prepareBrowserDialog(dialog);
-            await entry.frameReady;
-            await entry.controlsReady;
-        }
-        catch (error) {
-            console.error(error);
-        }
-    }
+    await Promise.all(dialogs.map(async function (dialog) {
+        const entry = await prepareBrowserDialog(dialog);
+        await entry.frameReady;
+        await entry.controlsReady;
+    }));
 };
 
 const openDialog = async function (dialog) {
