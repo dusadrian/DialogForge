@@ -34,8 +34,10 @@ const packQualifiedHelper = function(bundleRoot, outputRoot) {
     if (fs.existsSync(destination)) {
         throw new Error("Refusing to replace an existing release archive: " + destination);
     }
-    execFileSync("tar", ["-czf", destination, "-C", bundleRoot,
-        "r-runtime/native", "native-acceptance.json"], { stdio: "inherit" });
+    // A drive-letter archive path is interpreted as a remote host by GNU tar.
+    // Use the local filename from its output directory on every platform.
+    execFileSync("tar", ["-czf", name, "-C", path.resolve(bundleRoot),
+        "r-runtime/native", "native-acceptance.json"], { cwd: outputRoot, stdio: "inherit" });
     const metadata = {
         format: 1, packageName, packageVersion,
         sourceCommit: process.env.GITHUB_SHA || execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim(),
