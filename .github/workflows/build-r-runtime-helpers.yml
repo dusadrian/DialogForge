@@ -23,6 +23,10 @@ concurrency:
 jobs:
   configure:
     runs-on: ubuntu-24.04
+    # GitHub hides draft releases from read-only integration tokens, even in a
+    # public repository. Only this draft check and the upload job need access.
+    permissions:
+      contents: write
     outputs:
       versions: ${{ steps.identity.outputs.versions }}
       count: ${{ steps.identity.outputs.count }}
