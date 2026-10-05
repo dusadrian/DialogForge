@@ -186,23 +186,29 @@ const verifyResolver = function() {
 
 const createWebRAdapter = function(version) {
     const visibleCommands = [];
+    let statisticsAttached = false;
     const adapter = webRAdapterModule.createWebRRuntimePackageAdapter({
-        loadedPackages: new Set(),
+        getProductId: () => "fixture",
+        chooseInstallLibrary: async () => ({ action: "default" }),
+        confirmInstallRestart: async () => ({ action: "cancel" }),
+        restartForInstall: async () => ({ status: "ready" }),
         createActivity: function() {
             return { id: "activity" };
         },
         finishActivity: function() {},
         recordRuntimeMessageStream: function() {},
-        setRuntimeBusy: function() {},
-        renderToolbar: function() {},
+        packagesLoaded: async function() {},
         ensureRuntime: async function() {},
         evaluateHiddenText: async function(command) {
             return command.includes("packageVersion")
                 ? `statistics\t${version}`
-                : "|";
+                : statisticsAttached ? "|statistics" : "|";
         },
         executeVisibleCommand: async function(command) {
             visibleCommands.push(command);
+            if (command === "library(statistics)") {
+                statisticsAttached = true;
+            }
             return { ok: true };
         }
     });
@@ -240,6 +246,7 @@ const verifyNativeProtection = async function() {
     const visibleCommands = [];
     let installedVersion = "0.13";
     let statisticsAttached = false;
+    let attachmentStatusOverride = null;
     const ipcMain = {
         on: function() {},
         handle: function(channel, handler) {
@@ -268,16 +275,22 @@ const verifyNativeProtection = async function() {
                         }
                         : {
                             status: "ready",
-                            value: statisticsAttached,
+                            value: attachmentStatusOverride !== null
+                                ? attachmentStatusOverride
+                                : statisticsAttached ? "|statistics" : "|",
                             message: ""
                         };
                 },
-                executeVisibleCommand: async function(request) {
+                getSnapshot: function() {
+                    return { providerId: "r", status: "ready", lifecycleGeneration: 1 };
+                },
+                executeVisibleCommandWithEffects: async function(request) {
                     visibleCommands.push(request.text);
                     if (request.text === "library(statistics)") {
                         statisticsAttached = true;
                     }
-                    return [];
+                    return { executionDisposition: "completed", evaluationOutcome: "success",
+                        transcriptEvents: [], workspaceUpdate: null };
                 },
                 executeDialog: async function() {
                     return { status: "ready" };
@@ -291,8 +304,8 @@ const verifyNativeProtection = async function() {
             getUiCommandVisibility: function() {
                 return "hidden";
             },
-            executeVisibleCommandAndBroadcast: async function() {
-                return [];
+            executeVisibleCommandReceiptAndBroadcast: async function() {
+                return { ok: true, transcriptEvents: [] };
             },
             sendTranscriptEvents: function() {},
             invalidateDatasetPreview: function() {},
@@ -363,6 +376,15 @@ const verifyNativeProtection = async function() {
 
     assert.strictEqual(satisfied.ok, true);
     assert.deepStrictEqual(visibleCommands, ["anovahv(...)"]);
+
+    visibleCommands.length = 0;
+    attachmentStatusOverride = "";
+    const malformedStatus = await nativeComposition.prepareDialog("anovahv", dialogDefinition);
+    assert.strictEqual(malformedStatus.ok, false);
+    assert.match(malformedStatus.error, /Invalid R package status response/);
+    assert.deepStrictEqual(visibleCommands, []);
+    attachmentStatusOverride = null;
+    assert.strictEqual((await nativeComposition.prepareDialog("anovahv", dialogDefinition)).ok, true);
 };
 
 

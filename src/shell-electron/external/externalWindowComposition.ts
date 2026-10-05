@@ -10,18 +10,21 @@ import type {
     HelpTopicRequest,
     HelpTopicResult,
     RuntimeSessionManager,
-    TranscriptEvent,
     VisibleCommandRequest
 } from "../../runtime/provider-contract/runtimeProvider";
+import type { RuntimeCommandResult } from "../../runtime/commands/runtimeCommandReceipt";
+import { createHelpRequestOwner } from "../../runtime/help/helpRequestOwner";
 import {
-    createHelpTopicRequest,
-    createHelpTopicResult
+    createHelpTopicRequest, createHelpTopicResult
 } from "../../runtime/help/helpProtocol";
 import {
-    buildHelpChooserDocument
-} from "../../runtime/help/helpChooserDocument";
+    createHelpViewerParameters,
+    createHelpViewerOpenEntry
+} from "../../runtime/help/helpViewerDocument";
 import {
     createRHelpTopicTitle,
+    createRHelpTopicPresentation,
+    createRHelpHomeTopicResult,
     rHelpTitle
 } from "../../runtime/providers/r/help/rHelpPresentation";
 import {
@@ -68,13 +71,14 @@ export interface ExternalWindowCompositionOptions {
     fetchHelpPage(value: unknown): Promise<unknown>;
     executeVisibleCommand(
         request: VisibleCommandRequest
-    ): Promise<TranscriptEvent[]>;
+    ): Promise<RuntimeCommandResult>;
 }
 
 
 export const createExternalWindowComposition = function(
     options: ExternalWindowCompositionOptions
 ) {
+    const helpRequests = createHelpRequestOwner();
     let helpDocumentState = {
         title: rHelpTitle,
         body: ""
@@ -113,33 +117,34 @@ export const createExternalWindowComposition = function(
     });
     const helpWindowController = createHelpWindowController({
         createWindow: createHelpWindow,
-        showOnOpen: options.showOnOpen
+        showOnOpen: options.showOnOpen,
+        onClose: helpRequests.retire
     });
 
     const openHelpTopic = async function(
         input: Partial<HelpTopicRequest>
     ): Promise<HelpTopicResult> {
+        const isCurrent = helpRequests.begin();
         const request = createHelpTopicRequest(input || {});
         const result = request.kind === "home"
-            ? createHelpTopicResult({
-                status: "ready",
-                kind: "home",
-                title: rHelpTitle,
-                path: "/doc/html/index.html"
-            })
+            ? createRHelpHomeTopicResult()
             : await options.runtimeSessionManager.readHelpTopic(request);
-        const title = result.title || result.topic || rHelpTitle;
-        const hasBody = result.status === "ready" && result.body;
-        const hasChooser = result.status === "ready"
-            && Array.isArray(result.matches)
-            && result.matches.length > 0;
-        const hasPath = result.status === "ready" && result.path;
+        await presentHelpResult(result, request, isCurrent);
+        return result;
+    };
 
-        if (hasBody || hasChooser || hasPath) {
-            let sourceUrl = "";
-            let chooserBody = "";
+    const presentHelpResult = async function(
+        result: HelpTopicResult,
+        request: Partial<HelpTopicRequest>,
+        isCurrent: () => boolean
+    ): Promise<void> {
+        if (!isCurrent()) {
+            return;
+        }
+        let presentation = createRHelpTopicPresentation(result, request);
 
-            if (hasChooser || hasPath) {
+        if (presentation.available) {
+            if (presentation.needsResources) {
                 const port = await options.startHelpServer();
                 const toHelpUrl = function(pathValue: string): string {
                     const helpPath = String(pathValue || "");
@@ -148,15 +153,15 @@ export const createExternalWindowComposition = function(
                         + (helpPath.startsWith("/") ? helpPath : `/${helpPath}`);
                 };
 
-                sourceUrl = result.path ? toHelpUrl(result.path) : "";
-                chooserBody = hasChooser
-                    ? buildHelpChooserDocument(result, toHelpUrl)
-                    : "";
+                presentation = createRHelpTopicPresentation(result, request, toHelpUrl);
             }
 
+            if (!isCurrent()) {
+                return;
+            }
             helpDocumentState = {
-                title: createRHelpTopicTitle(title, " - "),
-                body: hasBody ? result.body : chooserBody
+                title: createRHelpTopicTitle(presentation.title, " - "),
+                body: presentation.html
             };
 
             const helpPagePath = path.join(
@@ -164,54 +169,47 @@ export const createExternalWindowComposition = function(
                 "src/base-app/pages/help.html"
             );
             const helpPageUrl = new URL(`file://${helpPagePath}`);
-
-            if (sourceUrl) {
-                helpPageUrl.searchParams.set("src", sourceUrl);
-            } else if (hasBody) {
-                helpPageUrl.searchParams.set(
-                    "doc",
-                    Buffer.from(result.body, "utf8").toString("base64")
-                );
-            } else {
-                helpPageUrl.searchParams.set(
-                    "doc",
-                    Buffer.from(
-                        chooserBody || result.body || "",
-                        "utf8"
-                    ).toString("base64")
-                );
-            }
-
-            helpPageUrl.searchParams.set("title", rHelpTitle);
-            helpPageUrl.searchParams.set("topic", result.topic || request.topic);
-            if (request.package) {
-                helpPageUrl.searchParams.set("package", request.package);
-            }
-
-            const openedInExistingWindow = await helpWindowController.openEntry({
-                id: "app-help-open",
+            const viewerDocument = {
                 title: rHelpTitle,
-                url: sourceUrl,
-                html: hasBody
-                    ? result.body
-                    : chooserBody || result.body || "",
-                baseUrl: sourceUrl,
-                base: sourceUrl,
-                topic: result.topic || request.topic,
-                packageName: request.package || ""
-            }, helpDocumentState.title);
+                sourceUrl: presentation.sourceUrl,
+                html: presentation.html,
+                baseUrl: presentation.sourceUrl,
+                topic: presentation.topic,
+                packageName: presentation.packageName
+            };
+            helpPageUrl.search = createHelpViewerParameters(viewerDocument).toString();
+
+            const openedInExistingWindow = await helpWindowController.openEntry(
+                createHelpViewerOpenEntry(viewerDocument),
+                helpDocumentState.title,
+                isCurrent
+            );
 
             if (openedInExistingWindow) {
-                return result;
+                return;
             }
 
+            if (!isCurrent()) {
+                return;
+            }
             await helpWindowController.load(
                 helpPageUrl.toString(),
-                helpDocumentState.title
+                helpDocumentState.title,
+                isCurrent
             );
         }
 
-        return result;
+    };
+
+    const openRHelpPage = async function(
+        helpPath: string, isCurrent: () => boolean
+    ): Promise<void> {
+        const match = helpPath.match(/^\/library\/([^/]+)\/html\/([^/]+)[.]html/);
+        await presentHelpResult(createHelpTopicResult({
+            status: "ready", kind: "topic", title: rHelpTitle,
+            topic: match?.[2] || rHelpTitle, path: helpPath,
+            body: "", matches: [], message: "R browser callback."
+        }), { package: match?.[1] || "" }, isCurrent);
     };
 
     createHelpIpcController({
@@ -221,6 +219,7 @@ export const createExternalWindowComposition = function(
             return helpDocumentState;
         },
         openHelpTopic,
+        retireHelpRequest: helpRequests.retire,
         executeVisibleCommand: options.executeVisibleCommand,
         fetchRHelpPage: options.fetchHelpPage
     });
@@ -237,6 +236,8 @@ export const createExternalWindowComposition = function(
     return {
         plotViewerController,
         openHelpTopic,
+        openRHelpPage,
+        helpRequests,
         getHelpWindow: helpWindowController.getWindow,
         createDevDiagnosticsWindow: devDiagnosticsWindowController.open
     };

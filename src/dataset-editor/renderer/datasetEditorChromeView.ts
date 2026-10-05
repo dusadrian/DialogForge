@@ -1,3 +1,5 @@
+import { formatDatasetEditorTitle } from "../datasetEditorTitle";
+
 export type DatasetEditorTab = "data" | "variables";
 
 export interface DatasetEditorTitleState {
@@ -28,6 +30,7 @@ export interface DatasetEditorChromeOptions {
     window: Window;
     translate: (key: string) => string;
     readTitleState: () => DatasetEditorTitleState;
+    onDataActivated: () => void;
     onVariablesActivated: () => void;
 }
 
@@ -191,11 +194,10 @@ export const createDatasetEditorChromeView = function(
             footer.textContent = footerNotice || options.translate("Spreadsheet view");
         }
 
-        document.title = state.datasetName
-            ? state.datasetName
-                + " - "
-                + options.translate("Dataset Editor")
-            : options.translate("Dataset Editor");
+        document.title = formatDatasetEditorTitle(
+            state.datasetName,
+            options.translate
+        );
     };
     const syncDatasetSelector = function(
         datasetNames: string[],
@@ -304,7 +306,9 @@ export const createDatasetEditorChromeView = function(
             !dataActive
         );
 
-        if (!dataActive) {
+        if (dataActive) {
+            options.onDataActivated();
+        } else {
             options.onVariablesActivated();
         }
 

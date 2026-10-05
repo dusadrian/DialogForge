@@ -18,11 +18,6 @@ export interface WebRGraphicsTransportRuntime {
     flush?(): Promise<WebROutputMessage[]>;
 }
 
-export interface WebRGraphicsCommandResult {
-    responseText: string;
-    images: unknown[];
-}
-
 export interface WebRGraphicsPrewarmOptions {
     width?: number;
     height?: number;
@@ -61,42 +56,6 @@ export const prewarmWebRGraphicsTransport = async function(
     }
     catch {
         return false;
-    }
-    finally {
-        await shelter.purge?.();
-        await flushWebROutputQueue(runtime);
-    }
-};
-
-
-export const evaluateWebRGraphicsCommand = async function(
-    runtime: WebRGraphicsTransportRuntime,
-    command: string,
-    width = 720,
-    height = 576
-): Promise<WebRGraphicsCommandResult> {
-    if (!runtime.Shelter) {
-        throw new Error("WebR graphics transport is not available.");
-    }
-
-    const shelter = await new runtime.Shelter();
-
-    try {
-        const captured = await shelter.captureR(`cat(${command})`, {
-            captureGraphics: {
-                width: Math.max(1, Number(width || 720)),
-                height: Math.max(1, Number(height || 576)),
-                capture: true
-            }
-        });
-        const responseText = (captured.output || []).map((entry) => {
-            return typeof entry?.data === "string" ? entry.data : "";
-        }).join("");
-
-        return {
-            responseText,
-            images: Array.isArray(captured.images) ? captured.images : []
-        };
     }
     finally {
         await shelter.purge?.();

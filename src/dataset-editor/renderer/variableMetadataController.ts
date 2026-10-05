@@ -55,6 +55,8 @@ export const createVariableMetadataController = function<Item>(
     options: VariableMetadataControllerOptions<Item>
 ): VariableMetadataController {
     let priorityRow = -1;
+    let activationSequence = 0;
+    let prioritySequence = 0;
 
     const loader: VariableMetadataLoader =
         createVariableMetadataLoader<Item>({
@@ -72,44 +74,67 @@ export const createVariableMetadataController = function<Item>(
             renderFailure: options.renderFailure
         });
 
-    const finishPriorityNavigation = function(): void {
-        if (priorityRow < 0) {
+    const finishPriorityNavigation = function(
+        rowIndex: number,
+        requestPrioritySequence: number
+    ): void {
+        if (rowIndex < 0 || requestPrioritySequence !== prioritySequence) {
             return;
         }
 
-        options.scrollRowIntoView(priorityRow);
         priorityRow = -1;
+        options.scrollRowIntoView(rowIndex);
     };
 
     const activate = async function(): Promise<void> {
+        const requestSequence = ++activationSequence;
+        const datasetName = options.getDatasetName();
+        const loadSequence = loader.snapshot.sequence;
+        const requestedRow = priorityRow;
+        const requestPrioritySequence = prioritySequence;
+        const isCurrentActivation = function(): boolean {
+            return requestSequence === activationSequence
+                && loadSequence === loader.snapshot.sequence
+                && datasetName === options.getDatasetName();
+        };
         const items = options.getItems();
 
         if (
             Array.isArray(items)
             && items.length > 0
             && loader.snapshot.loaded
+            && !loader.snapshot.failed
         ) {
             options.renderItems();
-            finishPriorityNavigation();
+            if (isCurrentActivation() && options.isVariableViewActive()) {
+                finishPriorityNavigation(requestedRow, requestPrioritySequence);
+            }
             return;
         }
 
-        if (!options.getDatasetName()) {
+        if (!datasetName) {
             return;
         }
 
-        if (priorityRow >= 0) {
-            await loader.loadThroughRow(priorityRow, false);
+        try {
+            if (requestedRow >= 0) {
+                await loader.loadThroughRow(requestedRow, false);
+            } else {
+                const minimumRows = Math.max(
+                    options.batchSize,
+                    options.getMinimumVisibleRows(options.getVariableHost())
+                );
+                await loader.loadUntil(minimumRows, false);
+            }
+        } catch (error) {
+            if (isCurrentActivation()) {
+                throw error;
+            }
+            return;
         }
-        else {
-            const minimumRows = Math.max(
-                options.batchSize,
-                options.getMinimumVisibleRows(
-                    options.getVariableHost()
-                )
-            );
 
-            await loader.loadUntil(minimumRows, false);
+        if (!isCurrentActivation()) {
+            return;
         }
 
         if (options.isVariableViewActive()) {
@@ -118,20 +143,36 @@ export const createVariableMetadataController = function<Item>(
             if (Array.isArray(nextItems) && nextItems.length > 0) {
                 options.renderItems();
             }
+            else if (loader.snapshot.failed) {
+                options.renderFailure();
+            }
             else if (loader.snapshot.loaded) {
                 options.renderEmpty();
             }
         }
 
-        finishPriorityNavigation();
+        if (!isCurrentActivation()) {
+            return;
+        }
+        if (options.isVariableViewActive() && !loader.snapshot.failed) {
+            finishPriorityNavigation(requestedRow, requestPrioritySequence);
+        }
 
-        if (!loader.snapshot.loaded) {
+        if (isCurrentActivation() && !loader.snapshot.loaded) {
             loader.scheduleBackground();
         }
     };
 
     const prioritizeRow = function(rowIndex: number): void {
+        prioritySequence += 1;
         priorityRow = Math.max(-1, Math.floor(Number(rowIndex)));
+    };
+
+    const reset = function(): void {
+        activationSequence += 1;
+        prioritySequence += 1;
+        priorityRow = -1;
+        loader.reset();
     };
 
     return {
@@ -140,7 +181,7 @@ export const createVariableMetadataController = function<Item>(
         },
         activate,
         prioritizeRow,
-        reset: loader.reset,
+        reset,
         scheduleBackground: loader.scheduleBackground,
         loadAll: loader.loadAll,
         loadUntil: loader.loadUntil,

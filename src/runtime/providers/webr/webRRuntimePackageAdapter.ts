@@ -2,26 +2,37 @@ import {
     parseRPackageList
 } from "../r/commands/rCommandIntents";
 import {
-    createRMissingPackageMessage,
-    createRPackageLoadFailureMessage,
-    createRLibraryLoadCommand,
-    createRRuntimePackageStatusCommand,
-    parseRRuntimePackageStatus,
+    loadRequiredRPackages,
+    requireSuccessfulRPackageAttachment,
+    type RPackageAttachmentReceipt
+} from "../r/dependencies/rPackageAttachment";
+import {
     readRDialogPackageRequirements
 } from "../r/dependencies/runtimePackageRequirements";
 import type {
-    RPackageRequirement
+    RPackageRequirement,
+    ProductPackageSourcePolicy
 } from "../../../core/contracts/applicationComposition";
 import {
-    applyRPackageRequirementConstraints,
-    createRPackageCompatibilityMessage,
-    createRPackageVersionsCommand,
-    parseRPackageVersions,
-    resolveRPackageCompatibility
+    applyRPackageRequirementConstraints
 } from "../r/dependencies/rPackageCompatibility";
 import {
-    createWebRRequiredInstallCommand
-} from "../r/dependencies/packageInstallPlan";
+    createRPackagePreparationController,
+    prepareRequiredRPackages
+} from "../r/dependencies/rPackageRequirementReadiness";
+import {
+    createRPackageInstallWorkflow,
+    type PackageLibraryChoice,
+    type PackageRestartChoice,
+    type PackageRuntimeSnapshot
+} from "../r/dependencies/packageInstallWorkflow";
+import {
+    captureRPackageRuntime
+} from "../r/dependencies/rPackageRuntimeGuard";
+import type { RuntimeSessionManager } from "../../provider-contract/runtimeProvider";
+import {
+    RuntimeDependencyPreparationError
+} from "../../dependencies/runtimeDependencyPreparation";
 
 
 interface WebRRuntimePackageActivity {
@@ -30,11 +41,15 @@ interface WebRRuntimePackageActivity {
 
 export interface WebRRuntimePackageLoadOptions {
     activitiesByPackage?: Map<string, WebRRuntimePackageActivity>;
-    manageRuntimeBusy?: boolean;
 }
 
 export interface WebRRuntimePackageAdapterBindings {
-    loadedPackages: Set<string>;
+    getRuntime?(): Pick<RuntimeSessionManager, "getSnapshot"> | null | undefined;
+    getPackageSourcePolicy?(): ProductPackageSourcePolicy;
+    getProductId(): string;
+    chooseInstallLibrary(input: { userLibrary: string; defaultLibrary: string }): Promise<PackageLibraryChoice>;
+    confirmInstallRestart(packages: string[]): Promise<PackageRestartChoice>;
+    restartForInstall(action: "clean" | "restore"): Promise<PackageRuntimeSnapshot>;
     packageRequirementsByDialogId?: Record<string, unknown>;
     packageRequirements?: unknown;
     createActivity(command: string): WebRRuntimePackageActivity;
@@ -45,39 +60,32 @@ export interface WebRRuntimePackageAdapterBindings {
         name: "stdout" | "stderr";
         text: string;
     }): void;
-    setRuntimeBusy(busy: boolean): void;
-    renderToolbar(): void;
+    packagesLoaded(packageNames: readonly string[]): Promise<void>;
     ensureRuntime(): Promise<unknown>;
     evaluateHiddenText(command: string): Promise<string>;
     executeVisibleCommand(
         command: string,
         options?: Record<string, unknown>
-    ): Promise<{ ok?: boolean } | null | undefined>;
+    ): Promise<RPackageAttachmentReceipt | null | undefined>;
 }
 
 export interface WebRRuntimePackageAdapter {
     readRequirements(dialogPayload: unknown): RPackageRequirement[];
     loadPackages(packages: unknown, options?: WebRRuntimePackageLoadOptions): Promise<void>;
     installSessionPackages(packages: unknown): Promise<void>;
+    updateSessionPackages(packages: unknown): Promise<void>;
     ensureRequirements(requirements: unknown): Promise<void>;
     ensureDialogPackages(dialogPayload: unknown): Promise<void>;
 }
 
-const readRuntimePackageStatus = async function(
-    bindings: WebRRuntimePackageAdapterBindings,
-    packages: string[]
-): Promise<ReturnType<typeof parseRRuntimePackageStatus>> {
-    const result = await bindings.evaluateHiddenText(
-        createRRuntimePackageStatusCommand(packages)
-    );
-
-    return parseRRuntimePackageStatus(result);
-};
-
 export const createWebRRuntimePackageAdapter = function(
     bindings: WebRRuntimePackageAdapterBindings
 ): WebRRuntimePackageAdapter {
-    const verifiedRequirementSets = new Set<string>();
+    const packagePreparation = createRPackagePreparationController<void>({
+        getRuntime: bindings.getRuntime,
+        ensureRuntime: bindings.ensureRuntime
+    });
+
     const readRequirements = function(
         dialogPayload: unknown
     ): RPackageRequirement[] {
@@ -102,15 +110,8 @@ export const createWebRRuntimePackageAdapter = function(
 
         const activitiesByPackage = options.activitiesByPackage || new Map();
 
-        const manageRuntimeBusy = options.manageRuntimeBusy !== false;
-
-        if (manageRuntimeBusy) {
-            bindings.setRuntimeBusy(true);
-            bindings.renderToolbar();
-        }
-
         try {
-            await bindings.ensureRuntime();
+            await packagePreparation.ensureRuntimeReady();
         }
         catch (error) {
             for (const activity of activitiesByPackage.values()) {
@@ -123,20 +124,16 @@ export const createWebRRuntimePackageAdapter = function(
                 bindings.finishActivity(activity.id, "error");
             }
 
-            if (manageRuntimeBusy) {
-                bindings.setRuntimeBusy(false);
-                bindings.renderToolbar();
-            }
-
             throw error;
         }
 
-        try {
-            const status = await readRuntimePackageStatus(bindings, pending);
-
-            if (status.missing.length) {
-                const message = createRMissingPackageMessage(status.missing);
-
+        const isCurrent = bindings.getRuntime
+            ? captureRPackageRuntime(bindings.getRuntime)
+            : undefined;
+        await loadRequiredRPackages(pending, {
+            isCurrent,
+            readStatus: async (command) => bindings.evaluateHiddenText(command),
+            missingPackages: function(message) {
                 for (const activity of activitiesByPackage.values()) {
                     bindings.recordRuntimeMessageStream({
                         id: `${activity.id}_missing_error`,
@@ -146,73 +143,47 @@ export const createWebRRuntimePackageAdapter = function(
                     });
                     bindings.finishActivity(activity.id, "error");
                 }
-
-                throw new Error(message);
-            }
-
-            for (const packageName of pending) {
-                if (status.attached.includes(packageName)) {
-                    bindings.loadedPackages.add(packageName);
-                    continue;
-                }
-
+            },
+            attach: async function(packageName, command) {
                 let activity = activitiesByPackage.get(packageName);
 
                 if (!activity) {
-                    activity = bindings.createActivity(
-                        createRLibraryLoadCommand(packageName)
-                    );
+                    activity = bindings.createActivity(command);
                     activitiesByPackage.set(packageName, activity);
                 }
 
                 const result = await bindings.executeVisibleCommand(
-                    createRLibraryLoadCommand(packageName),
+                    command,
                     activity?.id
-                        ? {
-                            activityId: activity.id,
-                            preRecorded: true,
-                            manageRuntimeBusy: false
-                        }
-                        : {
-                            manageRuntimeBusy: false
-                        }
+                        ? { activityId: activity.id }
+                        : {}
                 );
 
-                if (!result?.ok) {
-                    throw new Error(createRPackageLoadFailureMessage(packageName));
-                }
-
-                bindings.loadedPackages.add(packageName);
-            }
-        }
-        finally {
-            if (manageRuntimeBusy) {
-                bindings.setRuntimeBusy(false);
-                bindings.renderToolbar();
-            }
-        }
-    };
-
-    const installSessionPackages = async function(packages: unknown): Promise<void> {
-        const packageNames = parseRPackageList(packages);
-
-        if (!packageNames.length) {
-            return;
-        }
-
-        const result = await bindings.executeVisibleCommand(
-            createWebRRequiredInstallCommand(packageNames)
-        );
-
-        if (!result?.ok) {
-            throw new Error(createRPackageLoadFailureMessage(packageNames.join(", ")));
-        }
-
-        packageNames.forEach((packageName) => {
-            bindings.loadedPackages.delete(packageName);
+                requireSuccessfulRPackageAttachment(packageName, result, isCurrent);
+            },
+            packagesLoaded: bindings.packagesLoaded
         });
-        verifiedRequirementSets.clear();
     };
+
+    const installWorkflow = createRPackageInstallWorkflow({
+        getRuntimeSnapshot: bindings.getRuntime
+            ? () => bindings.getRuntime?.()?.getSnapshot() || null : undefined,
+        getRuntimeIdentity: bindings.getRuntime,
+        getProductId: bindings.getProductId,
+        getPackageSourcePolicy: bindings.getPackageSourcePolicy,
+        // The worker's binary package loader supplies dependency mounting.
+        getInstallDependencies: () => false,
+        ensureRuntime: () => packagePreparation.ensureRuntimeReady(),
+        executeQuery: async function(command) {
+            return { status: "ready", value: await bindings.evaluateHiddenText(command) };
+        },
+        chooseLibrary: bindings.chooseInstallLibrary,
+        confirmRestart: bindings.confirmInstallRestart,
+        restartRuntime: bindings.restartForInstall,
+        executeVisibleCommand: function(command, source) {
+            return bindings.executeVisibleCommand(command, { source });
+        }
+    });
 
     const ensureRequirements = async function(
         requirementsInput: unknown
@@ -226,37 +197,43 @@ export const createWebRRuntimePackageAdapter = function(
             return;
         }
 
-        const requirementKey = JSON.stringify(requirements);
+        await packagePreparation.prepare(requirements, async function() {
+            const isCurrent = bindings.getRuntime
+                ? captureRPackageRuntime(bindings.getRuntime)
+                : undefined;
+            const readiness = await prepareRequiredRPackages(requirements, {
+                isCurrent,
+                readVersions: async function(command) {
+                    return {
+                        ok: true,
+                        value: await bindings.evaluateHiddenText(command)
+                    };
+                },
+                loadPackages: async function(packageNames) {
+                    await loadPackages(packageNames);
+                    return { ok: true, error: "" };
+                }
+            });
 
-        if (!verifiedRequirementSets.has(requirementKey)) {
-            const compatibility = resolveRPackageCompatibility(
-                requirements,
-                parseRPackageVersions(
-                    await bindings.evaluateHiddenText(
-                        createRPackageVersionsCommand(requirements)
-                    )
-                )
-            );
+            if (!readiness.ok) {
+                const message = readiness.status === "r-package-update-required"
+                    ? ["Package update required", readiness.error].join("\n")
+                    : readiness.error;
 
-            if (!compatibility.compatible) {
-                throw new Error([
-                    "Package update required",
-                    createRPackageCompatibilityMessage(compatibility)
-                ].join("\n"));
+                throw new RuntimeDependencyPreparationError(readiness, message);
             }
-
-            verifiedRequirementSets.add(requirementKey);
-        }
-
-        await loadPackages(
-            requirements.map((requirement) => requirement.name)
-        );
+        });
     };
 
     return {
         readRequirements,
         loadPackages,
-        installSessionPackages,
+        installSessionPackages: function(packages): Promise<void> {
+            return installWorkflow.installRequired(packages);
+        },
+        updateSessionPackages: function(packages): Promise<void> {
+            return installWorkflow.updateRequired(packages);
+        },
         ensureRequirements,
         async ensureDialogPackages(dialogPayload) {
             await ensureRequirements(readRequirements(dialogPayload));

@@ -9,6 +9,7 @@ import {
     createWorkspaceObject
 } from "../../../workspace/workspaceProtocol";
 import {
+    readWorkspaceObjectNameValue,
     normalizeWorkspaceUpdateObject,
     workspaceUpdateHasChanges
 } from "../../../workspace/workspaceUpdate";
@@ -24,7 +25,10 @@ import type {
     WorkspaceObjectSnapshot
 } from "../../../provider-contract/runtimeProvider";
 import {
-    createRWorkspaceUpdate
+    createRWorkspaceUpdate,
+    hasValidRWorkspaceRevision,
+    hasValidRWorkspaceObjectList,
+    hasValidRWorkspaceReconciliationPayload
 } from "./rWorkspaceUpdate";
 import {
     rWorkspaceObjectCapabilities
@@ -35,9 +39,10 @@ import {
     parseRuntimeControlResultObject
 } from "../protocol/runtimeControlEvents";
 import type {
-    RRuntimeControlClient
+    RRuntimeControlClient,
+    RRuntimeControlResponse
 } from "../protocol/runtimeControlClient";
-import { coerceRuntimeCellValue } from "../tabular/runtimeTabularValues";
+import { coerceRuntimeCellValue, optionalRuntimeNumber } from "../tabular/runtimeTabularValues";
 
 
 export interface RWorkspaceControllerOptions {
@@ -45,6 +50,45 @@ export interface RWorkspaceControllerOptions {
     createRequestId(prefix: string): string;
     onVisibleWorkspaceRefresh?(): void;
 }
+
+
+const createWorkspaceReadFailure = function(
+    message: string,
+    response: RRuntimeControlResponse,
+    clientRetired: boolean
+): Error {
+    return new Error(message, {
+        cause: {
+            method: response.method,
+            responseId: response.id,
+            responseError: response.error,
+            clientRetired,
+            transportFailure: response.transportFailure === true,
+            requestRejected: response.requestRejected === true,
+            completionFailure: response.completionFailure === true
+        }
+    });
+};
+
+
+const hasValidWorkspaceSnapshotPayload = function(
+    payload: Record<string, unknown>
+): boolean {
+    const variables = payload.variables;
+    const count = payload.objectCount;
+
+    if (
+        !Array.isArray(variables)
+        || typeof count !== "number"
+        || !Number.isSafeInteger(count)
+        || count !== variables.length
+        || !hasValidRWorkspaceRevision(payload.workspaceRevision)
+    ) {
+        return false;
+    }
+
+    return hasValidRWorkspaceObjectList(variables);
+};
 
 
 export const createRWorkspaceController = function(
@@ -76,11 +120,25 @@ export const createRWorkspaceController = function(
             method: "workspace.update",
             params: { timeoutMs: 10000 }
         }).then((result) => {
-            if (!result.ok || options.getClient() !== client) {
-                throw new Error("Workspace refresh did not complete in the current session.");
+            const clientRetired = options.getClient() !== client;
+            if (!result.ok || clientRetired) {
+                throw createWorkspaceReadFailure(
+                    "Workspace refresh did not complete in the current session.",
+                    result,
+                    clientRetired
+                );
             }
 
-            return createRWorkspaceUpdate(result.result);
+            const payload = parseRuntimeControlResultObject(result.result);
+            if (!hasValidRWorkspaceReconciliationPayload(payload)) {
+                throw createWorkspaceReadFailure(
+                    "Workspace refresh response is invalid.",
+                    { ...result, error: "invalid-workspace-update" },
+                    false
+                );
+            }
+
+            return createRWorkspaceUpdate(payload);
         }).finally(() => {
             if (pendingRefresh?.promise === promise) {
                 pendingRefresh = null;
@@ -147,20 +205,28 @@ export const createRWorkspaceController = function(
             }
         });
 
-        if (!result.ok || options.getClient() !== client) {
-            throw new Error("Workspace snapshot is unavailable.");
+        const clientRetired = options.getClient() !== client;
+        if (!result.ok || clientRetired) {
+            throw createWorkspaceReadFailure(
+                "Workspace snapshot is unavailable.",
+                result,
+                clientRetired
+            );
         }
 
         const payload = parseRuntimeControlResultObject(result.result);
+        if (!hasValidWorkspaceSnapshotPayload(payload)) {
+            throw createWorkspaceReadFailure(
+                "Workspace snapshot response is invalid.",
+                { ...result, error: "invalid-workspace-snapshot" },
+                false
+            );
+        }
         const dataframes = asRuntimeControlObject(payload.dataframe);
 
         const objects = asRuntimeControlArray(payload.variables).map((entry) => {
             const variable = asRuntimeControlObject(entry);
-            const name = String(
-                variable.access_key
-                || variable.display_name
-                || ""
-            );
+            const name = String(readWorkspaceObjectNameValue(variable)).trim();
             const object = normalizeWorkspaceUpdateObject({
                 ...variable,
                 dataframe: variable.dataframe
@@ -221,6 +287,7 @@ export const createRWorkspaceController = function(
             return createColumn({
                 name: String(column.name || ""),
                 type: String(column.type || "unknown"),
+                decimals: optionalRuntimeNumber(column.decimals),
                 numeric: column.numeric === true,
                 character: column.character === true,
                 logical: column.logical === true,
@@ -295,7 +362,8 @@ export const createRWorkspaceController = function(
 
             return createColumn({
                 name: String(column.name || ""),
-                type: String(column.type || "unknown")
+                type: String(column.type || "unknown"),
+                decimals: optionalRuntimeNumber(column.decimals)
             });
         }).filter((column) => {
             return column.name.length > 0;

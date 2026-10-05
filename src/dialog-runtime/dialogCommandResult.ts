@@ -1,6 +1,8 @@
-import type {
-    TranscriptEvent
-} from "../runtime/provider-contract/runtimeProvider";
+import {
+    isTranscriptFailureEvent
+} from "../runtime/commands/commandProtocol";
+import type { RuntimeCommandResult } from "../runtime/commands/runtimeCommandReceipt";
+import { runtimeCommandResultSucceeded } from "../runtime/commands/runtimeCommandReceipt";
 import type {
     ProductDialogCommandResult
 } from "./dialogRuntimeIpc";
@@ -26,49 +28,29 @@ export const createEmptyProductDialogCommandResult = function(
     };
 };
 
-export const createProductDialogCommandResultFromEvents = function(
+export const createProductDialogCommandResultFromRuntime = function(
     command: string,
-    events: TranscriptEvent[]
+    result: RuntimeCommandResult
 ): ProductDialogCommandResult {
-    const errorEvent = events.find((event) => {
-        return event.type === "error" || event.type === "rejected";
-    });
+    const receipt = Array.isArray(result)
+        ? { ok: true, transcriptEvents: result }
+        : result;
+    const events = receipt?.transcriptEvents || [];
+    const errorEvent = events.find(isTranscriptFailureEvent);
     const printed = events.filter((event) => {
         return event.type === "output" && Boolean(event.message);
     }).map((event) => {
         return String(event.message);
     }).join("\n");
 
-    return errorEvent
-        ? {
-            ok: false,
-            status: "error",
-            printed,
-            error: String(errorEvent.message || "Dialog command failed."),
-            command,
-            events
-        }
-        : {
-            ok: true,
-            status: "ok",
-            printed,
-            error: "",
-            command,
-            events
-        };
-};
-
-export const createProductDialogCommandResultFromStatus = function(
-    command: string,
-    result: { ok?: boolean } | null | undefined
-): ProductDialogCommandResult {
-    const ok = result?.ok !== false;
+    const ok = runtimeCommandResultSucceeded(result);
 
     return {
         ok,
-        status: ok ? "executed" : "error",
-        printed: "",
-        error: "",
-        command
+        status: ok ? "ok" : "error",
+        printed,
+        error: ok ? "" : String(errorEvent?.message || "Dialog command failed."),
+        command,
+        events
     };
 };

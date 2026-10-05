@@ -1,8 +1,5 @@
-import {
-    createEmptyProductDialogCommandResult,
-    createProductDialogCommandResultFromStatus,
-    readProductDialogCommandText
-} from "./dialogCommandResult";
+import { executeProductDialogCommand } from "./dialogCommandExecution";
+import type { RuntimeCommandResult } from "../runtime/commands/runtimeCommandReceipt";
 import {
     createDialogImportFileResult,
     type DialogImportFileResult
@@ -15,6 +12,7 @@ import {
 
 
 export interface DialogChannelAdapterBindings {
+    getProductId?(): string;
     getWorkingDirectory(): string;
     openImportFile(): Promise<unknown>;
     previewImportFile(input: unknown): Promise<unknown>;
@@ -24,7 +22,10 @@ export interface DialogChannelAdapterBindings {
         action: () => Promise<Result>
     ): Promise<Result>;
     ensureRuntimePackages(input: Record<string, unknown>): Promise<void>;
-    executeVisibleCommand(command: string): Promise<{ ok?: boolean } | null | undefined>;
+    executeVisibleCommand(
+        command: string,
+        options?: { source: string }
+    ): Promise<RuntimeCommandResult>;
     callExternal?(name: string, parameters: Record<string, unknown>): unknown;
     handleStateCall(name: string, parameters: unknown): unknown;
     readConsoleStateChips?(dataset: string): unknown[];
@@ -77,29 +78,20 @@ export const createDialogChannelAdapter = function(
             return bindings.readVariableValues(input);
         },
 
-        async executeDialog(value) {
-            const input = readInput(value);
-            const command = readProductDialogCommandText(input);
-
-            if (!command) {
-                return createEmptyProductDialogCommandResult(command);
-            }
-
-            const execute = async function(): Promise<{
-                ok?: boolean;
-            } | null | undefined> {
-                await bindings.ensureRuntimePackages(input);
-
-                return bindings.executeVisibleCommand(command);
-            };
-            const result = typeof bindings.runActivity === "function"
-                ? await bindings.runActivity("Running dialog command...", execute)
-                : await execute();
-
-            return createProductDialogCommandResultFromStatus(command, result);
+        executeDialog(value) {
+            return executeProductDialogCommand(value, {
+                getProductId: () => bindings.getProductId?.() || "base-app",
+                prepareDependencies: (input) => bindings.ensureRuntimePackages(input),
+                executeVisibleCommand: (request) => bindings.executeVisibleCommand(
+                    request.text, { source: request.source }
+                ),
+                runActivity: bindings.runActivity
+                    ? (message, action) => bindings.runActivity!(message, action)
+                    : undefined
+            });
         },
 
-        callExternal(value, args) {
+        async callExternal(value, args) {
             const input = readInput(value);
             const name = String(input.name || args?.[0] || "");
             const parameters = input.parameters || args?.[1] || {};
@@ -107,7 +99,7 @@ export const createDialogChannelAdapter = function(
             if (isDialogStateExternalCall(name)) {
                 return createDialogStateExternalCallResult(
                     name,
-                    bindings.handleStateCall(name, parameters)
+                    await bindings.handleStateCall(name, parameters)
                 );
             }
 

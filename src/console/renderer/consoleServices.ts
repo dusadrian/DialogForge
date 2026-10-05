@@ -52,6 +52,10 @@ export const createConsoleServices = function(
     const completionModel = createCompletionModel(options.completion);
     const commandHistory = createConsoleCommandHistory({
         ...options.history,
+        onPersistenceFailure: function(error): void {
+            coordinator.reportHistoryPersistenceFailure();
+            options.history.onPersistenceFailure?.(error);
+        },
         registerCompletionInput: function(command) {
             completionModel.registerCommandInput(command);
         }

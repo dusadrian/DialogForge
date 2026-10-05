@@ -1,5 +1,7 @@
 import * as fs from "fs";
 import * as path from "path";
+import { createAboutPayload } from "../../base-app/features/about/aboutPayload";
+import { createApplicationLanguageLifecycle } from "../../base-app/features/settings/applicationLanguageLifecycle";
 import type {
     App,
     BrowserWindow,
@@ -45,8 +47,8 @@ import {
     createApplicationSettingsIpcController
 } from "../settings/applicationSettingsIpcController";
 import {
-    createFactoryApplicationSettings
-} from "../../base-app/features/settings/applicationSettingsPolicy";
+    createApplicationSettingsPayload
+} from "../../base-app/features/settings/applicationSettingsPayload";
 import {
     createDialogRuntimeRequirementsPayload
 } from "../../dialog-runtime/requirements/dialogRuntimeRequirements";
@@ -103,9 +105,6 @@ export const createApplicationSupportWindowComposition = function(
     };
     const defaultRuntimeProvider = options.composition.product.defaultRuntimeProvider
         || options.composition.runtime.id;
-    const factorySettings = createFactoryApplicationSettings(
-        defaultRuntimeProvider
-    );
     const getParentWindow = function(): BrowserWindow | null {
         const win = options.getMainWindow();
 
@@ -257,9 +256,9 @@ export const createApplicationSupportWindowComposition = function(
             "src/base-app/pages/settings.html"
         ),
         readPayload: async function(): Promise<unknown> {
-            return {
+            return createApplicationSettingsPayload({
                 settings: readVisibleSettings(),
-                factorySettings,
+                defaultRuntimeProvider,
                 locales: options.composition.availableLocales || [],
                 runtimeProviders: visibleRuntimeProviders().map((choice) => {
                     return {
@@ -271,7 +270,7 @@ export const createApplicationSupportWindowComposition = function(
                 selectedRuntimeProvider:
                     options.composition.runtimeProviderSelection.selectedProviderId,
                 strings: options.composition.i18n
-            };
+            });
         },
         onClosed: function(): void {
             cancelSettingsPreview();
@@ -410,53 +409,12 @@ export const createApplicationSupportWindowComposition = function(
     createMenuCustomizationWindow = menuCustomizationWindowController.open;
 
     const buildAboutWindowPayload = function(): AboutWindowPayload {
-        const about = options.composition.productAbout;
-        const productName = options.composition.product.name;
-        const version = String(
-            options.composition.product.version || options.app.getVersion()
-        );
-        const currentYear = new Date().getFullYear();
-        const startYear = Number(
-            about.copyrightStartYear || currentYear
-        );
-        const yearText = currentYear > startYear
-            ? `${startYear}-${currentYear}`
-            : String(startYear);
-        const holder = about.copyrightHolder || about.authorName || productName;
-        const translateAboutItems = function(
-            items: string[],
-            keyPrefix: string,
-            itemPrefix: string
-        ): string[] {
-            return items.map((text, index) => {
-                const key = `${keyPrefix}.${itemPrefix}${index + 1}`;
-                const translated = options.translate(key);
-
-                if (translated !== key) {
-                    return translated;
-                }
-
-                return options.translate(text);
-            });
-        };
-
-        return {
-            title: options.translate("About {productName}", { productName }),
-            version: options.translate("Version {version}", { version }),
-            body: translateAboutItems(about.body || [], "about.body", "b"),
-            highlights: translateAboutItems(
-                about.highlights || [],
-                "about.highlights",
-                "h"
-            ),
-            authorLabel: options.translate(about.authorLabel || "Author:"),
-            authorName: about.authorName || "",
-            authorUrl: about.authorUrl || "",
-            copyright: options.translate(
-                "Copyright © {yearText}, {holder}",
-                { yearText, holder }
-            )
-        };
+        return createAboutPayload({
+            about: options.composition.productAbout,
+            productName: options.composition.product.name,
+            version: String(options.composition.product.version || options.app.getVersion()),
+            translate: options.translate
+        });
     };
     const aboutWindowController = createAboutWindowController({
         pagePath: path.join(
@@ -473,46 +431,39 @@ export const createApplicationSupportWindowComposition = function(
     const createAboutWindow = function(): BrowserWindow {
         return aboutWindowController.open(buildAboutWindowPayload());
     };
-    const applyLanguageLive = function(
-        nextLocale: string,
-        persist: boolean
-    ): void {
-        const locale = String(nextLocale || "").trim();
-
-        if (!locale || locale === options.composition.locale) {
-            return;
-        }
-
-        if (persist) {
+    const changeLanguage = createApplicationLanguageLifecycle({
+        currentLocale: () => options.composition.locale,
+        currentTranslations: () => options.composition.i18n,
+        appPath: () => options.composition.rootDir,
+        persistLocale: function(locale): void {
             options.writeSettings({
                 defaultLanguage: locale,
                 languageNS: locale
             });
+        },
+        applyLocale: options.applyLocale,
+        refreshSurfaces: function(): void {
+            applicationMenuInstaller.install();
+            settingsWindowController.refresh();
+            runtimeRequirementsController.refresh();
+            menuCustomizationWindowController.refresh();
+            aboutWindowController.refresh(buildAboutWindowPayload());
+            settingsWindowController.getWindow()?.setTitle(
+                options.translate("Settings")
+            );
+            runtimeRequirementsController.getWindow()?.setTitle(
+                options.translate("Dialog Runtime Requirements")
+            );
+            menuCustomizationWindowController.getWindow()?.setTitle(
+                options.translate("Customize the menu")
+            );
+        },
+        notifyChanged: function(payload): void {
+            options.sendToAllWindows(applicationEventChannels.languageChanged, payload);
         }
-
-        options.applyLocale(locale);
-        applicationMenuInstaller.install();
-        settingsWindowController.refresh();
-        runtimeRequirementsController.refresh();
-        menuCustomizationWindowController.refresh();
-        aboutWindowController.refresh(buildAboutWindowPayload());
-        settingsWindowController.getWindow()?.setTitle(
-            options.translate("Settings")
-        );
-        runtimeRequirementsController.getWindow()?.setTitle(
-            options.translate("Dialog Runtime Requirements")
-        );
-        menuCustomizationWindowController.getWindow()?.setTitle(
-            options.translate("Customize the menu")
-        );
-        options.sendToAllWindows(
-            applicationEventChannels.languageChanged,
-            {
-                languageNS: locale,
-                language: locale.split(/[-_]/)[0].toLowerCase(),
-                appPath: options.composition.rootDir
-            }
-        );
+    });
+    const applyLanguageLive = function(locale: string, persist: boolean): void {
+        changeLanguage(locale, { persist });
     };
 
     const settingsIpcController = createApplicationSettingsIpcController({
@@ -545,6 +496,17 @@ export const createApplicationSupportWindowComposition = function(
             settingsPreview = settings;
         },
         sendToAllWindows: options.sendToAllWindows,
+        reportSettingsFailure: function(message): void {
+            options.sendToAllWindows(applicationEventChannels.runtimeTranscript, [{
+                type: "output",
+                commandKind: "visible",
+                source: "application.settings",
+                text: "",
+                createdAt: new Date().toISOString(),
+                message: `${message}\n`,
+                streamName: "stderr"
+            }]);
+        },
         userDialogsDirectory: options.userDialogsDirectory,
         rootDir: options.composition.rootDir,
         productLocation: options.composition.location,

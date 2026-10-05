@@ -2,6 +2,7 @@
     "Settings": "Einstellungen",
     "Language": "Sprache",
     "Runtime provider": "Laufzeitanbieter",
+    "Runtime session is not ready.": "Die Laufzeitsitzung ist nicht bereit.",
     "Console font": "Konsolenschriftart",
     "Console cursor": "Konsolencursor",
     "Console cursor blink": "Blinken des Konsolencursors",

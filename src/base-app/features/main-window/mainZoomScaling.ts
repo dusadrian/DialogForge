@@ -1,3 +1,6 @@
+import { clampMainZoomFactor } from "./mainZoomPolicy";
+
+
 export interface MainZoomScaling {
     readZoomFactor(): number;
     scaleLayoutSize(value: number): number;
@@ -9,7 +12,7 @@ export const createMainZoomScaling = function(): MainZoomScaling {
     let mainZoomFactor = 1;
 
     const readZoomFactor = function(): number {
-        return Math.max(0.5, Math.min(3, mainZoomFactor || 1));
+        return clampMainZoomFactor(mainZoomFactor || 1);
     };
 
     const scaleLayoutSize = function(value: number): number {

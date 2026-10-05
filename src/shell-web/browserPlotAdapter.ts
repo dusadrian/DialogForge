@@ -1,22 +1,33 @@
 import {
-    createCanceledPlotSaveResult,
-    createCopiedPlotCopyResult,
-    createFailedPlotCopyResult,
-    createFailedPlotSaveResult,
-    createEmptyPlotViewerPayload,
     createInvalidPlotCopyResult,
     createInvalidPlotSaveResult,
     createIndexedPlotSaveFileName,
-    createPlotViewerPayload,
     createPlotSaveRequest,
     createPlotSaveFileName,
-    createSavedPlotSaveResult,
     getPlotSaveFormatInfo,
     type PlotViewerPayload,
     type PlotCopyResult,
     type PlotSaveResult
 } from "../base-app/features/plot-viewer/plotViewerState";
+import {
+    copyPlotThroughHost,
+    readPlotExportResource,
+    savePlotThroughHost
+} from "../base-app/features/plot-viewer/plotExportOperations";
+import {
+    createPlotViewerPresentationState
+} from "../base-app/features/plot-viewer/plotViewerPresentationState";
 import type { BrowserFrameSurfaceController } from "./browserFrameSurface";
+import { createBrowserResourceClient } from "../core/host/browserResourceClient";
+
+
+const readBrowserPlotBlob = async function(url: string): Promise<Blob> {
+    const response = await readPlotExportResource(createBrowserResourceClient(), url);
+
+    return new Blob([new Uint8Array(response.body).buffer], {
+        type: response.contentType || "image/png"
+    });
+};
 
 
 interface BrowserPlotSaveRequest {
@@ -53,9 +64,6 @@ interface BrowserPlotViewerHostOptions {
     frameSurfaces: BrowserFrameSurfaceController;
     activateSurface(surfaceId: string): void;
     installSurfaceActivation(surfaceId: string, element?: HTMLElement | null): void;
-    executeMutation(input?: Record<string, unknown>): Promise<unknown>;
-    savePlot?(input?: Record<string, unknown>): Promise<unknown>;
-    copyPlot?(url?: string): Promise<unknown>;
     closeCapturedImages?(images: unknown[]): void;
     getI18n?(): Record<string, string>;
     initialPayload?: Partial<PlotViewerPayload>;
@@ -65,21 +73,21 @@ interface BrowserPlotViewerHostOptions {
 interface BrowserPlotViewerHostState {
     layer: HTMLElement | null;
     frame: HTMLIFrameElement | null;
-    objectUrls: string[];
     frameReady: boolean;
-    renderToken: number;
     renderWaiters: BrowserPlotRenderWaiter[];
-    payload: PlotViewerPayload;
 }
 
 export interface BrowserPlotViewerHost {
     layer(): HTMLElement | null;
     isFrameReady(): boolean;
     open(payload?: PlotViewerPayload | null, options?: { hidden?: boolean }): void;
+    refreshTitle(): void;
+    notifyLanguageChanged(payload: unknown): void;
     prewarm(): void;
     waitForFrameReady(timeoutMs?: number): Promise<boolean>;
     waitForRender(renderToken: unknown, timeoutMs?: number): Promise<boolean>;
-    updateFromCapturedImages(images: unknown): Promise<void>;
+    updateFromCapturedImages(images: unknown, pageCount?: unknown): Promise<void>;
+    retireResources(): void;
     handleMessage(event: MessageEvent): Promise<void>;
 }
 
@@ -117,8 +125,8 @@ export const saveBrowserPlot = async function(
         return createInvalidPlotSaveResult();
     }
 
-    if (windowRef.showSaveFilePicker) {
-        try {
+    return savePlotThroughHost(async () => {
+        if (windowRef.showSaveFilePicker) {
             const fileHandle = await windowRef.showSaveFilePicker({
                 suggestedName: createPlotSaveFileName(format),
                 types: [
@@ -130,8 +138,7 @@ export const saveBrowserPlot = async function(
                     }
                 ]
             });
-            const response = await fetch(url);
-            const blob = await response.blob();
+            const blob = await readBrowserPlotBlob(url);
             const writable = await fileHandle.createWritable();
 
             try {
@@ -141,20 +148,13 @@ export const saveBrowserPlot = async function(
                 await writable.close();
             }
 
-            return createSavedPlotSaveResult(fileHandle.name || "");
+            return fileHandle.name || "";
         }
-        catch (error) {
-            if (error instanceof DOMException && error.name === "AbortError") {
-                return createCanceledPlotSaveResult();
-            }
 
-            return createFailedPlotSaveResult(error);
-        }
-    }
+        downloadPlotAsFile(documentRef, url, format, rawRequest.index);
 
-    downloadPlotAsFile(documentRef, url, format, rawRequest.index);
-
-    return createSavedPlotSaveResult();
+        return { status: "requested" };
+    }, error => error instanceof DOMException && error.name === "AbortError");
 };
 
 
@@ -167,27 +167,23 @@ export const copyBrowserPlot = async function(
         return createInvalidPlotCopyResult();
     }
 
-    try {
+    return copyPlotThroughHost(async () => {
         if (
             typeof ClipboardItem !== "undefined"
             && navigator.clipboard?.write
         ) {
-            const response = await fetch(url);
-            const blob = await response.blob();
+            const blob = await readBrowserPlotBlob(url);
             const type = blob.type || "image/png";
 
             await navigator.clipboard.write([
                 new ClipboardItem({ [type]: blob })
             ]);
 
-            return createCopiedPlotCopyResult();
+            return;
         }
 
         throw new Error("Image clipboard access is unavailable.");
-    }
-    catch (error) {
-        return createFailedPlotCopyResult(error);
-    }
+    });
 };
 
 
@@ -251,31 +247,16 @@ export const createBrowserPlotObjectUrl = function(
 };
 
 
-const defaultPlotViewerPayload = function(): PlotViewerPayload {
-    return {
-        status: "waiting",
-        message: "Plots created by the runtime will appear here when graphics capture is active.",
-        url: "",
-        urls: [],
-        count: 0,
-        upid: "",
-        updatedAt: new Date(0).toISOString()
-    };
-};
-
-
 export const createBrowserPlotViewerHost = function(
     options: BrowserPlotViewerHostOptions
 ): BrowserPlotViewerHost {
     const windowRef = options.windowRef || window;
+    const presentation = createPlotViewerPresentationState(options.initialPayload);
     const state: BrowserPlotViewerHostState = {
         layer: null,
         frame: null,
-        objectUrls: [],
         frameReady: false,
-        renderToken: 0,
-        renderWaiters: [],
-        payload: Object.assign(defaultPlotViewerPayload(), options.initialPayload || {})
+        renderWaiters: []
     };
     let shiftPressed = false;
 
@@ -308,7 +289,7 @@ export const createBrowserPlotViewerHost = function(
         postModifierState();
     });
 
-    const postUpdate = function(payload = state.payload): void {
+    const postUpdate = function(payload = presentation.getPayload()): void {
         const frameWindow = state.frame?.contentWindow;
 
         if (!frameWindow) {
@@ -327,8 +308,7 @@ export const createBrowserPlotViewerHost = function(
     };
 
     const updatePayload = function(payload: Partial<PlotViewerPayload>): void {
-        state.payload = Object.assign({}, state.payload, payload || {});
-        postUpdate(state.payload);
+        postUpdate(presentation.update(payload || {}));
     };
 
     const open = function(
@@ -358,8 +338,8 @@ export const createBrowserPlotViewerHost = function(
             closeClass: "dialogforge-web-plot-close",
             frameClass: "dialogforge-web-plot-frame",
             onClose: function(): void {
-                revokeBrowserPlotObjectUrls(state.objectUrls);
-                state.objectUrls = [];
+                // Closing the surface does not close R's graphics history.
+                // Keep the shared presentation until the runtime is retired.
                 state.layer = null;
                 state.frame = null;
                 state.frameReady = false;
@@ -456,29 +436,34 @@ export const createBrowserPlotViewerHost = function(
         });
     };
 
-    const updateFromCapturedImages = async function(images: unknown): Promise<void> {
+    const updateFromCapturedImages = async function(
+        images: unknown,
+        pageCount?: unknown
+    ): Promise<void> {
         const capturedImages = Array.isArray(images) ? images.filter(Boolean) : [];
 
         if (!capturedImages.length) {
-            updatePayload(createEmptyPlotViewerPayload(state.payload.urls));
+            postUpdate(presentation.appendImages([]));
             return;
         }
 
-        const urls = Array.isArray(state.objectUrls)
-            ? state.objectUrls.slice()
-            : [];
+        const payload = await presentation.receiveCapturedImages(
+            capturedImages,
+            pageCount,
+            {
+                createUrl: function(image): Promise<string> {
+                    return createBrowserPlotObjectUrl(image as BrowserPlotImage);
+                },
+                closeImages: function(images): void {
+                    options.closeCapturedImages?.(images);
+                },
+                releaseUrls: revokeBrowserPlotObjectUrls
+            }
+        );
 
-        for (const image of capturedImages) {
-            urls.push(await createBrowserPlotObjectUrl(image as BrowserPlotImage));
+        if (!payload || !presentation.isCurrentPayload(payload)) {
+            return;
         }
-        options.closeCapturedImages?.(capturedImages);
-
-        state.objectUrls = urls;
-
-        const renderToken = state.renderToken + 1;
-        const payload = createPlotViewerPayload(urls, renderToken);
-
-        state.renderToken = renderToken;
 
         if (state.layer?.isConnected) {
             updatePayload(payload);
@@ -520,10 +505,6 @@ export const createBrowserPlotViewerHost = function(
                 ? state.renderWaiters.slice()
                 : [];
 
-            if (state.layer?.isConnected) {
-                options.activateSurface("plotViewer");
-            }
-
             state.renderWaiters = waiters.filter(function(waiter): boolean {
                 if (waiter.token !== token) {
                     return true;
@@ -535,19 +516,6 @@ export const createBrowserPlotViewerHost = function(
             return;
         }
 
-        if (message.type === "executeInvisibleMutation") {
-            await options.executeMutation(message.request || {});
-            return;
-        }
-
-        if (message.type === "savePlot") {
-            await (options.savePlot || saveBrowserPlot)(message.request || {});
-            return;
-        }
-
-        if (message.type === "copyPlot") {
-            await (options.copyPlot || copyBrowserPlot)(message.url || "");
-        }
     };
 
     return {
@@ -558,10 +526,27 @@ export const createBrowserPlotViewerHost = function(
             return state.frameReady;
         },
         open,
+        refreshTitle: function(): void {
+            options.frameSurfaces.updateTitle(
+                "plotViewer",
+                options.getI18n?.()["Plot Viewer"] || "Plot Viewer"
+            );
+        },
+        notifyLanguageChanged: function(payload: unknown): void {
+            state.frame?.contentWindow?.postMessage({
+                source: "dialogforge.browser-plot-host",
+                type: "languageChanged",
+                payload
+            }, windowRef.location.origin);
+        },
         prewarm,
         waitForFrameReady,
         waitForRender,
         updateFromCapturedImages,
+        retireResources: function(): void {
+            revokeBrowserPlotObjectUrls(presentation.retireImages());
+            postUpdate();
+        },
         handleMessage
     };
 };

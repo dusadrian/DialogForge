@@ -1073,7 +1073,7 @@ workspace_dataset_update_cell <- function(name, row, column, value = "") {
 
     text <- as.character(value %||% "")
     declared_namespace <- if (
-        requireNamespace("declared", quietly = TRUE)
+        base::requireNamespace("declared", quietly = TRUE)
     ) {
         asNamespace("declared")
     }
@@ -1145,7 +1145,7 @@ workspace_dataset_sort_command <- function(
             "]]"
         ),
         paste0(
-            "  .__dm_sort_ord__ <- if (requireNamespace(\"declared\", ",
+            "  .__dm_sort_ord__ <- if (base::requireNamespace(\"declared\", ",
             "quietly=TRUE) && inherits(.__dm_sort_col__, \"declared\")) ",
             "declared::order_declared(.__dm_sort_col__, na.last = ",
             if (na_last) "TRUE" else "FALSE",
@@ -1179,7 +1179,7 @@ workspace_dataset_sort_order <- function(
 ) {
     tryCatch({
         if (
-            requireNamespace("declared", quietly = TRUE) &&
+            base::requireNamespace("declared", quietly = TRUE) &&
             inherits(column, "declared")
         ) {
             return(declared::order_declared(
@@ -1708,7 +1708,11 @@ workspace_dataset_remove_row <- function(name, row) {
     )
 }
 workspace_declared_namespace <- function() {
-    if (!requireNamespace("declared", quietly = TRUE)) {
+    # DialogR and DialogQCA require declared through their startup dependency
+    # contracts because Variables-tab measurement inference depends on it.
+    # The empty fallback exists only for the product-neutral base app or another
+    # runtime contribution that does not advertise that product behavior.
+    if (!base::requireNamespace("declared", quietly = TRUE)) {
         return(NULL)
     }
 
@@ -2303,7 +2307,7 @@ workspace_import_binary_preview <- function(
     row_limit,
     file_encoding
 ) {
-    if (!requireNamespace("DDIwR", quietly = TRUE)) {
+    if (!base::requireNamespace("DDIwR", quietly = TRUE)) {
         return(list(ok = FALSE, error = "missing-package: DDIwR"))
     }
 
@@ -2943,9 +2947,15 @@ workspace_dataset_target_decimals <- function(request, column) {
         return(NULL)
     }
 
-    workspace_dataset_attribute_text(
+    decimals <- suppressWarnings(as.integer(workspace_dataset_attribute_text(
         workspace_dataset_attribute(column, "decimals")
-    )
+    )))
+
+    if (length(decimals) != 1L || is.na(decimals) || !is.finite(decimals)) {
+        return(NULL)
+    }
+
+    max(0L, min(8L, decimals))
 }
 
 

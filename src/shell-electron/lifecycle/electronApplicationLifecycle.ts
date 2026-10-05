@@ -16,6 +16,7 @@ export interface ElectronApplicationLifecycleOptions {
     app: App;
     smokeMode: boolean;
     initializeZoom(): void;
+    bindWindowZoom(win: BrowserWindow): void;
     installApplicationMenu(): void;
     createMainWindow(): BrowserWindow;
     setMainWindow(win: BrowserWindow | null): void;
@@ -41,6 +42,10 @@ export const bindElectronApplicationLifecycle = function(
         mainWindow = win;
         options.setMainWindow(win);
     };
+
+    options.app.on("browser-window-created", (_event, win) => {
+        options.bindWindowZoom(win);
+    });
 
     options.app.whenReady().then(async () => {
         options.initializeZoom();

@@ -252,6 +252,7 @@ export const createTerminalConsoleEditorInputView = (deps: {
     clear: inputStateController.clear,
     getText: inputStateController.getValue,
     submit: () => submissionController?.submit(),
+    retireSubmission: () => submissionController?.retire(),
     setText: inputStateController.setText,
     historyPrevious: () => historyController.previous(),
     historyNext: () => historyController.next(),

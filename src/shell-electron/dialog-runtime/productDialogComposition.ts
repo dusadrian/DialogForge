@@ -44,6 +44,10 @@ import {
 import {
     createProductDialogIpcController
 } from "./productDialogIpcController";
+import {
+    readSelectedWorkspaceDatasetName,
+    readWorkspaceActiveDatasetScope
+} from "../../runtime/workspace/workspaceActiveDatasetDelivery";
 
 
 export interface ProductDialogCompositionOptions {
@@ -106,8 +110,11 @@ export const createProductDialogComposition = function(
         readWorkspaceData,
         readInitialWorkspaceData,
         getActiveDatasetName: function(): string {
-            return options.runtimeSessionManager.getActiveDataset().objectName;
+            return readSelectedWorkspaceDatasetName(options.runtimeSessionManager.getActiveDataset());
         },
+        getSessionScope: () => readWorkspaceActiveDatasetScope(
+            options.runtimeSessionManager.getWorkspaceSnapshot()
+        ),
         getParentWindow: options.getParentWindow,
         windowClosed: events.windowClosed,
         prepareDialog: options.prepareDialog

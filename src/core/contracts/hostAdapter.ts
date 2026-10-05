@@ -1,5 +1,6 @@
 export interface ResourceRequestOptions {
     redirect?: "follow" | "manual";
+    maxBodyBytes?: number;
 }
 
 
@@ -9,6 +10,7 @@ export interface ResourceTextResult {
     url: string;
     contentType: string;
     text: string;
+    headers?: string[];
 }
 
 
@@ -18,6 +20,7 @@ export interface ResourceBufferResult {
     url: string;
     contentType: string;
     body: Uint8Array;
+    headers?: string[];
 }
 
 

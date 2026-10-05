@@ -21,6 +21,8 @@ import type {
 export interface RuntimeVariableMetadataOperationControllerOptions {
     variableMetadataExecutionController: RuntimeVariableMetadataExecutionController;
     getSnapshot(): RuntimeSessionSnapshot;
+    getWorkspaceReadEpoch?(): number;
+    isWorkspaceReadAvailable?(): boolean;
     getActiveObjectName(): string;
     hasRuntimeCapability(capability: RuntimeCapability): boolean;
     readVariableMetadataValue(
@@ -35,7 +37,8 @@ export interface RuntimeVariableMetadataOperationControllerOptions {
 export interface RuntimeVariableMetadataOperationController {
     readVariableMetadata(objectName: string): Promise<VariableMetadataSnapshot>;
     writeVariableMetadata(
-        request: VariableMetadataUpdateRequest
+        request: VariableMetadataUpdateRequest,
+        beginMutation?: () => void
     ): Promise<VariableMetadataUpdateResult>;
 }
 
@@ -65,10 +68,31 @@ export const createRuntimeVariableMetadataOperationController = function(
                 }));
             }
 
-            return options.variableMetadataExecutionController.readVariableMetadata(targetName);
+            const epoch = options.getWorkspaceReadEpoch?.();
+            if (options.isWorkspaceReadAvailable?.() === false) {
+                return createVariableMetadataSnapshot({
+                    status: "unavailable", providerId: snapshot.providerId,
+                    objectName: targetName, message: "Workspace synchronization is pending or stale."
+                });
+            }
+            const metadata = await options.variableMetadataExecutionController.readVariableMetadata(targetName);
+
+            if (
+                epoch !== options.getWorkspaceReadEpoch?.()
+                || options.getSnapshot().status !== "ready"
+                || options.isWorkspaceReadAvailable?.() === false
+            ) {
+                return createVariableMetadataSnapshot({
+                    status: "unavailable", providerId: snapshot.providerId,
+                    objectName: targetName, message: "Workspace changed while reading variable metadata. Retry the read."
+                });
+            }
+
+            return metadata;
         },
         writeVariableMetadata: async function(
-            request
+            request,
+            beginMutation
         ): Promise<VariableMetadataUpdateResult> {
             const snapshot = options.getSnapshot();
             const targetName = request.objectName || options.getActiveObjectName();
@@ -117,7 +141,8 @@ export const createRuntimeVariableMetadataOperationController = function(
                     metadataKey,
                     value,
                     label
-                }
+                },
+                beginMutation
             );
         }
     };

@@ -17,13 +17,17 @@ import {
 } from "../protocol/runtimeControlClient";
 import type { RRuntimeLaunchPlan } from "./runtimeLaunchPlan";
 import { createRuntimeControlDiagnostics } from "../protocol/runtimeControlDiagnostics";
+import { readRStartupOutput, hasRStartupPrompt } from "./rStartupOutput";
+import { releaseOwnedRuntimeResource } from "../../../session/runtimeResourceRelease";
+import { runOwnedRuntimeStartupStage } from "../../../session/runtimeStartupStage";
 
 
 export interface RRuntimeProcessHostOptions {
     createLaunchPlan: () => RRuntimeLaunchPlan | Promise<RRuntimeLaunchPlan>;
     startupTimeoutMs: number;
     onClientChanged: (
-        client: ReturnType<typeof createRuntimeControlClient> | null
+        client: ReturnType<typeof createRuntimeControlClient> | null,
+        context?: { plan: RRuntimeLaunchPlan; meta: RRuntimeControlMeta }
     ) => void;
     onRuntimeEvent: (event: unknown) => void;
     onProcessOutput?: (output: {
@@ -48,32 +52,6 @@ export interface RRuntimeProcessHost {
     interrupt: () => boolean | null;
 }
 
-const extractStartupOutput = function(processOutput: string): string {
-    const normalized = String(processOutput || "")
-        .replace(/\r\n/g, "\n")
-        .replace(/\r/g, "\n");
-    const lines = normalized.split("\n");
-    const startupLines: string[] = [];
-
-    for (const line of lines) {
-        if (/^\s*[>+]\s/.test(line)) {
-            break;
-        }
-
-        startupLines.push(line);
-    }
-
-    return startupLines.join("\n").trim();
-};
-
-const hasRPromptLine = function(processOutput: string): boolean {
-    return String(processOutput || "")
-        .replace(/\r\n/g, "\n")
-        .replace(/\r/g, "\n")
-        .split("\n")
-        .some((line) => /^\s*[>+]\s/.test(line));
-};
-
 const waitForStartupOutputDrain = async function(): Promise<void> {
     await new Promise<void>((resolve) => {
         setTimeout(resolve, 50);
@@ -96,7 +74,7 @@ export const createRRuntimeProcessHost = function(
         nextClient: ReturnType<typeof createRuntimeControlClient> | null
     ): void {
         client = nextClient;
-        options.onClientChanged(nextClient);
+        options.onClientChanged(nextClient, nextClient && plan && meta ? { plan, meta } : undefined);
     };
 
     const createStartupFailureMessage = function(
@@ -142,39 +120,47 @@ export const createRRuntimeProcessHost = function(
 
     const stopRuntime = async function(): Promise<void> {
         const activePlan = plan;
+        const activeChild = child;
+        const activeMeta = meta;
+        const unregisterActiveTermination = unregisterEmergencyTermination;
 
         if (client) {
             client.detach();
             replaceClient(null);
         }
 
-        const runtimePid = Number(meta?.pid || 0);
-        const childPid = Number(child?.pid || 0);
+        await releaseOwnedRuntimeResource({
+            resource: { child: activeChild, meta: activeMeta, plan: activePlan },
+            release: async function(resource) {
+                const runtimePid = Number(resource.meta?.pid || 0);
+                const childPid = Number(resource.child?.pid || 0);
+                if (resource.child && !resource.child.killed) {
+                    try {
+                        resource.child.kill("SIGTERM");
+                    } catch {}
+                }
 
-        if (child && !child.killed) {
-            try {
-                child.kill("SIGTERM");
-            } catch {}
-        }
-
-        await terminateProcessTree({
-            pid: childPid,
-            sync: process.platform === "win32"
+                await terminateProcessTree({
+                    pid: childPid, sync: process.platform === "win32"
+                });
+                if (runtimePid && runtimePid !== childPid) {
+                    await terminateProcessTree({
+                        pid: runtimePid, sync: process.platform === "win32"
+                    });
+                }
+            },
+            disposeReleased: function(resource) {
+                unregisterActiveTermination?.();
+                removeRuntimeFiles(resource.plan);
+            },
+            isCurrent: (resource) => child === resource.child && plan === resource.plan,
+            clearCurrent: function() {
+                unregisterEmergencyTermination = null;
+                child = null;
+                meta = null;
+                plan = null;
+            }
         });
-
-        if (runtimePid && runtimePid !== childPid) {
-            await terminateProcessTree({
-                pid: runtimePid,
-                sync: process.platform === "win32"
-            });
-        }
-
-        unregisterEmergencyTermination?.();
-        unregisterEmergencyTermination = null;
-        child = null;
-        meta = null;
-        plan = null;
-        removeRuntimeFiles(activePlan);
     };
 
     const stoppedSnapshot = function(
@@ -197,7 +183,11 @@ export const createRRuntimeProcessHost = function(
         diagnostics.record(lifecycleRequest, "startup.started");
 
         try {
-            activePlan = await options.createLaunchPlan();
+            activePlan = await runOwnedRuntimeStartupStage<RRuntimeLaunchPlan>({
+                isCurrent: () => generation === lifecycleGeneration,
+                run: async () => options.createLaunchPlan(),
+                discard: removeRuntimeFiles
+            });
             diagnostics.record(lifecycleRequest, "startup.plan_ready");
         } catch (error) {
             return Object.assign({}, snapshot, {
@@ -249,7 +239,7 @@ export const createRRuntimeProcessHost = function(
 
             if (!startupProcessOutputClosed) {
                 startupProcessOutput += text;
-                startupProcessOutputClosed = hasRPromptLine(
+                startupProcessOutputClosed = hasRStartupPrompt(
                     startupProcessOutput
                 );
             }
@@ -260,16 +250,35 @@ export const createRRuntimeProcessHost = function(
                 );
             }
 
-            if (!startupPending && text) {
-                options.onProcessOutput?.({
-                    streamName,
-                    text
-                });
+            if (
+                !startupPending && text
+                && child === spawnedChild
+                && generation === lifecycleGeneration
+            ) {
+                const outputClient = client;
+                try {
+                    options.onProcessOutput?.({
+                        streamName,
+                        text
+                    });
+                } catch {
+                    // A physical pipe callback has no awaiting request to catch
+                    // consumer failure. Retire only its captured client; the
+                    // SAME command owner supplies session-loss disposition.
+                    diagnostics.record(lifecycleRequest, "process.output_delivery_failed", 1);
+                    outputClient?.detach();
+                    if (client === outputClient && child === spawnedChild
+                        && generation === lifecycleGeneration) {
+                        replaceClient(null);
+                    }
+                }
             }
         };
         child = spawnedChild;
         unregisterEmergencyTermination =
             registerEmergencyProcessTreeTermination(spawnedChild.pid);
+        spawnedChild.stdout.setEncoding("utf8");
+        spawnedChild.stderr.setEncoding("utf8");
         spawnedChild.stdout.on("data", (chunk) => {
             appendActiveProcessOutput("stdout", chunk);
         });
@@ -328,8 +337,6 @@ export const createRRuntimeProcessHost = function(
             ),
             startupFailure
         ]);
-        startupPending = false;
-
         if (generation !== lifecycleGeneration) {
             if (child === spawnedChild) {
                 await stopRuntime();
@@ -358,20 +365,46 @@ export const createRRuntimeProcessHost = function(
             });
         }
 
+        if (
+            plan?.env.DM_ORDERED_OUTPUT_ENABLED === "1"
+            && (nextMeta.orderedOutputEncoding !== "utf8"
+                || nextMeta.orderedOutputSession !== plan.env.DM_ORDERED_OUTPUT_SESSION)
+        ) {
+            await stopRuntime();
+            return Object.assign({}, snapshot, {
+                status: "failed",
+                message: "Native ordered output startup did not confirm encoding and ownership."
+            });
+        }
+        if (
+            activePlan.env.DM_BOUNDED_INPUT_ENABLED === "1"
+            && (nextMeta.boundedInput !== "native-v1"
+                || nextMeta.maxRequestBytes !== Number(activePlan.env.DM_RUNTIME_CONTROL_MAX_PAYLOAD))
+        ) {
+            await stopRuntime();
+            return Object.assign({}, snapshot, {
+                status: "failed",
+                message: "Native bounded input startup did not confirm its reader and payload limit."
+            });
+        }
         meta = nextMeta;
         diagnostics.record(lifecycleRequest, "startup.runtime_ready", Number(meta.pid || 0));
         replaceClient(createRuntimeControlClient(meta, {
             onEvent: options.onRuntimeEvent,
             diagnostics
         }));
-        await waitForStartupOutputDrain();
+        await runOwnedRuntimeStartupStage({
+            isCurrent: () => generation === lifecycleGeneration && child === spawnedChild,
+            run: waitForStartupOutputDrain
+        });
+        startupPending = false;
         diagnostics.record(lifecycleRequest, "startup.ready");
 
         return Object.assign({}, snapshot, {
             status: "ready",
             connection: "runtime-control",
             message: `R runtime-control session is attached on port ${String(meta.port || "")}.`,
-            startupOutput: extractStartupOutput(startupProcessOutput)
+            startupOutput: readRStartupOutput(startupProcessOutput)
         });
     };
 
@@ -413,6 +446,17 @@ export const createRRuntimeProcessHost = function(
         interrupt: function(): boolean | null {
             if (!child || child.exitCode !== null || child.signalCode !== null) {
                 return null;
+            }
+
+            if (process.platform !== "win32" && child.pid) {
+                // This host spawned a detached, task-owned Unix process group.
+                // Signal its foreground OS children as well as R, like Ctrl-C.
+                try {
+                    process.kill(-child.pid, "SIGINT");
+                    return true;
+                } catch {
+                    return false;
+                }
             }
 
             return child.kill("SIGINT");

@@ -1,4 +1,5 @@
 export {
+    createInvalidPlotCopyResult,
     createIndexedPlotSaveFileName,
     createPlotCopyResult,
     createPlotSaveFileName,

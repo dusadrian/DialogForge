@@ -17,6 +17,8 @@ import type {
 export interface RuntimeTabularReadOperationControllerOptions {
     tabularReadController: RuntimeTabularReadController;
     getSnapshot(): RuntimeSessionSnapshot;
+    getWorkspaceReadEpoch?(): number;
+    isWorkspaceReadAvailable?(): boolean;
     getActiveObjectName(): string;
 }
 
@@ -55,7 +57,27 @@ export const createRuntimeTabularReadOperationController = function(
                 });
             }
 
-            return options.tabularReadController.readSchema(targetName);
+            const epoch = options.getWorkspaceReadEpoch?.();
+            if (options.isWorkspaceReadAvailable?.() === false) {
+                return createTabularSchema({
+                    status: "unavailable", providerId: snapshot.providerId,
+                    objectName: targetName, message: "Workspace synchronization is pending or stale."
+                });
+            }
+            const schema = await options.tabularReadController.readSchema(targetName);
+
+            if (
+                epoch !== options.getWorkspaceReadEpoch?.()
+                || options.getSnapshot().status !== "ready"
+                || options.isWorkspaceReadAvailable?.() === false
+            ) {
+                return createTabularSchema({
+                    status: "unavailable", providerId: snapshot.providerId,
+                    objectName: targetName, message: "Workspace changed while reading the schema. Retry the read."
+                });
+            }
+
+            return schema;
         },
         readPreview: async function(input): Promise<TabularPreviewSnapshot> {
             const snapshot = options.getSnapshot();
@@ -80,7 +102,27 @@ export const createRuntimeTabularReadOperationController = function(
                 });
             }
 
-            return options.tabularReadController.readPreview(targetName, request);
+            const epoch = options.getWorkspaceReadEpoch?.();
+            if (options.isWorkspaceReadAvailable?.() === false) {
+                return createTabularPreview({
+                    status: "unavailable", providerId: snapshot.providerId,
+                    objectName: targetName, message: "Workspace synchronization is pending or stale."
+                });
+            }
+            const preview = await options.tabularReadController.readPreview(targetName, request);
+
+            if (
+                epoch !== options.getWorkspaceReadEpoch?.()
+                || options.getSnapshot().status !== "ready"
+                || options.isWorkspaceReadAvailable?.() === false
+            ) {
+                return createTabularPreview({
+                    status: "unavailable", providerId: snapshot.providerId,
+                    objectName: targetName, message: "Workspace changed while reading the preview. Retry the read."
+                });
+            }
+
+            return preview;
         }
     };
 };

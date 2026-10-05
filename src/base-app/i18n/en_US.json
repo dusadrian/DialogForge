@@ -49,6 +49,7 @@
     "General": "General",
     "Runtime": "Runtime",
     "Runtime status pending.": "Runtime status pending.",
+    "Runtime session is not ready.": "Runtime session is not ready.",
     "Start": "Start",
     "Start runtime": "Start runtime",
     "Stop": "Stop",

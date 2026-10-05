@@ -2,6 +2,7 @@ import type {
     DeclaredMissingSnapshot,
     DeclaredMissingUpdateRequest,
     DeclaredMissingUpdateResult,
+    RuntimeSessionSnapshot,
     UiCommandVisibility,
     ValueLabelSnapshot,
     ValueLabelUpdateRequest,
@@ -27,6 +28,7 @@ import {
     createValueLabelUpdateFromSelection,
     createVariableMetadataUpdateFromInputs
 } from "../commands/metadataCommands";
+import { captureDatasetConsumerScope } from "./datasetConsumerScope";
 
 
 interface MetadataControls {
@@ -53,6 +55,7 @@ export interface DatasetMetadataMutationBindings {
     getState(): DatasetEditorState;
     setState(state: DatasetEditorState): void;
     getObjectName(): string;
+    getRuntimeSnapshot(): RuntimeSessionSnapshot | null;
     getUiCommandVisibility(): UiCommandVisibility;
     renderSelection(): void;
     renderStatus(elementId: string, result: CommandStatus): void;
@@ -94,9 +97,15 @@ export const createDatasetMetadataMutationController = function(
     const readVariableMetadata = async function(
         objectName: string
     ): Promise<void> {
+        const isCurrent = captureDatasetConsumerScope(bindings);
+        if (!isCurrent()) {
+            return;
+        }
         const snapshot = await bindings.readVariableMetadata(objectName || "");
 
-        bindings.renderVariableMetadata(snapshot);
+        if (isCurrent()) {
+            bindings.renderVariableMetadata(snapshot);
+        }
     };
 
     const writeVariableMetadata = async function(): Promise<void> {
@@ -124,26 +133,47 @@ export const createDatasetMetadataMutationController = function(
         }
 
         request.uiCommandVisibility = bindings.getUiCommandVisibility();
+        const isCurrent = captureDatasetConsumerScope(bindings);
+        if (!isCurrent()) {
+            return;
+        }
         const result = await bindings.writeVariableMetadata(request);
 
+        if (!isCurrent()) {
+            return;
+        }
         bindings.renderVariableMetadataUpdate(result);
 
-        if (result.status === "updated") {
+        if (isCurrent() && result.status === "updated") {
             bindings.setState(datasetEditorReducer(bindings.getState(), {
                 type: "endEdit"
             }));
+            if (!isCurrent()) {
+                return;
+            }
             bindings.renderSelection();
+            if (!isCurrent()) {
+                return;
+            }
             void readVariableMetadata(result.objectName);
-            bindings.refreshRuntimeEvents();
+            if (isCurrent()) {
+                bindings.refreshRuntimeEvents();
+            }
         }
     };
 
     const readValueLabels = async function(
         objectName: string
     ): Promise<void> {
+        const isCurrent = captureDatasetConsumerScope(bindings);
+        if (!isCurrent()) {
+            return;
+        }
         const snapshot = await bindings.readValueLabels(objectName || "");
 
-        bindings.renderValueLabels(snapshot);
+        if (isCurrent()) {
+            bindings.renderValueLabels(snapshot);
+        }
     };
 
     const writeValueLabels = async function(): Promise<void> {
@@ -169,22 +199,37 @@ export const createDatasetMetadataMutationController = function(
         }
 
         command.request.uiCommandVisibility = bindings.getUiCommandVisibility();
+        const isCurrent = captureDatasetConsumerScope(bindings);
+        if (!isCurrent()) {
+            return;
+        }
         const result = await bindings.writeValueLabels(command.request);
 
+        if (!isCurrent()) {
+            return;
+        }
         bindings.renderValueLabelUpdate(result);
 
-        if (result.status === "updated") {
+        if (isCurrent() && result.status === "updated") {
             void readValueLabels(result.objectName);
-            bindings.refreshRuntimeEvents();
+            if (isCurrent()) {
+                bindings.refreshRuntimeEvents();
+            }
         }
     };
 
     const readDeclaredMissing = async function(
         objectName: string
     ): Promise<void> {
+        const isCurrent = captureDatasetConsumerScope(bindings);
+        if (!isCurrent()) {
+            return;
+        }
         const snapshot = await bindings.readDeclaredMissing(objectName || "");
 
-        bindings.renderDeclaredMissing(snapshot);
+        if (isCurrent()) {
+            bindings.renderDeclaredMissing(snapshot);
+        }
     };
 
     const writeDeclaredMissing = async function(): Promise<void> {
@@ -210,13 +255,22 @@ export const createDatasetMetadataMutationController = function(
         }
 
         command.request.uiCommandVisibility = bindings.getUiCommandVisibility();
+        const isCurrent = captureDatasetConsumerScope(bindings);
+        if (!isCurrent()) {
+            return;
+        }
         const result = await bindings.writeDeclaredMissing(command.request);
 
+        if (!isCurrent()) {
+            return;
+        }
         bindings.renderDeclaredMissingUpdate(result);
 
-        if (result.status === "updated") {
+        if (isCurrent() && result.status === "updated") {
             void readDeclaredMissing(result.objectName);
-            bindings.refreshRuntimeEvents();
+            if (isCurrent()) {
+                bindings.refreshRuntimeEvents();
+            }
         }
     };
 

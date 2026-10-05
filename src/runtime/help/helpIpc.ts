@@ -26,6 +26,7 @@ export const helpIpcChannels = {
     readTopic: "base-app:readHelpTopic",
     getDocument: "base-app:getHelpDocument",
     openTopic: "base-app:openHelpTopic",
+    retireRequest: "base-app:retireHelpRequest",
     openCommandUrl: "base-app:openHelpCommandUrl",
     openRCommandUrl: "rHelp:openCommandUrl",
     fetchRPage: "rHelp:fetchPage",
@@ -45,6 +46,10 @@ interface HelpIpcRoutes {
     "base-app:openHelpTopic": {
         input: [Partial<HelpTopicRequest>];
         result: HelpTopicResult;
+    };
+    "base-app:retireHelpRequest": {
+        input: [];
+        result: void;
     };
     "base-app:openHelpCommandUrl": {
         input: [string];

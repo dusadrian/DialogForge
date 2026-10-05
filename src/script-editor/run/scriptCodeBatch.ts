@@ -8,6 +8,7 @@ import type {
     TranscriptEvent,
     VisibleCommandRequest
 } from "../../runtime/provider-contract/runtimeProvider";
+import type { RuntimeCommandResult } from "../../runtime/commands/runtimeCommandReceipt";
 import type {
     ScriptCodeBatchResult
 } from "../scriptEditorIpc";
@@ -20,7 +21,7 @@ export interface ScriptCodeBatchInput {
 export interface ScriptCodeBatchRunnerOptions {
     source?: string;
     ensureRuntimeReady(): Promise<boolean>;
-    executeVisibleCommand(request: VisibleCommandRequest): Promise<TranscriptEvent[]>;
+    executeVisibleCommand(request: VisibleCommandRequest): Promise<RuntimeCommandResult>;
     publishCommandBoundary?(code: string): void;
 }
 
@@ -68,15 +69,28 @@ export const runScriptCodeBatch = async function(
     const source = options.source || "base-app.script-editor";
 
     for (const chunk of chunks) {
-        const nextEvents = await options.executeVisibleCommand(
+        const result = await options.executeVisibleCommand(
             createVisibleCommandRequest({
                 text: chunk,
                 source
             })
         );
 
+        const nextEvents = Array.isArray(result) ? result : result?.transcriptEvents || [];
         events.push(...nextEvents);
+
+        if (!Array.isArray(result) && (
+            !result
+            || result.executionDisposition === "session_lost"
+            || result.executionDisposition === "not_started"
+            || (result.ok === false && !result.executionDisposition && !result.evaluationOutcome)
+        )) {
+            return { status: "unavailable", events };
+        }
         options.publishCommandBoundary?.(chunk);
+        if (!Array.isArray(result) && result.evaluationOutcome === "interrupted") {
+            return { status: "interrupted", events };
+        }
     }
 
     return {

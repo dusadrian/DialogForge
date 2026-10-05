@@ -422,10 +422,13 @@ export const createRPackageVersionsCommand = function(
     return `local({
         .pkgs <- ${createRCharacterVector(names)}
         .versions <- vapply(.pkgs, function(.pkg) {
-            if (requireNamespace(.pkg, quietly = TRUE)) {
+            if (base::requireNamespace(.pkg, quietly = TRUE)) {
                 as.character(utils::packageVersion(.pkg))
             }
             else {
+                if (length(find.package(.pkg, quiet = TRUE))) {
+                    stop(paste("Installed R package could not load:", .pkg))
+                }
                 ${JSON.stringify(missingVersionMarker)}
             }
         }, character(1))

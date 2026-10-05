@@ -45,13 +45,6 @@ const readNestedRecord = function(value: unknown, key: string): Record<string, u
 };
 
 
-const parsePart = function(value: unknown): string[] {
-    return String(value || "").split(",").map((entry) => {
-        return entry.trim();
-    }).filter(Boolean);
-};
-
-
 const createRCharacterVector = function(values: string[]): string {
     return `c(${values.map((value) => {
         return JSON.stringify(value);
@@ -90,6 +83,17 @@ export const readRDialogPackageRequirements = function(
 };
 
 
+export const createRDialogCommandPackageRequirements = function(
+    dependencies: unknown,
+    requirements: unknown
+): RPackageRequirement[] {
+    return mergeRPackageRequirements(
+        createRPackageRequirementsFromNames(dependencies),
+        requirements
+    );
+};
+
+
 export const createRRuntimePackageStatusCommand = function(
     packages: string[]
 ): string {
@@ -102,7 +106,7 @@ export const createRRuntimePackageStatusCommand = function(
     return `local({
             .pkgs <- ${createRCharacterVector(normalized)}
             .installed <- vapply(.pkgs, function(.pkg) {
-                nzchar(find.package(.pkg, quiet = TRUE))
+                length(find.package(.pkg, quiet = TRUE)) > 0L
             }, logical(1))
             .missing <- .pkgs[!.installed]
             .attached <- .pkgs[vapply(.pkgs, function(.pkg) is.element(paste0("package:", .pkg), search()), logical(1))]
@@ -118,13 +122,61 @@ export const createRLibraryLoadCommand = function(packageName: unknown): string 
 };
 
 
+export const createRRuntimeLoadedPackageCommand = function(packages: string[]): string {
+    const normalized = parseRPackageList(packages);
+    if (!normalized.length) {
+        return "";
+    }
+    return `base::local({
+        .pkgs <- base::${createRCharacterVector(normalized)}
+        .loaded_namespaces <- base::loadedNamespaces()
+        .search <- base::search()
+        .loaded <- .pkgs[base::vapply(.pkgs, function(.pkg) {
+            base::is.element(base::paste0("package:", .pkg), .search) ||
+                base::is.element(.pkg, .loaded_namespaces)
+        }, base::logical(1))]
+        base::cat(base::paste(.loaded, collapse = ","))
+    })`;
+};
+
+
 export const parseRRuntimePackageStatus = function(
-    value: unknown
+    value: unknown,
+    requestedPackages?: readonly string[]
 ): RuntimePackageStatus {
-    const [missingPart = "", attachedPart = ""] = String(value || "").split("|");
+    if (typeof value !== "string") {
+        throw new Error("Invalid R package status response.");
+    }
+
+    const parts = value.trim().split("|");
+
+    if (parts.length !== 2) {
+        throw new Error("Invalid R package status response.");
+    }
+
+    const names = parts.map((part) => {
+        if (!part) {
+            return [];
+        }
+
+        const entries = part.split(",");
+
+        if (
+            entries.some((name) => !/^[A-Za-z][A-Za-z0-9.]*$/.test(name))
+            || new Set(entries).size !== entries.length
+            || (
+                requestedPackages
+                && entries.some((name) => !requestedPackages.includes(name))
+            )
+        ) {
+            throw new Error("Invalid R package status response.");
+        }
+
+        return entries;
+    });
 
     return {
-        missing: parsePart(missingPart),
-        attached: parsePart(attachedPart)
+        missing: names[0],
+        attached: names[1]
     };
 };

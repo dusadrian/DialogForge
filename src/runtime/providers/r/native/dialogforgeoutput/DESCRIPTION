@@ -1,0 +1,13 @@
+Package: dialogforgeoutput
+Type: Package
+Title: Experimental Ordered Output Capture for DialogForge
+Version: 0.0.1
+Authors@R: person("Adrian", "Dusa", role = c("aut", "cre", "cph"),
+    email = "dusa.adrian@unibuc.ro")
+Description: Prototype custom output connections sharing one bounded native
+    write journal. Not enabled in normal application startup or distributed
+    runtime builds. Transport delivery and warning policy remain separate.
+License: GPL-3
+Encoding: UTF-8
+Depends: R (>= 4.5.0)
+NeedsCompilation: yes

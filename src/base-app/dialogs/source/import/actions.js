@@ -2,6 +2,16 @@ let previewRoot = null;
 let lastSuggestedObjectName = '';
 let workingDirectory = '';
 let homeDirectory = '';
+const previewInputNode = getElementNode(input1);
+const previewCanvas = previewInputNode?.closest('#paper') || null;
+let previewRequestId = 0;
+const isImportDialogCurrent = () => {
+    return Boolean(
+        previewCanvas
+        && previewInputNode?.isConnected
+        && previewCanvas.contains(previewInputNode)
+    );
+};
 const ENCODING_VALUE_BY_LABEL = {
   'UTF-8': 'utf8',
   'UTF-8-BOM': 'UTF-8-BOM',
@@ -248,25 +258,35 @@ const buildCommand = () => {
   return datasetName() + ' <- ' + formatCall(payload.command, args);
 };
 const ensurePreviewRoot = () => {
-  if (previewRoot && previewRoot.isConnected) return previewRoot;
-  const host = document.createElement('div');
-  host.style.position = 'absolute';
-  host.style.left = '15px';
-  host.style.top = '205px';
-  host.style.width = '537px';
-  host.style.height = '155px';
-  host.style.border = '1px solid #b8b8b8';
-  host.style.borderRadius = '4px';
-  host.style.background = '#ffffff';
-  host.style.overflow = 'auto';
-  host.style.fontSize = '12px';
-  host.style.zIndex = '1';
-  document.body.appendChild(host);
-  previewRoot = host;
-  return host;
+    if (!isImportDialogCurrent()) {
+        return null;
+    }
+    if (previewRoot && previewRoot.isConnected) {
+        return previewRoot;
+    }
+
+    const host = document.createElement('div');
+    host.style.position = 'absolute';
+    host.style.left = '15px';
+    host.style.top = '205px';
+    host.style.width = '537px';
+    host.style.height = '155px';
+    host.style.border = '1px solid #b8b8b8';
+    host.style.borderRadius = '4px';
+    host.style.background = '#ffffff';
+    host.style.overflow = 'auto';
+    host.style.fontSize = '12px';
+    host.style.zIndex = '1';
+    // Rebuilding the shared canvas must also retire this activation's preview.
+    previewCanvas.appendChild(host);
+    previewRoot = host;
+    return host;
 };
 const renderPreview = (payload) => {
   const root = ensurePreviewRoot();
+    if (!root) {
+        return;
+    }
   root.innerHTML = '';
   const errorMessage = String(payload && payload.error || '').trim();
   if (errorMessage) {
@@ -327,22 +347,35 @@ const renderPreview = (payload) => {
   root.appendChild(table);
 };
 const refreshPreview = async () => {
-  syncTypeControls();
-  const knownType = syncFileTypeError();
-  await refreshWorkingDirectory();
-  const command = buildCommand();
-  updateSyntax(command);
-  if (!knownType) {
-    renderPreview({ error: UNKNOWN_FILE_TYPE_ERROR });
-    return;
-  }
-  if (!filePath()) {
-    renderPreview(null);
-    return;
-  }
-  renderPreview({ error: 'Loading preview...' });
-  const out = await getImportPreview(previewPayload());
-  renderPreview(out);
+    const requestId = ++previewRequestId;
+    if (!isImportDialogCurrent()) {
+        return;
+    }
+
+    syncTypeControls();
+    const knownType = syncFileTypeError();
+    await refreshWorkingDirectory();
+    if (!isImportDialogCurrent() || requestId !== previewRequestId) {
+        return;
+    }
+
+    const command = buildCommand();
+    updateSyntax(command);
+    if (!knownType) {
+        renderPreview({ error: UNKNOWN_FILE_TYPE_ERROR });
+        return;
+    }
+    if (!filePath()) {
+        renderPreview(null);
+        return;
+    }
+
+    renderPreview({ error: 'Loading preview...' });
+    const out = await getImportPreview(previewPayload());
+    if (!isImportDialogCurrent() || requestId !== previewRequestId) {
+        return;
+    }
+    renderPreview(out);
 };
 check(radio1);
 check(radio5);
@@ -350,16 +383,22 @@ check(radio7);
 syncTypeControls();
 setValue(select4, 'None');
 onClick(browse, async () => {
-  const picked = await openImportFile();
-  const nextPath = picked && picked.ok ? String(picked.filePath || '') : '';
-  if (!nextPath) {
-    if (picked && picked.message) addError(input1, String(picked.message));
-    return;
-  }
-  clearError(input1);
-  setValue(input1, nextPath);
-  syncSuggestedDatasetName();
-  await refreshPreview();
+    const picked = await openImportFile();
+    if (!isImportDialogCurrent()) {
+        return;
+    }
+
+    const nextPath = picked && picked.ok ? String(picked.filePath || '') : '';
+    if (!nextPath) {
+        if (picked && picked.message) {
+            addError(input1, String(picked.message));
+        }
+        return;
+    }
+    clearError(input1);
+    setValue(input1, nextPath);
+    syncSuggestedDatasetName();
+    await refreshPreview();
 });
 onChange(input1, () => {
   syncSuggestedDatasetName();
@@ -384,14 +423,20 @@ onChange(type_group, () => {
 });
 onChange(decimal_group, refreshPreview);
 onClick(b_import, async () => {
-  await refreshWorkingDirectory();
-  const command = buildCommand();
-  if (!filePath()) {
-    addError(input1, 'No file selected');
-    return;
-  }
-  if (!syncFileTypeError()) return;
-  clearError(input1);
-  await run(command, commandRuntimeOptions(command));
+    await refreshWorkingDirectory();
+    if (!isImportDialogCurrent()) {
+        return;
+    }
+
+    const command = buildCommand();
+    if (!filePath()) {
+        addError(input1, 'No file selected');
+        return;
+    }
+    if (!syncFileTypeError()) {
+        return;
+    }
+    clearError(input1);
+    await run(command, commandRuntimeOptions(command));
 });
 refreshPreview();

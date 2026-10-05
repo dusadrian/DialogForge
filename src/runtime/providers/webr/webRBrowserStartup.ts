@@ -9,12 +9,11 @@ import {
     setWebRWorkingDirectory
 } from "./webRFileSystem";
 import {
-    flushWebROutputQueue
-} from "./webRInstallProgressAdapter";
-import {
+    flushWebROutputQueue,
     readWebRMessageText,
     type WebROutputMessage
 } from "./webROutputMessages";
+import { readRStartupOutput } from "../r/session/rStartupOutput";
 import type {
     RuntimeSessionSnapshot
 } from "../../provider-contract/runtimeProvider";
@@ -36,7 +35,6 @@ export interface BrowserWebRStartupOptions {
 
 export interface BrowserWebRStoppableRuntime {
     close?: () => Promise<unknown> | unknown;
-    destroy?: () => Promise<unknown> | unknown;
 }
 
 
@@ -45,12 +43,9 @@ const readWebRStartupOutput = async function(runtime: WebR): Promise<string> {
         const messages = await runtime.flush() as WebROutputMessage[];
         const output = messages
             .map(readWebRMessageText)
-            .join("\n")
-            .trim();
+            .join("\n");
 
-        return output
-            .replace(/(?:^|\n)>\s*$/, "")
-            .trimEnd();
+        return readRStartupOutput(output);
     }
     catch {
         return "";
@@ -83,27 +78,33 @@ export const startBrowserWebRRuntime = async function(
         importWebRModule: options.importWebRModule
     }) as WebR;
 
-    options.setStatus("Initializing WebR...");
-    await runtime.init();
+    try {
+        options.setStatus("Initializing WebR...");
+        await runtime.init();
 
-    if (options.startQuiet === true) {
-        await flushWebROutputQueue(runtime);
-    }
-    else {
-        const startupOutput = await readWebRStartupOutput(runtime);
-
-        if (startupOutput) {
-            options.writeStartupOutput?.(`${startupOutput}\n\n`);
+        if (options.startQuiet === true) {
+            await flushWebROutputQueue(runtime);
         }
+        else {
+            const startupOutput = await readWebRStartupOutput(runtime);
+
+            if (startupOutput) {
+                options.writeStartupOutput?.(`${startupOutput}\n\n`);
+            }
+        }
+
+        await options.mountPackageLibrary(runtime);
+        options.setStatus("Preparing WebR workspace...");
+        await setWebRWorkingDirectory(runtime, options.workingDirectoryPath);
+        await installWebRPackageInstallShim(runtime);
+        await flushWebROutputQueue(runtime);
+
+        return runtime;
+    } catch (error) {
+        // This worker was allocated here; failed initialization must close it.
+        await stopBrowserWebRRuntime(runtime);
+        throw error;
     }
-
-    await options.mountPackageLibrary(runtime);
-    options.setStatus("Preparing WebR workspace...");
-    await setWebRWorkingDirectory(runtime, options.workingDirectoryPath);
-    await installWebRPackageInstallShim(runtime);
-    await flushWebROutputQueue(runtime);
-
-    return runtime;
 };
 
 
@@ -115,8 +116,4 @@ export const stopBrowserWebRRuntime = async function(
     }
     catch {}
 
-    try {
-        await runtime?.destroy?.();
-    }
-    catch {}
 };

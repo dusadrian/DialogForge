@@ -36,6 +36,8 @@ export interface RuntimeCapabilityRequestControllerOptions {
     toolExecutionController: RuntimeToolExecutionController;
     queryExecutionController: RuntimeQueryExecutionController;
     getSnapshot(): RuntimeSessionSnapshot;
+    getWorkspaceReadEpoch?(): number;
+    isWorkspaceReadAvailable?(): boolean;
     hasRuntimeCapability(capability: RuntimeCapability): boolean;
 }
 
@@ -54,6 +56,15 @@ export interface RuntimeCapabilityRequestController {
 export const createRuntimeCapabilityRequestController = function(
     options: RuntimeCapabilityRequestControllerOptions
 ): RuntimeCapabilityRequestController {
+    const isCurrentRead = function(snapshot: RuntimeSessionSnapshot): boolean {
+        const current = options.getSnapshot();
+
+        return current.providerId === snapshot.providerId
+            && current.lifecycleGeneration === snapshot.lifecycleGeneration
+            && current.status === snapshot.status;
+    };
+    const retiredReadMessage = "Runtime session changed while reading; the old result was discarded.";
+
     return {
         readHelpTopic: async function(request) {
             const snapshot = options.getSnapshot();
@@ -84,17 +95,37 @@ export const createRuntimeCapabilityRequestController = function(
                 });
             }
 
-            return options.toolExecutionController.readHelpTopic(request);
+            const result = await options.toolExecutionController.readHelpTopic(request);
+            if (!isCurrentRead(snapshot)) {
+                return createHelpTopicResult({
+                    status: "unavailable", providerId: snapshot.providerId,
+                    topic: request.topic, message: retiredReadMessage
+                });
+            }
+
+            return result;
         },
         readCompletions: async function(request) {
             const snapshot = options.getSnapshot();
+            const workspaceEpoch = options.getWorkspaceReadEpoch?.();
+            const isCurrentCompletionRead = function(): boolean {
+                return isCurrentRead(snapshot)
+                    && workspaceEpoch === options.getWorkspaceReadEpoch?.()
+                    && options.isWorkspaceReadAvailable?.() !== false;
+            };
+            const discardedCompletion = function(): CompletionResult {
+                return createCompletionResult({
+                    status: "unavailable", providerId: snapshot.providerId,
+                    prefix: request.prefix, message: retiredReadMessage
+                });
+            };
 
-            if (snapshot.status !== "ready") {
+            if (snapshot.status !== "ready" || options.isWorkspaceReadAvailable?.() === false) {
                 return createCompletionResult({
                     status: "unavailable",
                     providerId: snapshot.providerId,
                     prefix: request.prefix,
-                    message: "Runtime session is not ready."
+                    message: "Runtime session or workspace is not ready for completions."
                 });
             }
 
@@ -106,7 +137,22 @@ export const createRuntimeCapabilityRequestController = function(
                 }));
             }
 
-            return options.toolExecutionController.readCompletions(request);
+            let result: CompletionResult;
+            try {
+                result = await options.toolExecutionController.readCompletions(request);
+            }
+            catch (error) {
+                if (isCurrentCompletionRead()) {
+                    throw error;
+                }
+
+                return discardedCompletion();
+            }
+            if (!isCurrentCompletionRead()) {
+                return discardedCompletion();
+            }
+
+            return result;
         },
         checkDependencies: async function(request) {
             const snapshot = options.getSnapshot();
@@ -137,7 +183,15 @@ export const createRuntimeCapabilityRequestController = function(
                 });
             }
 
-            return options.toolExecutionController.checkDependencies(request);
+            const result = await options.toolExecutionController.checkDependencies(request);
+            if (!isCurrentRead(snapshot)) {
+                return createDependencyCheckResult({
+                    status: "unavailable", providerId: snapshot.providerId,
+                    kind: request.kind, message: retiredReadMessage
+                });
+            }
+
+            return result;
         },
         executeInvisibleQuery: async function(request) {
             const snapshot = options.getSnapshot();
@@ -168,7 +222,15 @@ export const createRuntimeCapabilityRequestController = function(
                 });
             }
 
-            return options.queryExecutionController.executeInvisibleQuery(request);
+            const result = await options.queryExecutionController.executeInvisibleQuery(request);
+            if (!isCurrentRead(snapshot)) {
+                return createInvisibleQueryResult({
+                    status: "unavailable", providerId: snapshot.providerId,
+                    query: request.query, message: retiredReadMessage
+                });
+            }
+
+            return result;
         },
         executeInvisibleMutation: async function(request) {
             const snapshot = options.getSnapshot();

@@ -1,9 +1,9 @@
 import type {
     ProductCommandRequest,
     ProductCommandResult,
-    TranscriptEvent,
     VisibleCommandRequest
 } from "../../runtime/provider-contract/runtimeProvider";
+import type { RuntimeCommandReceipt } from "../../runtime/commands/runtimeCommandReceipt";
 
 
 export const runtimeCommandIpcChannels = {
@@ -27,7 +27,7 @@ interface RuntimeCommandIpcInputs {
 
 
 interface RuntimeCommandIpcResults {
-    "base-app:executeVisibleCommand": TranscriptEvent[];
+    "base-app:executeVisibleCommand": RuntimeCommandReceipt;
     "base-app:executeProductCommand": ProductCommandResult;
 }
 

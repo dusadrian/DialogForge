@@ -55,7 +55,7 @@ export const createRuntimeSessionLifecycleState = function(
             return true;
         },
         getSnapshot: function() {
-            return Object.assign({}, snapshot);
+            return Object.assign({}, snapshot, { lifecycleGeneration: generation });
         }
     };
 };

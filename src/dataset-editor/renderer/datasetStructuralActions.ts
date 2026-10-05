@@ -50,8 +50,7 @@ export interface DatasetStructuralActionsOptions {
     confirm: (message: string) => boolean;
     hideHeaderMenu: () => void;
     hideRowMenu: () => void;
-    showLoading: (message: string) => void;
-    hideLoading: () => void;
+    showLoading: (message: string) => () => void;
     showNotice: (message: string) => void;
     rememberCommand: (command: string) => void;
     resetSelectionAfterSort: (columnName: string) => void;
@@ -60,6 +59,7 @@ export interface DatasetStructuralActionsOptions {
 
 
 export interface DatasetStructuralActions {
+    invalidate: () => void;
     sortRowsByColumn: (
         columnName: string,
         decreasing: boolean
@@ -128,6 +128,17 @@ const suggestedRowName = function(
 export const createDatasetStructuralActions = function(
     options: DatasetStructuralActionsOptions
 ): DatasetStructuralActions {
+    let operationSequence = 0;
+
+    const captureAction = function(datasetName: string): () => boolean {
+        const sequence = ++operationSequence;
+
+        return function(): boolean {
+            return sequence === operationSequence
+                && datasetName === options.getDatasetName();
+        };
+    };
+
     const sortRowsByColumn = async function(
         columnInput: string,
         decreasing: boolean
@@ -139,8 +150,12 @@ export const createDatasetStructuralActions = function(
             return;
         }
 
+        const isCurrent = captureAction(datasetName);
         options.hideHeaderMenu();
-        options.showLoading(
+        if (!isCurrent()) {
+            return;
+        }
+        const releaseLoading = options.showLoading(
             options.translate(
                 decreasing
                     ? "Sorting descending..."
@@ -149,6 +164,9 @@ export const createDatasetStructuralActions = function(
         );
 
         try {
+            if (!isCurrent()) {
+                return;
+            }
             const result = await options.client.sortRows(
                 datasetName,
                 columnName,
@@ -159,14 +177,26 @@ export const createDatasetStructuralActions = function(
                 }
             );
 
+            if (!isCurrent()) {
+                return;
+            }
             if (!result) {
                 options.showNotice(options.translate("Sort failed"));
                 return;
             }
 
             options.rememberCommand(String(result.command || ""));
+            if (!isCurrent()) {
+                return;
+            }
             options.resetSelectionAfterSort(columnName);
+            if (!isCurrent()) {
+                return;
+            }
             await options.refreshDataset(datasetName);
+            if (!isCurrent()) {
+                return;
+            }
             options.showNotice(
                 options.translate(
                     decreasing
@@ -175,8 +205,13 @@ export const createDatasetStructuralActions = function(
                 )
             );
         }
+        catch (error) {
+            if (isCurrent()) {
+                throw error;
+            }
+        }
         finally {
-            options.hideLoading();
+            releaseLoading();
         }
     };
 
@@ -191,7 +226,11 @@ export const createDatasetStructuralActions = function(
             return;
         }
 
+        const isCurrent = captureAction(datasetName);
         options.hideHeaderMenu();
+        if (!isCurrent()) {
+            return;
+        }
         const schema = options.getSchema();
         const currentIndex = (schema?.columns || []).findIndex((entry) => {
             return String(entry?.name || "") === columnName;
@@ -208,9 +247,12 @@ export const createDatasetStructuralActions = function(
             ? currentIndex + 1
             : currentIndex + 2;
         const nextName = suggestedColumnName(schema, insertAt);
-        options.showLoading(options.translate("Adding column..."));
+        const releaseLoading = options.showLoading(options.translate("Adding column..."));
 
         try {
+            if (!isCurrent()) {
+                return;
+            }
             const result = await options.client.insertColumn(
                 datasetName,
                 columnName,
@@ -218,6 +260,9 @@ export const createDatasetStructuralActions = function(
                 position
             );
 
+            if (!isCurrent()) {
+                return;
+            }
             options.showNotice(
                 options.translate(
                     result
@@ -226,8 +271,13 @@ export const createDatasetStructuralActions = function(
                 )
             );
         }
+        catch (error) {
+            if (isCurrent()) {
+                throw error;
+            }
+        }
         finally {
-            options.hideLoading();
+            releaseLoading();
         }
     };
 
@@ -241,7 +291,11 @@ export const createDatasetStructuralActions = function(
             return;
         }
 
+        const isCurrent = captureAction(datasetName);
         options.hideHeaderMenu();
+        if (!isCurrent()) {
+            return;
+        }
         const confirmed = options.confirm(
             interpolateName(
                 options.translate('Remove column "{name}"?'),
@@ -249,18 +303,24 @@ export const createDatasetStructuralActions = function(
             )
         );
 
-        if (!confirmed) {
+        if (!confirmed || !isCurrent()) {
             return;
         }
 
-        options.showLoading(options.translate("Removing column..."));
+        const releaseLoading = options.showLoading(options.translate("Removing column..."));
 
         try {
+            if (!isCurrent()) {
+                return;
+            }
             const result = await options.client.removeColumn(
                 datasetName,
                 columnName
             );
 
+            if (!isCurrent()) {
+                return;
+            }
             options.showNotice(
                 options.translate(
                     result
@@ -269,8 +329,13 @@ export const createDatasetStructuralActions = function(
                 )
             );
         }
+        catch (error) {
+            if (isCurrent()) {
+                throw error;
+            }
+        }
         finally {
-            options.hideLoading();
+            releaseLoading();
         }
     };
 
@@ -289,7 +354,11 @@ export const createDatasetStructuralActions = function(
             return;
         }
 
+        const isCurrent = captureAction(datasetName);
         options.hideRowMenu();
+        if (!isCurrent()) {
+            return;
+        }
         const insertAt = position === "before"
             ? rowNumber
             : rowNumber + 1;
@@ -297,9 +366,12 @@ export const createDatasetStructuralActions = function(
             options.getLoadedRowNames(),
             insertAt
         );
-        options.showLoading(options.translate("Adding row..."));
+        const releaseLoading = options.showLoading(options.translate("Adding row..."));
 
         try {
+            if (!isCurrent()) {
+                return;
+            }
             const result = await options.client.insertRow(
                 datasetName,
                 rowNumber,
@@ -307,6 +379,9 @@ export const createDatasetStructuralActions = function(
                 position
             );
 
+            if (!isCurrent()) {
+                return;
+            }
             options.showNotice(
                 options.translate(
                     result
@@ -315,8 +390,13 @@ export const createDatasetStructuralActions = function(
                 )
             );
         }
+        catch (error) {
+            if (isCurrent()) {
+                throw error;
+            }
+        }
         finally {
-            options.hideLoading();
+            releaseLoading();
         }
     };
 
@@ -332,7 +412,11 @@ export const createDatasetStructuralActions = function(
             return;
         }
 
+        const isCurrent = captureAction(datasetName);
         options.hideRowMenu();
+        if (!isCurrent()) {
+            return;
+        }
         const confirmed = options.confirm(
             interpolateNumber(
                 options.translate('Delete row "{number}"?'),
@@ -340,18 +424,24 @@ export const createDatasetStructuralActions = function(
             )
         );
 
-        if (!confirmed) {
+        if (!confirmed || !isCurrent()) {
             return;
         }
 
-        options.showLoading(options.translate("Deleting row..."));
+        const releaseLoading = options.showLoading(options.translate("Deleting row..."));
 
         try {
+            if (!isCurrent()) {
+                return;
+            }
             const result = await options.client.removeRow(
                 datasetName,
                 rowNumber
             );
 
+            if (!isCurrent()) {
+                return;
+            }
             options.showNotice(
                 options.translate(
                     result
@@ -360,12 +450,20 @@ export const createDatasetStructuralActions = function(
                 )
             );
         }
+        catch (error) {
+            if (isCurrent()) {
+                throw error;
+            }
+        }
         finally {
-            options.hideLoading();
+            releaseLoading();
         }
     };
 
     return {
+        invalidate: function(): void {
+            operationSequence += 1;
+        },
         sortRowsByColumn,
         insertColumn,
         removeColumn,

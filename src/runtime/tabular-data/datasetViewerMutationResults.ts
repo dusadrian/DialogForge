@@ -1,5 +1,4 @@
 import type {
-    CellUpdateBatchResult,
     CellUpdateResult,
     ColumnInsertResult,
     ColumnRemoveResult,
@@ -345,33 +344,6 @@ export const collectDatasetViewerVariablePatchParams = function(
     });
 
     return params;
-};
-
-
-export const createDatasetViewerCellUpdateBatchResult = function(
-    input: {
-        providerId: string;
-        objectName: string;
-        results: CellUpdateResult[];
-        workspaceReconciliation?: CellUpdateBatchResult["workspaceReconciliation"];
-    }
-): CellUpdateBatchResult {
-    const updated = input.results.filter((result) => {
-        return result.status === "updated";
-    }).length;
-    const failed = input.results.length - updated;
-
-    return {
-        status: failed > 0 ? "partial" : "updated",
-        providerId: input.providerId,
-        objectName: input.objectName,
-        updated,
-        failed,
-        results: input.results,
-        workspaceReconciliation: input.workspaceReconciliation,
-        message: `${updated} cell${updated === 1 ? "" : "s"} updated.`,
-        updatedAt: new Date().toISOString()
-    };
 };
 
 

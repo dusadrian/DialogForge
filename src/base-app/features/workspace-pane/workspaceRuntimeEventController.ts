@@ -1,10 +1,15 @@
 import type {
-    RuntimeCapability,
     RuntimeEventRecord,
     RuntimeEventSnapshot,
-    WorkspaceObjectSnapshot,
     WorkspaceSnapshot
 } from "../../../runtime/provider-contract/runtimeProvider";
+import {
+    applyWorkspaceUpdateToObjects,
+    createWorkspaceUpdate
+} from "../../../runtime/workspace/workspaceUpdate";
+import {
+    readLatestAddedWorkspaceDataset
+} from "../../../runtime/workspace/workspaceDatasetSelection";
 
 
 export interface WorkspaceRuntimeEventControllerBindings {
@@ -21,68 +26,6 @@ export interface WorkspaceRuntimeEventController {
 
 
 const maximumAppliedEventKeys = 160;
-
-
-const workspaceObjectName = function(value: unknown): string {
-    if (!value || typeof value !== "object") {
-        return "";
-    }
-
-    const record = value as Record<string, unknown>;
-
-    return String(
-        record.name || record.access_key || record.display_name || ""
-    ).trim();
-};
-
-
-const isDatasetWorkspaceObject = function(value: unknown): boolean {
-    if (!value || typeof value !== "object") {
-        return false;
-    }
-
-    const record = value as Record<string, unknown>;
-    const kind = String(
-        record.kind || record.display_type || record.type_info || ""
-    ).trim().toLowerCase();
-
-    return kind === "table" || kind === "data.frame" || kind === "tibble";
-};
-
-
-const normalizeWorkspaceObject = function(
-    value: unknown
-): WorkspaceObjectSnapshot | null {
-    if (!value || typeof value !== "object") {
-        return null;
-    }
-
-    const record = value as Record<string, unknown>;
-    const name = workspaceObjectName(record);
-
-    if (!name) {
-        return null;
-    }
-
-    const capabilities = Array.isArray(record.capabilities)
-        ? record.capabilities.filter(
-            (capability): capability is RuntimeCapability => {
-                return typeof capability === "string";
-            }
-        )
-        : [];
-
-    return {
-        name,
-        kind: String(
-            record.kind || record.display_type || record.type_info || "other"
-        ).trim() || "other",
-        detail: String(record.detail || record.display_value || "").trim(),
-        hasViewer: Boolean(record.hasViewer || record.has_viewer),
-        provenance: null,
-        capabilities
-    };
-};
 
 
 export const createWorkspaceRuntimeEventController = function(
@@ -120,9 +63,36 @@ export const createWorkspaceRuntimeEventController = function(
             return;
         }
 
+        const snapshot = bindings.getWorkspaceSnapshot();
+        const payload = event.payload || {};
+        const update = createWorkspaceUpdate(payload);
+        const revision = update.workspaceRevision;
+
+        // Event history is a delta stream, not an authoritative recovery
+        // snapshot. It cannot initialize or repair a versioned baseline.
+        if (
+            (snapshot && snapshot.status !== "ready")
+            || (event.providerId && snapshot?.providerId
+                && event.providerId !== snapshot.providerId)
+            || (payload.workspaceRevision !== undefined && !revision)
+        ) {
+            return;
+        }
+
+        if (revision || snapshot?.workspaceRevision) {
+            const currentRevision = snapshot?.workspaceRevision;
+
+            if (
+                !revision || !currentRevision
+                || revision.session !== currentRevision.session
+                || revision.sequence <= currentRevision.sequence
+            ) {
+                return;
+            }
+        }
+
         rememberAppliedEventKey(eventKey);
 
-        const snapshot = bindings.getWorkspaceSnapshot();
         const current = snapshot && snapshot.status === "ready"
             ? snapshot
             : {
@@ -132,59 +102,20 @@ export const createWorkspaceRuntimeEventController = function(
                 message: "",
                 refreshedAt: ""
             };
-        const objectsByName = new Map<string, WorkspaceObjectSnapshot>();
-
-        current.objects.forEach((entry) => {
-            const name = workspaceObjectName(entry);
-
-            if (name) {
-                objectsByName.set(name, entry);
-            }
-        });
-
-        const payload = event.payload || {};
-        const added = Array.isArray(payload.added) ? payload.added : [];
-        const updated = Array.isArray(payload.updated) ? payload.updated : [];
-        const removed = Array.isArray(payload.removed) ? payload.removed : [];
-        let latestAddedDataset = "";
-
-        added.forEach((entry) => {
-            const object = normalizeWorkspaceObject(entry);
-
-            if (!object) {
-                return;
-            }
-
-            if (isDatasetWorkspaceObject(entry)) {
-                latestAddedDataset = object.name;
-            }
-
-            objectsByName.set(object.name, object);
-        });
-
-        updated.forEach((entry) => {
-            const object = normalizeWorkspaceObject(entry);
-
-            if (object) {
-                objectsByName.set(object.name, object);
-            }
-        });
-
-        removed.forEach((entry) => {
-            const name = String(entry || "").trim();
-
-            if (name) {
-                objectsByName.delete(name);
-            }
-        });
+        const objects = applyWorkspaceUpdateToObjects(current.objects, update);
+        const latestAddedDataset = readLatestAddedWorkspaceDataset(
+            objects,
+            update.added.map((object) => object.name)
+        );
 
         bindings.renderWorkspace({
             status: "ready",
+            ...(revision ? { workspaceRevision: revision } : {}),
             providerId: current.providerId
                 || event.providerId
                 || bindings.getRuntimeProviderId(),
-            objects: Array.from(objectsByName.values()),
-            message: String(payload.message || `${objectsByName.size} objects`),
+            objects,
+            message: String(payload.message || `${objects.length} objects`),
             refreshedAt: event.createdAt || new Date().toISOString()
         });
 
@@ -194,6 +125,9 @@ export const createWorkspaceRuntimeEventController = function(
     };
 
     const applySnapshot = function(snapshot: RuntimeEventSnapshot): void {
+        if (snapshot.status !== "ready") {
+            return;
+        }
         snapshot.events.forEach(applyEvent);
     };
 

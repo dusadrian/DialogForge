@@ -166,6 +166,9 @@ const createVariableFromWorkspaceObject = function(object: WorkspaceObjectSnapsh
 
 export const normalizeWorkspaceSnapshot = function(value: unknown): WorkspaceSnapshotPayload {
     if (isRuntimeWorkspaceSnapshot(value)) {
+        if (value.freshness === "unavailable") {
+            return { ...EMPTY_SNAPSHOT };
+        }
         const variables = value.objects
             .map(createVariableFromWorkspaceObject)
             .filter((variable) => {
@@ -506,6 +509,7 @@ export const createWorkspacePane = function(options: WorkspacePaneOptions): Work
     const container = options.container;
     let t = options.t || ((key: string) => key);
     let snapshot: WorkspaceSnapshotPayload = { ...EMPTY_SNAPSHOT };
+    let runtimeUnavailable = false;
     let previousFingerprints = new Map<string, string>();
     let collapsedGroups = new Set<string>();
     let recentTimer: ReturnType<typeof setTimeout> | null = null;
@@ -595,7 +599,9 @@ export const createWorkspacePane = function(options: WorkspacePaneOptions): Work
                 emptyEl.className = "workspace-pane-empty";
             }
 
-            emptyEl.textContent = t("No objects in workspace");
+            emptyEl.textContent = t(runtimeUnavailable
+                ? "Runtime session is not ready."
+                : "No objects in workspace");
             if (emptyEl.parentElement !== bodyEl) {
                 bodyEl.replaceChildren(emptyEl);
             }
@@ -901,6 +907,11 @@ export const createWorkspacePane = function(options: WorkspacePaneOptions): Work
 
     return {
         setSnapshot(next: unknown): void {
+            runtimeUnavailable = isRuntimeWorkspaceSnapshot(next)
+                && next.freshness === "unavailable";
+            if (runtimeUnavailable) {
+                hideContextMenu();
+            }
             snapshot = normalizeWorkspaceSnapshot(next);
             render();
         },

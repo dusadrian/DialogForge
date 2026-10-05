@@ -14,6 +14,93 @@ export interface WorkspaceDatasetCacheEffect {
 }
 
 
+export interface WorkspaceDatasetCache {
+    copy(sourceName: string, targetName: string): void;
+    invalidatePreview(objectName: string): void;
+    invalidateVariableMetadata(objectName: string): void;
+    refreshVariableMetadata(objectName: string, variableNames: string[]): Promise<unknown>;
+}
+
+
+export const readWorkspaceDatasetWarmup = function(
+    effects: readonly WorkspaceDatasetCacheEffect[],
+    datasetName: string
+): { preview: boolean; variableMetadata: boolean } {
+    const effect = effects.find(function(candidate) {
+        return candidate.name === datasetName && !candidate.removed;
+    });
+
+    return {
+        preview: Boolean(effect?.preview),
+        variableMetadata: Boolean(
+            effect?.variableMetadata
+            && (
+                effect.variableMetadataStructure
+                || effect.variableNames.length === 0
+            )
+        )
+    };
+};
+
+
+export const applyWorkspaceDatasetCacheEffects = function(
+    effects: readonly WorkspaceDatasetCacheEffect[],
+    cache: WorkspaceDatasetCache | null | undefined,
+    invalidateHostDataset?: (objectName: string) => void
+): Promise<unknown>[] {
+    const metadataRefreshes: Promise<unknown>[] = [];
+
+    for (const effect of effects) {
+        invalidateHostDataset?.(effect.name);
+        if (effect.copiedFrom) {
+            cache?.copy(effect.copiedFrom, effect.name);
+            continue;
+        }
+
+        if (effect.preview) {
+            cache?.invalidatePreview(effect.name);
+        }
+
+        if (!effect.variableMetadata) {
+            continue;
+        }
+
+        if (
+            !effect.variableMetadataStructure
+            && effect.variableNames.length > 0
+        ) {
+            if (cache) {
+                metadataRefreshes.push(cache.refreshVariableMetadata(effect.name, effect.variableNames));
+            }
+        }
+        else {
+            cache?.invalidateVariableMetadata(effect.name);
+        }
+    }
+
+    return metadataRefreshes;
+};
+
+
+export const warmWorkspaceDatasetCacheEffects = function(
+    effects: readonly WorkspaceDatasetCacheEffect[],
+    datasetName: string,
+    cache: {
+        warmPreview(objectName: string): void;
+        warmVariableMetadata(objectName: string): void;
+    } | null | undefined
+): void {
+    const warmup = readWorkspaceDatasetWarmup(effects, datasetName);
+
+    if (warmup.preview) {
+        cache?.warmPreview(datasetName);
+    }
+    if (warmup.variableMetadata) {
+        cache?.warmVariableMetadata(datasetName);
+    }
+};
+
+
 const ensureEffect = function(
     effects: Map<string, WorkspaceDatasetCacheEffect>,
     name: string
@@ -106,6 +193,19 @@ export const createWorkspaceDatasetCacheEffects = function(
     });
 
     return Array.from(effects.values());
+};
+
+
+export const prepareWorkspaceDatasetCacheEffects = function(
+    update: WorkspaceUpdate,
+    cache: WorkspaceDatasetCache | null | undefined
+) {
+    const effects = createWorkspaceDatasetCacheEffects(update);
+    const metadataRefreshes = Promise.allSettled(
+        applyWorkspaceDatasetCacheEffects(effects, cache)
+    );
+
+    return { effects, metadataRefreshes };
 };
 
 

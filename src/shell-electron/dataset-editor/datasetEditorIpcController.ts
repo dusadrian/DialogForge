@@ -1,3 +1,5 @@
+import { warmDatasetEditorFirstScreens } from "../../dataset-editor/datasetEditorWarmCache";
+import { formatDatasetEditorTitle } from "../../dataset-editor/datasetEditorTitle";
 import type {
     IpcMain,
     IpcMainEvent,
@@ -6,9 +8,12 @@ import type {
 
 import type {
     ActiveDatasetSnapshot,
-    RuntimeSessionManager,
-    TranscriptEvent
+    RuntimeSessionManager
 } from "../../runtime/provider-contract/runtimeProvider";
+import {
+    runtimeCommandResultSucceeded,
+    type RuntimeCommandResult
+} from "../../runtime/commands/runtimeCommandReceipt";
 import {
     createVisibleCommandRequest
 } from "../../runtime/commands/commandProtocol";
@@ -23,6 +28,14 @@ import {
     datasetEditorIpcChannels,
     type DatasetEditorDocumentState
 } from "../../dataset-editor/datasetEditorIpc";
+import {
+    createWorkspaceActiveDatasetDelivery,
+    readWorkspaceActiveDatasetScope,
+    readSelectedWorkspaceDatasetName
+} from "../../runtime/workspace/workspaceActiveDatasetDelivery";
+import {
+    createWorkspaceChannelAdapter
+} from "../../base-app/features/workspace-pane/workspaceChannelAdapter";
 
 
 export interface DatasetEditorIpcControllerOptions {
@@ -30,17 +43,18 @@ export interface DatasetEditorIpcControllerOptions {
     runtimeSessionManager: Pick<
         RuntimeSessionManager,
         "getActiveDataset" | "setActiveDataset" | "executeRuntimeMethod"
-    >;
+    > & Partial<Pick<RuntimeSessionManager, "getWorkspaceSnapshot">>;
     datasetEditorWindowController: Pick<
         DatasetEditorWindowController,
         "getWindow" | "send" | "setTitle"
     >;
+    translate(text: string): string;
     getDatasetEditorState(): DatasetEditorDocumentState;
     setDatasetEditorState(state: DatasetEditorDocumentState): void;
     openDatasetEditor(objectName: unknown): Promise<DatasetEditorDocumentState>;
     writeVariableColumnWidths(payload: unknown): void;
     uiCommandVisibility(): "hidden" | "visible";
-    executeVisibleCommand(request: ReturnType<typeof createVisibleCommandRequest>): Promise<TranscriptEvent[]>;
+    executeVisibleCommand(request: ReturnType<typeof createVisibleCommandRequest>): Promise<RuntimeCommandResult>;
     refreshWorkspaceAndBroadcast(): Promise<unknown>;
     broadcastRuntimeEvents(): Promise<void>;
     sendActiveDataset(snapshot: ActiveDatasetSnapshot): void;
@@ -50,10 +64,13 @@ export interface DatasetEditorIpcControllerOptions {
 }
 
 
-const createDocumentState = function(objectName: string): DatasetEditorDocumentState {
+const createDocumentState = function(
+    objectName: string,
+    translate: (key: string) => string
+): DatasetEditorDocumentState {
     return {
         objectName,
-        title: `${objectName} - Dataset Editor`,
+        title: formatDatasetEditorTitle(objectName, translate),
         message: `Editing ${objectName}.`
     };
 };
@@ -73,6 +90,40 @@ const sendToDatasetEditor = function(
 export const createDatasetEditorIpcController = function(
     options: DatasetEditorIpcControllerOptions
 ): void {
+    const activeDatasetDelivery = createWorkspaceActiveDatasetDelivery({
+        getSessionScope: function() {
+            return readWorkspaceActiveDatasetScope(
+                options.runtimeSessionManager.getWorkspaceSnapshot?.()
+            ) || options.runtimeSessionManager;
+        },
+        readActiveDataset: async () => options.runtimeSessionManager.getActiveDataset(),
+        requestActiveDataset: (name) => options.runtimeSessionManager.setActiveDataset(name),
+        getAuthoritativeSnapshot: () => options.runtimeSessionManager.getActiveDataset(),
+        publish: options.sendActiveDataset,
+        selected: function(snapshot) {
+            warmDatasetEditorFirstScreens(
+                options.warmInitialDatasetPreview,
+                options.warmInitialVariableMetadata,
+                snapshot.objectName
+            );
+        }
+    });
+    const workspaceChannels = createWorkspaceChannelAdapter({
+        getDataEditorDatasetName: () => options.getDatasetEditorState().objectName,
+        setDataEditorDatasetName: (name) => options.setDatasetEditorState(
+            createDocumentState(name, options.translate)
+        ),
+        getActiveDatasetName: () => readSelectedWorkspaceDatasetName(
+            options.runtimeSessionManager.getActiveDataset()
+        ),
+        setActiveDataset: async function(name) {
+            await activeDatasetDelivery.select(name);
+        },
+        clearActiveDataset: async function() {
+            await activeDatasetDelivery.clear();
+        }
+    });
+
     options.ipcMain.handle(datasetEditorIpcChannels.getDocument, async () => {
         return options.getDatasetEditorState();
     });
@@ -93,15 +144,12 @@ export const createDatasetEditorIpcController = function(
                 return;
             }
 
-            const state = createDocumentState(objectName);
+            const state = createDocumentState(objectName, options.translate);
             options.setDatasetEditorState(state);
             options.datasetEditorWindowController.setTitle(state.title);
 
-            void options.runtimeSessionManager.setActiveDataset(objectName)
-                .then((snapshot) => {
-                    options.sendActiveDataset(snapshot);
-                })
-                .catch(options.reportError);
+            // The editor already owns its current viewport/metadata loading.
+            void activeDatasetDelivery.select(objectName, false).catch(options.reportError);
         }
     );
 
@@ -134,15 +182,11 @@ export const createDatasetEditorIpcController = function(
                 options.uiCommandVisibility() === "visible";
 
             if (shouldShowCommand) {
-                const events = await options.executeVisibleCommand(createVisibleCommandRequest({
+                const result = await options.executeVisibleCommand(createVisibleCommandRequest({
                     text: command,
                     source: "base-app.dataset-editor"
                 }));
-                const failed = events.some((event) => {
-                    return event.type === "failed";
-                });
-
-                return !failed;
+                return runtimeCommandResultSucceeded(result);
             }
 
             const result = await options.runtimeSessionManager.executeRuntimeMethod(
@@ -226,31 +270,18 @@ export const createDatasetEditorIpcController = function(
     );
 
     options.ipcMain.handle(datasetEditorIpcChannels.getActiveDataset, async () => {
-        return options.runtimeSessionManager.getActiveDataset().objectName || "";
+        return workspaceChannels.getActiveDataset();
     });
 
     options.ipcMain.handle(
         datasetEditorIpcChannels.setActiveDataset,
         async (_event: IpcMainInvokeEvent, payload: { name?: string }) => {
-            const snapshot = await options.runtimeSessionManager
-                .setActiveDataset(String(payload?.name || ""));
-
-            options.sendActiveDataset(snapshot);
-            if (snapshot.status === "selected") {
-                options.warmInitialDatasetPreview(snapshot.objectName);
-                options.warmInitialVariableMetadata(snapshot.objectName);
-            }
-
-            return snapshot.objectName;
+            return workspaceChannels.setActiveDataset(payload, []);
         }
     );
 
     options.ipcMain.handle(datasetEditorIpcChannels.clearActiveDataset, async () => {
-        const snapshot = await options.runtimeSessionManager.setActiveDataset("");
-
-        options.sendActiveDataset(snapshot);
-
-        return snapshot.objectName;
+        return workspaceChannels.clearActiveDataset();
     });
 
     options.ipcMain.handle(datasetEditorIpcChannels.getActiveState, async () => {

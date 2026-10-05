@@ -102,11 +102,18 @@ export const wireConsoleEditorCommands = function(
             const contribution = editor.getContribution(
                 "editor.contrib.suggestController"
             ) as unknown as {
-                model?: { state?: unknown };
+                widget?: {
+                    isInitialized?: boolean;
+                    value?: { getFocusedItem?(): unknown };
+                };
             } | null;
-            const modelState = contribution?.model?.state;
 
-            return Boolean(modelState && Number(modelState) !== 0);
+            // A pending query is not an available suggestion to accept.
+            if (!contribution?.widget?.isInitialized) {
+                return false;
+            }
+
+            return Boolean(contribution.widget.value?.getFocusedItem?.());
         }
         catch {
             return false;

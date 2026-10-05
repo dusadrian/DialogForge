@@ -27,6 +27,7 @@ export const createConsoleTranscriptService = (deps?: {
   let runtimeItems: RuntimeItem[] = [];
   const runtimeActivitiesById = new Map<string, RuntimeItemActivity>();
   let activeRequest: { activityId: string; item: ActivityItemPrompt } | null = null;
+  let replyingRequest: { activityId: string; item: ActivityItemPrompt } | null = null;
   let promptState: ConsolePromptState = {
     inputPrompt: '> ',
     continuationPrompt: '+ '
@@ -129,6 +130,7 @@ export const createConsoleTranscriptService = (deps?: {
     when?: number | string | Date;
     name?: string;
     text?: string;
+    origin?: "runtime" | "console";
   }) => {
     const activityId = String(message?.parent_id || (message?.id ? `orphan_${String(message.id || '')}` : makeId('orphan_stream')));
     addOrUpdateRuntimeItemActivity(
@@ -138,7 +140,8 @@ export const createConsoleTranscriptService = (deps?: {
         activityId,
         new Date(message?.when || Date.now()),
         classifyConsoleStreamMessage(message, getRuntimeActivity(activityId)),
-        String(message?.text || '')
+        String(message?.text || ''),
+        message.origin || 'runtime'
       )
     );
   };
@@ -224,18 +227,85 @@ export const createConsoleTranscriptService = (deps?: {
     emit();
   };
 
-  const replyToPrompt = async (reply: string) => {
-    if (!activeRequest) return;
-    const current = { ...activeRequest };
-    current.item.state = ActivityItemPromptState.Answered;
-    current.item.answer = current.item.password ? '' : String(reply || '');
-    activeRequest = null;
-    emit();
-    await deps?.submitRequestReply?.(String(reply || ''), {
-      activityId: current.activityId,
-      promptId: current.item.id
-    });
+  const replyToPrompt = async function(reply: string): Promise<boolean> {
+    if (!activeRequest || replyingRequest === activeRequest) {
+        return false;
+    }
+
+    const current = activeRequest;
+    replyingRequest = current;
+
+    try {
+        if (!deps?.submitRequestReply) {
+            throw new Error("Prompt reply is not available.");
+        }
+
+        await deps.submitRequestReply(String(reply || ''), {
+            activityId: current.activityId,
+            promptId: current.item.id
+        });
+
+        const activity = getRuntimeActivity(current.activityId);
+        if (!activity?.activityItems.includes(current.item)) {
+            return false;
+        }
+
+        if (current.item.state === ActivityItemPromptState.Unanswered) {
+            current.item.state = ActivityItemPromptState.Answered;
+            current.item.answer = current.item.password ? '' : String(reply || '');
+        }
+
+        if (activeRequest !== current) {
+            emit();
+            return false;
+        }
+
+        activeRequest = null;
+        emit();
+        return true;
+    }
+    catch {
+        if (activeRequest === current) {
+            recordRuntimeMessageStream({
+                parent_id: current.activityId,
+                name: 'stderr',
+                text: 'Prompt reply was not accepted. You can retry or interrupt the command.\n'
+            });
+        }
+
+        return false;
+    }
+    finally {
+        if (replyingRequest === current) {
+            replyingRequest = null;
+        }
+    }
   };
+
+    const retireRuntimeActivities = function(): void {
+        activeRequest = null;
+        replyingRequest = null;
+
+        for (const activity of runtimeActivitiesById.values()) {
+            for (const item of activity.activityItems) {
+                if (
+                    item instanceof ActivityItemInput
+                    && (item.state === ActivityItemInputState.Executing
+                        || item.state === ActivityItemInputState.Provisional)
+                ) {
+                    item.state = ActivityItemInputState.Cancelled;
+                }
+                else if (
+                    item instanceof ActivityItemPrompt
+                    && item.state === ActivityItemPromptState.Unanswered
+                ) {
+                    item.state = ActivityItemPromptState.Interrupted;
+                }
+            }
+        }
+
+        emit();
+    };
 
   const clear = () => {
     runtimeItems = [];
@@ -245,6 +315,7 @@ export const createConsoleTranscriptService = (deps?: {
   };
 
   return {
+    retireRuntimeActivities,
     clear,
     recordBlankInput,
     recordRuntimeMessageInput,

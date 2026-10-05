@@ -18,6 +18,8 @@ export interface RuntimeTabularReadControllerOptions {
     fallbackWorkspaceController: RuntimeWorkspaceController;
     hasFallbackRows(objectName: string): boolean;
     getSnapshot(): RuntimeSessionSnapshot;
+    getWorkspaceReadEpoch?(): number;
+    isWorkspaceReadAvailable?(): boolean;
 }
 
 
@@ -38,6 +40,7 @@ export const createRuntimeTabularReadController = function(
         request: TabularPreviewRequest
     ): Promise<TabularPreviewSnapshot> {
         const snapshot = options.getSnapshot();
+        const epoch = options.getWorkspaceReadEpoch?.();
 
         if (!options.hasFallbackRows(objectName)) {
             if (options.workspaceController) {
@@ -48,6 +51,17 @@ export const createRuntimeTabularReadController = function(
                         objectName
                     })
                 );
+
+                if (
+                    epoch !== options.getWorkspaceReadEpoch?.()
+                    || options.getSnapshot().status !== "ready"
+                    || options.isWorkspaceReadAvailable?.() === false
+                ) {
+                    return createTabularPreview({
+                        status: "unavailable", providerId: snapshot.providerId,
+                        objectName, message: "Workspace changed while reading the preview."
+                    });
+                }
 
                 if (preview) {
                     return preview;
@@ -83,12 +97,24 @@ export const createRuntimeTabularReadController = function(
     return {
         readSchema: async function(objectName): Promise<TabularSchemaSnapshot> {
             const snapshot = options.getSnapshot();
+            const epoch = options.getWorkspaceReadEpoch?.();
 
             if (options.workspaceController?.readTabularSchema) {
                 const schema = await options.workspaceController.readTabularSchema(
                     objectName,
                     snapshot
                 );
+
+                if (
+                    epoch !== options.getWorkspaceReadEpoch?.()
+                    || options.getSnapshot().status !== "ready"
+                    || options.isWorkspaceReadAvailable?.() === false
+                ) {
+                    return createTabularSchema({
+                        status: "unavailable", providerId: snapshot.providerId,
+                        objectName, message: "Workspace changed while reading the schema."
+                    });
+                }
 
                 if (schema) {
                     return schema;
@@ -117,7 +143,7 @@ export const createRuntimeTabularReadController = function(
             }
 
             return createTabularSchema({
-                status: "not-tabular",
+                status: preview.status === "unavailable" ? "unavailable" : "not-tabular",
                 providerId: snapshot.providerId,
                 objectName,
                 message: "Object does not advertise tabular schema support."

@@ -1,6 +1,7 @@
 import type {
     ActiveDatasetSnapshot,
     ObjectInspectionResult,
+    RuntimeSessionSnapshot,
     WorkspaceRenameRequest,
     WorkspaceObjectSnapshot,
     WorkspaceSnapshot
@@ -10,12 +11,30 @@ import type {
 export const createWorkspaceSnapshot = function(input: Partial<WorkspaceSnapshot>): WorkspaceSnapshot {
     return {
         status: input.status || "unknown",
+        ...(input.freshness ? { freshness: input.freshness } : {}),
         providerId: input.providerId || "",
         objects: input.objects || [],
         workspaceRevision: input.workspaceRevision,
         message: input.message || "",
         refreshedAt: new Date().toISOString()
     };
+};
+
+
+export const createUnavailableWorkspaceSnapshot = function(
+    session: RuntimeSessionSnapshot,
+    workspace?: WorkspaceSnapshot | null
+): WorkspaceSnapshot {
+    const baseline = workspace?.providerId === session.providerId ? workspace : null;
+
+    return createWorkspaceSnapshot({
+        status: "unavailable",
+        freshness: "unavailable",
+        providerId: session.providerId,
+        objects: baseline?.objects || [],
+        workspaceRevision: baseline?.workspaceRevision,
+        message: "Runtime session is not ready."
+    });
 };
 
 
@@ -65,7 +84,10 @@ export const createActiveDatasetSnapshot = function(input: Partial<ActiveDataset
         providerId: input.providerId || "",
         objectName: input.objectName || "",
         message: input.message || "",
-        selectedAt: input.selectedAt || ""
+        selectedAt: input.selectedAt || "",
+        ...(input.selectionRevision ? {
+            selectionRevision: { ...input.selectionRevision }
+        } : {})
     };
 };
 

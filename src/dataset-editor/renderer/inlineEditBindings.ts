@@ -3,11 +3,16 @@ export interface InlineEditBindings {
     cancel: () => void;
 }
 
+const boundInputs = new WeakSet<HTMLInputElement>();
 
 export const bindInlineEdit = function(
     input: HTMLInputElement,
     bindings: InlineEditBindings
 ): void {
+    if (boundInputs.has(input)) {
+        return;
+    }
+    boundInputs.add(input);
     let settled = false;
 
     const commit = function(): void {
@@ -36,5 +41,17 @@ export const bindInlineEdit = function(
             cancel();
         }
     });
-    input.addEventListener("blur", commit);
+    input.addEventListener("blur", () => {
+        // DOM removal can blur before the node is disconnected. Allow the
+        // synchronous render to finish before deciding whether focus left a
+        // current editor, rather than committing a retired or restored draft.
+        queueMicrotask(() => {
+            if (
+                input.isConnected
+                && input.ownerDocument.activeElement !== input
+            ) {
+                commit();
+            }
+        });
+    });
 };

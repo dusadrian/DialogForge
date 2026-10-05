@@ -20,6 +20,7 @@ export interface DatasetRefreshControllerOptions<Schema, Variable> {
     markViewportActivity(): void;
     isVariableViewActive(): boolean;
     isVariableMetadataLoaded(): boolean;
+    isVariableMetadataFailed(): boolean;
     resetVariableMetadata(): void;
     fetchSchema(datasetName: string): Promise<Schema | null>;
     applySchema(schema: Schema): void;
@@ -38,12 +39,14 @@ export interface DatasetRefreshControllerOptions<Schema, Variable> {
     getVariables(): Variable[] | null;
     renderVariables(): void;
     renderNoVariables(): void;
+    renderVariableFailure(): void;
     scheduleBackgroundVariableLoad(): void;
     queueViewportRefresh(): void;
 }
 
 
 export interface DatasetRefreshController {
+    invalidate(): void;
     refresh(datasetName: string): Promise<void>;
 }
 
@@ -98,6 +101,9 @@ export const createDatasetRefreshController = function<Schema, Variable>(
 
         options.resetVariableMetadata();
 
+        if (!isCurrentRefresh()) {
+            return;
+        }
         const schema = await options.fetchSchema(nextName);
 
         if (!isCurrentRefresh()) {
@@ -110,10 +116,16 @@ export const createDatasetRefreshController = function<Schema, Variable>(
         }
 
         options.applySchema(schema);
+        if (!isCurrentRefresh()) {
+            return;
+        }
 
         const viewport = options.readViewport();
 
         options.resetLoadedWindow();
+        if (!isCurrentRefresh()) {
+            return;
+        }
         await options.loadWindow(viewport);
 
         if (!isCurrentRefresh()) {
@@ -151,11 +163,15 @@ export const createDatasetRefreshController = function<Schema, Variable>(
                         && variables.length > 0
                     ) {
                         options.renderVariables();
+                        if (!isCurrentRefresh()) {
+                            return;
+                        }
                         restoreVariableScroll();
                     }
-                    else if (
-                        options.isVariableMetadataLoaded()
-                    ) {
+                    else if (options.isVariableMetadataFailed()) {
+                        options.renderVariableFailure();
+                    }
+                    else if (options.isVariableMetadataLoaded()) {
                         options.renderNoVariables();
                     }
                 }
@@ -173,14 +189,22 @@ export const createDatasetRefreshController = function<Schema, Variable>(
             return;
         }
 
-        if (!options.isVariableMetadataLoaded()) {
+        if (
+            !options.isVariableMetadataLoaded()
+            && !options.isVariableMetadataFailed()
+        ) {
             options.scheduleBackgroundVariableLoad();
         }
 
-        options.queueViewportRefresh();
+        if (isCurrentRefresh()) {
+            options.queueViewportRefresh();
+        }
     };
 
     return {
+        invalidate: function(): void {
+            refreshGeneration += 1;
+        },
         refresh
     };
 };

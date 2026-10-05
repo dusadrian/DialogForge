@@ -13,16 +13,16 @@ export interface WorkspaceChannelAdapterBindings {
     getDataEditorDatasetName(): string;
     setDataEditorDatasetName(name: string): void;
     getActiveDatasetName(): string;
-    setActiveDataset(name: string): void;
-    clearActiveDataset(): void;
+    setActiveDataset(name: string): void | Promise<void>;
+    clearActiveDataset(): void | Promise<void>;
 }
 
 export interface WorkspaceChannelAdapter {
     getDatasetEditorDocument(): WorkspaceDatasetEditorDocument;
-    openDatasetEditor(input: unknown, args: unknown[]): WorkspaceDatasetEditorDocument;
+    openDatasetEditor(input: unknown, args: unknown[]): Promise<WorkspaceDatasetEditorDocument>;
     getActiveDataset(): string;
-    setActiveDataset(input: unknown, args: unknown[]): string;
-    clearActiveDataset(): string;
+    setActiveDataset(input: unknown, args: unknown[]): Promise<string>;
+    clearActiveDataset(): Promise<string>;
 }
 
 export const createWorkspaceChannelAdapter = function(

@@ -284,7 +284,7 @@ backend_environment$dialog_package_status <- function(packages = character(0)) {
 
     list(
         missing = packages[!vapply(packages, function(package) {
-            requireNamespace(package, quietly = TRUE)
+            base::requireNamespace(package, quietly = TRUE)
         }, logical(1))],
         attached = packages[vapply(packages, function(package) {
             is.element(paste0("package:", package), search())

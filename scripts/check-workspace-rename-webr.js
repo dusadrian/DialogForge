@@ -8,16 +8,24 @@ const http = require("node:http");
 const path = require("node:path");
 const { build } = require("esbuild");
 const { chromium } = require("playwright");
+const { createBrowserNodeFallbackPlugin } = require("./browser-node-fallbacks");
+const {
+    readRegressionPackageLibrary,
+    regressionPackageLibrarySource,
+    serveRegressionPackageLibrary
+} = require("./webr-regression-package-library");
 
 const rootDir = path.resolve(__dirname, "..");
 const webRDir = path.join(rootDir, "node_modules/webr/dist");
 const sourceDir = path.join(rootDir, "src/runtime/providers/r/r-sources");
 
 const main = async function() {
+    const packageLibrary = readRegressionPackageLibrary(rootDir, true);
     const bundle = await build({
         stdin: {
             resolveDir: rootDir,
             contents: `
+                ${regressionPackageLibrarySource(packageLibrary)}
                 import { installWebRSharedRuntimeControl } from
                     "./src/runtime/providers/webr/webRSharedRuntimeControl";
                 import { createBrowserWebRSession } from
@@ -32,6 +40,7 @@ const main = async function() {
                     });
                     window.renameRuntime = runtime;
                     await runtime.init();
+                    window.renamePackageLibraryTimings = await window.mountRegressionPackageLibrary(runtime);
                     let pending = Promise.resolve();
                     const runRuntimeOperation = function(action) {
                         const next = pending.then(action);
@@ -53,7 +62,6 @@ const main = async function() {
                     window.renameWorkspaceChanges = [];
                     window.renameSession = createBrowserWebRSession({
                         runtimeControlClient,
-                        runRuntimeOperation,
                         visibleCommands: {
                             readConsoleOutputWidth: () => 80,
                             recordTranscriptEvents: (events) => {
@@ -79,29 +87,7 @@ const main = async function() {
         platform: "browser",
         format: "esm",
         external: ["/webr/webr.js"],
-        // Match build-shell-web-modules.js: these Node-only dialog/import
-        // fallbacks throw if reached. No runtime provider is replaced.
-        plugins: [{
-            name: "unavailable-node-fallbacks",
-            setup(builder) {
-                builder.onResolve({ filter: /^(fs|path)$/ }, (args) => ({
-                    path: args.path,
-                    namespace: "node-fallback"
-                }));
-                builder.onLoad({ filter: /.*/, namespace: "node-fallback" }, (args) => {
-                    const members = args.path === "fs"
-                        ? ["existsSync", "readFileSync"]
-                        : ["dirname", "isAbsolute", "join", "relative", "resolve"];
-                    return {
-                        contents: [
-                            'const unavailable = () => { throw new Error("Node fallback reached in WebR acceptance"); };',
-                            ...members.map((name) => `export const ${name} = unavailable;`),
-                            'export const sep = "/";'
-                        ].join("\n")
-                    };
-                });
-            }
-        }],
+        plugins: [createBrowserNodeFallbackPlugin()],
         write: false
     });
     const server = http.createServer(async function(request, response) {
@@ -109,6 +95,9 @@ const main = async function() {
         response.setHeader("Cross-Origin-Embedder-Policy", "require-corp");
         try {
             const pathname = new URL(request.url, "http://localhost").pathname;
+            if (serveRegressionPackageLibrary(pathname, response, packageLibrary)) {
+                return;
+            }
             if (pathname === "/") {
                 response.setHeader("Content-Type", "text/html");
                 response.end('<!doctype html><script type="module" src="/acceptance.js"></script>');
@@ -117,6 +106,14 @@ const main = async function() {
             if (pathname === "/acceptance.js") {
                 response.setHeader("Content-Type", "text/javascript");
                 response.end(bundle.outputFiles[0].contents);
+                return;
+            }
+            if (
+                /^\/r-inspection\/webr\/\d+\.\d+\.\d+\/dialogforgeinspect_0\.4\.3\.tgz$/.test(pathname)
+                || /^\/r-transport-prototype\/webr\/\d+\.\d+\.\d+\/dialogforgetransport_0\.0\.4\.tgz$/.test(pathname)
+            ) {
+                response.setHeader("Content-Type", "application/octet-stream");
+                response.end(await fs.readFile(path.join(rootDir, "dist", pathname.slice(1))));
                 return;
             }
             const directory = pathname.startsWith("/webr/") ? webRDir
@@ -138,6 +135,8 @@ const main = async function() {
     });
     let browser;
     let deadline;
+    const deadlineMs = Number(process.env.DIALOGFORGE_TEST_RENAME_DEADLINE_MS || 120000);
+    assert.ok(Number.isFinite(deadlineMs) && deadlineMs > 0 && deadlineMs <= 600000);
     try {
         await new Promise((resolve, reject) => {
             server.once("error", reject);
@@ -145,14 +144,17 @@ const main = async function() {
         });
         browser = await chromium.launch({ headless: true });
         deadline = setTimeout(() => {
-            console.error("WebR Rename acceptance exceeded its two-minute limit.");
+            console.error("WebR Rename acceptance exceeded its " + deadlineMs + "ms limit.");
             void browser.close();
-        }, 120000);
+        }, deadlineMs);
         const page = await browser.newPage();
         page.on("pageerror", (error) => console.error(error));
         page.on("console", (message) => {
             if (message.type() === "error") {
                 console.error(message.text());
+            }
+            else if (message.text().startsWith("WebR SAME-source case ")) {
+                console.log(message.text());
             }
         });
         page.setDefaultTimeout(120000);
@@ -160,6 +162,8 @@ const main = async function() {
         await page.waitForFunction(() => typeof window.startRenameAcceptance === "function");
         const started = await page.evaluate(() => window.startRenameAcceptance());
         assert.equal(started.status, "ready", started.message);
+        console.log("Canonical WebR package-library mount timings:",
+            JSON.stringify(await page.evaluate(() => window.renamePackageLibraryTimings)));
 
         const execute = async function(text) {
             const result = await page.evaluate((command) => {
@@ -232,11 +236,85 @@ const main = async function() {
         assert.ok(recovered.workspaceRevision.sequence > baseline.workspaceRevision.sequence);
         const delivered = await page.evaluate(() => window.renameWorkspaceChanges.at(-1));
         assert.deepEqual(names(delivered.snapshot), names(recovered));
+        const edits = await page.evaluate(() => {
+            return window.renameSession.runtimeSessionManager.writeCells([
+                { objectName: "rename_recovered", rowIndex: 0, columnName: "value", value: 33 },
+                { objectName: "rename_recovered", rowIndex: 1, columnName: "value", value: 44 }
+            ]);
+        });
+        assert.equal(edits.updated, 2);
+        assert.equal(edits.failed, 0);
+        assert.ok((await snapshot()).workspaceRevision.sequence > recovered.workspaceRevision.sequence);
+        await execute("stopifnot(identical(rename_recovered$value, c(33, 44)))");
+        console.log("Real WebR cell batch: both edits committed, R values verified and workspace revision advanced.");
+        const inspectionSources = await Promise.all([
+            "runtimePrelude.R", "runtimeBindingInspection.R", "runtimeWorkspaceCore.R",
+            "runtimeDatasetCore.R", "runtimeDatasetStateCore.R", "runtimeOutputJournalPrototype.R"
+        ].map(async (name) => ({ name, text: await fs.readFile(path.join(sourceDir, name), "utf8") })));
+        const inspectionTests = await Promise.all([
+            "src/runtime/providers/r/native/dialogforgeinspect/tests/binding-info.R",
+            "src/runtime/providers/r/native/dialogforgeinspect/tests/stored-graph.R",
+            "scripts/check-workspace-standard-method-safety.R",
+            "scripts/check-workspace-inspection-safety.R",
+            "scripts/check-workspace-copy-safety.R",
+            "scripts/check-workspace-altrep-safety.R",
+            "scripts/check-output-journal-prototype.R",
+            "scripts/check-dataset-mixed-change.R"
+        ].map(async (name) => ({ name, text: await fs.readFile(path.join(rootDir, name), "utf8") })));
+        const probe = await fs.readFile(path.join(rootDir, "dist/r-inspection/probe/webr/altrepprobe.so"));
+        const declaredInstalled = await page.evaluate(async ({ sources, tests, probe }) => {
+            const runtime = window.renameRuntime;
+            await runtime.FS.writeFile("/tmp/altrepprobe.so", new Uint8Array(probe));
+            await runtime.evalRVoid('Sys.setenv(DIALOGFORGE_ALTREP_PROBE_DLL = "/tmp/altrepprobe.so")');
+            await runtime.evalRVoid([
+                'dir.create("src/runtime/providers/r/r-sources", recursive = TRUE)',
+                '.libPaths(c(as.environment("DialogApp")$runtime_inspection_library, .libPaths()))',
+                'Sys.setenv(DIALOGFORGE_TEST_INSPECTION_LIBRARY = as.environment("DialogApp")$runtime_inspection_library)',
+                'Sys.setenv(DIALOGFORGE_TEST_SOURCE_ROOT = getwd())'
+            ].join("\n"));
+            const directory = await runtime.evalRString('normalizePath("src/runtime/providers/r/r-sources")');
+            for (const source of sources) {
+                await runtime.FS.writeFile(`${directory}/${source.name}`, new TextEncoder().encode(source.text));
+            }
+            window.renameInspectionTimings = [];
+            for (const test of tests) {
+                const started = performance.now();
+                console.log("WebR SAME-source case started: " + test.name);
+                await runtime.evalRVoid(test.text);
+                console.log("WebR SAME-source case completed: " + test.name
+                    + " in " + Math.round(performance.now() - started) + "ms");
+                window.renameInspectionTimings.push({
+                    name: test.name, milliseconds: performance.now() - started
+                });
+            }
+            return runtime.evalRBoolean(
+                'is.element("declared", rownames(installed.packages()))'
+            );
+        }, { sources: inspectionSources, tests: inspectionTests, probe: Array.from(probe) });
+        console.log("WebR: the same " + inspectionTests.length
+            + " native helper/inspection/journal/receipt regression sources passed, including real ALTREP callbacks.");
+        console.log("WebR SAME-source regression timings:",
+            JSON.stringify(await page.evaluate(() => window.renameInspectionTimings)));
+        console.log(declaredInstalled
+            ? "WebR declared package is installed; conditional inspection cases were available."
+            : "WebR declared package is absent; conditional declared inspection cases were skipped, not accepted.");
+        assert.equal(declaredInstalled, true, "Paired declared inspection must not silently skip package cases.");
         await page.evaluate(async () => {
             await window.renameSession.runtimeSessionManager.stop();
             await window.renameRuntime.close();
         });
         console.log("Real browser WebR Rename: shared snapshots, active dataset, receipts, rejection cases, uncertain outcome and single-attempt recovery passed.");
+        await page.route("**/r-inspection/webr/**", (route) => route.fulfill({ status: 404, body: "missing helper" }));
+        try {
+            await assert.rejects(
+                page.evaluate(() => window.startRenameAcceptance()),
+                /Build and serve the WebR binding-inspection helper/
+            );
+        }
+        finally {
+            await page.evaluate(() => window.renameRuntime?.close());
+        }
+        console.log("WebR missing-helper startup failed explicitly, without an evaluating fallback.");
     }
     finally {
         clearTimeout(deadline);

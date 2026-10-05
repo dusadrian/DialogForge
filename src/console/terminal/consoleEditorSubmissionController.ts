@@ -38,6 +38,7 @@ export interface ConsoleEditorSubmissionBindings {
 export interface ConsoleEditorSubmissionController {
     submit(): Promise<void>;
     cancelPending(): boolean;
+    retire(): void;
     isBusy(): boolean;
     isSubmitting(): boolean;
     activeCommandStartAt(): number;
@@ -179,6 +180,10 @@ export const createConsoleEditorSubmissionController = function(
 
             const status = await bindings.executeCode(code);
 
+            if (generation !== submissionGeneration) {
+                return;
+            }
+
             debugLog("editorInput:onEnter:status", {
                 status: String(status || "")
             });
@@ -214,6 +219,14 @@ export const createConsoleEditorSubmissionController = function(
 
     return {
         submit,
+        retire: function(): void {
+            submissionGeneration += 1;
+            submitting = false;
+            busy = false;
+            commandStartAt = 0;
+            bindings.refreshInteractivity();
+            bindings.refreshPrompt();
+        },
         cancelPending: function(): boolean {
             if (!submitting || busy) {
                 return false;

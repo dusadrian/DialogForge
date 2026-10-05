@@ -4,6 +4,7 @@ import type {
 import {
     createRPackageInstallWorkflow
 } from "../providers/r/dependencies/packageInstallWorkflow";
+import type { RuntimeCommandResult } from "../commands/runtimeCommandReceipt";
 
 
 export interface RuntimePackageLibraryChoice {
@@ -18,6 +19,8 @@ export interface RuntimePackageRestartChoice {
 
 export interface RuntimePackageSessionSnapshot {
     status: string;
+    providerId?: string;
+    lifecycleGeneration?: number;
 }
 
 
@@ -35,6 +38,7 @@ export interface RuntimePackageInstallWorkflow {
 
 
 export interface RuntimePackageInstallWorkflowBindings {
+    getRuntimeSnapshot?(): RuntimePackageSessionSnapshot | null;
     getRuntimeProviderId(): string;
     getProductId(): string;
     getPackageSourcePolicy?(): ProductPackageSourcePolicy;
@@ -47,7 +51,7 @@ export interface RuntimePackageInstallWorkflowBindings {
     restartRuntime(
         action: "clean" | "restore"
     ): Promise<RuntimePackageSessionSnapshot>;
-    executeVisibleCommand(command: string, source: string): Promise<void>;
+    executeVisibleCommand(command: string, source: string): Promise<RuntimeCommandResult>;
 }
 
 

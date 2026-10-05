@@ -48,6 +48,14 @@ const inputHasSelection = function(
 };
 
 
+const isEditableClipboardTarget = function(target: EventTarget | null): boolean {
+    return target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target instanceof HTMLSelectElement ||
+        (target instanceof HTMLElement && target.isContentEditable);
+};
+
+
 export const bindDatasetEditorGlobalEvents = function(
     options: DatasetEditorGlobalBindingOptions
 ): void {
@@ -70,6 +78,7 @@ export const bindDatasetEditorGlobalEvents = function(
             dataTabActive: state.dataTabActive,
             dataColumnSelected: state.dataColumnSelected,
             inputTextSelected: inputHasSelection(event.target),
+            editableTarget: isEditableClipboardTarget(event.target),
             variableRangeSelected: state.variableRangeSelected
         });
 

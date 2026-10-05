@@ -12,6 +12,7 @@ export interface RuntimeLifecycleExecutionControllerOptions {
     lifecycleController?: RuntimeLifecycleController;
     lifecycleState: RuntimeSessionLifecycleState;
     invalidateWorkspace(): void;
+    retireRuntimeResources?(): void;
     getSnapshot(): RuntimeSessionSnapshot;
 }
 
@@ -25,64 +26,111 @@ export interface RuntimeLifecycleExecutionController {
 export const createRuntimeLifecycleExecutionController = function(
     options: RuntimeLifecycleExecutionControllerOptions
 ): RuntimeLifecycleExecutionController {
+    let pendingGeneration: number | null = null;
+
+    const recordLifecycleFailure = function(generation: number, error: unknown): void {
+        options.lifecycleState.commit(generation, {
+            ...options.getSnapshot(),
+            status: "failed",
+            message: error instanceof Error ? error.message : String(error)
+        });
+    };
+
     return {
         start: async function() {
-            const generation = options.lifecycleState.beginTransition();
-            options.invalidateWorkspace();
-
-            if (options.lifecycleState.snapshot.connection === "missing") {
-                options.lifecycleState.reset(
-                    "failed",
-                    "Runtime provider is not registered."
-                );
-
+            if (pendingGeneration === null && options.getSnapshot().status === "ready") {
                 return options.getSnapshot();
             }
 
-            if (options.lifecycleController) {
-                options.lifecycleState.transition(
+            const generation = options.lifecycleState.beginTransition();
+            pendingGeneration = generation;
+            try {
+                options.invalidateWorkspace();
+
+                if (options.lifecycleState.snapshot.connection === "missing") {
+                    options.lifecycleState.reset(
+                        "failed",
+                        "Runtime provider is not registered."
+                    );
+
+                    return options.getSnapshot();
+                }
+
+                if (options.lifecycleController) {
+                    options.lifecycleState.transition(
+                        "starting",
+                        "Runtime session is starting."
+                    );
+                    try {
+                        const nextSnapshot =
+                            await options.lifecycleController.start(options.getSnapshot());
+
+                        if (!options.lifecycleState.commit(generation, nextSnapshot)) {
+                            throw new Error("Runtime start was superseded by a newer lifecycle transition.");
+                        }
+                    } catch (error) {
+                        recordLifecycleFailure(generation, error);
+                        throw error;
+                    }
+
+                    return options.getSnapshot();
+                }
+
+                options.lifecycleState.reset(
                     "starting",
                     "Runtime session is starting."
                 );
-                const nextSnapshot =
-                    await options.lifecycleController.start(options.getSnapshot());
 
-                options.lifecycleState.commit(generation, nextSnapshot);
+                options.lifecycleState.reset(
+                    "ready",
+                    options.initialMessage
+                );
 
                 return options.getSnapshot();
+            } finally {
+                if (pendingGeneration === generation) {
+                    pendingGeneration = null;
+                }
             }
-
-            options.lifecycleState.reset(
-                "starting",
-                "Runtime session is starting."
-            );
-
-            options.lifecycleState.reset(
-                "ready",
-                options.initialMessage
-            );
-
-            return options.getSnapshot();
         },
         stop: async function() {
             const generation = options.lifecycleState.beginTransition();
-            options.invalidateWorkspace();
+            pendingGeneration = generation;
+            try {
+                options.invalidateWorkspace();
 
-            if (options.lifecycleController) {
-                const nextSnapshot =
-                    await options.lifecycleController.stop(options.getSnapshot());
+                if (options.lifecycleController) {
+                    try {
+                        const nextSnapshot =
+                            await options.lifecycleController.stop(options.getSnapshot());
 
-                options.lifecycleState.commit(generation, nextSnapshot);
+                        if (!options.lifecycleState.commit(generation, nextSnapshot)) {
+                            throw new Error("Runtime stop was superseded by a newer lifecycle transition.");
+                        }
+                    } catch (error) {
+                        recordLifecycleFailure(generation, error);
+                        throw error;
+                    }
+                }
+                else {
+                    options.lifecycleState.reset(
+                        "stopped",
+                        "Runtime session is stopped."
+                    );
+                }
 
-                return options.getSnapshot();
+                const snapshot = options.getSnapshot();
+
+                if (snapshot.status === "stopped") {
+                    options.retireRuntimeResources?.();
+                }
+
+                return snapshot;
+            } finally {
+                if (pendingGeneration === generation) {
+                    pendingGeneration = null;
+                }
             }
-
-            options.lifecycleState.reset(
-                "stopped",
-                "Runtime session is stopped."
-            );
-
-            return options.getSnapshot();
         }
     };
 };

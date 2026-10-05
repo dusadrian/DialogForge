@@ -1,3 +1,4 @@
+import { commandExecutionDidNotSucceed } from "../../../commands/commandProtocol";
 import {
     createCellUpdateResult,
     createColumnInsertResult,
@@ -111,7 +112,9 @@ export const createRTabularMutationController = function(
                 snapshot
             );
             const transcriptEvents = commandResult.transcriptEvents;
-            const failed = options.transcriptHasFailure(transcriptEvents);
+            const failed = commandExecutionDidNotSucceed(
+                commandResult, options.transcriptHasFailure
+            );
 
             return createColumnRenameResult({
                 status: failed ? "invalid-column" : "updated",
@@ -163,7 +166,9 @@ export const createRTabularMutationController = function(
                 snapshot
             );
             const transcriptEvents = commandResult.transcriptEvents;
-            const failed = options.transcriptHasFailure(transcriptEvents);
+            const failed = commandExecutionDidNotSucceed(
+                commandResult, options.transcriptHasFailure
+            );
 
             return createColumnInsertResult({
                 status: failed ? "invalid" : "updated",
@@ -219,7 +224,9 @@ export const createRTabularMutationController = function(
                 snapshot
             );
             const transcriptEvents = commandResult.transcriptEvents;
-            const failed = options.transcriptHasFailure(transcriptEvents);
+            const failed = commandExecutionDidNotSucceed(
+                commandResult, options.transcriptHasFailure
+            );
 
             return createColumnRemoveResult({
                 status: failed ? "invalid-column" : "updated",
@@ -272,7 +279,9 @@ export const createRTabularMutationController = function(
                 snapshot
             );
             const transcriptEvents = commandResult.transcriptEvents;
-            const failed = options.transcriptHasFailure(transcriptEvents);
+            const failed = commandExecutionDidNotSucceed(
+                commandResult, options.transcriptHasFailure
+            );
 
             return createRowInsertResult({
                 status: failed ? "invalid-row" : "updated",
@@ -336,7 +345,9 @@ export const createRTabularMutationController = function(
                 snapshot
             );
             const transcriptEvents = commandResult.transcriptEvents;
-            const failed = options.transcriptHasFailure(transcriptEvents);
+            const failed = commandExecutionDidNotSucceed(
+                commandResult, options.transcriptHasFailure
+            );
 
             return createRowRemoveResult({
                 status: failed ? "invalid-row" : "updated",
@@ -389,7 +400,9 @@ export const createRTabularMutationController = function(
                 snapshot
             );
             const transcriptEvents = commandResult.transcriptEvents;
-            const failed = options.transcriptHasFailure(transcriptEvents);
+            const failed = commandExecutionDidNotSucceed(
+                commandResult, options.transcriptHasFailure
+            );
 
             return createRowSortResult({
                 status: failed ? "invalid-column" : "updated",
@@ -452,7 +465,9 @@ export const createRTabularMutationController = function(
                 snapshot
             );
             const transcriptEvents = commandResult.transcriptEvents;
-            const failed = options.transcriptHasFailure(transcriptEvents);
+            const failed = commandExecutionDidNotSucceed(
+                commandResult, options.transcriptHasFailure
+            );
 
             return createRowNameUpdateResult({
                 status: failed ? "invalid-row" : "updated",
@@ -504,7 +519,9 @@ export const createRTabularMutationController = function(
                 snapshot
             );
             const transcriptEvents = commandResult.transcriptEvents;
-            const failed = options.transcriptHasFailure(transcriptEvents);
+            const failed = commandExecutionDidNotSucceed(
+                commandResult, options.transcriptHasFailure
+            );
 
             return createCellUpdateResult({
                 status: failed ? "invalid-cell" : "updated",

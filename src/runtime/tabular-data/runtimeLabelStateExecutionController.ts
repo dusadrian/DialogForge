@@ -24,6 +24,9 @@ export interface RuntimeLabelStateExecutionControllerOptions {
     readOnlyAdapter?: RuntimeReadOnlyAdapter;
     fallbackLabelStateController: RuntimeFallbackLabelStateController;
     getSnapshot(): RuntimeSessionSnapshot;
+    getWorkspaceGeneration?(): number;
+    getWorkspaceReadEpoch?(): number;
+    isWorkspaceReadAvailable?(): boolean;
     getActiveObjectName(): string;
     materializeRows(objectName: string): boolean;
     recordRuntimeEvent(
@@ -49,6 +52,7 @@ export const createRuntimeLabelStateExecutionController = function(
     return {
         readValueLabels: async function(objectName) {
             const snapshot = options.getSnapshot();
+            const epoch = options.getWorkspaceReadEpoch?.();
             const targetName = objectName || options.getActiveObjectName();
 
             if (targetName && options.providerTabularController?.readValueLabels) {
@@ -56,6 +60,18 @@ export const createRuntimeLabelStateExecutionController = function(
                     targetName,
                     snapshot
                 );
+
+                if (
+                    epoch !== options.getWorkspaceReadEpoch?.()
+                    || options.getSnapshot().status !== "ready"
+                    || options.isWorkspaceReadAvailable?.() === false
+                ) {
+                    return createValueLabelSnapshot({
+                        status: "unavailable", providerId: snapshot.providerId,
+                        objectName: targetName,
+                        message: "Workspace changed while reading value labels."
+                    });
+                }
 
                 if (valueLabels) {
                     return valueLabels;
@@ -92,6 +108,7 @@ export const createRuntimeLabelStateExecutionController = function(
         },
         writeValueLabels: async function(request) {
             const snapshot = options.getSnapshot();
+            const generation = options.getWorkspaceGeneration?.();
             const targetName = request.objectName || options.getActiveObjectName();
 
             if (targetName && options.providerTabularController?.writeValueLabels) {
@@ -102,7 +119,11 @@ export const createRuntimeLabelStateExecutionController = function(
                     snapshot
                 );
 
-                if (result.status === "updated") {
+                if (
+                    result.status === "updated"
+                    && generation === options.getWorkspaceGeneration?.()
+                    && options.getSnapshot().status === "ready"
+                ) {
                     options.recordRuntimeEvent(
                         "tabular.valueLabels.updated",
                         targetName,
@@ -124,6 +145,7 @@ export const createRuntimeLabelStateExecutionController = function(
         },
         readDeclaredMissing: async function(objectName) {
             const snapshot = options.getSnapshot();
+            const epoch = options.getWorkspaceReadEpoch?.();
             const targetName = objectName || options.getActiveObjectName();
 
             if (targetName && options.providerTabularController?.readDeclaredMissing) {
@@ -132,6 +154,18 @@ export const createRuntimeLabelStateExecutionController = function(
                         targetName,
                         snapshot
                     );
+
+                if (
+                    epoch !== options.getWorkspaceReadEpoch?.()
+                    || options.getSnapshot().status !== "ready"
+                    || options.isWorkspaceReadAvailable?.() === false
+                ) {
+                    return createDeclaredMissingSnapshot({
+                        status: "unavailable", providerId: snapshot.providerId,
+                        objectName: targetName,
+                        message: "Workspace changed while reading declared missing values."
+                    });
+                }
 
                 if (declaredMissing) {
                     return declaredMissing;
@@ -169,6 +203,7 @@ export const createRuntimeLabelStateExecutionController = function(
         },
         writeDeclaredMissing: async function(request) {
             const snapshot = options.getSnapshot();
+            const generation = options.getWorkspaceGeneration?.();
             const targetName = request.objectName || options.getActiveObjectName();
 
             if (targetName && options.providerTabularController?.writeDeclaredMissing) {
@@ -179,7 +214,11 @@ export const createRuntimeLabelStateExecutionController = function(
                     snapshot
                 );
 
-                if (result.status === "updated") {
+                if (
+                    result.status === "updated"
+                    && generation === options.getWorkspaceGeneration?.()
+                    && options.getSnapshot().status === "ready"
+                ) {
                     options.recordRuntimeEvent(
                         "tabular.declaredMissing.updated",
                         targetName,

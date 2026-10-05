@@ -38,6 +38,26 @@ filter_warnings <- function(warnings, code = "") {
 }
 
 
+runtime_accept_input_warning <- function(warning, code) {
+    text <- conditionMessage(warning)
+    level <- getOption("warn", 0)
+
+    if (level < 0 || !length(filter_warnings(text, code))) {
+        return(FALSE)
+    }
+
+    # signalCondition() alone has no default warning action to convert.
+    if (level >= 2 && !is.null(findRestart("muffleWarning"))) {
+        stop(simpleError(
+            paste0("(converted from warning) ", text),
+            call = conditionCall(warning)
+        ))
+    }
+
+    TRUE
+}
+
+
 is_package_loading_warning <- function(text) {
     text <- as.character(text %||% "")
 

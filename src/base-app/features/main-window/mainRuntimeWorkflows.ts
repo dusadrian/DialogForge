@@ -2,7 +2,8 @@ import type {
     ProductPackageSourcePolicy
 } from "../../../core/contracts/applicationComposition";
 import type {
-    RuntimeExtensionMethodResult
+    RuntimeExtensionMethodResult,
+    RuntimeSessionSnapshot
 } from "../../../runtime/provider-contract/runtimeProvider";
 import {
     createRuntimePackageInstallWorkflow,
@@ -14,14 +15,16 @@ import {
 import type {
     OpenFileResult
 } from "../files/openFileResult";
+import type { RuntimeCommandResult } from "../../../runtime/commands/runtimeCommandReceipt";
 
 
 export interface MainRuntimeWorkflowOptions {
     dialogForge: DialogForgeApi;
+    getRuntimeSnapshot?(): RuntimeSessionSnapshot | null;
     getRuntimeProviderId(): string;
     getProductId(): string;
     getPackageSourcePolicy(): ProductPackageSourcePolicy;
-    executeVisibleCommand(command: string, source: string): Promise<void>;
+    executeVisibleCommand(command: string, source: string): Promise<RuntimeCommandResult>;
     renderImportFileResult(result: OpenFileResult): void;
     renderRuntimeMethodResult(result: RuntimeExtensionMethodResult): void;
     refreshConsoleWorkingDirectory(): Promise<void>;
@@ -41,6 +44,7 @@ export const createMainRuntimeWorkflows = function(
     options: MainRuntimeWorkflowOptions
 ): MainRuntimeWorkflows {
     const packageInstallWorkflow = createRuntimePackageInstallWorkflow({
+        getRuntimeSnapshot: options.getRuntimeSnapshot,
         getRuntimeProviderId: options.getRuntimeProviderId,
         getProductId: options.getProductId,
         getPackageSourcePolicy: options.getPackageSourcePolicy,

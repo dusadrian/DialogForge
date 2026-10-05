@@ -3,12 +3,16 @@ import type {
     ObjectInspectionResult,
     WorkspaceSnapshot
 } from "../../../runtime/provider-contract/runtimeProvider";
+import {
+    createWorkspaceActiveDatasetDelivery
+} from "../../../runtime/workspace/workspaceActiveDatasetDelivery";
 
 
 export interface MainWorkspaceControllerBindings {
+    getSessionScope?(): unknown;
     renderWorkspace(snapshot: WorkspaceSnapshot): void;
     renderObjectInspection(result: ObjectInspectionResult): void;
-    renderActiveDataset(snapshot: ActiveDatasetSnapshot): void;
+    renderActiveDataset(snapshot: ActiveDatasetSnapshot): void | boolean;
     confirmRemove(objectName: string): boolean;
     confirmClear(): boolean;
     refreshRuntimeEvents(): void;
@@ -28,6 +32,17 @@ export interface MainWorkspaceController {
 export const createMainWorkspaceController = function(
     bindings: MainWorkspaceControllerBindings
 ): MainWorkspaceController {
+    const activeDatasetDelivery = createWorkspaceActiveDatasetDelivery({
+        getSessionScope: () => bindings.getSessionScope?.(),
+        readActiveDataset: () => window.dialogForge.getActiveDataset(),
+        requestActiveDataset: (name) => window.dialogForge.setActiveDataset(name),
+        publish: bindings.renderActiveDataset,
+        selected: function(snapshot) {
+            bindings.readDatasetDetails(snapshot.objectName);
+            bindings.refreshRuntimeEvents();
+        }
+    });
+
     const refresh = async function(): Promise<void> {
         const snapshot = await window.dialogForge.refreshWorkspace();
 
@@ -41,9 +56,7 @@ export const createMainWorkspaceController = function(
     };
 
     const refreshWorkspaceState = async function(): Promise<void> {
-        const activeDataset = await window.dialogForge.getActiveDataset();
-
-        bindings.renderActiveDataset(activeDataset);
+        await activeDatasetDelivery.refresh();
         bindings.refreshRuntimeEvents();
     };
 
@@ -74,14 +87,7 @@ export const createMainWorkspaceController = function(
     const setActiveDataset = async function(
         objectName: string
     ): Promise<void> {
-        const snapshot = await window.dialogForge.setActiveDataset(objectName);
-
-        bindings.renderActiveDataset(snapshot);
-
-        if (snapshot.status === "selected") {
-            bindings.readDatasetDetails(snapshot.objectName);
-            bindings.refreshRuntimeEvents();
-        }
+        await activeDatasetDelivery.select(objectName);
     };
 
     return {

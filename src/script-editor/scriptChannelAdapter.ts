@@ -12,6 +12,7 @@ import {
     createUnsupportedScriptDirectoryResult,
     type ScriptDirectoryResult
 } from "./files/scriptDirectoryResult";
+import { readAcceptedRuntimeCommandResult } from "../runtime/commands/runtimeCommandReceipt";
 
 
 export interface ScriptChannelAdapterBindings {
@@ -56,9 +57,8 @@ export const createScriptChannelAdapter = function(
             return runScriptCodeBatch(readScriptCodeBatchInput(value), {
                 ensureRuntimeReady: bindings.ensureRuntimeReady,
                 executeVisibleCommand: async function(request) {
-                    await bindings.executeVisibleCommand(request.text);
-
-                    return [];
+                    const result = await bindings.executeVisibleCommand(request.text);
+                    return readAcceptedRuntimeCommandResult(result, true);
                 },
                 publishCommandBoundary: bindings.publishCommandBoundary
             });

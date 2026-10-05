@@ -1,9 +1,11 @@
 import { createRuntimeExtensionMethodResult } from "../../../extensions/runtimeExtensionProtocol";
+import { createRuntimeInterruptResult } from "../../../extensions/runtimeInterruptResult";
 import type {
     RuntimeExtensionController
 } from "../../../provider-contract/runtimeProvider";
 import {
-    createRWorkspaceUpdate
+    createRWorkspaceUpdate,
+    hasValidRWorkspaceReconciliationPayload
 } from "./rWorkspaceUpdate";
 import type {
     RRuntimeControlClient
@@ -14,6 +16,9 @@ export interface RExtensionControllerOptions {
     getClient(): RRuntimeControlClient | null;
     createRequestId(prefix: string): string;
     interrupt(): boolean | null;
+    interruptUnavailableMessage?: string;
+    interruptAcceptedMessage?: string;
+    interruptFailedMessage?: string;
 }
 
 
@@ -25,24 +30,15 @@ export const createRExtensionController = function(
             if (request.method === "runtime.interrupt") {
                 const signalled = options.interrupt();
 
-                if (signalled === null) {
-                    return createRuntimeExtensionMethodResult({
-                        status: "unavailable",
-                        providerId: snapshot.providerId,
-                        method: request.method,
-                        message: "R runtime process is not running."
-                    });
-                }
-
-                return createRuntimeExtensionMethodResult({
-                    status: signalled ? "ready" : "failed",
-                    providerId: snapshot.providerId,
-                    method: request.method,
-                    value: signalled,
-                    message: signalled
-                        ? "R runtime process was sent SIGINT."
-                        : "R runtime process did not accept SIGINT."
-                });
+                return createRuntimeInterruptResult(
+                    snapshot,
+                    signalled,
+                    signalled === null
+                        ? options.interruptUnavailableMessage || "R runtime process is not running."
+                        : signalled
+                        ? options.interruptAcceptedMessage || "R runtime process was sent SIGINT."
+                        : options.interruptFailedMessage || "R runtime process did not accept SIGINT."
+                );
             }
 
             const client = options.getClient();
@@ -69,20 +65,26 @@ export const createRExtensionController = function(
                 && !Array.isArray(value)
                 ? value as Record<string, unknown>
                 : {};
-            const rawWorkspaceUpdate =
-                record.workspaceUpdate
-                || record.workspace_update;
+            const hasWorkspaceUpdate = Object.hasOwn(record, "workspaceUpdate")
+                || Object.hasOwn(record, "workspace_update");
+            const rawWorkspaceUpdate = Object.hasOwn(record, "workspaceUpdate")
+                ? record.workspaceUpdate : record.workspace_update;
+            const invalidWorkspaceUpdate = hasWorkspaceUpdate
+                && !hasValidRWorkspaceReconciliationPayload(rawWorkspaceUpdate);
 
             return createRuntimeExtensionMethodResult({
                 status: result.ok ? "ready" : "failed",
                 providerId: snapshot.providerId,
                 method: request.method,
                 value,
-                workspaceUpdate: rawWorkspaceUpdate
+                workspaceUpdate: hasWorkspaceUpdate && !invalidWorkspaceUpdate
                     ? createRWorkspaceUpdate(rawWorkspaceUpdate)
                     : undefined,
+                workspaceReconciliation: invalidWorkspaceUpdate ? "failed" : undefined,
                 message: result.ok
-                    ? "R runtime-control resolved the runtime extension method."
+                    ? invalidWorkspaceUpdate
+                    ? "R runtime extension completed, but its workspace update was rejected. Refresh the workspace before using its displayed values."
+                    : "R runtime-control resolved the runtime extension method."
                     : String(
                         result.error
                         || "R runtime extension method failed."

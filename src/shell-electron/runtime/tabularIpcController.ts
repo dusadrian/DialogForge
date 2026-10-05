@@ -1,3 +1,19 @@
+import { warmDatasetEditorFirstScreens } from "../../dataset-editor/datasetEditorWarmCache";
+import {
+    createRuntimeCellBatchMutation,
+    createRuntimeCellMutation
+} from "../../runtime/tabular-data/runtimeCellBatchMutation";
+import { createRuntimeTabularMetadataMutation } from "../../runtime/tabular-data/runtimeTabularMetadataMutation";
+import { createRuntimeTabularReadActions } from "../../runtime/tabular-data/runtimeTabularReadActions";
+import { createRuntimeColumnMutationActions } from "../../runtime/tabular-data/runtimeColumnMutationActions";
+import { createRuntimeRowMutationActions } from "../../runtime/tabular-data/runtimeRowMutationActions";
+import { createRuntimeTabularMetadataReads } from "../../runtime/tabular-data/runtimeTabularMetadataReads";
+import { deliverDatasetMutationEffects } from "../../dataset-editor/datasetMutationDelivery";
+import { captureWorkspaceRuntimeScope } from "../../runtime/workspace/workspaceSnapshotDelivery";
+import {
+    createDatasetMutationCacheEffect,
+    type DatasetMutationCacheEffect
+} from "../../dataset-editor/datasetMutationCacheEffects";
 import type {
     IpcMain,
     IpcMainInvokeEvent
@@ -29,19 +45,6 @@ import {
     tabularIpcChannels
 } from "../../core/ipc/tabularIpc";
 import {
-    createCellUpdateRequest,
-    createColumnInsertRequest,
-    createColumnRemoveRequest,
-    createColumnRenameRequest,
-    createDeclaredMissingUpdateRequest,
-    createRowInsertRequest,
-    createRowNameUpdateRequest,
-    createRowRemoveRequest,
-    createRowSortRequest,
-    createValueLabelUpdateRequest,
-    createVariableMetadataUpdateRequest
-} from "../../runtime/tabular-data/tabularProtocol";
-import {
     createImportRequest
 } from "../../runtime/tabular-data/importProtocol";
 
@@ -51,6 +54,8 @@ export interface TabularIpcControllerOptions {
     runtimeSessionManager: Pick<
         RuntimeSessionManager,
         | "readTabularSchema"
+        | "getSnapshot"
+        | "getWorkspaceSnapshot"
         | "writeCell"
         | "writeCells"
         | "renameColumn"
@@ -72,7 +77,7 @@ export interface TabularIpcControllerOptions {
     readInitialDatasetPreview(
         request: string | Partial<TabularPreviewRequest>
     ): Promise<TabularPreviewSnapshot>;
-    invalidateInitialDatasetPreview(objectName?: string): void;
+    invalidateInitialDatasetPreview(objectName: string, effect: DatasetMutationCacheEffect): void;
     warmInitialDatasetPreview(objectName: string): void;
     warmInitialVariableMetadata(objectName: string): void;
     refreshWorkspaceAndBroadcast(): Promise<unknown>;
@@ -88,27 +93,75 @@ export interface TabularIpcControllerOptions {
 }
 
 
-const uniqueObjectNames = function(requests: CellUpdateRequest[]): string[] {
-    return Array.from(new Set(requests.map((request) => {
-        return request.objectName;
-    }).filter(Boolean)));
-};
-
-
 export const createTabularIpcController = function(
     options: TabularIpcControllerOptions
 ): void {
-    const invalidateAndBroadcast = async function(objectName: string): Promise<void> {
-        options.invalidateInitialDatasetPreview(objectName);
-        await options.broadcastRuntimeEvents();
+    const reads = createRuntimeTabularReadActions({
+        runtimeSessionManager: options.runtimeSessionManager,
+        readPreview: options.readInitialDatasetPreview,
+        previewRead: options.sendTabularPreview
+    });
+    const metadataReads = createRuntimeTabularMetadataReads({
+        runtimeSessionManager: options.runtimeSessionManager,
+        publishVariableMetadata: options.sendVariableMetadata,
+        publishValueLabels: options.sendValueLabels,
+        publishDeclaredMissing: options.sendDeclaredMissing
+    });
+    const cellBatch = createRuntimeCellBatchMutation({
+        runtimeSessionManager: options.runtimeSessionManager,
+        completed: options.sendCellUpdate,
+        updated: async (_result, objectNames, isCurrent) => {
+            await deliverDatasetMutationEffects({
+                isCurrent,
+                objectNames,
+                updateCache: name => options.invalidateInitialDatasetPreview(name, createDatasetMutationCacheEffect([
+                    { kind: "dataset_cells_changed" }
+                ])),
+                refreshConsumers: options.broadcastRuntimeEvents
+            });
+        }
+    });
+    const invalidateAndBroadcast = async function(
+        objectName: string,
+        effect: DatasetMutationCacheEffect
+    ): Promise<void> {
+        await deliverDatasetMutationEffects({
+            isCurrent: captureWorkspaceRuntimeScope(() => options.runtimeSessionManager),
+            objectNames: [objectName],
+            updateCache: name => options.invalidateInitialDatasetPreview(name, effect),
+            refreshConsumers: options.broadcastRuntimeEvents
+        });
     };
+    const metadata = createRuntimeTabularMetadataMutation({
+        runtimeSessionManager: options.runtimeSessionManager,
+        updated: result => invalidateAndBroadcast(result.objectName, createDatasetMutationCacheEffect([
+            { kind: "dataset_variable_meta_changed" }
+        ]))
+    });
+    const columns = createRuntimeColumnMutationActions({
+        runtimeSessionManager: options.runtimeSessionManager,
+        updated: result => invalidateAndBroadcast(result.objectName, createDatasetMutationCacheEffect([
+            { kind: "dataset_columns_changed", schemaChanged: true }
+        ]))
+    });
+    const rows = createRuntimeRowMutationActions({
+        runtimeSessionManager: options.runtimeSessionManager,
+        updated: (result, changes) => invalidateAndBroadcast(
+            result.objectName, createDatasetMutationCacheEffect(changes)
+        )
+    });
+    const cell = createRuntimeCellMutation({
+        runtimeSessionManager: options.runtimeSessionManager,
+        completed: options.sendCellUpdate,
+        updated: result => invalidateAndBroadcast(result.objectName, createDatasetMutationCacheEffect([
+            { kind: "dataset_cells_changed" }
+        ]))
+    });
 
     options.ipcMain.handle(
         tabularIpcChannels.readSchema,
         async (_event: IpcMainInvokeEvent, objectName: string) => {
-            const targetName = String(objectName || "").trim();
-
-            return options.runtimeSessionManager.readTabularSchema(targetName);
+            return reads.readTabularSchema(objectName);
         }
     );
 
@@ -118,222 +171,112 @@ export const createTabularIpcController = function(
             _event: IpcMainInvokeEvent,
             input: string | Partial<TabularPreviewRequest>
         ) => {
-            const request = typeof input === "string"
-                ? { objectName: input }
-                : input;
-            const preview = await options.readInitialDatasetPreview(request);
-
-            options.sendTabularPreview(preview);
-
-            return preview;
+            return reads.readTabularPreview(input);
         }
     );
 
     options.ipcMain.handle(
         tabularIpcChannels.writeCell,
         async (_event: IpcMainInvokeEvent, input: Partial<CellUpdateRequest>) => {
-            const request = createCellUpdateRequest(input || {});
-            const result = await options.runtimeSessionManager.writeCell(request);
-
-            options.sendCellUpdate(result);
-            if (result.status === "updated") {
-                await invalidateAndBroadcast(result.objectName);
-            }
-
-            return result;
+            return cell.writeCell(input);
         }
     );
 
     options.ipcMain.handle(
         tabularIpcChannels.writeCells,
         async (_event: IpcMainInvokeEvent, inputs: Partial<CellUpdateRequest>[]) => {
-            const requests = (inputs || []).map((input) => {
-                return createCellUpdateRequest(input || {});
-            });
-            const result = await options.runtimeSessionManager.writeCells(requests);
-
-            options.sendCellUpdate(result);
-            if (result.updated > 0) {
-                uniqueObjectNames(requests).forEach((objectName) => {
-                    options.invalidateInitialDatasetPreview(objectName);
-                });
-                await options.broadcastRuntimeEvents();
-            }
-
-            return result;
+            return cellBatch.writeCells(inputs);
         }
     );
 
     options.ipcMain.handle(
         tabularIpcChannels.renameColumn,
         async (_event: IpcMainInvokeEvent, input: Partial<ColumnRenameRequest>) => {
-            const request = createColumnRenameRequest(input || {});
-            const result = await options.runtimeSessionManager.renameColumn(request);
-
-            if (result.status === "updated") {
-                await invalidateAndBroadcast(result.objectName);
-            }
-
-            return result;
+            return columns.renameColumn(input);
         }
     );
 
     options.ipcMain.handle(
         tabularIpcChannels.insertColumn,
         async (_event: IpcMainInvokeEvent, input: Partial<ColumnInsertRequest>) => {
-            const request = createColumnInsertRequest(input || {});
-            const result = await options.runtimeSessionManager.insertColumn(request);
-
-            if (result.status === "updated") {
-                await invalidateAndBroadcast(result.objectName);
-            }
-
-            return result;
+            return columns.insertColumn(input);
         }
     );
 
     options.ipcMain.handle(
         tabularIpcChannels.removeColumn,
         async (_event: IpcMainInvokeEvent, input: Partial<ColumnRemoveRequest>) => {
-            const request = createColumnRemoveRequest(input || {});
-            const result = await options.runtimeSessionManager.removeColumn(request);
-
-            if (result.status === "updated") {
-                await invalidateAndBroadcast(result.objectName);
-            }
-
-            return result;
+            return columns.removeColumn(input);
         }
     );
 
     options.ipcMain.handle(
         tabularIpcChannels.insertRow,
         async (_event: IpcMainInvokeEvent, input: Partial<RowInsertRequest>) => {
-            const request = createRowInsertRequest(input || {});
-            const result = await options.runtimeSessionManager.insertRow(request);
-
-            if (result.status === "updated") {
-                await invalidateAndBroadcast(result.objectName);
-            }
-
-            return result;
+            return rows.insertRow(input);
         }
     );
 
     options.ipcMain.handle(
         tabularIpcChannels.removeRow,
         async (_event: IpcMainInvokeEvent, input: Partial<RowRemoveRequest>) => {
-            const request = createRowRemoveRequest(input || {});
-            const result = await options.runtimeSessionManager.removeRow(request);
-
-            if (result.status === "updated") {
-                await invalidateAndBroadcast(result.objectName);
-            }
-
-            return result;
+            return rows.removeRow(input);
         }
     );
 
     options.ipcMain.handle(
         tabularIpcChannels.sortRows,
         async (_event: IpcMainInvokeEvent, input: Partial<RowSortRequest>) => {
-            const request = createRowSortRequest(input || {});
-            const result = await options.runtimeSessionManager.sortRows(request);
-
-            if (result.status === "updated") {
-                await invalidateAndBroadcast(result.objectName);
-            }
-
-            return result;
+            return rows.sortRows(input);
         }
     );
 
     options.ipcMain.handle(
         tabularIpcChannels.updateRowName,
         async (_event: IpcMainInvokeEvent, input: Partial<RowNameUpdateRequest>) => {
-            const request = createRowNameUpdateRequest(input || {});
-            const result = await options.runtimeSessionManager.updateRowName(request);
-
-            if (result.status === "updated") {
-                await invalidateAndBroadcast(result.objectName);
-            }
-
-            return result;
+            return rows.updateRowName(input);
         }
     );
 
     options.ipcMain.handle(
         tabularIpcChannels.readVariableMetadata,
         async (_event: IpcMainInvokeEvent, objectName: string) => {
-            const snapshot = await options.runtimeSessionManager.readVariableMetadata(objectName);
-
-            options.sendVariableMetadata(snapshot);
-
-            return snapshot;
+            return metadataReads.readVariableMetadata(objectName);
         }
     );
 
     options.ipcMain.handle(
         tabularIpcChannels.writeVariableMetadata,
         async (_event: IpcMainInvokeEvent, input: Partial<VariableMetadataUpdateRequest>) => {
-            const request = createVariableMetadataUpdateRequest(input || {});
-            const result = await options.runtimeSessionManager.writeVariableMetadata(request);
-
-            if (result.status === "updated") {
-                await invalidateAndBroadcast(result.objectName);
-            }
-
-            return result;
+            return metadata.writeVariableMetadata(input);
         }
     );
 
     options.ipcMain.handle(
         tabularIpcChannels.readValueLabels,
         async (_event: IpcMainInvokeEvent, objectName: string) => {
-            const snapshot = await options.runtimeSessionManager.readValueLabels(objectName);
-
-            options.sendValueLabels(snapshot);
-
-            return snapshot;
+            return metadataReads.readValueLabels(objectName);
         }
     );
 
     options.ipcMain.handle(
         tabularIpcChannels.writeValueLabels,
         async (_event: IpcMainInvokeEvent, input: Partial<ValueLabelUpdateRequest>) => {
-            const request = createValueLabelUpdateRequest(input || {});
-            const result = await options.runtimeSessionManager.writeValueLabels(request);
-
-            if (result.status === "updated") {
-                await invalidateAndBroadcast(result.objectName);
-            }
-
-            return result;
+            return metadata.writeValueLabels(input);
         }
     );
 
     options.ipcMain.handle(
         tabularIpcChannels.readDeclaredMissing,
         async (_event: IpcMainInvokeEvent, objectName: string) => {
-            const snapshot = await options.runtimeSessionManager.readDeclaredMissing(objectName);
-
-            options.sendDeclaredMissing(snapshot);
-
-            return snapshot;
+            return metadataReads.readDeclaredMissing(objectName);
         }
     );
 
     options.ipcMain.handle(
         tabularIpcChannels.writeDeclaredMissing,
         async (_event: IpcMainInvokeEvent, input: Partial<DeclaredMissingUpdateRequest>) => {
-            const request = createDeclaredMissingUpdateRequest(input || {});
-            const result = await options.runtimeSessionManager.writeDeclaredMissing(request);
-
-            if (result.status === "updated") {
-                await invalidateAndBroadcast(result.objectName);
-            }
-
-            return result;
+            return metadata.writeDeclaredMissing(input);
         }
     );
 
@@ -346,8 +289,11 @@ export const createTabularIpcController = function(
             options.sendImportResult(result);
             options.sendActiveDataset(options.runtimeSessionManager.getActiveDataset());
             if (result.status === "imported") {
-                options.warmInitialDatasetPreview(result.targetName);
-                options.warmInitialVariableMetadata(result.targetName);
+                warmDatasetEditorFirstScreens(
+                    options.warmInitialDatasetPreview,
+                    options.warmInitialVariableMetadata,
+                    result.targetName
+                );
                 await options.refreshWorkspaceAndBroadcast();
             }
             if (result.transcriptEvents.length > 0) {

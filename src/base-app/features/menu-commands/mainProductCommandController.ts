@@ -3,6 +3,7 @@ import type {
     EvaluatedProductCapability
 } from "../../../core/contracts/applicationComposition";
 import type {
+    ProductCommandRequest,
     ProductCommandResult
 } from "../../../runtime/provider-contract/runtimeProvider";
 
@@ -10,10 +11,11 @@ import type {
 export interface MainProductCommandControllerBindings {
     getProductId(): string;
     getProductCapabilities(): EvaluatedProductCapability[];
+    executeProductCommand(request: ProductCommandRequest): Promise<ProductCommandResult>;
     installRequired(value: unknown): Promise<void>;
     updateRequired(value: unknown): Promise<void>;
     renderResult(result: ProductCommandResult): void;
-    refreshRuntimeEvents(): void;
+    refreshRuntimeEvents?(): void;
     checkDependencies(names: string[], source: string): Promise<void>;
 }
 
@@ -77,7 +79,7 @@ export const createMainProductCommandController = function(
             return;
         }
 
-        const result = await window.dialogForge.executeProductCommand({
+        const result = await bindings.executeProductCommand({
             productId: bindings.getProductId(),
             command: commandId,
             label: command.label || "",
@@ -87,7 +89,7 @@ export const createMainProductCommandController = function(
         });
 
         bindings.renderResult(result);
-        bindings.refreshRuntimeEvents();
+        bindings.refreshRuntimeEvents?.();
 
         if (packages.length > 0) {
             await bindings.checkDependencies(

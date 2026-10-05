@@ -9,6 +9,7 @@ import type {
     RowNameUpdateResult,
     RowRemoveResult,
     RowSortResult,
+    RuntimeSessionSnapshot,
     TabularPreviewSnapshot,
     UiCommandVisibility,
     ValueLabelSnapshot,
@@ -46,6 +47,7 @@ import {
 import {
     createDatasetNavigationCommandController
 } from "../../../dataset-editor/renderer/datasetNavigationCommandController";
+import { createDatasetPreviewReadController } from "../../../dataset-editor/renderer/datasetPreviewReadController";
 
 
 interface PasteApplyResult {
@@ -73,6 +75,7 @@ export interface MainDatasetCommandServicesOptions {
     getCopyPayload(): CopyPayload | null;
     getPastePayload(): PastePayload | null;
     getUiCommandVisibility(): UiCommandVisibility;
+    getRuntimeSnapshot(): RuntimeSessionSnapshot | null;
     renderSelection(): void;
     renderStatus(
         elementId: string,
@@ -161,14 +164,15 @@ const selectById = function(
 export const createMainDatasetCommandServices = function(
     options: MainDatasetCommandServicesOptions
 ) {
-    const readTabularPreview = async function(
-        objectName: string
-    ): Promise<void> {
-        const preview = await options.dialogForge.readTabularPreview(objectName);
-
-        options.renderTabularPreview(preview);
-    };
+    const previewController = createDatasetPreviewReadController({
+        getRuntimeSnapshot: options.getRuntimeSnapshot,
+        getObjectName: () => options.getPreview()?.objectName || "",
+        readPreview: options.dialogForge.readTabularPreview,
+        renderPreview: options.renderTabularPreview
+    });
+    const readTabularPreview = previewController.read;
     const metadataController = createDatasetMetadataMutationController({
+        getRuntimeSnapshot: options.getRuntimeSnapshot,
         controls: {
             variableName: inputById(options.document, "variableName"),
             metadataKey: selectById(options.document, "variableMetadataKey"),
@@ -212,6 +216,7 @@ export const createMainDatasetCommandServices = function(
         refreshRuntimeEvents: options.refreshRuntimeEvents
     });
     const cellController = createDatasetCellMutationController({
+        getRuntimeSnapshot: options.getRuntimeSnapshot,
         controls: {
             row: inputById(options.document, "cellRow"),
             column: inputById(options.document, "cellColumn"),
@@ -242,6 +247,7 @@ export const createMainDatasetCommandServices = function(
         refreshRuntimeEvents: options.refreshRuntimeEvents
     });
     const structureController = createDatasetStructureMutationController({
+        getRuntimeSnapshot: options.getRuntimeSnapshot,
         controls: {
             columnRenameFrom: inputById(options.document, "columnRenameFrom"),
             columnRenameTo: inputById(options.document, "columnRenameTo"),
@@ -291,6 +297,7 @@ export const createMainDatasetCommandServices = function(
         refreshRuntimeEvents: options.refreshRuntimeEvents
     });
     const clipboardController = createDatasetClipboardController({
+        getRuntimeSnapshot: options.getRuntimeSnapshot,
         pasteInput: textAreaById(options.document, "pasteInput"),
         getPreview: options.getPreview,
         getMetadata: options.getMetadata,

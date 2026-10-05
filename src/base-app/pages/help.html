@@ -178,12 +178,14 @@
         const initialUrl = String(params.get('src') || '').trim();
         const initialDoc = String(params.get('doc') || '').trim();
         const initialBase = String(params.get('base') || '').trim();
+        const initialResourceBase = String(params.get('resourceBase') || '').trim();
         const initialTopic = String(params.get('topic') || '').trim();
         const initialPackage = String(params.get('package') || '').trim();
         let baseTitle = String(params.get('title') || 'Help').trim() || 'Help';
         let currentUrl = initialUrl;
         let currentTopic = initialTopic;
         let currentPackage = initialPackage;
+        let helpRequestSequence = 0;
         let consoleSyntaxModulePromise = null;
         const historyEntries = [];
         let historyIndex = -1;
@@ -338,7 +340,9 @@
         const sameEntry = (left, right) => {
           if (!left || !right || left.kind !== right.kind) return false;
           if (left.kind === 'url') return String(left.url || '') === String(right.url || '');
-          return String(left.baseUrl || '') === String(right.baseUrl || '') && String(left.html || '') === String(right.html || '');
+          return String(left.baseUrl || '') === String(right.baseUrl || '')
+              && String(left.html || '') === String(right.html || '')
+              && String(left.resourceBaseUrl || '') === String(right.resourceBaseUrl || '');
         };
 
         const recordHistory = (entry) => {
@@ -373,39 +377,79 @@
           '@media (min-width:1220px){.container{width:1200px !important;}main{width:800px !important;margin-left:400px !important;padding-left:10px !important;}nav.topic{width:400px !important;}}'
         ].join('');
 
-        const buildSrcDoc = (html, baseUrl) => {
+        const bindHelpDocumentResources = (html, baseUrl, resourceBaseUrl) => {
+            if (!resourceBaseUrl) {
+                return html;
+            }
+            const resourceBase = new URL(resourceBaseUrl);
+            const base = new URL(baseUrl || '/', resourceBase.origin);
+            if (resourceBase.origin !== base.origin || resourceBase.search || resourceBase.hash) {
+                throw new Error('invalid-help-resource-base');
+            }
+            const document = new DOMParser().parseFromString(html, 'text/html');
+            const attributes = [
+                ['link[href]', 'href'], ['script[src]', 'src'],
+                ['img[src]', 'src'], ['input[src]', 'src'],
+                ['source[src]', 'src'], ['video[src]', 'src'],
+                ['video[poster]', 'poster'], ['audio[src]', 'src'],
+                ['object[data]', 'data'], ['iframe[src]', 'src'], ['embed[src]', 'src']
+            ];
+            for (const [selector, attribute] of attributes) {
+                for (const element of document.querySelectorAll(selector)) {
+                    const value = String(element.getAttribute(attribute) || '').trim();
+                    if (!value) {
+                        continue;
+                    }
+                    let resolved;
+                    try {
+                        resolved = new URL(value, base);
+                    } catch {
+                        continue;
+                    }
+                    if (resolved.origin !== base.origin) {
+                        continue;
+                    }
+                    element.setAttribute(attribute,
+                        resourceBase.href.replace(/\/$/, '') + resolved.pathname + resolved.search + resolved.hash);
+                }
+            }
+            return document.documentElement.outerHTML;
+        };
+
+        const buildHelpFrameDocument = (html, baseUrl, resourceBaseUrl = '') => {
           const safeBaseUrl = String(baseUrl || '').trim();
-          const safeHtml = String(html || '');
+          const safeHtml = bindHelpDocumentResources(String(html || ''), safeBaseUrl, resourceBaseUrl);
           const injectedScript = `
             (() => {
               const post = (payload) => {
                 try { window.parent.postMessage(payload, '*'); } catch {}
               };
-              const hijackLinks = () => {
-                const links = Array.from(document.links || []);
-                for (const link of links) {
-                  link.onclick = (event) => {
-                    try { event.preventDefault(); } catch {}
-                    post({ id: 'app-help-navigate', url: String(link.href || '') });
-                    return false;
-                  };
+              document.addEventListener('click', (event) => {
+                const link = event.target instanceof Element
+                    ? event.target.closest('a[href]')
+                    : null;
+
+                if (!link) {
+                    return;
                 }
-              };
+
+                event.preventDefault();
+                post({ id: 'app-help-navigate', requestId: ${helpRequestSequence}, url: String(link.href || '') });
+              });
               const report = () => {
                 post({
                   id: 'app-help-complete',
+                  requestId: ${helpRequestSequence},
                   url: document.baseURI || '',
                   title: document.title || ''
                 });
               };
               document.addEventListener('readystatechange', () => {
                 if (document.readyState === 'complete') {
-                  hijackLinks();
                   report();
                 }
               });
               window.addEventListener('load', () => {
-                hijackLinks();
                 report();
               });
             })();
@@ -417,10 +461,10 @@
             '<meta charset="UTF-8">',
             `<base href="${escapeAttr(safeBaseUrl)}">`,
             `<style>${helpDocumentStyle}</style>`,
+            `<script>${injectedScript}<\/script>`,
             '</head>',
             '<body>',
             safeHtml,
-            `<script>${injectedScript}<\/script>`,
             '</body>',
             '</html>'
           ].join('');
@@ -441,12 +485,12 @@
           } catch {}
         };
 
-        const renderHelpPage = (html, baseUrl) => {
+        const renderHelpPage = (html, baseUrl, resourceBaseUrl = '') => {
           try {
             if (!frame) return;
             currentUrl = String(baseUrl || '');
             updateToolbarState();
-            frame.srcdoc = buildSrcDoc(html, currentUrl);
+            frame.srcdoc = buildHelpFrameDocument(html, currentUrl, resourceBaseUrl);
           } catch {}
         };
 
@@ -462,7 +506,8 @@
             }
             return {
               text: String(result.text || ''),
-              url: String(result.url || nextUrl)
+              url: String(result.url || nextUrl),
+              resourceBaseUrl: String(result.resourceBaseUrl || '')
             };
           }
 
@@ -481,6 +526,7 @@
         const loadHelpUrl = async (targetUrl, options = {}) => {
           const nextUrl = String(targetUrl || '').trim();
           if (!nextUrl || !frame) return;
+          const requestId = ++helpRequestSequence;
           currentUrl = nextUrl;
           updateToolbarState();
           frame.srcdoc = [
@@ -490,6 +536,9 @@
           ].join('');
           try {
             const fetched = await fetchHelpHtml(nextUrl);
+            if (requestId !== helpRequestSequence) {
+                return;
+            }
             const text = String(fetched.text || '');
             const resolvedUrl = String(fetched.url || nextUrl);
             const metadata = readHelpUrlMetadata(resolvedUrl);
@@ -505,9 +554,12 @@
               updateToolbarState();
             }
 
-            renderHelpPage(text, resolvedUrl);
+            renderHelpPage(text, resolvedUrl, fetched.resourceBaseUrl);
             return;
           } catch (error) {
+            if (requestId !== helpRequestSequence) {
+                return;
+            }
             frame.srcdoc = [
               '<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body style="margin:0;padding:16px;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;color:#444;background:#fff;">',
               `<div>${escapeHtml('Unable to load help page.')}</div>`,
@@ -520,24 +572,29 @@
         };
 
         const loadHelpDoc = (html, baseUrl, options = {}) => {
+          helpRequestSequence += 1;
           const base = String(baseUrl || initialBase || '');
           if (options.record !== false) {
-            recordHistory({ kind: 'doc', html: String(html || ''), baseUrl: base });
+            recordHistory({ kind: 'doc', html: String(html || ''), baseUrl: base,
+                resourceBaseUrl: String(options.resourceBaseUrl || '') });
           } else {
             updateToolbarState();
           }
-          renderHelpPage(String(html || ''), base);
+          renderHelpPage(String(html || ''), base, options.resourceBaseUrl);
         };
 
         const openHistoryIndex = async (nextIndex) => {
           const idx = Number(nextIndex);
           if (!Number.isInteger(idx) || idx < 0 || idx >= historyEntries.length) return;
+          void getDialogForgeApi()?.retireHelpRequest?.();
           historyIndex = idx;
           const entry = historyEntries[idx];
           updateToolbarState();
           if (!entry) return;
           if (entry.kind === 'doc') {
-            loadHelpDoc(String(entry.html || ''), String(entry.baseUrl || ''), { record: false });
+            loadHelpDoc(String(entry.html || ''), String(entry.baseUrl || ''), {
+                record: false, resourceBaseUrl: entry.resourceBaseUrl
+            });
             return;
           }
           await loadHelpUrl(String(entry.url || ''), { record: false });
@@ -581,13 +638,16 @@
             loadHelpDoc(
               String(data.html || ''),
               String(data.baseUrl || data.base || ''),
-              { record: true }
+              { record: true, resourceBaseUrl: String(data.resourceBaseUrl || '') }
             );
             document.title = baseTitle;
             return;
           }
 
           if (String(data.id || '') === 'app-help-complete') {
+            if (event.source !== frame?.contentWindow || data.requestId !== helpRequestSequence) {
+                return;
+            }
             if (getCurrentEntry()?.kind !== 'doc') {
               currentUrl = String(data.url || currentUrl || initialUrl || '');
             }
@@ -607,6 +667,9 @@
             return;
           }
           if (String(data.id || '') !== 'app-help-navigate') return;
+          if (event.source !== frame?.contentWindow || data.requestId !== helpRequestSequence) {
+              return;
+          }
           const resolved = resolveHref(String(data.url || ''));
           if (!resolved) return;
           if (/^app:\/\//i.test(resolved)) {
@@ -614,6 +677,7 @@
             return;
           }
           if (isLocalHelpUrl(resolved) && !/\.pdf(?:$|[?#])/i.test(resolved)) {
+            void getDialogForgeApi()?.retireHelpRequest?.();
             void loadHelpUrl(resolved, { record: true });
             return;
           }
@@ -626,7 +690,7 @@
             const decoded = typeof atob === 'function'
               ? decodeURIComponent(escape(atob(initialDoc)))
               : initialDoc;
-            loadHelpDoc(decoded, initialBase, { record: true });
+            loadHelpDoc(decoded, initialBase, { record: true, resourceBaseUrl: initialResourceBase });
             document.title = baseTitle;
           } catch {
             document.title = baseTitle;

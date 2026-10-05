@@ -9,9 +9,9 @@ import type {
 
 import type {
     RuntimeSessionManager,
-    TranscriptEvent,
     VisibleCommandRequest
 } from "../../runtime/provider-contract/runtimeProvider";
+import type { RuntimeCommandResult } from "../../runtime/commands/runtimeCommandReceipt";
 import {
     createScriptFileResult,
     type ScriptFileResult
@@ -65,6 +65,7 @@ export interface ScriptEditorCompositionOptions {
     getZoomFactor(): number;
     readTerminalSettings(): Record<string, unknown>;
     getLocale(): string;
+    getI18n(): Record<string, string>;
     runtimeSessionManager: Pick<
         RuntimeSessionManager,
         "executeRuntimeMethod"
@@ -72,7 +73,7 @@ export interface ScriptEditorCompositionOptions {
     ensureRuntimeReady(): Promise<boolean>;
     executeVisibleCommand(
         request: VisibleCommandRequest
-    ): Promise<TranscriptEvent[]>;
+    ): Promise<RuntimeCommandResult>;
 }
 
 
@@ -239,7 +240,8 @@ export const createScriptEditorComposition = function(
                     ...options.readTerminalSettings()
                 },
                 appPath: options.rootDir,
-                languageNS: options.getLocale()
+                languageNS: options.getLocale(),
+                i18n: options.getI18n()
             };
         },
         shouldPreventClose: function(): boolean {

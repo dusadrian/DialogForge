@@ -6,6 +6,7 @@ import type {
     HelpTopicResult,
     InvisibleMutationResult,
     InvisibleQueryResult,
+    ProductCommandRequest,
     ProductCommandResult
 } from "../../../runtime/provider-contract/runtimeProvider";
 import {
@@ -19,6 +20,7 @@ import {
 export interface MainRuntimeCommandServicesOptions {
     getProductId(): string;
     getProductCapabilities(): EvaluatedProductCapability[];
+    executeProductCommand(request: ProductCommandRequest): Promise<ProductCommandResult>;
     installRequired(value: unknown): Promise<void>;
     updateRequired(value: unknown): Promise<void>;
     renderProductCommandResult(result: ProductCommandResult): void;
@@ -44,6 +46,7 @@ export const createMainRuntimeCommandServices = function(
     const productCommandController = createMainProductCommandController({
         getProductId: options.getProductId,
         getProductCapabilities: options.getProductCapabilities,
+        executeProductCommand: options.executeProductCommand,
         installRequired: options.installRequired,
         updateRequired: options.updateRequired,
         renderResult: options.renderProductCommandResult,

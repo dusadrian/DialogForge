@@ -6,6 +6,7 @@ import type {
     ActiveDatasetSnapshot,
     RuntimeSessionSnapshot,
     WorkspaceObjectSnapshot,
+    WorkspaceFreshness,
     WorkspaceSnapshot,
     WorkspaceUpdate
 } from "../provider-contract/runtimeProvider";
@@ -20,18 +21,32 @@ export interface RuntimeWorkspaceSelection {
 }
 
 
+export interface RuntimeWorkspaceSnapshotAcceptance {
+    accepted: boolean;
+    objects: WorkspaceObjectSnapshot[];
+}
+
+
 export interface RuntimeWorkspaceState {
     invalidate(): void;
     getGeneration(): number;
+    getReadEpoch(): number;
+    beginCommandReconciliation(): number;
+    endCommandReconciliation(token: number): void;
     markStale(requireSnapshot?: boolean): void;
     needsFullSnapshot(): boolean;
     remember(
         objects: WorkspaceObjectSnapshot[],
         revision?: WorkspaceUpdate["workspaceRevision"]
     ): WorkspaceObjectSnapshot[];
+    rememberSnapshot(
+        objects: WorkspaceObjectSnapshot[],
+        revision?: WorkspaceUpdate["workspaceRevision"]
+    ): RuntimeWorkspaceSnapshotAcceptance;
+    canApplyUpdate(update: WorkspaceUpdate): boolean;
     applyUpdate(update: WorkspaceUpdate): WorkspaceObjectSnapshot[];
     getObjects(): WorkspaceObjectSnapshot[] | null;
-    createSnapshot(session: RuntimeSessionSnapshot): WorkspaceSnapshot;
+    createSnapshot(session: RuntimeSessionSnapshot, excludedToken?: number): WorkspaceSnapshot;
     getActiveDataset(): ActiveDatasetSnapshot;
     getActiveObjectName(): string;
     reconcile(
@@ -46,6 +61,7 @@ export interface RuntimeWorkspaceState {
     selectKnown(providerId: string, objectName: string): RuntimeWorkspaceSelection;
     setUnavailable(providerId: string, objectName: string): void;
     setInvalid(providerId: string, objectName: string): void;
+    clearSelection(providerId: string): void;
     clearIfRemoved(providerId: string, objectNames: string[]): void;
     rename(providerId: string, oldName: string, newName: string): void;
 }
@@ -69,16 +85,38 @@ const isReadableTabularObject = function(
 };
 
 
+let workspaceOwnerSequence = 0;
+
+
 export const createRuntimeWorkspaceState = function(
     providerId: string
 ): RuntimeWorkspaceState {
+    const selectionOwner = [
+        Date.now(), ++workspaceOwnerSequence, Math.random().toString(36).slice(2)
+    ].join("-");
+    let selectionSequence = 0;
+    const createSelectionSnapshot = function(
+        input: Partial<ActiveDatasetSnapshot>
+    ): ActiveDatasetSnapshot {
+        return createActiveDatasetSnapshot({
+            ...input,
+            selectionRevision: {
+                owner: selectionOwner,
+                sequence: ++selectionSequence
+            }
+        });
+    };
+
     let stale = false;
     let requiresSnapshot = false;
     let generation = 0;
+    let readEpoch = 0;
     let revision: WorkspaceUpdate["workspaceRevision"];
     const retiredSessions = new Set<string>();
     let objects: WorkspaceObjectSnapshot[] | null = null;
-    let activeDataset = createActiveDatasetSnapshot({
+    let reconciliationSequence = 0;
+    const pendingCommandReconciliations = new Set<number>();
+    let activeDataset = createSelectionSnapshot({
         status: "none",
         providerId,
         message: "No active dataset is selected."
@@ -92,7 +130,7 @@ export const createRuntimeWorkspaceState = function(
             activeDataset.status !== "selected" ||
             activeDataset.objectName !== objectName;
 
-        activeDataset = createActiveDatasetSnapshot({
+        activeDataset = createSelectionSnapshot({
             status: "selected",
             providerId: nextProviderId,
             objectName,
@@ -125,7 +163,7 @@ export const createRuntimeWorkspaceState = function(
         }
 
         if (activeDataset.status === "selected") {
-            activeDataset = createActiveDatasetSnapshot({
+            activeDataset = createSelectionSnapshot({
                 status: "none",
                 providerId: nextProviderId,
                 message: "The active dataset is no longer available in the workspace."
@@ -147,7 +185,7 @@ export const createRuntimeWorkspaceState = function(
         }
 
         const selection = selectKnown(nextProviderId, firstDataset.name);
-        activeDataset = createActiveDatasetSnapshot({
+        activeDataset = createSelectionSnapshot({
             status: "selected",
             providerId: nextProviderId,
             objectName: firstDataset.name,
@@ -158,9 +196,62 @@ export const createRuntimeWorkspaceState = function(
         return selection;
     };
 
+    const canApplyUpdate = function(update: WorkspaceUpdate): boolean {
+        // A delta cannot repair a mutation whose committed result was lost.
+        if (requiresSnapshot) {
+            return false;
+        }
+
+        const nextRevision = update.workspaceRevision;
+
+        if (!nextRevision) {
+            return true;
+        }
+
+        return !retiredSessions.has(nextRevision.session)
+            && (!revision || (
+                revision.session === nextRevision.session
+                && nextRevision.sequence > revision.sequence
+            ));
+    };
+
+    const rememberSnapshot = function(
+        nextObjects: WorkspaceObjectSnapshot[],
+        nextRevision?: WorkspaceUpdate["workspaceRevision"]
+    ): RuntimeWorkspaceSnapshotAcceptance {
+        if (nextRevision) {
+            // A snapshot from before a failed check cannot prove recovery.
+            // Recovery must carry a later authoritative commit receipt.
+            if (
+                retiredSessions.has(nextRevision.session)
+                || (revision && revision.session !== nextRevision.session)
+                || (revision?.session === nextRevision.session
+                    && nextRevision.sequence < revision.sequence)
+                || (stale && revision?.session === nextRevision.session
+                    && nextRevision.sequence === revision.sequence)
+            ) {
+                return {
+                    accepted: false,
+                    objects: cloneWorkspaceObjects(objects || [])
+                };
+            }
+            revision = nextRevision;
+        }
+        readEpoch += 1;
+        objects = cloneWorkspaceObjects(nextObjects);
+        stale = false;
+        requiresSnapshot = false;
+
+        return { accepted: true, objects: nextObjects };
+    };
+
     return {
         invalidate: function(): void {
             generation += 1;
+            // Keep restart restoration intent, but retire pre-lifecycle reads.
+            activeDataset = createSelectionSnapshot(activeDataset);
+            readEpoch += 1;
+            pendingCommandReconciliations.clear();
             if (revision) {
                 retiredSessions.add(revision.session);
             }
@@ -172,7 +263,21 @@ export const createRuntimeWorkspaceState = function(
         getGeneration: function() {
             return generation;
         },
+        getReadEpoch: function() {
+            return readEpoch;
+        },
+        beginCommandReconciliation: function(): number {
+            readEpoch += 1;
+            reconciliationSequence += 1;
+            pendingCommandReconciliations.add(reconciliationSequence);
+
+            return reconciliationSequence;
+        },
+        endCommandReconciliation: function(token): void {
+            pendingCommandReconciliations.delete(token);
+        },
         markStale: function(requireSnapshot = false): void {
+            readEpoch += 1;
             // Retain the last baseline so a later committed delta can recover it.
             stale = true;
             requiresSnapshot = requiresSnapshot || requireSnapshot;
@@ -181,52 +286,21 @@ export const createRuntimeWorkspaceState = function(
             return requiresSnapshot;
         },
         remember: function(nextObjects, nextRevision) {
-            if (nextRevision) {
-                // A snapshot from before a failed check cannot prove recovery.
-                // Recovery must carry a later authoritative commit receipt.
-                if (
-                    retiredSessions.has(nextRevision.session)
-                    || (revision && revision.session !== nextRevision.session)
-                    || (revision?.session === nextRevision.session
-                        && nextRevision.sequence < revision.sequence)
-                    || (stale && revision?.session === nextRevision.session
-                        && nextRevision.sequence === revision.sequence)
-                ) {
-                    return cloneWorkspaceObjects(objects || []);
-                }
-                revision = nextRevision;
-            }
-            objects = cloneWorkspaceObjects(nextObjects);
-            stale = false;
-            requiresSnapshot = false;
-
-            return nextObjects;
+            return rememberSnapshot(nextObjects, nextRevision).objects;
         },
+        rememberSnapshot,
+        canApplyUpdate,
         applyUpdate: function(update) {
-            // An uncertain mutation may have committed a delta we never received.
-            // A later empty delta cannot repair that missing baseline.
-            if (requiresSnapshot) {
+            if (!canApplyUpdate(update)) {
                 return cloneWorkspaceObjects(objects || []);
             }
             const nextRevision = update.workspaceRevision;
 
             if (nextRevision) {
-                if (
-                    retiredSessions.has(nextRevision.session)
-                    || (revision?.session === nextRevision.session
-                        && nextRevision.sequence <= revision.sequence)
-                ) {
-                    return cloneWorkspaceObjects(objects || []);
-                }
-
-                if (revision && revision.session !== nextRevision.session) {
-                    // A different session is admitted only after lifecycle
-                    // invalidation, never by a delayed event alone.
-                    return cloneWorkspaceObjects(objects || []);
-                }
                 revision = nextRevision;
             }
 
+            readEpoch += 1;
             objects = applyWorkspaceUpdateToObjects(objects || [], update);
 
             if (update.workspaceRevision) {
@@ -236,17 +310,41 @@ export const createRuntimeWorkspaceState = function(
             return cloneWorkspaceObjects(objects);
         },
         getObjects: function() {
-            return objects === null || stale ? null : cloneWorkspaceObjects(objects);
+            if (objects === null || stale || pendingCommandReconciliations.size > 0) {
+                return null;
+            }
+
+            return cloneWorkspaceObjects(objects);
         },
-        createSnapshot: function(session) {
+        createSnapshot: function(session, excludedToken) {
+            let freshness: WorkspaceFreshness;
+            const pendingCount = pendingCommandReconciliations.size
+                - (excludedToken !== undefined && pendingCommandReconciliations.has(excludedToken) ? 1 : 0);
+
+            if (session.status !== "ready") {
+                freshness = "unavailable";
+            }
+            else if (pendingCount > 0) {
+                freshness = "pending";
+            }
+            else if (stale) {
+                freshness = "stale";
+            }
+            else {
+                freshness = objects === null ? "unread" : "fresh";
+            }
+
             return createWorkspaceSnapshot({
-                status: session.status === "ready" && objects !== null && !stale
-                    ? "ready"
-                    : "unavailable",
+                status: freshness === "fresh" ? "ready" : "unavailable",
+                freshness,
                 providerId: session.providerId,
                 objects: cloneWorkspaceObjects(objects || []),
                 workspaceRevision: revision,
-                message: stale
+                message: freshness === "pending"
+                    ? "Workspace synchronization is pending for an active command."
+                    : freshness === "unavailable"
+                    ? "Runtime session is not ready."
+                    : stale
                     ? "Workspace refresh failed; displayed values may be stale."
                     : objects !== null
                     ? "Last workspace objects read from the runtime provider."
@@ -254,7 +352,7 @@ export const createRuntimeWorkspaceState = function(
             });
         },
         getActiveDataset: function() {
-            return Object.assign({}, activeDataset);
+            return createActiveDatasetSnapshot(activeDataset);
         },
         getActiveObjectName: function(): string {
             return activeDataset.objectName;
@@ -272,7 +370,7 @@ export const createRuntimeWorkspaceState = function(
         },
         selectKnown,
         setUnavailable: function(nextProviderId, objectName): void {
-            activeDataset = createActiveDatasetSnapshot({
+            activeDataset = createSelectionSnapshot({
                 status: "unavailable",
                 providerId: nextProviderId,
                 objectName,
@@ -280,11 +378,18 @@ export const createRuntimeWorkspaceState = function(
             });
         },
         setInvalid: function(nextProviderId, objectName): void {
-            activeDataset = createActiveDatasetSnapshot({
+            activeDataset = createSelectionSnapshot({
                 status: "invalid",
                 providerId: nextProviderId,
                 objectName,
                 message: "Selected object is not a readable tabular object."
+            });
+        },
+        clearSelection: function(nextProviderId): void {
+            activeDataset = createSelectionSnapshot({
+                status: "none",
+                providerId: nextProviderId,
+                message: "No active dataset is selected."
             });
         },
         clearIfRemoved: function(nextProviderId, objectNames): void {
@@ -292,7 +397,7 @@ export const createRuntimeWorkspaceState = function(
                 return;
             }
 
-            activeDataset = createActiveDatasetSnapshot({
+            activeDataset = createSelectionSnapshot({
                 status: "none",
                 providerId: nextProviderId,
                 message: "The active dataset was removed from the workspace."
@@ -306,7 +411,7 @@ export const createRuntimeWorkspaceState = function(
                 return;
             }
 
-            activeDataset = createActiveDatasetSnapshot({
+            activeDataset = createSelectionSnapshot({
                 status: "selected",
                 providerId: nextProviderId,
                 objectName: newName,

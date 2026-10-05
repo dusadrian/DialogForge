@@ -4,6 +4,7 @@ import type {
 import type {
     DatasetEditorContextMenuView
 } from "./datasetEditorContextMenuView";
+import { runDatasetEditorEventAction } from "./datasetEditorEventAction";
 
 
 export interface DatasetEditorContextMenuActionOptions {
@@ -59,33 +60,37 @@ export const createDatasetEditorContextMenuBindingController = function<
         hideVariableRowMenu: contextMenus.hideVariableRow,
         hideCellMenu: contextMenus.hideCell,
         copyColumn: (columnName, options) => {
-            void actions.copyColumn(columnName, options);
+            void runDatasetEditorEventAction("copy-column", () => actions.copyColumn(columnName, options));
         },
         pasteColumn: (columnName) => {
-            void actions.pasteColumn(columnName);
+            void runDatasetEditorEventAction("paste-column", () => actions.pasteColumn(columnName));
         },
         sortColumn: (columnName, decreasing) => {
-            void actions.sortColumn(columnName, decreasing);
+            void runDatasetEditorEventAction("sort-column", () => actions.sortColumn(columnName, decreasing));
         },
-        renameColumn: actions.renameColumn,
+        renameColumn: (columnName) => {
+            void runDatasetEditorEventAction("rename-column", () => actions.renameColumn(columnName));
+        },
         insertColumn: (columnName, position) => {
-            void actions.insertColumn(columnName, position);
+            void runDatasetEditorEventAction("insert-column", () => actions.insertColumn(columnName, position));
         },
         removeColumn: (columnName) => {
-            void actions.removeColumn(columnName);
+            void runDatasetEditorEventAction("remove-column", () => actions.removeColumn(columnName));
         },
         insertRow: (rowNumber, position) => {
-            void actions.insertRow(rowNumber, position);
+            void runDatasetEditorEventAction("insert-row", () => actions.insertRow(rowNumber, position));
         },
-        renameRow: actions.renameRow,
+        renameRow: (rowNumber) => {
+            void runDatasetEditorEventAction("rename-row", () => actions.renameRow(rowNumber));
+        },
         removeRow: (rowNumber) => {
-            void actions.removeRow(rowNumber);
+            void runDatasetEditorEventAction("remove-row", () => actions.removeRow(rowNumber));
         },
         copyCell: () => {
-            void actions.copyCell();
+            void runDatasetEditorEventAction("copy-cell", () => actions.copyCell());
         },
         pasteCell: () => {
-            void actions.pasteCell();
+            void runDatasetEditorEventAction("paste-cell", () => actions.pasteCell());
         }
     };
 };

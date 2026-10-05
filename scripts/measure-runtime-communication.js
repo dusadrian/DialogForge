@@ -7,6 +7,7 @@ const crypto = require("node:crypto");
 const { execFile } = require("node:child_process");
 const { promisify } = require("node:util");
 const { _electron, chromium } = require("playwright");
+const { findMainWindowPage } = require("../tests/electron/product-launch");
 
 
 // An explicit local measurement run in an isolated profile. No workspace saves
@@ -45,6 +46,7 @@ const main = async function() {
     report.interactionVersion = 2;
     report.consoleSubmission = "Monaco keyboard input and Enter";
     let page;
+    let readDiagnostics;
     let memoryTimer;
     let memoryPending = false;
     const memory = { intervalMs: 250, samples: 0, peakTreeRssBytes: 0, peakByPid: {}, errors: 0 };
@@ -106,8 +108,7 @@ const main = async function() {
             await page.goto(target);
         }
         else {
-            page = app.windows().find((candidate) => candidate.url().endsWith("/main.html"))
-                || await app.firstWindow();
+            page = await findMainWindowPage(app);
         }
 
         console.log("Waiting for console readiness", page.url());
@@ -123,7 +124,7 @@ const main = async function() {
         }, undefined, { timeout: 90000 });
         report.startupReadyMs = performance.now() - started;
 
-        const readDiagnostics = async function(clear = false) {
+        readDiagnostics = async function(clear = false) {
             const read = function({ clear }) {
                 const journal = globalThis.dialogForgeRuntimeDiagnostics;
                 if (!journal) {
@@ -288,6 +289,7 @@ const main = async function() {
         await measure("small-cold", 'cat("DFBASE_SMALL_0\\n")', "DFBASE_SMALL_0");
         await measure("buffered-output", 'cat("DFBASE_START\\n"); Sys.sleep(5); cat("DFBASE_FINISH\\n")', "DFBASE_START");
 
+        const fixtureLoadStarted = performance.now();
         if (browserTarget) {
             const chooser = page.waitForEvent("filechooser");
             await page.evaluate(() => {
@@ -306,6 +308,7 @@ const main = async function() {
             const result = await query(`ess9en <- readRDS(${JSON.stringify(path.resolve(fixture))})`);
             report.fixtureLoad = { status: result.status };
         }
+        report.fixtureLoadMs = performance.now() - fixtureLoadStarted;
         if (browserTarget) {
             await page.evaluate(() => window.dialogForgeWebConsole.executeVisibleCommand(
                 'cat(paste("DFBASE_RUNTIME", R.version.string, paste(dim(ess9en), collapse="x"), as.character(object.size(ess9en)), sep=" | "))'
@@ -521,6 +524,29 @@ cat("DFREV_BEFORE_DELETE\\n")`, "DFREV_BEFORE_DELETE");
             }
             const cellSelector = 'td[data-data-cell="true"][data-data-row="1"][data-data-column="value"]';
             await editor.locator(cellSelector).waitFor();
+            if (browserTarget) {
+                await editor.evaluate(() => {
+                    window.runtimeMeasurementReads = [];
+                    const api = window.dialogForge.datasetViewer;
+                    for (const method of ["getContent", "getSchema", "updateCell"]) {
+                        const original = api[method].bind(api);
+                        api[method] = function(...args) {
+                            const record = { method, started: performance.now() };
+                            window.runtimeMeasurementReads.push(record);
+                            const response = original(...args);
+                            Promise.resolve(response).then(result => {
+                                record.finished = performance.now();
+                                record.returnedNull = result === null;
+                                record.rows = result?.rows?.length;
+                                record.columns = result?.columns?.length;
+                            }, error => {
+                                record.error = String(error);
+                            });
+                            return response;
+                        };
+                    }
+                });
+            }
             for (const [label, value] of [["visible-cell-change", "10"], ["visible-cell-unchanged", "10"]]) {
                 await readDiagnostics(true);
                 await editor.locator(cellSelector).dblclick();
@@ -543,6 +569,9 @@ cat("DFREV_BEFORE_DELETE\\n")`, "DFREV_BEFORE_DELETE");
             }
             if (!browserTarget) {
                 await editor.screenshot({ path: destination.replace(/\.json$/, "-editor.png") });
+            }
+            else {
+                report.editorReads = await editor.evaluate(() => window.runtimeMeasurementReads);
             }
             await page.screenshot({ path: destination.replace(/\.json$/, "-editor-shell.png") });
             if (scenarioSet === "--finalize-cases") {
@@ -644,9 +673,11 @@ local({
                 report.runs.push({ label: "restart-with-pending-command", ...restart, diagnostics: await readDiagnostics() });
                 report.afterRestart = {
                     oldObjectPresent: await query('exists("old_session_probe", envir=.GlobalEnv, inherits=FALSE)'),
-                    inputVisible: await page.locator("#visibleCommandInput").isVisible(),
+                    inputVisible: await page.locator('#consoleTerminal [data-session-phase="ready"] .view-lines').isVisible(),
+                    inputSelector: '#consoleTerminal [data-session-phase="ready"] .view-lines',
                     note: "Provider recovery and console input availability are recorded separately."
                 };
+                await measure("keyboard-after-restart", 'cat("DFFINAL_AFTER_RESTART\\n")', "DFFINAL_AFTER_RESTART");
             }
         }
 
@@ -684,8 +715,26 @@ local({
     }
     catch (error) {
         report.error = String(error.stack || error);
+        if (readDiagnostics) {
+            report.failureDiagnostics = await readDiagnostics().catch(error => ({ unavailable: String(error) }));
+        }
         if (page) {
             report.renderedFailure = await page.locator("body").innerText().catch(() => "");
+            const editors = browserTarget
+                ? page.frames().filter(frame => frame.url().includes("datasetEditor.html"))
+                : app.windows().filter(candidate => candidate.url().includes("datasetEditor.html"));
+            report.editorFailures = [];
+            for (const editor of editors) {
+                report.editorFailures.push(await editor.evaluate(() => ({
+                    text: document.body.innerText,
+                    reads: window.runtimeMeasurementReads,
+                    cells: Array.from(document.querySelectorAll('[data-data-cell="true"]'))
+                        .slice(0, 8).map(cell => ({
+                            row: cell.dataset.dataRow, column: cell.dataset.dataColumn,
+                            text: cell.textContent
+                        }))
+                })).catch(error => ({ unavailable: String(error) })));
+            }
         }
         throw error;
     }

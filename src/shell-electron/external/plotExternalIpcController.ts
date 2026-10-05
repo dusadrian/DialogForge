@@ -21,12 +21,19 @@ import type {
     PlotViewerController
 } from "./plotViewerController";
 import {
-    createPlotCopyResult,
+    createInvalidPlotCopyResult,
     createPlotSaveFileName,
     createPlotSaveRequest,
     createPlotSaveResult,
     ensurePlotSaveFileExtension
 } from "./plotViewerState";
+import {
+    getPlotSaveFormatInfo
+} from "../../base-app/features/plot-viewer/plotViewerState";
+import {
+    copyPlotThroughHost,
+    savePlotThroughHost
+} from "../../base-app/features/plot-viewer/plotExportOperations";
 import {
     plotExternalIpcChannels
 } from "../../base-app/features/plot-viewer/plotExternalIpc";
@@ -41,15 +48,6 @@ export interface PlotExternalIpcControllerOptions {
     plotViewerController: PlotViewerController;
     plotDownloadController: PlotDownloadController;
 }
-
-
-const plotFormatLabels = {
-    png: "PNG Image",
-    jpeg: "JPEG Image",
-    svg: "SVG Image",
-    pdf: "PDF Document",
-    tiff: "TIFF Image"
-};
 
 
 export const createPlotExternalIpcController = function(
@@ -102,6 +100,7 @@ export const createPlotExternalIpcController = function(
         }
 
         const extension = request.format;
+        const formatInfo = getPlotSaveFormatInfo(extension);
         const suggestedName = path.basename(String(input?.fileName || "").trim())
             || createPlotSaveFileName(extension);
         const saveOptions = {
@@ -112,31 +111,29 @@ export const createPlotExternalIpcController = function(
             ),
             filters: [
                 {
-                    name: plotFormatLabels[request.format],
+                    name: formatInfo.label.replace(/\b\w/g, letter => letter.toUpperCase()),
                     extensions: request.format === "jpeg"
                         ? ["jpg", "jpeg"]
                         : [extension]
                 }
             ]
         };
-        const plotWindow = options.plotViewerController.getWindow();
-        const target = plotWindow
-            ? await options.dialog.showSaveDialog(plotWindow, saveOptions)
-            : await options.dialog.showSaveDialog(saveOptions);
 
-        if (target.canceled || !target.filePath) {
-            return createPlotSaveResult({
-                status: "canceled",
-                message: "Plot save was canceled."
-            });
-        }
+        return savePlotThroughHost(async () => {
+            const plotWindow = options.plotViewerController.getWindow();
+            const target = plotWindow
+                ? await options.dialog.showSaveDialog(plotWindow, saveOptions)
+                : await options.dialog.showSaveDialog(saveOptions);
 
-        const filePath = ensurePlotSaveFileExtension(
-            target.filePath,
-            extension
-        );
+            if (target.canceled || !target.filePath) {
+                return null;
+            }
 
-        try {
+            const filePath = ensurePlotSaveFileExtension(
+                target.filePath,
+                extension
+            );
+
             await fs.promises.writeFile(
                 filePath,
                 suppliedData.length
@@ -144,19 +141,8 @@ export const createPlotExternalIpcController = function(
                     : await options.plotDownloadController.download(urlRequest!.url)
             );
 
-            return createPlotSaveResult({
-                status: "saved",
-                filePath,
-                message: "Plot saved."
-            });
-        } catch (error) {
-            return createPlotSaveResult({
-                status: "failed",
-                message: error instanceof Error
-                    ? error.message
-                    : String(error || "plot-save-failed")
-            });
-        }
+            return filePath;
+        });
     });
 
     options.ipcMain.handle(plotExternalIpcChannels.copyPlot, async (
@@ -166,37 +152,19 @@ export const createPlotExternalIpcController = function(
         const request = createExternalUrlOpenRequest(url);
 
         if (request.status !== "ready") {
-            return createPlotCopyResult({
-                status: "invalid",
-                message: request.message
-            });
+            return createInvalidPlotCopyResult(request.message);
         }
 
-        try {
+        return copyPlotThroughHost(async () => {
             const image = nativeImage.createFromBuffer(
                 await options.plotDownloadController.download(request.url)
             );
 
             if (image.isEmpty()) {
-                return createPlotCopyResult({
-                    status: "failed",
-                    message: "Downloaded plot is not a supported image."
-                });
+                throw new Error("Downloaded plot is not a supported image.");
             }
 
             options.clipboard.writeImage(image);
-
-            return createPlotCopyResult({
-                status: "copied",
-                message: "Plot copied to clipboard."
-            });
-        } catch (error) {
-            return createPlotCopyResult({
-                status: "failed",
-                message: error instanceof Error
-                    ? error.message
-                    : String(error || "plot-copy-failed")
-            });
-        }
+        });
     });
 };

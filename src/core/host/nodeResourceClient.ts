@@ -1,5 +1,6 @@
 import * as http from "http";
 import * as https from "https";
+import { createResourceBodyCollector } from "./resourceBodyCollector";
 
 import type {
     ResourceBufferResult,
@@ -35,28 +36,36 @@ const normalizeHeaders = function(
 
 
 const readResponseBody = function(
-    response: http.IncomingMessage
+    response: http.IncomingMessage,
+    collector: ReturnType<typeof createResourceBodyCollector>
 ): Promise<Buffer> {
     return new Promise((resolve, reject) => {
-        const chunks: Buffer[] = [];
-
         response.on("data", (chunk: unknown) => {
-            if (Buffer.isBuffer(chunk)) {
-                chunks.push(chunk);
-                return;
+            try {
+                let bytes: Buffer;
+                if (typeof chunk === "string") {
+                    bytes = Buffer.from(chunk, "utf8");
+                } else if (Buffer.isBuffer(chunk)) {
+                    bytes = chunk;
+                } else {
+                    bytes = Buffer.from(chunk as Uint8Array);
+                }
+                collector.append(bytes);
+            } catch (error) {
+                reject(error);
+                response.destroy(error instanceof Error ? error : undefined);
             }
-
-            if (typeof chunk === "string") {
-                chunks.push(Buffer.from(chunk, "utf8"));
-                return;
-            }
-
-            chunks.push(Buffer.from(chunk as Uint8Array));
         });
         response.on("end", () => {
-            resolve(Buffer.concat(chunks));
+            try {
+                const body = collector.finish();
+                resolve(Buffer.from(body.buffer, body.byteOffset, body.byteLength));
+            } catch (error) {
+                reject(error);
+            }
         });
         response.on("error", reject);
+        response.on("aborted", () => reject(new Error("resource-body-aborted")));
     });
 };
 
@@ -73,6 +82,7 @@ const requestUrl = function(
     body: Buffer;
 }> {
     return new Promise((resolve, reject) => {
+        const collector = createResourceBodyCollector(options.maxBodyBytes);
         let parsed: URL;
 
         try {
@@ -118,7 +128,7 @@ const requestUrl = function(
                     return;
                 }
 
-                void readResponseBody(response).then((body) => {
+                void readResponseBody(response, collector).then((body) => {
                     resolve({
                         ok: status >= 200 && status < 300,
                         status,
@@ -146,7 +156,8 @@ const createTextResult = function(
         status: response.status,
         url: response.url,
         contentType,
-        text: response.body.toString("utf8")
+        text: response.body.toString("utf8"),
+        headers: Object.entries(response.headers).map(([name, value]) => `${name}: ${value}`)
     };
 };
 
@@ -161,7 +172,8 @@ const createBufferResult = function(
         status: response.status,
         url: response.url,
         contentType,
-        body: new Uint8Array(response.body)
+        body: new Uint8Array(response.body),
+        headers: Object.entries(response.headers).map(([name, value]) => `${name}: ${value}`)
     };
 };
 

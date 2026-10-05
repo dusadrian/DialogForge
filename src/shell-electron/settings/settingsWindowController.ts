@@ -55,8 +55,8 @@ export const createSettingsWindowController = function(
         nextWindow.on("closed", () => {
             if (win === nextWindow) {
                 win = null;
+                options.onClosed?.();
             }
-            options.onClosed?.();
         });
         nextWindow.webContents.once("did-finish-load", () => {
             void sendPayload(nextWindow, true);

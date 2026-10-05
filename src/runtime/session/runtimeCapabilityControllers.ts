@@ -39,6 +39,8 @@ export interface RuntimeCapabilityControllersOptions {
     mutationState: RuntimeInvisibleMutationState;
     getWorkspaceObjectCount(): number;
     getSnapshot(): RuntimeSessionSnapshot;
+    getWorkspaceReadEpoch?(): number;
+    isWorkspaceReadAvailable?(): boolean;
     hasRuntimeCapability(capability: RuntimeCapability): boolean;
 }
 
@@ -72,6 +74,8 @@ export const createRuntimeCapabilityControllers = function(
         toolExecutionController,
         queryExecutionController,
         getSnapshot: options.getSnapshot,
+        getWorkspaceReadEpoch: options.getWorkspaceReadEpoch,
+        isWorkspaceReadAvailable: options.isWorkspaceReadAvailable,
         hasRuntimeCapability: options.hasRuntimeCapability
     });
 

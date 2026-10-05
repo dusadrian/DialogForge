@@ -1,4 +1,8 @@
-import type { TranscriptEvent, VisibleCommandRequest } from "../provider-contract/runtimeProvider";
+import type {
+    RuntimeCommandExecutionResult,
+    TranscriptEvent,
+    VisibleCommandRequest
+} from "../provider-contract/runtimeProvider";
 
 
 export interface TranscriptRequest {
@@ -6,6 +10,42 @@ export interface TranscriptRequest {
     source: string;
     text: string;
 }
+
+
+export const isTranscriptFailureEvent = function(
+    event: Pick<TranscriptEvent, "type" | "state">
+): boolean {
+    return event.type === "failed"
+        || event.type === "rejected"
+        || event.type === "error"
+        || event.state === "error";
+};
+
+
+export const transcriptHasFailure = function(
+    events: readonly TranscriptEvent[]
+): boolean {
+    return events.some(isTranscriptFailureEvent);
+};
+
+
+export const commandExecutionDidNotSucceed = function(
+    result: Pick<RuntimeCommandExecutionResult,
+        "executionDisposition" | "evaluationOutcome" | "transcriptEvents">,
+    hasTranscriptFailure: (events: TranscriptEvent[]) => boolean = transcriptHasFailure
+): boolean {
+    if (
+        result.executionDisposition === "session_lost"
+        || result.executionDisposition === "not_started"
+        || result.evaluationOutcome === "error"
+        || result.evaluationOutcome === "interrupted"
+        || result.transcriptEvents.some(event => event.state === "interrupted")
+    ) {
+        return true;
+    }
+
+    return hasTranscriptFailure(result.transcriptEvents);
+};
 
 
 export const createVisibleCommandRequest = function(input: Partial<VisibleCommandRequest>): VisibleCommandRequest {
@@ -19,6 +59,10 @@ export const createVisibleCommandRequest = function(input: Partial<VisibleComman
 
     if (Number.isFinite(outputWidth) && outputWidth > 0) {
         request.outputWidth = Math.round(outputWidth);
+    }
+
+    if (input?.activityId) {
+        request.activityId = String(input.activityId);
     }
 
     return request;

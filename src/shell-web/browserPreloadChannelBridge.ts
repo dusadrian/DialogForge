@@ -9,6 +9,9 @@ import {
     applicationSettingsIpcChannels
 } from "../base-app/features/settings/applicationSettingsIpc";
 import {
+    runApplicationSettingsOperation
+} from "../base-app/features/settings/applicationSettingsLifecycle";
+import {
     shellClipboardIpcChannels
 } from "../base-app/clipboard/shellClipboardIpc";
 import {
@@ -47,7 +50,20 @@ interface BrowserPreloadWorkspaceChannels {
 
 
 interface BrowserPreloadDatasetChannels {
+    tabularRows: {
+        updateRowName(input: unknown): Promise<unknown>;
+        insertRow(input: unknown): Promise<unknown>;
+        removeRow(input: unknown): Promise<unknown>;
+        sortRows(input: unknown): Promise<unknown>;
+    };
+    tabularColumns: {
+        renameColumn(input: unknown): Promise<unknown>;
+        insertColumn(input: unknown): Promise<unknown>;
+        removeColumn(input: unknown): Promise<unknown>;
+    };
     readSchema(input: unknown): Promise<unknown>;
+    readTabularSchema(input: unknown): Promise<unknown>;
+    readTabularPreview(input: unknown): Promise<unknown>;
     readContent(input: unknown): Promise<unknown>;
     readFilterMask(input: unknown): unknown;
     readVariables(input: unknown): Promise<unknown>;
@@ -61,6 +77,7 @@ interface BrowserPreloadDatasetChannels {
     removeColumn(input: unknown): Promise<unknown>;
     sortRows(input: unknown): Promise<unknown>;
     writeCells(input: unknown): Promise<unknown>;
+    writeCell(input: unknown): Promise<unknown>;
     updateVariable(input: unknown): Promise<unknown>;
     readVariableMetadata(input: unknown): Promise<unknown>;
     writeVariableMetadata(input: unknown): Promise<unknown>;
@@ -149,6 +166,7 @@ export interface BrowserPreloadChannelBridgeOptions {
     refreshWorkspace(): Promise<unknown> | unknown;
     chooseRuntimeLocation(input: Record<string, unknown>): Promise<unknown> | unknown;
     discoverRuntimeLocation(input: Record<string, unknown>): Promise<unknown> | unknown;
+    isCurrentSettingsSource(sourceWindow: Window | null): boolean;
     previewSettings(input: Record<string, unknown>): Promise<void> | void;
     cancelSettingsPreview(): Promise<void> | void;
     saveSettings(
@@ -194,6 +212,19 @@ const reportAsyncError = function(
 export const createBrowserPreloadChannelBridge = function(
     options: BrowserPreloadChannelBridgeOptions
 ): BrowserPreloadChannelBridge {
+    const runSettingsOperation = function(
+        operation: () => void | Promise<void>,
+        sourceWindow: Window | null
+    ): void {
+        runApplicationSettingsOperation(
+            operation,
+            (message) => options.appendMessage(
+                message, "web-transcript__line--stderr"
+            ),
+            () => options.isCurrentSettingsSource(sourceWindow)
+        );
+    };
+
     return {
         readInput,
 
@@ -284,6 +315,36 @@ export const createBrowserPreloadChannelBridge = function(
             }
             if (channel === tabularIpcChannels.writeCells) {
                 return options.datasetChannels().writeCells(input);
+            }
+            if (channel === tabularIpcChannels.readSchema) {
+                return options.datasetChannels().readTabularSchema(args[0]);
+            }
+            if (channel === tabularIpcChannels.readPreview) {
+                return options.datasetChannels().readTabularPreview(args[0]);
+            }
+            if (channel === tabularIpcChannels.writeCell) {
+                return options.datasetChannels().writeCell(input);
+            }
+            if (channel === tabularIpcChannels.renameColumn) {
+                return options.datasetChannels().tabularColumns.renameColumn(input);
+            }
+            if (channel === tabularIpcChannels.updateRowName) {
+                return options.datasetChannels().tabularRows.updateRowName(input);
+            }
+            if (channel === tabularIpcChannels.insertRow) {
+                return options.datasetChannels().tabularRows.insertRow(input);
+            }
+            if (channel === tabularIpcChannels.removeRow) {
+                return options.datasetChannels().tabularRows.removeRow(input);
+            }
+            if (channel === tabularIpcChannels.sortRows) {
+                return options.datasetChannels().tabularRows.sortRows(input);
+            }
+            if (channel === tabularIpcChannels.insertColumn) {
+                return options.datasetChannels().tabularColumns.insertColumn(input);
+            }
+            if (channel === tabularIpcChannels.removeColumn) {
+                return options.datasetChannels().tabularColumns.removeColumn(input);
             }
             if (channel === tabularIpcChannels.readVariableMetadata) {
                 return options.datasetChannels().readVariableMetadata(
@@ -532,31 +593,31 @@ export const createBrowserPreloadChannelBridge = function(
             }
 
             if (channel === applicationSettingsEventChannels.previewSettings) {
-                reportAsyncError(
-                    Promise.resolve(options.previewSettings(input)),
-                    options
+                runSettingsOperation(
+                    () => options.previewSettings(input),
+                    sourceWindow
                 );
                 return;
             }
 
             if (channel === applicationSettingsEventChannels.cancelSettingsPreview) {
-                reportAsyncError(
-                    Promise.resolve(options.cancelSettingsPreview()),
-                    options
+                runSettingsOperation(
+                    () => options.cancelSettingsPreview(),
+                    sourceWindow
                 );
                 return;
             }
 
             if (channel === applicationSettingsEventChannels.saveSettings) {
-                reportAsyncError(
-                    Promise.resolve(options.saveSettings(input, sourceWindow)),
-                    options
+                runSettingsOperation(
+                    () => options.saveSettings(input, sourceWindow),
+                    sourceWindow
                 );
                 return;
             }
 
             if (channel === applicationSettingsEventChannels.closeSettingsWindow) {
-                options.closeSettingsWindow();
+                runSettingsOperation(options.closeSettingsWindow, sourceWindow);
                 return;
             }
 

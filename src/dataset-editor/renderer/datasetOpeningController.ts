@@ -45,6 +45,7 @@ export interface DatasetOpeningControllerOptions<
 export interface DatasetOpeningController {
     invalidate(): void;
     open(value: unknown): Promise<void>;
+    retryAfterWorkspaceUpdate(datasetNames: string[]): Promise<void>;
 }
 
 
@@ -55,6 +56,9 @@ export const createDatasetOpeningController = function<
     options: DatasetOpeningControllerOptions<Schema, Page>
 ): DatasetOpeningController {
     let openSequence = 0;
+    let failedDatasetName = "";
+    let workspaceSequence = 0;
+    let workspaceDatasetNames: string[] = [];
 
     const coordinator = createDatasetOpeningCoordinator<Schema, Page>({
         fetchInitialPage: options.fetchInitialPage,
@@ -68,7 +72,9 @@ export const createDatasetOpeningController = function<
 
     const open = async function(value: unknown): Promise<void> {
         const request = ++openSequence;
+        const openingWorkspaceSequence = workspaceSequence;
         const datasetName = options.normalizeDatasetName(value);
+        failedDatasetName = "";
         options.prepareDataset(datasetName);
 
         if (!datasetName) {
@@ -85,13 +91,14 @@ export const createDatasetOpeningController = function<
                 options.initialRowCount
             );
 
-            if (result.stale) {
+            if (result.stale || request !== openSequence) {
                 return;
             }
 
             const schema = result.schema;
 
             if (!schema) {
+                failedDatasetName = datasetName;
                 if (!result.initialPageReceived) {
                     options.showSchemaFailure();
                 }
@@ -100,20 +107,39 @@ export const createDatasetOpeningController = function<
             }
 
             options.applySchema(datasetName, schema);
+            if (request !== openSequence) {
+                return;
+            }
 
             if (!result.initialPageReceived) {
                 options.showContentLoading();
+                if (request !== openSequence) {
+                    return;
+                }
                 await options.loadFallbackPage(
                     schema,
                     options.initialRowCount
                 );
+                if (request !== openSequence) {
+                    return;
+                }
                 options.startVariableWarmup();
             }
 
-            options.queueViewportRefresh();
+            if (request === openSequence) {
+                options.queueViewportRefresh();
+            }
         } finally {
             if (request === openSequence) {
                 options.hideLoading();
+                if (
+                    request === openSequence
+                    && failedDatasetName === datasetName
+                    && openingWorkspaceSequence !== workspaceSequence
+                    && workspaceDatasetNames.includes(datasetName)
+                ) {
+                    await open(datasetName);
+                }
             }
         }
     };
@@ -121,8 +147,18 @@ export const createDatasetOpeningController = function<
     return {
         invalidate: function(): void {
             openSequence += 1;
+            failedDatasetName = "";
             coordinator.invalidate();
         },
-        open
+        open,
+        retryAfterWorkspaceUpdate: async function(datasetNames): Promise<void> {
+            workspaceSequence += 1;
+            workspaceDatasetNames = datasetNames;
+            const datasetName = failedDatasetName;
+
+            if (datasetName && datasetNames.includes(datasetName)) {
+                await open(datasetName);
+            }
+        }
     };
 };

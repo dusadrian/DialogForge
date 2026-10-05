@@ -1,8 +1,12 @@
+import { createRuntimeHelpEventDelivery } from "/browser-esm/src/runtime/help/runtimeHelpEventDelivery.js";
+import { createHelpRequestOwner } from "/browser-esm/src/runtime/help/helpRequestOwner.js";
+import { runtimeCommandResultSucceeded } from "/browser-esm/src/runtime/commands/runtimeCommandReceipt.js";
 import {
     createDialogBindingState
 } from "/browser-esm/src/dialog-runtime/custom-js/dialogBindings.js";
 import {
-    routeDialogStateCall
+    routeDialogStateCall,
+    createDialogFilterStateDelivery
 } from "/browser-esm/src/dialog-runtime/custom-js/dialogStateCallRouter.js";
 import {
     routeDialogHostExternalCall
@@ -31,14 +35,22 @@ import {
     applicationEventChannels
 } from "/browser-esm/src/base-app/bootstrap/applicationEvents.js";
 import {
+    developerDiagnosticsWindowTitle
+} from "/browser-esm/src/base-app/features/auxiliary-surfaces/auxiliarySurfaces.js";
+import {
     applicationSettingsEventChannels
 } from "/browser-esm/src/base-app/features/settings/applicationSettingsIpc.js";
 import {
-    createFactoryApplicationSettings,
-    defaultApplicationTerminalSettings,
-    mergeApplicationSettings,
-    synchronizeApplicationSettingsLocale
+    defaultApplicationTerminalSettings
 } from "/browser-esm/src/base-app/features/settings/applicationSettingsPolicy.js";
+import {
+    createApplicationSettingsPayload
+} from "/browser-esm/src/base-app/features/settings/applicationSettingsPayload.js";
+import {
+    createApplicationSettingsLifecycle,
+    readApplicationSettingsLocale,
+    runApplicationSettingsOperation
+} from "/browser-esm/src/base-app/features/settings/applicationSettingsLifecycle.js";
 import {
     isDatasetGoToCommand,
     isDatasetOpenActiveCommand,
@@ -49,14 +61,30 @@ import {
     createRuntimeSessionDatasetChannelAdapter
 } from "/browser-esm/src/runtime/tabular-data/runtimeSessionDatasetChannelAdapter.js";
 import {
+    applyDatasetMutationCacheEffects
+} from "/browser-esm/src/dataset-editor/datasetMutationCacheEffects.js";
+import {
+    deliverDatasetMutationEffects
+} from "/browser-esm/src/dataset-editor/datasetMutationDelivery.js";
+import {
+    createWorkspaceSnapshotDelivery,
+    captureWorkspaceRuntimeScope
+} from "/browser-esm/src/runtime/workspace/workspaceSnapshotDelivery.js";
+import {
     createDatasetEditorSettings
 } from "/browser-esm/src/dataset-editor/datasetEditorSettings.js";
 import {
     createDatasetEditorWarmCache
 } from "/browser-esm/src/dataset-editor/datasetEditorWarmCache.js";
 import {
+    prepareDatasetEditorOpening
+} from "/browser-esm/src/dataset-editor/datasetEditorOpeningPreparation.js";
+import {
     createDialogChannelAdapter
 } from "/browser-esm/src/dialog-runtime/dialogChannelAdapter.js";
+import {
+    createRDialogCommandPackageRequirements
+} from "/browser-esm/src/runtime/providers/r/dependencies/runtimePackageRequirements.js";
 import {
     createDialogExternalCallHost
 } from "/browser-esm/src/dialog-runtime/custom-js/externalCallHost.js";
@@ -74,7 +102,12 @@ import {
     createProductDialogWorkspaceDataFromEntries
 } from "/browser-esm/src/dialog-runtime/dialog-builder/productDialogWorkspaceData.js";
 import {
-    createRuntimeDialogDatasetResolver
+    captureProductDialogWorkspaceTarget,
+    createProductDialogWorkspaceDelivery,
+    readProductDialogWorkspaceDeliveryWarning
+} from "/browser-esm/src/dialog-runtime/dialog-builder/productDialogWorkspaceDelivery.js";
+import {
+    createRuntimeDialogDatasetResolverOwner
 } from "/browser-esm/src/dialog-runtime/custom-js/runtimeDatasetResolver.js";
 import {
     createProductDialogSessionController
@@ -109,8 +142,11 @@ import {
     datasetEditorEventChannels
 } from "/browser-esm/src/dataset-editor/datasetEditorIpc.js";
 import {
-    showBrowserScriptSavePrompt
+    showBrowserScriptSavePrompt, showBrowserMessageBox
 } from "/browser-esm/src/shell-web/browserScriptSavePrompt.js";
+import {
+    createRPackageInstallPrompts
+} from "/browser-esm/src/runtime/providers/r/dependencies/packageInstallPrompts.js";
 import {
     readLiveScriptJoinTextFromUrl
 } from "/browser-esm/src/script-editor/collaboration/liveScriptTicket.js";
@@ -149,19 +185,41 @@ import {
     readWebRConsoleCompletionResult
 } from "/browser-esm/src/runtime/providers/webr/webRConsoleCompletionAdapter.js";
 import {
-    createWebRPromptCoordinator
-} from "/browser-esm/src/runtime/providers/webr/webRPromptBridge.js";
+    isWorkspaceDatasetCandidate,
+    readLatestAddedWorkspaceDataset
+} from "/browser-esm/src/runtime/workspace/workspaceDatasetSelection.js";
+import {
+    createWorkspaceActiveDatasetDelivery,
+    readWorkspaceActiveDatasetScope,
+    readSelectedWorkspaceDatasetName
+} from "/browser-esm/src/runtime/workspace/workspaceActiveDatasetDelivery.js";
+import {
+    createActiveDatasetStateChipReader
+} from "/browser-esm/src/base-app/features/workspace-pane/activeDatasetStateChips.js";
+import {
+    createWorkspaceActiveDatasetPresenter
+} from "/browser-esm/src/base-app/features/workspace-pane/workspaceActiveDatasetPresentation.js";
+import {
+    createLiveTranscriptEventsFromRuntimeControl
+} from "/browser-esm/src/runtime/providers/r/protocol/runtimeControlEvents.js";
 import {
     createBrowserWebRSession
 } from "/browser-esm/src/runtime/providers/webr/webRBrowserSession.js";
 import {
-    createWebRRuntimeOperationQueue
-} from "/browser-esm/src/runtime/providers/webr/webRRuntimeOperationQueue.js";
+    createRuntimeOperationQueue
+} from "/browser-esm/src/runtime/session/runtimeOperationQueue.js";
 import {
-    createWebRRuntimeRestartWorkspaceController
-} from "/browser-esm/src/runtime/providers/webr/webRRuntimeRestartWorkspace.js";
+    releaseOwnedRuntimeResource
+} from "/browser-esm/src/runtime/session/runtimeResourceRelease.js";
 import {
-    installWebRSharedRuntimeControl
+    runOwnedRuntimeStartupStage
+} from "/browser-esm/src/runtime/session/runtimeStartupStage.js";
+import {
+    createWebRRuntimeRestartAdapter
+} from "/browser-esm/src/runtime/providers/webr/webRRuntimeRestartAdapter.js";
+import {
+    installWebRSharedRuntimeControl,
+    createWebROutputJournalReader
 } from "/browser-esm/src/runtime/providers/webr/webRSharedRuntimeControl.js";
 import {
     getRCompletionContext
@@ -182,19 +240,18 @@ import {
     stopBrowserWebRRuntime
 } from "/browser-esm/src/runtime/providers/webr/webRBrowserStartup.js";
 import {
-    fetchWebRHelpPageByUrl,
-    fetchWebRHelpHomeDocument,
-    prepareWebRHelpDocumentHtml
+    createWebRHelpPageReader,
+    fetchWebRHelpHomeDocument
 } from "/browser-esm/src/runtime/providers/webr/webRHelpDocument.js";
+import { assertRHelpReadOwner } from "/browser-esm/src/runtime/help/rHelpPageReader.js";
+import { createBrowserHelpResourceChannel } from "/browser-esm/src/shell-web/browserHelpResourceChannel.js";
+import { createHelpCommandActions } from "/browser-esm/src/runtime/help/helpCommandActions.js";
+import { createHelpTopicRequest } from "/browser-esm/src/runtime/help/helpProtocol.js";
 import {
-    buildHelpExampleCommand,
-    parseHelpCommandUrl
-} from "/browser-esm/src/runtime/help/helpCommandUrl.js";
+    createRHelpTopicPresentation
+} from "/browser-esm/src/runtime/providers/r/help/rHelpPresentation.js";
 import {
-    buildHelpChooserDocument
-} from "/browser-esm/src/runtime/help/helpChooserDocument.js";
-import {
-    createRHelpFallbackHtml
+    prepareRHelpDocumentWithoutResources
 } from "/browser-esm/src/runtime/help/rHelpDocument.js";
 import {
     buildRContextualHelpRequest,
@@ -203,16 +260,19 @@ import {
 import {
     readRuntimeVersion
 } from "/browser-esm/src/runtime/lifecycle/runtimeVersion.js";
+import { createAboutPayload } from "/browser-esm/src/base-app/features/about/aboutPayload.js";
 import {
-    createWorkspaceDatasetCacheEffects,
+    prepareWorkspaceDatasetCacheEffects,
+    warmWorkspaceDatasetCacheEffects,
     workspaceUpdateChangesDialogVariables
 } from "/browser-esm/src/runtime/workspace/workspaceUpdateEffects.js";
 import {
     workspaceUpdateHasChanges
 } from "/browser-esm/src/runtime/workspace/workspaceUpdate.js";
 import {
-    createRuntimeDatasetChangeProjector
-} from "/browser-esm/src/runtime/events/runtimeDatasetChanges.js";
+    createRuntimeEventDelivery,
+    createRuntimeSessionPublication
+} from "/browser-esm/src/runtime/events/runtimeEventDelivery.js";
 import {
     createWebRFilePath,
     ensureWebRDirectory,
@@ -251,8 +311,8 @@ import {
     createBrowserPreloadChannelBridge
 } from "/browser-esm/src/shell-web/browserPreloadChannelBridge.js";
 import {
-    readBrowserConsoleOutputWidth
-} from "/browser-esm/src/shell-web/browserRCommandCapture.js";
+    readConsoleOutputWidth
+} from "/browser-esm/src/console/renderer/consoleOutputWidth.js";
 import {
     isRPlotCommand
 } from "/browser-esm/src/runtime/providers/r/commands/rCommandIntents.js";
@@ -263,8 +323,14 @@ import {
     createWebRRuntimePackageAdapter
 } from "/browser-esm/src/runtime/providers/webr/webRRuntimePackageAdapter.js";
 import {
-    isWebRSessionPackageMenuCommand
-} from "/browser-esm/src/runtime/providers/webr/webRPackageMenuPolicy.js";
+    createRPackageRuntimeStartupReceipt
+} from "/browser-esm/src/runtime/providers/r/dependencies/rPackageRequirementReadiness.js";
+import {
+    retiredRPackageRuntimeMessage
+} from "/browser-esm/src/runtime/providers/r/dependencies/rPackageRuntimeGuard.js";
+import {
+    createMainProductCommandController
+} from "/browser-esm/src/base-app/features/menu-commands/mainProductCommandController.js";
 import {
     createBrowserRuntimeProgressController
 } from "/browser-esm/src/shell-web/browserRuntimeProgressAdapter.js";
@@ -308,8 +374,14 @@ import {
     createBrowserZoomAdapter
 } from "/browser-esm/src/shell-web/browserZoomAdapter.js";
 import {
+    readMainZoomMenuAction
+} from "/browser-esm/src/base-app/features/main-window/mainZoomPolicy.js";
+import {
     localeDisplayName
 } from "/browser-esm/src/base-app/i18n/localeDisplayName.js";
+import {
+    createApplicationLanguageLifecycle
+} from "/browser-esm/src/base-app/features/settings/applicationLanguageLifecycle.js";
 
 const state = {
     composition: null,
@@ -337,9 +409,7 @@ const state = {
     dialogBindingState: createDialogBindingState(),
     dialogExternalCallHost: null,
     dialogDatasetResolver: null,
-    dialogDatasetResolverRuntime: null,
     commandHistory: null,
-    loadedRuntimePackages: new Set(),
     datasetChannelAdapter: null,
     datasetWarmCache: null,
     datasetWarmCacheRuntime: null,
@@ -351,7 +421,6 @@ const state = {
     browserRuntimeProgressController: null,
     runtimeSession: null,
     runtimeSessionRuntime: null,
-    runtimeDatasetChangeProjector: createRuntimeDatasetChangeProjector(),
     runtimeControlClient: null,
     runtimeOperationQueue: null,
     runtimeRestartWorkspaceController: null,
@@ -368,7 +437,6 @@ const state = {
     settingsPreview: null,
     goToContext: null,
     devDiagnosticsLayer: null,
-    promptCoordinator: null,
     workingDirectoryPath: "/web",
     workingDirectoryHandle: null,
     homeDirectoryPath: "",
@@ -396,7 +464,6 @@ const state = {
             kind: "",
             target: null
         },
-        cache: new Map(),
         variableColumnWidths: {
             index: 58,
             name: 140,
@@ -462,6 +529,10 @@ const modelessSurfaces = createBrowserModelessSurfaceController(() => [
     {
         id: "settings",
         element: state.settingsLayer
+    },
+    {
+        id: "about",
+        element: state.browserFrameSurfaces?.get("about")?.layer
     },
     {
         id: "devDiagnostics",
@@ -632,19 +703,21 @@ const readBrowserRuntimeLocationState = function (providerId) {
 };
 
 const readBrowserSettingsPayload = function () {
-    const settings = browserApplicationStorageAdapter.readSettings();
+    const settings = state.settingsPreview || browserApplicationStorageAdapter.readSettings();
     const runtimeProviders = buildWebRuntimeProviderOptions();
     const selectedRuntimeProvider = String(
-        settings.runtimeStartup?.providerId
+        state.composition?.runtimeProviderSelection?.selectedProviderId
         || state.composition?.runtime?.id
         || runtimeProviders[0]?.id
         || "webr"
     );
 
-    return {
+    return createApplicationSettingsPayload({
         settings,
-        factorySettings: createFactoryApplicationSettings(
-            selectedRuntimeProvider
+        defaultRuntimeProvider: String(
+            state.composition?.product?.defaultRuntimeProvider
+            || state.composition?.runtime?.id
+            || selectedRuntimeProvider
         ),
         locales: buildWebLocaleOptions(),
         runtimeProviders,
@@ -654,88 +727,50 @@ const readBrowserSettingsPayload = function () {
         },
         selectedRuntimeProvider,
         strings: state.composition?.i18n || {}
-    };
+    });
 };
 
-const previewBrowserSettings = async function (input) {
-    const current = browserApplicationStorageAdapter.readSettings();
-    const providerId = String(
-        state.composition?.runtime?.id || "webr"
-    );
-    const next = mergeApplicationSettings(
-        current,
-        input,
-        [providerId],
-        providerId
-    );
-    const nextLocale = String(
-        next.defaultLanguage || next.languageNS || "en_US"
-    );
+const browserSettingsLifecycle = createApplicationSettingsLifecycle({
+    readSettings: () => browserApplicationStorageAdapter.readSettings(),
+    writeSettings: (settings) => browserApplicationStorageAdapter.writeSettings(settings),
+    visibleRuntimeProviderIds: () => [String(state.composition?.runtime?.id || "webr")],
+    defaultRuntimeProvider: () => String(state.composition?.runtime?.id || "webr"),
+    setPreview: (settings) => { state.settingsPreview = settings; },
+    applyLive: async function (settings) {
+        applyWebTerminalSettings(settings);
+        broadcastBrowserPreloadEvent(
+            applicationEventChannels.terminalSettingsUpdated,
+            readTerminalSettings(settings)
+        );
+        await applyBrowserLanguage(readApplicationSettingsLocale(settings), {
+            persist: false
+        });
+    }
+});
 
-    state.settingsPreview = next;
-    applyWebTerminalSettings(next);
-    broadcastBrowserPreloadEvent(
-        applicationEventChannels.terminalSettingsUpdated,
-        readTerminalSettings(next)
-    );
-    await applyBrowserLanguage(nextLocale, {
-        persist: false,
-        refreshSettings: false
-    });
+const previewBrowserSettings = async function (input) {
+    await browserSettingsLifecycle.preview(input);
 };
 
 const cancelBrowserSettingsPreview = async function () {
-    const saved = browserApplicationStorageAdapter.readSettings();
-    const savedLocale = String(
-        saved.defaultLanguage || saved.languageNS || "en_US"
-    );
-
-    state.settingsPreview = null;
-    applyWebTerminalSettings(saved);
-    broadcastBrowserPreloadEvent(
-        applicationEventChannels.terminalSettingsUpdated,
-        readTerminalSettings(saved)
-    );
-    await applyBrowserLanguage(savedLocale, {
-        persist: false,
-        refreshSettings: false
-    });
+    await browserSettingsLifecycle.cancel();
 };
 
 const saveBrowserSettings = async function (input, sourceWindow) {
-    const current = browserApplicationStorageAdapter.readSettings();
-    const providerId = String(
-        state.composition?.runtime?.id || "webr"
-    );
-    const next = synchronizeApplicationSettingsLocale(
-        current,
-        mergeApplicationSettings(
-            current,
-            input,
-            [providerId],
-            providerId
-        ),
-        input
-    );
-    const nextLocale = String(
-        next.defaultLanguage || next.languageNS || "en_US"
-    );
+    const target = browserFrameSurfaces().get("settings");
+    const isCurrentSurface = function () {
+        return Boolean(target)
+            && target.layer.isConnected
+            && target.frame.contentWindow === sourceWindow
+            && browserFrameSurfaces().get("settings")?.frame === target.frame;
+    };
 
-    state.settingsPreview = null;
-    browserApplicationStorageAdapter.writeSettings(next);
-    applyWebTerminalSettings(next);
-    broadcastBrowserPreloadEvent(
-        applicationEventChannels.terminalSettingsUpdated,
-        readTerminalSettings(next)
-    );
-    await applyBrowserLanguage(nextLocale, {
-        persist: false,
-        refreshSettings: false
-    });
-    postBrowserPreloadEvent(
-        sourceWindow,
-        applicationSettingsEventChannels.settingsSaved
-    );
+    await browserSettingsLifecycle.save(input, () => {
+        postBrowserPreloadEvent(
+            sourceWindow,
+            applicationSettingsEventChannels.settingsSaved
+        );
+    }, isCurrentSurface);
 };
 
 const openSettingsModal = function () {
@@ -757,13 +792,18 @@ const openSettingsModal = function () {
             browserZoomAdapter.postToWindow(frame?.contentWindow || null);
         },
         onActivate: function (layer) {
-            activateModelessSurface("settings");
             state.settingsLayer = layer;
+            activateModelessSurface("settings");
         },
         onClose: function () {
             state.settingsLayer = null;
             if (state.settingsPreview) {
-                void cancelBrowserSettingsPreview();
+                runApplicationSettingsOperation(
+                    cancelBrowserSettingsPreview,
+                    (message) => appendTranscript(
+                        message, "web-transcript__line--stderr"
+                    )
+                );
             }
         }
     });
@@ -873,7 +913,7 @@ const browserPreloadChannelBridge = createBrowserPreloadChannelBridge({
             }
         );
 
-        return result?.status !== "failed" && result?.ok !== false;
+        return runtimeCommandResultSucceeded(result);
     },
     runVisibleDialogCommand(args) {
         return browserPreloadChannelBridge.invoke(
@@ -1015,6 +1055,13 @@ const browserPreloadChannelBridge = createBrowserPreloadChannelBridge({
         return readBrowserRuntimeLocationState(providerId);
     },
     previewSettings: previewBrowserSettings,
+    isCurrentSettingsSource(sourceWindow) {
+        const target = browserFrameSurfaces().get("settings");
+
+        return Boolean(target)
+            && target.layer.isConnected
+            && target.frame.contentWindow === sourceWindow;
+    },
     cancelSettingsPreview: cancelBrowserSettingsPreview,
     saveSettings: saveBrowserSettings,
     closeSettingsWindow() {
@@ -1068,14 +1115,15 @@ const webRRuntimeSession = function () {
         !state.runtimeSession
         || state.runtimeSessionRuntime !== state.runtime
     ) {
+        const sessionRuntime = state.runtime;
         state.runtimeSession = createBrowserWebRSession({
             runtime: state.runtime,
-            runtimeControlClient: state.runtimeControlClient,
-            runRuntimeOperation: function (action) {
-                return state.runtimeOperationQueue.run(action);
+            isCurrentSession: function () {
+                return state.runtimeReady && state.runtime === sessionRuntime;
             },
+            runtimeControlClient: state.runtimeControlClient,
             visibleCommands: {
-                readConsoleOutputWidth: readBrowserConsoleOutputWidth,
+                readConsoleOutputWidth: () => readConsoleOutputWidth(document, window) ?? 120,
                 recordTranscriptEvents: function (events) {
                     state.console?.recordTranscriptEvents?.(events || []);
                 },
@@ -1086,49 +1134,33 @@ const webRRuntimeSession = function () {
                 }
             },
             workspaceChanged: applyBrowserWorkspaceUpdate,
+            refreshRuntimeEvents: function (manager) {
+                return browserRuntimeEventDelivery.refresh({ expectedRuntime: manager });
+            },
+            reportRuntimeEventError: function (error) {
+                appendTranscript(
+                    error instanceof Error ? error.message : String(error),
+                    "web-transcript__line--stderr"
+                );
+            },
             sessionManagerOptions: {
+                retireRuntimeResources: function () {
+                    if (state.runtime === sessionRuntime) {
+                        state.browserPlotViewerHost?.retireResources();
+                    }
+                },
                 dialogs: [
                     ...(state.composition?.sharedDialogs || []),
                     ...(state.composition?.productDialogs || [])
                 ],
                 startupTasks: state.composition?.startupTasks || [],
                 dialogExternalCallHost: browserDialogExternalCallHost()
-            },
-            runtimeMethods: {
-                checkCodeFragmentComplete,
-                isRuntimeBusy: function () {
-                    return Boolean(state.console?.session?.isRuntimeBusy?.());
-                },
-                setRuntimeStatus,
-                setRuntimeBusy: function (busy) {
-                    state.console?.session?.setRuntimeBusy?.(busy);
-                },
-                renderToolbar: function () {
-                    state.console?.toolbar?.render?.();
-                },
-                getRuntime: function () {
-                    return state.runtimeReady ? state.runtime : null;
-                },
-                getPromptCoordinator: webRPromptCoordinator
             }
         });
         state.runtimeSessionRuntime = state.runtime;
     }
 
     return state.runtimeSession;
-};
-
-const webRPromptCoordinator = function () {
-    if (!state.promptCoordinator) {
-        state.promptCoordinator = createWebRPromptCoordinator({
-            getRuntime: function () {
-                return state.runtimeReady ? state.runtime : null;
-            },
-            runtimeSessionManager: webRRuntimeSession()?.runtimeSessionManager
-        });
-    }
-
-    return state.promptCoordinator;
 };
 
 const webRCompletionSessionManager = function () {
@@ -1139,8 +1171,7 @@ const browserRuntimeSessionManager = function () {
     return webRRuntimeSession()?.runtimeSessionManager || null;
 };
 
-const queryBrowserRuntimeText = async function (command) {
-    const manager = webRRuntimeSession()?.runtimeSessionManager;
+const queryBrowserRuntimeText = async function (command, manager = webRRuntimeSession()?.runtimeSessionManager) {
 
     if (!manager) {
         throw new Error("WebR runtime session is not ready.");
@@ -1175,11 +1206,6 @@ const createVisibleCommandActivity = function (text, activityId = "") {
     const commandText = normalizeConstructedCommandText(text);
     const consoleTranscript = transcript();
 
-    consoleTranscript?.recordRuntimeMessageInput?.({
-        id: `${id}_input`,
-        parent_id: id,
-        code: commandText
-    });
     recordCommandHistory(commandText);
     consoleTranscript?.recordRuntimeMessageState?.({
         parent_id: id,
@@ -1219,45 +1245,37 @@ const workspaceObjectByName = function (objectName) {
     }) || null;
 };
 
-const broadcastBrowserWorkspaceSnapshot = function (snapshot) {
-    broadcastBrowserPreloadEvent(
-        applicationEventChannels.workspace,
-        snapshot
-    );
-    postBrowserPreloadEvent(
-        state.dataEditor.frame?.contentWindow,
-        datasetEditorEventChannels.setDatasetList,
-        { datasetNames: workspaceDatasetNames() }
-    );
+const workspaceSnapshotDelivery = createWorkspaceSnapshotDelivery({
+    getRuntime: () => webRRuntimeSession()?.runtimeSessionManager,
+    getActiveDataset: () => webRRuntimeSession()?.runtimeSessionManager.getActiveDataset(),
+    warmDatasetFirstScreens(objectName) {
+        browserDatasetWarmCache()?.warmFirstScreens(objectName);
+    },
+    publishWorkspace(current) {
+        broadcastBrowserPreloadEvent(applicationEventChannels.workspace, current);
+    },
+    publishDatasetNames(datasetNames) {
+        postBrowserPreloadEvent(
+            state.dataEditor.frame?.contentWindow,
+            datasetEditorEventChannels.setDatasetList,
+            { datasetNames }
+        );
+    }
+});
+
+const broadcastBrowserWorkspaceSnapshot = function (snapshot, refreshDialogs, options = {}) {
+    return workspaceSnapshotDelivery.deliver(snapshot, { ...options, refreshDialogs });
 };
 
 const isBrowserTabularWorkspaceObject = function (object) {
-    const kind = String(object?.kind || "").trim().toLowerCase();
-    const capabilities = Array.isArray(object?.capabilities)
-        ? object.capabilities
-        : [];
-
-    return (
-        kind === "data.frame"
-        || kind === "table"
-        || kind === "tibble"
-        || capabilities.includes("tabular.read")
-    );
+    return isWorkspaceDatasetCandidate(object);
 };
 
 const browserDialogDatasets = async function () {
-    const manager = webRRuntimeSession()?.runtimeSessionManager;
-
-    if (!manager) {
-        return [];
-    }
-
-    if (
-        state.dialogDatasetResolverRuntime !== manager
-        || typeof state.dialogDatasetResolver !== "function"
-    ) {
-        state.dialogDatasetResolverRuntime = manager;
-        state.dialogDatasetResolver = createRuntimeDialogDatasetResolver(manager);
+    if (typeof state.dialogDatasetResolver !== "function") {
+        state.dialogDatasetResolver = createRuntimeDialogDatasetResolverOwner(
+            () => webRRuntimeSession()?.runtimeSessionManager
+        );
     }
 
     return state.dialogDatasetResolver();
@@ -1301,18 +1319,40 @@ const browserDialogExternalCallHost = function () {
     return state.dialogExternalCallHost;
 };
 
+const dialogWorkspaceDelivery = createProductDialogWorkspaceDelivery({
+    readWorkspaceData: async (source) => ({ ...readBrowserDialogWorkspaceData(), ...source }),
+    readInitialWorkspaceData: async () => readBrowserDialogWorkspaceData(),
+    getActiveDatasetName: () => state.activeDatasetName,
+    getSessionScope() {
+        const manager = webRRuntimeSession()?.runtimeSessionManager;
+        return readWorkspaceActiveDatasetScope(manager?.getWorkspaceSnapshot()) || manager;
+    },
+    sendWorkspaceData(data, dialogId) {
+        document.querySelectorAll(".dialogforge-web-dialog__frame").forEach((frame) => {
+            const layer = frame.closest(".dialogforge-web-dialog-layer");
+            if (layer?.inert || (dialogId && layer?.dataset.dialogId !== dialogId)) {
+                return;
+            }
+            frame.contentWindow?.postMessage({
+                source: "dialogforge.web-host",
+                kind: "event",
+                channel: dialogRuntimeEventChannels.incomingData,
+                args: [data]
+            }, window.location.origin);
+        });
+    }
+});
+
 const notifyBrowserDialogsWorkspaceChanged = function () {
-    document.querySelectorAll(".dialogforge-web-dialog__frame").forEach((frame) => {
-        if (frame.closest(".dialogforge-web-dialog-layer")?.inert) {
-            return;
-        }
-        frame.contentWindow?.postMessage({
-            source: "dialogforge.web-host",
-            kind: "event",
-            channel: "dialogIncomingData",
-            args: [readBrowserDialogWorkspaceData()]
-        }, window.location.origin);
-    });
+    return dialogWorkspaceDelivery.refreshWorkspaceData("", {}).then(reportDialogWorkspaceDelivery);
+};
+
+const reportDialogWorkspaceDelivery = function (result) {
+    const warning = readProductDialogWorkspaceDeliveryWarning(result);
+    if (warning) {
+        appendTranscript(`Warning: ${warning}\n`, "web-transcript__line--stderr");
+    }
+    return result;
 };
 
 const clearDialogOpeningCover = function (dialogId = "") {
@@ -1387,42 +1427,30 @@ const readBrowserConsoleStateChips = async function (dataset) {
     );
 };
 
-const refreshBrowserConsoleStateChips = function (dataset = state.activeDatasetName) {
-    const datasetName = String(dataset || "").trim();
-    const activeDatasetName = String(state.activeDatasetName || "").trim();
-
-    if (!datasetName || datasetName !== activeDatasetName) {
-        state.productStateChips = [];
+const activeDatasetStateChipReader = createActiveDatasetStateChipReader({
+    getActiveDatasetName: () => state.activeDatasetName,
+    getSelectionRevision: () => webRRuntimeSession()?.runtimeSessionManager
+        ?.getActiveDataset().selectionRevision,
+    getSessionScope() {
+        const manager = webRRuntimeSession()?.runtimeSessionManager;
+        return readWorkspaceActiveDatasetScope(manager?.getWorkspaceSnapshot()) || manager;
+    },
+    read: readBrowserConsoleStateChips,
+    publish(snapshot) {
+        state.productStateChips = snapshot.chips;
         state.console?.toolbar?.render?.();
-        return;
     }
-
-    readBrowserConsoleStateChips(datasetName).then((chips) => {
-        if (datasetName !== String(state.activeDatasetName || "").trim()) {
-            return;
-        }
-
-        state.productStateChips = chips;
-        state.console?.toolbar?.render?.();
-    }).catch((error) => {
+});
+const refreshBrowserConsoleStateChips = function (dataset = state.activeDatasetName) {
+    return activeDatasetStateChipReader.refresh(dataset).catch((error) => {
         console.error(error);
     });
 };
 
 const notifyBrowserDialogsStateChanged = function (dataset = state.activeDatasetName) {
-    document.querySelectorAll(".dialogforge-web-dialog__frame").forEach((frame) => {
-        if (frame.closest(".dialogforge-web-dialog-layer")?.inert) {
-            return;
-        }
-        frame.contentWindow?.postMessage({
-            source: "dialogforge.web-host",
-            kind: "event",
-            channel: "dialogIncomingData",
-            args: [Object.assign(readBrowserDialogWorkspaceData(), {
-                dataset: String(dataset || "")
-            })]
-        }, window.location.origin);
-    });
+    return dialogWorkspaceDelivery.refreshWorkspaceData("", {
+        dataset: String(dataset || "")
+    }).then(reportDialogWorkspaceDelivery);
 };
 
 const applyBrowserWorkspaceUpdate = async function (update, snapshot) {
@@ -1431,70 +1459,35 @@ const applyBrowserWorkspaceUpdate = async function (update, snapshot) {
     }
 
     const previousDatasetNames = workspaceDatasetNames();
-    const effects = createWorkspaceDatasetCacheEffects(update);
     const warmCache = browserDatasetWarmCache();
-    const metadataRefreshes = [];
-
-    effects.forEach((effect) => {
-        state.dataEditor.cache.delete(effect.name);
-
-        if (effect.copiedFrom) {
-            warmCache?.copy(effect.copiedFrom, effect.name);
-            return;
-        }
-
-        if (effect.preview) {
-            warmCache?.invalidatePreview(effect.name);
-        }
-
-        if (!effect.variableMetadata) {
-            return;
-        }
-
-        if (
-            !effect.variableMetadataStructure
-            && effect.variableNames.length > 0
-        ) {
-            if (warmCache) {
-                metadataRefreshes.push(
-                    warmCache.refreshVariableMetadata(
-                        effect.name,
-                        effect.variableNames
-                    )
-                );
-            }
-            return;
-        }
-
-        warmCache?.invalidateVariableMetadata(effect.name);
-    });
+    const prepared = prepareWorkspaceDatasetCacheEffects(
+        update,
+        warmCache
+    );
 
     state.workspaceSnapshot = snapshot;
     state.workspaceMetadataReady = true;
-    selectActiveDatasetAfterWorkspaceRefresh(previousDatasetNames);
+    await selectActiveDatasetAfterWorkspaceRefresh(previousDatasetNames);
     renderWorkspacePane();
-    broadcastBrowserWorkspaceSnapshot(state.workspaceSnapshot);
 
-    const activeEffect = effects.find((effect) => {
-        return effect.name === state.activeDatasetName && !effect.removed;
-    });
+    const delivered = await broadcastBrowserWorkspaceSnapshot(
+        snapshot,
+        async function(_snapshot, isCurrent) {
+            if (isCurrent() && workspaceUpdateChangesDialogVariables(prepared.effects)) {
+                await notifyBrowserDialogsWorkspaceChanged();
+            }
+        },
+        {
+            warmActiveDataset: false,
+            metadataRefreshes: prepared.metadataRefreshes,
+            reportMetadataError: error => console.error(error)
+        }
+    );
 
-    if (
-        activeEffect?.variableMetadata
-        && (
-            activeEffect.variableMetadataStructure
-            || activeEffect.variableNames.length === 0
-        )
-    ) {
-        warmCache?.warmVariableMetadata(state.activeDatasetName);
+    if (!delivered) {
+        return false;
     }
-
-    await Promise.allSettled(metadataRefreshes);
-
-    if (workspaceUpdateChangesDialogVariables(effects)) {
-        notifyBrowserDialogsWorkspaceChanged();
-    }
-
+    warmWorkspaceDatasetCacheEffects(prepared.effects, state.activeDatasetName, warmCache);
     refreshBrowserConsoleStateChips();
 
     return true;
@@ -1532,16 +1525,30 @@ const executeWorkspaceRemove = async function (name) {
 
     const previousDatasetNames = workspaceDatasetNames();
 
-    state.workspaceSnapshot = await manager.removeWorkspaceObjects([objectName]);
+    const scopeIsCurrent = captureWorkspaceRuntimeScope(
+        () => webRRuntimeSession()?.runtimeSessionManager
+    );
+    const snapshot = await manager.removeWorkspaceObjects([objectName]);
+    if (!scopeIsCurrent(snapshot)) {
+        return;
+    }
+    state.workspaceSnapshot = snapshot;
     if (state.workspaceSnapshot.status === "uncertain") {
         appendTranscript(`Warning: ${state.workspaceSnapshot.message}\n`);
     }
     state.workspaceMetadataReady = true;
-    selectActiveDatasetAfterWorkspaceRefresh(previousDatasetNames);
+    await selectActiveDatasetAfterWorkspaceRefresh(previousDatasetNames);
+    if (!scopeIsCurrent(snapshot)) {
+        return;
+    }
     renderWorkspacePane();
-    notifyBrowserDialogsWorkspaceChanged();
-    refreshBrowserConsoleStateChips();
-    broadcastBrowserWorkspaceSnapshot(state.workspaceSnapshot);
+    const delivered = await broadcastBrowserWorkspaceSnapshot(
+        snapshot,
+        notifyBrowserDialogsWorkspaceChanged
+    );
+    if (delivered) {
+        refreshBrowserConsoleStateChips();
+    }
 };
 
 const executeWorkspaceClear = async function () {
@@ -1557,16 +1564,30 @@ const executeWorkspaceClear = async function () {
 
     const previousDatasetNames = workspaceDatasetNames();
 
-    state.workspaceSnapshot = await manager.clearWorkspace();
+    const scopeIsCurrent = captureWorkspaceRuntimeScope(
+        () => webRRuntimeSession()?.runtimeSessionManager
+    );
+    const snapshot = await manager.clearWorkspace();
+    if (!scopeIsCurrent(snapshot)) {
+        return;
+    }
+    state.workspaceSnapshot = snapshot;
     if (state.workspaceSnapshot.status === "uncertain") {
         appendTranscript(`Warning: ${state.workspaceSnapshot.message}\n`);
     }
     state.workspaceMetadataReady = true;
-    selectActiveDatasetAfterWorkspaceRefresh(previousDatasetNames);
+    await selectActiveDatasetAfterWorkspaceRefresh(previousDatasetNames);
+    if (!scopeIsCurrent(snapshot)) {
+        return;
+    }
     renderWorkspacePane();
-    notifyBrowserDialogsWorkspaceChanged();
-    refreshBrowserConsoleStateChips();
-    broadcastBrowserWorkspaceSnapshot(state.workspaceSnapshot);
+    const delivered = await broadcastBrowserWorkspaceSnapshot(
+        snapshot,
+        notifyBrowserDialogsWorkspaceChanged
+    );
+    if (delivered) {
+        refreshBrowserConsoleStateChips();
+    }
 };
 
 const readWorkspacePaneSnapshot = function () {
@@ -1585,8 +1606,7 @@ const setActiveWorkspaceDataset = function (name) {
         return;
     }
 
-    applyActiveWorkspaceDatasetName(datasetName);
-    state.workspacePane?.setActiveDataset(datasetName);
+    return applyActiveWorkspaceDatasetName(datasetName);
 };
 
 const renderWorkspacePane = function () {
@@ -1599,7 +1619,7 @@ const renderWorkspacePane = function () {
             container: elements.workspaceSummary,
             t: (key) => translateCompositionText(key, key),
             onSelectVariable: async function (item) {
-                setActiveWorkspaceDataset(item.access_key);
+                await setActiveWorkspaceDataset(item.access_key);
             },
             onOpenVariable: async function (item) {
                 const objectName = String(item.access_key || "").trim();
@@ -1609,7 +1629,7 @@ const renderWorkspacePane = function () {
                 }
             },
             onMakeActiveDataset: async function (item) {
-                setActiveWorkspaceDataset(item.access_key);
+                await setActiveWorkspaceDataset(item.access_key);
             },
             onDeleteVariable: executeWorkspaceRemove,
             onClearWorkspace: executeWorkspaceClear
@@ -1629,35 +1649,78 @@ const workspaceDatasetNames = function () {
         .map((entry) => entry.name);
 };
 
-const applyActiveWorkspaceDatasetName = function (datasetName) {
-    state.activeDatasetName = String(datasetName || "").trim();
+const presentActiveDataset = createWorkspaceActiveDatasetPresenter({
+    getAuthoritativeOwner() {
+        return webRRuntimeSession()?.runtimeSessionManager
+            .getActiveDataset().selectionRevision?.owner;
+    }
+});
+const workspaceActiveDatasetDelivery = createWorkspaceActiveDatasetDelivery({
+    getAuthoritativeSnapshot() {
+        return webRRuntimeSession()?.runtimeSessionManager.getActiveDataset();
+    },
+    getSessionScope() {
+        const manager = webRRuntimeSession()?.runtimeSessionManager;
+        return readWorkspaceActiveDatasetScope(manager?.getWorkspaceSnapshot()) || manager;
+    },
+    async readActiveDataset() {
+        const manager = webRRuntimeSession()?.runtimeSessionManager;
+        if (!manager) {
+            throw new Error("Runtime session is not ready.");
+        }
+        return manager.getActiveDataset();
+    },
+    async requestActiveDataset(name) {
+        const manager = webRRuntimeSession()?.runtimeSessionManager;
+        if (!manager) {
+            throw new Error("Runtime session is not ready.");
+        }
+        return manager.setActiveDataset(name);
+    },
+    publish(snapshot) {
+        let notification = Promise.resolve();
+        const accepted = presentActiveDataset(snapshot, {
+            remember(accepted) {
+                state.activeDatasetName = readSelectedWorkspaceDatasetName(accepted);
+            },
+            renderActiveName(name) {
+                state.workspacePane?.setActiveDataset(name);
+            },
+            renderToolbar() {
+                refreshBrowserConsoleStateChips(state.activeDatasetName);
+            },
+            updated(accepted, name) {
+                notification = notifyBrowserDialogsStateChanged(name);
 
-    const manager = webRRuntimeSession()?.runtimeSessionManager;
-
-    if (
-        manager
-        && state.activeDatasetName
-        && manager.getActiveDataset().objectName !== state.activeDatasetName
-    ) {
-        manager.setActiveDataset(state.activeDatasetName).catch((error) => {
-            appendTranscript(
-                error instanceof Error ? error.message : String(error),
-                "web-transcript__line--stderr"
-            );
+                if (name) {
+                    browserDatasetWarmCache()?.warmFirstScreens(name);
+                }
+            }
         });
+        return accepted ? notification.then(() => true) : false;
     }
+});
 
-    refreshBrowserConsoleStateChips(state.activeDatasetName);
-    notifyBrowserDialogsStateChanged(state.activeDatasetName);
+const applyActiveWorkspaceDatasetName = function (datasetName) {
+    const name = String(datasetName || "").trim();
+    const delivery = name
+        ? workspaceActiveDatasetDelivery.select(name)
+        : workspaceActiveDatasetDelivery.refresh();
 
-    if (state.activeDatasetName) {
-        browserDatasetWarmCache()?.warmVariableMetadata(
-            state.activeDatasetName
+    return delivery.catch((error) => {
+        appendTranscript(
+            error instanceof Error ? error.message : String(error),
+            "web-transcript__line--stderr"
         );
-    }
+        return null;
+    });
 };
 
-const selectActiveDatasetAfterWorkspaceRefresh = function (previousDatasetNames = []) {
+const clearActiveWorkspaceDataset = async function () {
+    await workspaceActiveDatasetDelivery.clear();
+};
+
+const selectActiveDatasetAfterWorkspaceRefresh = async function (previousDatasetNames = []) {
     const previous = new Set(
         (Array.isArray(previousDatasetNames) ? previousDatasetNames : [])
             .map((name) => String(name || "").trim())
@@ -1665,18 +1728,19 @@ const selectActiveDatasetAfterWorkspaceRefresh = function (previousDatasetNames 
     );
     const datasetNames = workspaceDatasetNames();
     const addedDatasetNames = datasetNames.filter((name) => !previous.has(name));
-    const latestAddedDataset = addedDatasetNames[addedDatasetNames.length - 1] || "";
+    const latestAddedDataset = readLatestAddedWorkspaceDataset(
+        workspaceEntries(),
+        addedDatasetNames
+    );
 
     if (latestAddedDataset) {
-        applyActiveWorkspaceDatasetName(latestAddedDataset);
+        await applyActiveWorkspaceDatasetName(latestAddedDataset);
         return;
     }
 
-    if (datasetNames.includes(state.activeDatasetName)) {
-        return;
-    }
-
-    applyActiveWorkspaceDatasetName(datasetNames[0] || "");
+    // The common runtime owns retention, clearing and first-dataset fallback.
+    // Read its decision instead of maintaining a browser-only selection rule.
+    await applyActiveWorkspaceDatasetName("");
 };
 
 const refreshWebRWorkspacePane = async function (options = {}) {
@@ -1696,6 +1760,9 @@ const refreshWebRWorkspacePane = async function (options = {}) {
 
     const refreshMetadata = async function () {
         const previousDatasetNames = workspaceDatasetNames();
+        const scopeIsCurrent = captureWorkspaceRuntimeScope(
+            () => webRRuntimeSession()?.runtimeSessionManager
+        );
 
         if (forceRefresh) {
             state.workspaceMetadataReady = false;
@@ -1704,15 +1771,25 @@ const refreshWebRWorkspacePane = async function (options = {}) {
             );
         }
 
-        state.workspaceSnapshot = await controller.listWorkspaceObjects({
+        const snapshot = await controller.listWorkspaceObjects({
             forceRefresh,
             detectChanges
         });
+        if (!scopeIsCurrent(snapshot)) {
+            return;
+        }
+        state.workspaceSnapshot = snapshot;
         state.workspaceMetadataReady = true;
 
-        selectActiveDatasetAfterWorkspaceRefresh(previousDatasetNames);
+        await selectActiveDatasetAfterWorkspaceRefresh(previousDatasetNames);
+        if (!scopeIsCurrent(snapshot)) {
+            return;
+        }
         renderWorkspacePane();
-        broadcastBrowserWorkspaceSnapshot(state.workspaceSnapshot);
+        await broadcastBrowserWorkspaceSnapshot(
+            snapshot,
+            notifyBrowserDialogsWorkspaceChanged
+        );
     };
     const pending = refreshMetadata();
 
@@ -1728,37 +1805,6 @@ const refreshWebRWorkspacePane = async function (options = {}) {
     }
 };
 
-const DATA_EDITOR_INITIAL_ROWS = 40;
-const DATA_EDITOR_INITIAL_COLUMNS = 32;
-const DATA_EDITOR_VARIABLE_OVERSCAN_ROWS = 20;
-
-const getDataEditorCache = function (datasetName) {
-    const key = String(datasetName || "").trim();
-    let cache = state.dataEditor.cache.get(key);
-
-    if (!cache) {
-        cache = {
-            snapshot: null,
-            variables: [],
-            variablesLoaded: 0,
-            variablesLoading: false,
-            variablesViewportLoading: false,
-            dataLoading: false,
-            loadedWindow: {
-                rowStart: 1,
-                rowEnd: 0,
-                columnStart: 1,
-                columnEnd: 0
-            },
-            pendingDataViewport: null,
-            dataScrollTimer: 0,
-            variablesScrollTimer: 0
-        };
-        state.dataEditor.cache.set(key, cache);
-    }
-
-    return cache;
-};
 
 const readBrowserDatasetNames = function () {
     return workspaceEntries().filter(isBrowserTabularWorkspaceObject).map((entry) => {
@@ -1813,10 +1859,19 @@ const openSharedDataEditorModal = async function (datasetName) {
     }
 
     const object = workspaceObjectByName(cleanName);
-
-    if (isBrowserTabularWorkspaceObject(object)) {
-        setActiveWorkspaceDataset(cleanName);
-    }
+    prepareDatasetEditorOpening(cleanName, {
+        selectDataset(name) {
+            if (isBrowserTabularWorkspaceObject(object)) {
+                return setActiveWorkspaceDataset(name);
+            }
+        },
+        warmFirstScreens(name) {
+            browserDatasetWarmCache()?.warmFirstScreens(name);
+        },
+        reportError(error) {
+            console.error(error);
+        }
+    });
 
     state.dataEditor.datasetName = cleanName;
     await browserDataEditorSurface().open(cleanName);
@@ -2379,7 +2434,8 @@ const browserWorkbenchLayout = function () {
             document,
             installDraggableSurface: installBrowserDraggableSurface,
             installResizableSurface: installBrowserResizableSurface,
-            initialWorkspacePaneWidth: 280
+            initialWorkspacePaneWidth: 280,
+            translate: (key) => translateCompositionText(key, key)
         });
     }
 
@@ -2392,9 +2448,6 @@ const browserPlotViewerHost = function () {
             frameSurfaces: browserFrameSurfaces(),
             activateSurface: activateModelessSurface,
             installSurfaceActivation: installModelessSurfaceActivation,
-            executeMutation: executeBrowserPlotMutation,
-            savePlot: saveBrowserPlot,
-            copyPlot: copyBrowserPlot,
             closeCapturedImages: closeBrowserCapturedPlotImages,
             getI18n: function () {
                 return state.composition?.i18n || {};
@@ -2408,7 +2461,8 @@ const browserPlotViewerHost = function () {
 const browserHelpViewerSurface = function () {
     if (!state.browserHelpViewerSurface) {
         state.browserHelpViewerSurface = createBrowserHelpViewerSurface({
-            frameSurfaces: browserFrameSurfaces()
+            frameSurfaces: browserFrameSurfaces(),
+            onClose: browserHelpRequests.retire
         });
     }
 
@@ -2495,19 +2549,30 @@ const browserImportAdapter = function () {
                     throw new Error("WebR runtime session is not ready.");
                 }
 
+                const scopeIsCurrent = captureWorkspaceRuntimeScope(
+                    () => webRRuntimeSession()?.runtimeSessionManager
+                );
                 const result = await session.runtimeSessionManager.importData(request);
 
-                if (result.status === "imported") {
-                    state.workspaceSnapshot = session.runtimeSessionManager
-                        .getWorkspaceSnapshot();
+                if (result.status === "imported" && scopeIsCurrent()) {
+                    const snapshot = session.runtimeSessionManager.getWorkspaceSnapshot();
+                    state.workspaceSnapshot = snapshot;
                     state.workspaceMetadataReady = true;
-                    applyActiveWorkspaceDatasetName(
+                    await applyActiveWorkspaceDatasetName(
                         session.runtimeSessionManager.getActiveDataset().objectName
                             || result.targetName
                     );
+                    if (!scopeIsCurrent(snapshot)) {
+                        return result;
+                    }
                     renderWorkspacePane();
-                    notifyBrowserDialogsWorkspaceChanged();
-                    refreshBrowserConsoleStateChips();
+                    const delivered = await broadcastBrowserWorkspaceSnapshot(
+                        snapshot,
+                        notifyBrowserDialogsWorkspaceChanged
+                    );
+                    if (delivered) {
+                        refreshBrowserConsoleStateChips();
+                    }
                 }
 
                 return result;
@@ -2556,11 +2621,22 @@ const setRuntimeStatus = function (text, progress) {
     browserRuntimeProgress().setStatus(text, progress);
 };
 
-const notifyConsoleSession = function () {
-    try {
+const runtimeSessionPublication = createRuntimeSessionPublication({
+    publishSession(value) {
         state.console?.session?.notifySessionPhase?.();
         state.console?.toolbar?.render?.();
-        const snapshot = browserRuntimeSessionManager()?.getSnapshot()
+        broadcastBrowserPreloadEvent(
+            applicationEventChannels.runtimeSession, value
+        );
+    },
+    publishScriptPhase: value => broadcastBrowserPreloadEvent(
+        scriptEditorEventChannels.sessionState, value
+    )
+});
+
+const notifyConsoleSession = function (snapshotInput) {
+    try {
+        const snapshot = snapshotInput || browserRuntimeSessionManager()?.getSnapshot()
             || (
                 state.runtimeStarting
                     ? runtimeSnapshot("starting", "WebR is starting.")
@@ -2569,14 +2645,8 @@ const notifyConsoleSession = function () {
                         : runtimeSnapshot("stopped", "WebR not started.")
             );
 
-        broadcastBrowserPreloadEvent(
-            applicationEventChannels.runtimeSession,
-            snapshot
-        );
-        broadcastBrowserPreloadEvent(
-            scriptEditorEventChannels.sessionState,
-            { phase: snapshot.status }
-        );
+        state.datasetWarmCache?.updateRuntimeSession(snapshot);
+        runtimeSessionPublication.publish(snapshot);
     }
     catch { }
 };
@@ -2615,24 +2685,6 @@ const closeMenus = function () {
     state.browserMenuAdapter?.close?.();
 };
 
-const browserZoomActionForMenuRole = function (role) {
-    const cleanRole = String(role || "").trim();
-
-    if (cleanRole === "zoomIn") {
-        return "in";
-    }
-
-    if (cleanRole === "zoomOut") {
-        return "out";
-    }
-
-    if (cleanRole === "resetZoom") {
-        return "reset";
-    }
-
-    return "";
-};
-
 const handleBrowserKeyDown = function (input) {
     if (browserZoomAdapter.handleKeyDown(input)) {
         return true;
@@ -2654,7 +2706,7 @@ const isMenuActionSupported = function (item) {
         || (
             item.type === "native-role"
             && (
-                Boolean(browserZoomActionForMenuRole(item.role))
+                Boolean(readMainZoomMenuAction(item.role))
                 || browserNativeEditRoleAdapter.isSupported(item.role)
             )
         )
@@ -2797,7 +2849,7 @@ const applyWebShellTranslations = function () {
     );
     setTranslatedElementLabel("consoleToolbarInfo", "Info");
     setTranslatedElementLabel("consoleToolbarClear", "Clear Console");
-    setTranslatedElementLabel("workspacePaneToggle", "Toggle Workspace");
+    browserWorkbenchLayout().refreshLabels();
     setTranslatedElementText(
         "consoleCoverMessage",
         "Loading web runtime...",
@@ -2805,60 +2857,18 @@ const applyWebShellTranslations = function () {
     );
 };
 
-const translateAboutItems = function (items, keyPrefix, itemPrefix) {
-    return (items || []).map((text, index) => {
-        const key = `${keyPrefix}.${itemPrefix}${index + 1}`;
-        const translated = translateCompositionText(key, key);
-
-        if (translated !== key) {
-            return translated;
-        }
-
-        return translateCompositionText(text, text);
-    });
-};
-
 const buildAboutPayload = function () {
     const composition = state.composition || {};
-    const about = composition.productAbout || {};
-    const product = composition.product || {};
-    const productName = String(product.name || "Application");
-    const version = String(product.version || "");
-    const currentYear = new Date().getFullYear();
-    const startYear = Number(about.copyrightStartYear || currentYear);
-    const yearText = currentYear > startYear
-        ? `${startYear}-${currentYear}`
-        : String(startYear);
-    const holder = about.copyrightHolder || about.authorName || productName;
-
-    return {
-        title: translateCompositionTemplate(
-            "About {productName}",
-            `About ${productName}`,
-            { productName }
-        ),
-        version: version
-            ? translateCompositionTemplate(
-                "Version {version}",
-                `Version ${version}`,
-                { version }
-            )
-            : "",
-        body: translateAboutItems(about.body || [], "about.body", "b"),
-        highlights: translateAboutItems(
-            about.highlights || [],
-            "about.highlights",
-            "h"
-        ),
-        authorLabel: translateCompositionText(about.authorLabel || "Author:", "Author:"),
-        authorName: String(about.authorName || ""),
-        authorUrl: String(about.authorUrl || ""),
-        copyright: translateCompositionTemplate(
-            "Copyright © {yearText}, {holder}",
-            `Copyright © ${yearText}, ${holder}`,
-            { yearText, holder }
-        )
-    };
+    return createAboutPayload({
+        about: composition.productAbout || {},
+        productName: String(composition.product?.name || "Application"),
+        version: String(composition.product?.version || ""),
+        translate(key, values) {
+            return values
+                ? translateCompositionTemplate(key, key, values)
+                : translateCompositionText(key, key);
+        }
+    });
 };
 
 const renderAboutPayload = function (frame, payload) {
@@ -2878,7 +2888,7 @@ const openAboutModal = function () {
     let surface = null;
     const render = function () {
         if (surface) {
-            renderAboutPayload(surface.frame, payload);
+            renderAboutPayload(surface.frame, buildAboutPayload());
         }
     };
 
@@ -2892,17 +2902,18 @@ const openAboutModal = function () {
         ariaModal: false,
         frameTitle: payload.title,
         storageKey: "about",
-        onFrameLoad: render
+        onFrameLoad: render,
+        onActivate: function () {
+            activateModelessSurface("about");
+        }
     });
 
+    installModelessSurfaceActivation("about", surface.layer);
     render();
 };
 
 const openDeveloperDiagnosticsModal = function () {
-    const title = translateCompositionText(
-        "menu.root.view.developerDiagnostics",
-        "Developer Diagnostics"
-    );
+    const title = developerDiagnosticsWindowTitle;
     const surface = browserFrameSurfaces().open({
         id: "devDiagnostics",
         title,
@@ -2920,8 +2931,8 @@ const openDeveloperDiagnosticsModal = function () {
             browserZoomAdapter.postToWindow(frame?.contentWindow || null);
         },
         onActivate: function (layer) {
-            activateModelessSurface("devDiagnostics");
             state.devDiagnosticsLayer = layer;
+            activateModelessSurface("devDiagnostics");
         },
         onClose: function () {
             state.devDiagnosticsLayer = null;
@@ -2982,66 +2993,63 @@ const insertLanguageMenu = function (menu) {
     ]);
 };
 
-const refreshOpenTranslatedSurfaces = async function (options = {}) {
+const refreshOpenTranslatedSurfaces = async function () {
     const plotLayer = state.browserPlotViewerHost?.layer?.();
 
     if (plotLayer?.isConnected) {
-        openPlotViewerModal(null, { hidden: plotLayer.style.display === "none" });
+        state.browserPlotViewerHost.refreshTitle();
     }
 
     if (state.dataEditor.layer?.isConnected && state.dataEditor.datasetName) {
-        await browserDataEditorSurface().open(state.dataEditor.datasetName);
+        browserDataEditorSurface().refreshTitle();
     }
 
     if (state.scriptEditor.layer?.isConnected) {
-        await browserScriptEditorSurface().open();
+        browserFrameSurfaces().updateTitle(
+            "scriptEditor",
+            translateCompositionText("Script editor", "Script editor")
+        );
     }
 
-    if (browserFrameSurfaces().get("about")) {
-        openAboutModal();
+    const aboutSurface = browserFrameSurfaces().get("about");
+
+    if (aboutSurface) {
+        const payload = buildAboutPayload();
+
+        browserFrameSurfaces().updateTitle("about", payload.title);
+        renderAboutPayload(aboutSurface.frame, payload);
     }
 
-    if (
-        options.refreshSettings !== false
-        && state.settingsLayer?.isConnected
-    ) {
-        openSettingsModal();
-    }
+    const settingsSurface = browserFrameSurfaces().get("settings");
 
-    if (state.devDiagnosticsLayer?.isConnected) {
-        openDeveloperDiagnosticsModal();
+    if (settingsSurface?.layer?.isConnected) {
+        const title = translateCompositionText("Settings", "Settings");
+
+        browserFrameSurfaces().updateTitle("settings", title);
+        postBrowserPreloadEvent(
+            settingsSurface.frame.contentWindow,
+            applicationSettingsEventChannels.settingsLoaded,
+            readBrowserSettingsPayload()
+        );
     }
 };
 
-const applyBrowserLanguage = async function (locale, options = {}) {
-    const cleanLocale = String(locale || "").trim();
-
-    if (!cleanLocale) {
-        return;
+const applyBrowserLanguage = createApplicationLanguageLifecycle({
+    currentLocale: () => String(state.composition?.locale || ""),
+    currentTranslations: () => state.composition?.i18n || {},
+    appPath: () => "/",
+    persistLocale: writeSelectedLocale,
+    applyLocale: loadComposition,
+    refreshSurfaces: async function () {
+        renderComposition();
+        browserZoomAdapter.broadcast();
+        await refreshOpenTranslatedSurfaces();
+    },
+    notifyChanged: function (payload) {
+        broadcastBrowserPreloadEvent(applicationEventChannels.languageChanged, payload);
+        state.browserPlotViewerHost?.notifyLanguageChanged(payload);
     }
-
-    if (options.persist !== false) {
-        writeSelectedLocale(cleanLocale);
-    }
-    if (cleanLocale === state.composition?.locale) {
-        return;
-    }
-
-    await loadComposition(cleanLocale);
-    renderComposition();
-    browserZoomAdapter.broadcast();
-    await refreshOpenTranslatedSurfaces({
-        refreshSettings: options.refreshSettings
-    });
-    broadcastBrowserPreloadEvent(
-        applicationEventChannels.languageChanged,
-        {
-            languageNS: cleanLocale,
-            language: cleanLocale.split(/[-_]/)[0].toLowerCase(),
-            appPath: "/"
-        }
-    );
-};
+});
 
 const browserDatasetNavigationSupport = createMainDatasetNavigationSupport({
     getProductCapabilities() {
@@ -3121,6 +3129,75 @@ const browserDatasetNavigationController =
             });
         }
     });
+
+const browserHelpRequests = createHelpRequestOwner();
+const browserRuntimeHelpEventDelivery = createRuntimeHelpEventDelivery({
+    getRuntime: () => webRRuntimeSession()?.runtimeSessionManager,
+    requests: browserHelpRequests,
+    async openPage(path, isCurrent) {
+        const response = await fetchBrowserRHelpPage(window.location.origin + path);
+        assertRHelpReadOwner(isCurrent);
+        if (!response.ok) {
+            throw new Error(response.error || "R help callback failed.");
+        }
+        const match = path.match(/^\/library\/([^/]+)\/html\/([^/]+)[.]html/);
+        updateHelpViewer(match?.[2] || "R Help", response.text, {
+            baseUrl: response.url || window.location.origin + path,
+            resourceBaseUrl: response.resourceBaseUrl,
+            packageName: match?.[1] || "", isCurrent
+        });
+    },
+    reportError: (error) => appendTranscript(String(error), "web-transcript__line--stderr")
+});
+
+const browserRuntimeEventDelivery = createRuntimeEventDelivery({
+    publishEffects: (snapshot) => browserRuntimeHelpEventDelivery.present(snapshot),
+    getRuntime: () => webRRuntimeSession()?.runtimeSessionManager,
+    publish(snapshot, changes) {
+        broadcastBrowserPreloadEvent(applicationEventChannels.runtimeEvents, snapshot);
+        if (changes.length > 0 && state.dataEditor.frame?.contentWindow) {
+            postBrowserPreloadEvent(state.dataEditor.frame.contentWindow,
+                datasetEditorEventChannels.applyChanges, { changes });
+        }
+    }
+});
+
+const browserProductCommandController = createMainProductCommandController({
+    getProductId: () => String(state.composition?.product?.id || ""),
+    getProductCapabilities: () => state.composition?.productCapabilities || [],
+    installRequired: (packages) => browserRuntimePackages().installSessionPackages(packages),
+    updateRequired: (packages) => browserRuntimePackages().updateSessionPackages(packages),
+    async executeProductCommand(request) {
+        await ensureRuntime();
+        const manager = webRRuntimeSession()?.runtimeSessionManager;
+        if (!manager) {
+            throw new Error("WebR runtime session is not ready.");
+        }
+        return manager.executeProductCommand(request);
+    },
+    renderResult(result) {
+        if (result.message) {
+            appendTranscript(result.message, result.status === "failed"
+                || result.status === "unavailable" ? "web-transcript__line--stderr" : "");
+        }
+    },
+    refreshRuntimeEvents() {
+        void browserRuntimeEventDelivery.refresh().catch((error) => {
+            appendTranscript(error instanceof Error ? error.message : String(error),
+                "web-transcript__line--stderr");
+        });
+    },
+    async checkDependencies(names, source) {
+        const manager = webRRuntimeSession()?.runtimeSessionManager;
+        if (!manager) {
+            throw new Error("WebR runtime session is not ready.");
+        }
+        const result = await manager.checkDependencies({ kind: "package", names, source });
+        if (result.status !== "ready" && result.message) {
+            appendTranscript(result.message, "web-transcript__line--stderr");
+        }
+    }
+});
 
 const sharedMenuCommandHandler = createMainMenuCommandHandler({
     recordCommand() { },
@@ -3210,35 +3287,7 @@ const sharedMenuCommandHandler = createMainMenuCommandHandler({
             void openDialog(dialog);
         }
     },
-    async executeProductCommand(item) {
-        await ensureRuntime();
-        const manager = webRRuntimeSession()?.runtimeSessionManager;
-
-        if (!manager) {
-            throw new Error("WebR runtime session is not ready.");
-        }
-
-        const result = await manager.executeProductCommand({
-            productId: String(state.composition?.product?.id || ""),
-            command: String(item.command || ""),
-            label: String(item.label || ""),
-            capability: String(item.capability || ""),
-            rPackages: Array.isArray(item.rPackages)
-                ? item.rPackages
-                : [],
-            source: "browser.product-command"
-        });
-
-        if (result.message) {
-            appendTranscript(
-                result.message,
-                result.status === "failed"
-                    || result.status === "unavailable"
-                    ? "web-transcript__line--stderr"
-                    : ""
-            );
-        }
-    },
+    executeProductCommand: browserProductCommandController.execute,
     activateFeature(command) {
         if (isPlotViewerOpenCommand(command?.command)) {
             openPlotViewerModal();
@@ -3249,7 +3298,7 @@ const sharedMenuCommandHandler = createMainMenuCommandHandler({
 const executeMenuItem = async function (item) {
     closeMenus();
 
-    const zoomAction = browserZoomActionForMenuRole(item.role);
+    const zoomAction = readMainZoomMenuAction(item.role);
 
     if (item.type === "native-role" && zoomAction) {
         browserZoomAdapter.execute(zoomAction);
@@ -3266,11 +3315,6 @@ const executeMenuItem = async function (item) {
 
     if (item.type === "language") {
         await applyBrowserLanguage(item.locale);
-        return;
-    }
-
-    if (isWebRSessionPackageMenuCommand(item)) {
-        await browserRuntimePackages().installSessionPackages(item.rPackages);
         return;
     }
 
@@ -3327,6 +3371,7 @@ const renderComposition = function () {
     applyWebShellTranslations();
     renderMenu(composition.menu || []);
     renderWorkspacePane();
+    state.workspacePane?.setTranslator((key) => translateCompositionText(key, key));
 
     state.console?.toolbar?.render?.();
 };
@@ -3411,8 +3456,7 @@ const loadMoodleLaunchDataset = async function (runtime) {
         );
 
         if (result.loaded) {
-            applyActiveWorkspaceDatasetName(result.datasetName);
-            state.workspacePane?.setActiveDataset(result.datasetName);
+            await applyActiveWorkspaceDatasetName(result.datasetName);
         }
     }
     catch (error) {
@@ -3461,8 +3505,11 @@ const ensureRuntime = async function () {
     state.runtimeStartPromise = (async function () {
         const startQuiet = readTerminalSettings().startQuiet === true;
 
-        state.loadedRuntimePackages.clear();
-        state.runtimeOperationQueue = createWebRRuntimeOperationQueue();
+        const operationQueue = createRuntimeOperationQueue();
+        state.runtimeOperationQueue = operationQueue;
+        const isCurrentStartup = function () {
+            return state.runtimeOperationQueue === operationQueue && !operationQueue.isRetired();
+        };
 
         // The library image needs no running R instance. Download/decompress
         // it alongside WebR instead of starting a second large transfer after
@@ -3473,7 +3520,7 @@ const ensureRuntime = async function () {
             const prepared = manifest?.available
                 ? await prepareBrowserProductPackageLibrary(manifest, {
                     setStatus(message, progress) {
-                        if (reportLibraryProgress) {
+                        if (reportLibraryProgress && isCurrentStartup()) {
                             setRuntimeStatus(message, progress);
                         }
                     },
@@ -3486,84 +3533,181 @@ const ensureRuntime = async function () {
         // while WebR is still initializing as well.
         packageLibraryPreparation.catch(() => {});
 
-        const runtime = await startBrowserWebRRuntime({
-            baseUrl: "/webr/",
-            workingDirectoryPath: state.workingDirectoryPath,
-            homeDirectoryPath: state.homeDirectoryPath,
-            setStatus: setRuntimeStatus,
-            importWebRModule: async function () {
-                await durableAssetCacheReady;
-                return import("/webr/webr.js");
-            },
-            mountPackageLibrary: function (runtime) {
-                reportLibraryProgress = true;
-                return mountProductPackageLibrary(runtime, packageLibraryPreparation);
-            },
-            startQuiet,
-            writeStartupOutput: appendTranscript
+        const runtime = await runOwnedRuntimeStartupStage({
+            isCurrent: isCurrentStartup,
+            discard: stopBrowserWebRRuntime,
+            run: () => startBrowserWebRRuntime({
+                baseUrl: "/webr/",
+                workingDirectoryPath: state.workingDirectoryPath,
+                homeDirectoryPath: state.homeDirectoryPath,
+                setStatus: function (message) {
+                    if (isCurrentStartup()) {
+                        setRuntimeStatus(message);
+                    }
+                },
+                importWebRModule: async function () {
+                    await durableAssetCacheReady;
+                    return import("/webr/webr.js");
+                },
+                mountPackageLibrary: function (runtime) {
+                    reportLibraryProgress = true;
+                    return runOwnedRuntimeStartupStage({
+                        isCurrent: isCurrentStartup,
+                        run: () => mountProductPackageLibrary(runtime, packageLibraryPreparation)
+                    });
+                },
+                startQuiet,
+                writeStartupOutput: function (text) {
+                    if (isCurrentStartup()) {
+                        appendTranscript(text);
+                    }
+                }
+            })
         });
 
         setRuntimeStatus("Loading shared R runtime services...");
-        state.runtimeControlClient = await installWebRSharedRuntimeControl({
-            runtime,
-            async prepareRequest(request) {
-                // Background workspace polling and hidden dialog preparation
-                // remain startup-only. Evaluate requests include the package
-                // compatibility check performed on opening a dialog.
-                const method = request.method;
-                if (
-                    method === "execute_input"
-                    || (method === "evaluate_code" && !state.runtimeStarting)
-                    || method === "show_help_topic"
-                    || method === "search_help_topic"
-                    || method.startsWith("workspace.dataset_")
-                    || method === "workspace.import_file_preview"
-                    || method === "runtime.run_script_file"
-                    || method === "runtime.load_workspace_file"
-                    || method === "runtime.load_serialized_object"
-                    || method === "load_workspace"
-                ) {
-                    await deferredPackageLibraries.get(runtime)?.ensureMounted();
-                }
+        const outputSessionId = crypto.randomUUID();
+        const outputDirectory = `/tmp/dialogforge-output-${outputSessionId}`;
+        let outputCaptureSequence = 0;
+        const controlClient = await runOwnedRuntimeStartupStage({
+            isCurrent: isCurrentStartup,
+            discard: async function (client) {
+                client.detach();
+                await stopBrowserWebRRuntime(runtime);
             },
-            runRuntimeOperation: function (action) {
-                return state.runtimeOperationQueue.run(action);
-            },
-            fetchSource: async function (sourceName) {
-                const response = await fetch(
-                    `/src/runtime/providers/r/r-sources/${encodeURIComponent(sourceName)}`
-                );
+            run: () => installWebRSharedRuntimeControl({
+                runtime,
+                orderedOutput: {
+                    library: `${outputDirectory}/library`,
+                    directory: `${outputDirectory}/captures`,
+                    sessionId: outputSessionId
+                },
+                fetchOutputArchive: async function (version) {
+                    const response = await fetch(
+                        `/r-output-prototype/webr/${version}/dialogforgeoutput_0.0.1.tgz`
+                    );
+                    if (!response.ok) {
+                        throw new Error("The WebR ordered-output helper could not be loaded.");
+                    }
+                    return new Uint8Array(await response.arrayBuffer());
+                },
+                outputJournalForRequest: function (request) {
+                    return createWebROutputJournalReader({
+                        path: `${outputDirectory}/captures/capture-${++outputCaptureSequence}.bin`,
+                        sessionId: outputSessionId,
+                        parentId: String(request.params?.parentId || ""),
+                        request: {
+                            text: String(request.params?.code || ""),
+                            source: "browser.webr.visible-command"
+                        },
+                        isCurrent: () => state.runtime === runtime && state.runtimeReady,
+                        onTranscriptEvents: function (events) {
+                            if (!state.console?.recordTranscriptEvents) {
+                                throw new Error("The owning console transcript is unavailable.");
+                            }
+                            state.console.recordTranscriptEvents(events);
+                        }
+                    });
+                },
+                async prepareRequest(request) {
+                    // Background workspace polling and hidden dialog preparation
+                    // remain startup-only. Evaluate requests include the package
+                    // compatibility check performed on opening a dialog.
+                    const method = request.method;
+                    if (
+                        method === "execute_input"
+                        || (method === "evaluate_code" && !state.runtimeStarting)
+                        || method === "show_help_topic"
+                        || method === "search_help_topic"
+                        || method.startsWith("workspace.dataset_")
+                        || method === "workspace.import_file_preview"
+                        || method === "runtime.run_script_file"
+                        || method === "runtime.load_workspace_file"
+                        || method === "runtime.load_serialized_object"
+                        || method === "load_workspace"
+                    ) {
+                        await deferredPackageLibraries.get(runtime)?.ensureMounted();
+                    }
+                },
+                runRuntimeOperation: function (action, waitBeforeNext) {
+                    return operationQueue.run(action, waitBeforeNext);
+                },
+                fetchSource: async function (sourceName) {
+                    const response = await fetch(
+                        `/src/runtime/providers/r/r-sources/${encodeURIComponent(sourceName)}`
+                    );
 
-                if (!response.ok) {
-                    throw new Error(
-                        `Shared R runtime source could not be loaded: ${sourceName}.`
+                    if (!response.ok) {
+                        throw new Error(
+                            `Shared R runtime source could not be loaded: ${sourceName}.`
+                        );
+                    }
+
+                    return response.text();
+                },
+                fetchControlCompilationCache: async function () {
+                    const controller = new AbortController();
+                    const timeout = setTimeout(() => controller.abort(), 2000);
+                    try {
+                        const response = await fetch(
+                            "/src/runtime/providers/r/r-sources/runtime-control-cache.rds",
+                            { signal: controller.signal }
+                        );
+                        return response.ok ? new Uint8Array(await response.arrayBuffer()) : null;
+                    }
+                    finally {
+                        clearTimeout(timeout);
+                    }
+                },
+                fetchProductSource: async function () {
+                    const response = await fetch(
+                        "/api/product-runtime-profile.R"
+                    );
+
+                    if (!response.ok) {
+                        throw new Error(
+                            "Product R runtime profile could not be loaded."
+                        );
+                    }
+
+                    return response.text();
+                },
+                graphicsReceived: updatePlotViewerFromCapturedImages,
+                runtimeEventReceived: function (event, request, orderedOutput) {
+                    if (state.runtime !== runtime || !state.runtimeReady) {
+                        return;
+                    }
+                    state.console?.recordTranscriptEvents?.(
+                        createLiveTranscriptEventsFromRuntimeControl(
+                            event,
+                            {
+                                text: String(request.params?.code || ""),
+                                source: "browser.webr.visible-command"
+                            },
+                            String(request.params?.parentId || ""),
+                            orderedOutput
+                        )
+                    );
+                },
+                promptReceived: function (event) {
+                    if (state.runtime !== runtime || !state.runtimeReady) {
+                        return;
+                    }
+                    state.console?.recordTranscriptEvents?.(
+                        createLiveTranscriptEventsFromRuntimeControl(
+                            event,
+                            { text: "", source: "browser.webr.visible-command" },
+                            String(event.parent_id || ""),
+                            false
+                        )
                     );
                 }
-
-                return response.text();
-            },
-            fetchProductSource: async function () {
-                const response = await fetch(
-                    "/api/product-runtime-profile.R"
-                );
-
-                if (!response.ok) {
-                    throw new Error(
-                        "Product R runtime profile could not be loaded."
-                    );
-                }
-
-                return response.text();
-            },
-            graphicsReceived: updatePlotViewerFromCapturedImages,
-            promptReceived: async function (input) {
-                const event = await webRPromptCoordinator().requestPrompt(input);
-
-                if (event) {
-                    state.console?.recordTranscriptEvents?.([event]);
-                }
-            }
+            }).catch(async function (error) {
+                await stopBrowserWebRRuntime(runtime);
+                throw error;
+            })
         });
+        state.runtimeControlClient = controlClient;
         state.runtime = runtime;
         state.runtimeReady = true;
         state.activeDatasetName = "";
@@ -3593,10 +3737,13 @@ const ensureRuntime = async function () {
                 continue;
             }
 
-            const result = await runtimeSessionManager?.executeStartupTask({
-                taskId: String(task.id || ""),
-                owner: String(task.owner || ""),
-                source: "base-app.startup"
+            const result = await runOwnedRuntimeStartupStage({
+                isCurrent: isCurrentStartup,
+                run: async () => runtimeSessionManager?.executeStartupTask({
+                    taskId: String(task.id || ""),
+                    owner: String(task.owner || ""),
+                    source: "base-app.startup"
+                })
             });
 
             if (
@@ -3612,13 +3759,17 @@ const ensureRuntime = async function () {
             }
         }
         setRuntimeStatus("Reading WebR workspace...");
-        await refreshWebRWorkspacePane({
-            forceRefresh: true
+        await runOwnedRuntimeStartupStage({
+            isCurrent: isCurrentStartup,
+            run: () => refreshWebRWorkspacePane({ forceRefresh: true })
         });
         if (String(state.moodleLaunchCode || "").trim()) {
             setRuntimeStatus("Loading launch dataset...");
         }
-        await loadMoodleLaunchDataset(runtime);
+        await runOwnedRuntimeStartupStage({
+            isCurrent: isCurrentStartup,
+            run: () => loadMoodleLaunchDataset(runtime)
+        });
         setRuntimeStatus("WebR ready");
         void prepareBrowserDialogs();
         prewarmPlotInfrastructure(runtime);
@@ -3627,15 +3778,18 @@ const ensureRuntime = async function () {
         return runtime;
     })();
 
+    const pendingStartup = state.runtimeStartPromise;
     try {
-        return await state.runtimeStartPromise;
+        return await pendingStartup;
     }
     finally {
-        state.runtimeStartPromise = null;
-        state.runtimeStarting = false;
-        notifyConsoleSession();
-        if (state.runtimeReady) {
-            deferredPackageLibraries.get(state.runtime)?.schedulePrefetch();
+        if (state.runtimeStartPromise === pendingStartup) {
+            state.runtimeStartPromise = null;
+            state.runtimeStarting = false;
+            notifyConsoleSession();
+            if (state.runtimeReady) {
+                deferredPackageLibraries.get(state.runtime)?.schedulePrefetch();
+            }
         }
     }
 };
@@ -3682,111 +3836,174 @@ const checkCodeFragmentComplete = async function (code) {
     return String(value.state || "unknown");
 };
 
-const fetchHelpTopicDocument = async function (topic, packageName = "") {
+let browserHelpResourceOwner = null;
+
+const captureBrowserHelpRuntime = async function () {
     const runtime = await ensureRuntime();
     const manager = webRRuntimeSession()?.runtimeSessionManager;
-
     if (!manager) {
         throw new Error("WebR runtime session is not ready.");
     }
-
-    const result = await manager.readHelpTopic({
-        topic,
-        package: packageName,
-        allowSearch: false,
-        kind: "topic",
-        source: "browser.help"
-    });
-    const path = String(result.path || "");
-    const pathMatch = path.match(/\/library\/([^/]+)\/html\/([^/]+)\.html$/);
-    const resolvedPackage = String(
-        packageName
-        || pathMatch?.[1]
-        || result.matches?.[0]?.package
-        || ""
-    ).trim();
-    const baseUrl = path
-        ? `${window.location.origin}${path}`
-        : "";
-    let html = prepareWebRHelpDocumentHtml(result.body).trim();
-
-    if (!html && Array.isArray(result.matches) && result.matches.length > 0) {
-        html = buildHelpChooserDocument(
-            result,
-            function (pathValue) {
-                const helpPath = String(pathValue || "");
-
-                return `${window.location.origin}${
-                    helpPath.startsWith("/") ? helpPath : `/${helpPath}`
-                }`;
-            }
-        );
-    }
-
-    if (!html && path) {
-        const page = await fetchWebRHelpPageByUrl(
-            path,
-            window.location.origin,
-            function (command) {
-                return queryBrowserRuntimeText(command);
-            }
-        );
-
-        html = page.ok
-            ? prepareWebRHelpDocumentHtml(page.text).trim()
-            : "";
-    }
-
+    const generation = manager.getSnapshot().lifecycleGeneration;
+    const isCurrent = () => state.runtime === runtime && state.runtimeReady
+        && webRRuntimeSession()?.runtimeSessionManager === manager
+        && manager.getSnapshot().lifecycleGeneration === generation;
+    const query = (command) => queryBrowserRuntimeText(command, manager);
     return {
-        html: html || createRHelpFallbackHtml(
-            topic,
-            `No help page was found for ${
-                packageName ? `${packageName}::` : ""
-            }${topic}.`
-        ),
-        topic: String(result.topic || topic || "").trim(),
-        packageName: resolvedPackage,
-        baseUrl
+        runtime, manager, generation, isCurrent, query,
+        reader: createWebRHelpPageReader(window.location.origin, query, isCurrent)
     };
 };
 
-const fetchHelpTopicHtml = async function (topic, packageName = "") {
-    return (await fetchHelpTopicDocument(topic, packageName)).html;
+const ensureBrowserHelpResourceRoute = async function (context) {
+    assertRHelpReadOwner(context.isCurrent);
+    const worker = navigator.serviceWorker?.controller;
+    if (!worker) {
+        browserHelpResourceOwner?.channel.close();
+        browserHelpResourceOwner = null;
+        return "";
+    }
+    let owner = browserHelpResourceOwner;
+    if (!owner || owner.manager !== context.manager || owner.generation !== context.generation
+        || owner.worker !== worker) {
+        owner?.channel.close();
+        owner = {
+            manager: context.manager, generation: context.generation, worker,
+            channel: createBrowserHelpResourceChannel({
+                serviceWorker: navigator.serviceWorker,
+                origin: window.location.origin,
+                reader: context.reader
+            }),
+            registration: null
+        };
+        browserHelpResourceOwner = owner;
+    }
+    try {
+        owner.registration ||= owner.channel.register();
+        const resourceBaseUrl = await owner.registration;
+        assertRHelpReadOwner(context.isCurrent);
+        assertRHelpReadOwner(() => browserHelpResourceOwner === owner);
+        assertRHelpReadOwner(() => navigator.serviceWorker.controller === owner.worker);
+        return resourceBaseUrl;
+    } catch (error) {
+        if (browserHelpResourceOwner === owner) {
+            owner.channel.close();
+            browserHelpResourceOwner = null;
+        }
+        assertRHelpReadOwner(context.isCurrent);
+        if (error instanceof Error && error.message === "help-resource-channel-unavailable") {
+            return "";
+        }
+        throw error;
+    }
+};
+
+const fetchHelpTopicDocument = async function (topic, packageName = "", options = {}) {
+    const context = await captureBrowserHelpRuntime();
+    const request = createHelpTopicRequest({
+        ...options,
+        topic,
+        package: packageName
+    });
+    const result = await context.manager.readHelpTopic(request);
+    assertRHelpReadOwner(context.isCurrent);
+    const presentation = createRHelpTopicPresentation(
+        result,
+        request,
+        function (pathValue) {
+            const helpPath = String(pathValue || "");
+
+            return `${window.location.origin}${
+                helpPath.startsWith("/") ? helpPath : `/${helpPath}`
+            }`;
+        }
+    );
+    if (!presentation.available) {
+        return { available: false, result };
+    }
+
+    const path = presentation.path;
+    const baseUrl = presentation.sourceUrl;
+    let html = presentation.html;
+
+    if (!html && path) {
+        const page = await context.reader.fetchPage(path);
+        assertRHelpReadOwner(context.isCurrent);
+
+        html = page.ok
+            ? String(page.text || "")
+            : "";
+    }
+
+    const resourceBaseUrl = await ensureBrowserHelpResourceRoute(context);
+    assertRHelpReadOwner(context.isCurrent);
+    if (!resourceBaseUrl) {
+        html = prepareRHelpDocumentWithoutResources(html);
+    }
+
+    return {
+        available: true,
+        result,
+        html,
+        topic: presentation.topic,
+        packageName: presentation.packageName,
+        baseUrl,
+        resourceBaseUrl,
+        isCurrent: context.isCurrent
+    };
 };
 
 const updateHelpViewer = function (topic, html, options = {}) {
+    assertRHelpReadOwner(options.isCurrent);
     browserHelpViewerSurface().open({
         topic: String(options.topic || topic || ""),
         html: String(html || ""),
         baseUrl: String(options.baseUrl || ""),
-        packageName: String(options.packageName || "")
+        packageName: String(options.packageName || ""),
+        resourceBaseUrl: String(options.resourceBaseUrl || "")
     });
 };
 
-const openHelpTopicModal = async function (topic, packageName = "") {
+const openHelpTopicModal = async function (topic, packageName = "", options = {}) {
     const cleanTopic = String(topic || "").trim();
 
     if (!cleanTopic) {
         return;
     }
 
-    const document = await fetchHelpTopicDocument(cleanTopic, packageName);
+    const requestIsCurrent = browserHelpRequests.begin();
+    const document = await fetchHelpTopicDocument(cleanTopic, packageName, options);
+    if (!requestIsCurrent() || !document.available) {
+        return document.result;
+    }
+
+    const runtimeIsCurrent = document.isCurrent;
+    document.isCurrent = () => requestIsCurrent() && runtimeIsCurrent();
 
     updateHelpViewer(
         document.topic,
         document.html,
         document
     );
+    return document.result;
 };
 
 const openHelpHomeModal = async function () {
-    const runtime = await ensureRuntime();
+    const requestIsCurrent = browserHelpRequests.begin();
+    const context = await captureBrowserHelpRuntime();
     const document = await fetchWebRHelpHomeDocument(
         window.location.origin,
-        function (command) {
-            return queryBrowserRuntimeText(command);
-        }
+        context.query,
+        context.isCurrent
     );
+    document.resourceBaseUrl = await ensureBrowserHelpResourceRoute(context);
+    if (!document.resourceBaseUrl) {
+        document.html = prepareRHelpDocumentWithoutResources(document.html);
+    }
+    if (!requestIsCurrent()) {
+        return;
+    }
+    document.isCurrent = () => requestIsCurrent() && context.isCurrent();
 
     updateHelpViewer(
         document.topic,
@@ -3795,28 +4012,16 @@ const openHelpHomeModal = async function () {
     );
 };
 
-const runHelpExampleInPage = async function (input = {}) {
-    const command = buildHelpExampleCommand(
-        String(input.topic || ""),
-        String(input.package || "")
-    );
-
-    if (!command) {
-        return {
-            status: "invalid",
-            message: "Invalid help example request."
-        };
+const browserHelpCommands = createHelpCommandActions({
+    openHelpTopic: (request) => openHelpTopicModal(request.topic, request.package, request),
+    executeVisibleCommand(request) {
+        return executeVisibleCommand(request.text, {
+            source: request.source,
+            outputWidth: request.outputWidth
+        });
     }
-
-    const result = await executeVisibleCommand(command);
-
-    return {
-        status: result.ok === false ? "error" : "ready",
-        message: result.ok === false
-            ? "R help example failed."
-            : "R help example completed."
-    };
-};
+});
+const runHelpExampleInPage = browserHelpCommands.runExample;
 
 const executeBrowserPlotMutation = async function (input = {}) {
     const text = String(input?.text || "").trim();
@@ -3853,45 +4058,30 @@ const handleHelpViewerMessage = async function (event) {
     browserHelpViewerSurface().handleMessage(event);
 };
 
-const openBrowserHelpCommandUrl = async function (value) {
-    const parsed = parseHelpCommandUrl(value);
-
-    if (!parsed) {
-        return { status: "invalid" };
-    }
-
-    try {
-        if (parsed.kind === "run") {
-            return executeVisibleCommand(parsed.value);
-        }
-
-        await openHelpTopicModal(parsed.value);
-        return { status: "ready" };
-    }
-    catch (error) {
-        return {
-            status: "error",
-            message: error instanceof Error ? error.message : String(error)
-        };
-    }
-};
+const openBrowserHelpCommandUrl = browserHelpCommands.openCommandUrl;
 
 const fetchBrowserRHelpPage = async function (value) {
-    const runtime = await ensureRuntime();
-
-    return fetchWebRHelpPageByUrl(
-        value,
-        window.location.origin,
-        function (command) {
-            return queryBrowserRuntimeText(command);
-        }
-    );
+    const context = await captureBrowserHelpRuntime();
+    const result = await context.reader.fetchPage(value);
+    if (!result.ok) {
+        return result;
+    }
+    const resourceBaseUrl = await ensureBrowserHelpResourceRoute(context);
+    assertRHelpReadOwner(context.isCurrent);
+    return {
+        ...result,
+        text: resourceBaseUrl
+            ? result.text
+            : prepareRHelpDocumentWithoutResources(result.text),
+        resourceBaseUrl
+    };
 };
 
 const installBrowserHelpBridge = function () {
     installBrowserSharedPageBridge(window, {
         openHelpCommandUrl: openBrowserHelpCommandUrl,
         fetchHelpPage: fetchBrowserRHelpPage,
+        retireHelpRequest: browserHelpRequests.retire,
         runHelpExample: runHelpExampleInPage,
         selectImportFile: function () {
             return browserImportAdapter().selectOpenFile();
@@ -3932,47 +4122,53 @@ const executeVisibleCommand = async function (text, options = {}) {
         return { ok: false };
     }
 
-    const result = await session.executeVisibleCommand(text, options);
-
-    try {
-        const runtimeEvents = await session.runtimeSessionManager.listRuntimeEvents();
-        const changes = state.runtimeDatasetChangeProjector.project(
-            runtimeEvents.events || []
-        );
-
-        broadcastBrowserPreloadEvent(
-            applicationEventChannels.runtimeEvents,
-            runtimeEvents
-        );
-        if (changes.length > 0 && state.dataEditor.frame?.contentWindow) {
-            postBrowserPreloadEvent(
-                state.dataEditor.frame.contentWindow,
-                datasetEditorEventChannels.applyChanges,
-                { changes }
-            );
-        }
-    }
-    catch (error) {
-        appendTranscript(
-            error instanceof Error ? error.message : String(error),
-            "web-transcript__line--stderr"
-        );
-    }
-
-    return result;
+    return session.executeVisibleCommand(text, options);
 };
 
-const webRRuntimeRestartWorkspace = function () {
+const browserRuntimeRestartController = function () {
     if (!state.runtimeRestartWorkspaceController) {
         state.runtimeRestartWorkspaceController =
-            createWebRRuntimeRestartWorkspaceController({
+            createWebRRuntimeRestartAdapter({
                 getRuntime() {
                     return state.runtimeReady ? state.runtime : null;
                 },
                 getRuntimeSessionManager() {
                     return webRRuntimeSession()?.runtimeSessionManager || null;
                 },
-                workspaceRestored: applyBrowserRuntimeMethodWorkspaceUpdate
+                readRuntimeSnapshot() {
+                    return webRRuntimeSession()?.runtimeSessionManager.getSnapshot()
+                        || runtimeSnapshot(state.runtimeStarting ? "starting" : "stopped");
+                },
+                canPersistWorkspaceNow() {
+                    // A worker evaluation owns its channel until input/evaluation finishes.
+                    return !state.runtimeOperationQueue?.isActive();
+                },
+                downloadSavedWorkspace(fileName, bytes) {
+                    downloadBrowserBytes(fileName, bytes, rWorkspaceFilePolicy.blobType);
+                },
+                stopRuntime() {
+                    return stopWebRRuntime("Restarting R...");
+                },
+                async startRuntime() {
+                    await ensureRuntime();
+                    return webRRuntimeSession().runtimeSessionManager.getSnapshot();
+                },
+                invalidateDatasetPreview() {
+                    browserDatasetWarmCache()?.invalidate();
+                },
+                setRuntimeSession(snapshot) {
+                    setRuntimeStatus(snapshot.workspaceRestoreMessage || snapshot.message);
+                },
+                sendRuntimeSession(snapshot) {
+                    notifyConsoleSession(snapshot);
+                },
+                deferRuntimeSessionReady: runtimeSessionPublication.deferReady,
+                refreshWorkspace() {
+                    return refreshWebRWorkspacePane({ forceRefresh: true });
+                },
+                async captureWorkspaceBaseline() {
+                    // Native external-file change detection has no browser filesystem equivalent.
+                }
             });
     }
 
@@ -3980,55 +4176,58 @@ const webRRuntimeRestartWorkspace = function () {
 };
 
 const restartBrowserRuntime = async function (action) {
-    try {
-        const savedWorkspace = action === "restore"
-            ? await webRRuntimeRestartWorkspace().save()
-            : null;
-
-        await stopWebRRuntime("Restarting R...");
-        await ensureRuntime();
-        await webRRuntimeRestartWorkspace().restore(savedWorkspace);
-
-        return runtimeSnapshot("ready", "WebR ready.");
-    }
-    catch (error) {
-        const message = error instanceof Error
-            ? error.message
-            : String(error);
-
-        appendTranscript(message, "web-transcript__line--stderr");
-        setRuntimeStatus(message);
-
-        return runtimeSnapshot("failed", message);
-    }
+    return browserRuntimeRestartController().restart(
+        action,
+        "browser.runtime.restart"
+    );
 };
 
 const stopWebRRuntime = async function (message) {
-    deferredPackageLibraries.get(state.runtime)?.dispose();
-    await stopBrowserWebRRuntime(state.runtime);
-
-    state.runtime = null;
-    state.runtimeStartPromise = null;
-    state.runtimeReady = false;
-    state.runtimeStarting = false;
-    state.loadedRuntimePackages.clear();
-    state.runtimePackageAdapter = null;
-    state.runtimeSession = null;
-    state.runtimeSessionRuntime = null;
-    state.runtimeControlClient?.detach?.();
-    state.runtimeControlClient = null;
-    state.runtimeOperationQueue = null;
-    state.workspaceMetadataReady = false;
-    state.datasetChannelAdapter = null;
-    state.datasetWarmCache = null;
-    state.datasetWarmCacheRuntime = null;
-    state.dialogDatasetResolver = null;
-    state.dialogDatasetResolverRuntime = null;
-    state.promptCoordinator = null;
-    state.plotViewerGraphicsWarmupPromise = null;
-    state.plotViewerGraphicsWarm = false;
-    setRuntimeStatus(message || "WebR stopped");
-    notifyConsoleSession();
+    browserHelpResourceOwner?.channel.close();
+    browserHelpResourceOwner = null;
+    const resource = {
+        runtime: state.runtime,
+        session: state.runtimeSession,
+        client: state.runtimeControlClient,
+        queue: state.runtimeOperationQueue
+    };
+    resource.client?.detach?.();
+    resource.queue?.retire(new Error("runtime-session-detached"));
+    await releaseOwnedRuntimeResource({
+        resource,
+        release: async function (owned) {
+            await owned.session?.runtimeSessionManager.stop();
+            deferredPackageLibraries.get(owned.runtime)?.dispose();
+            await stopBrowserWebRRuntime(owned.runtime);
+        },
+        isCurrent: function (owned) {
+            return state.runtime === owned.runtime
+                && state.runtimeSession === owned.session
+                && state.runtimeControlClient === owned.client
+                && state.runtimeOperationQueue === owned.queue;
+        },
+        clearCurrent: function () {
+            state.datasetWarmCache?.invalidate();
+            state.runtime = null;
+            state.runtimeStartPromise = null;
+            state.runtimeReady = false;
+            state.runtimeStarting = false;
+            state.runtimePackageAdapter = null;
+            state.runtimeSession = null;
+            state.runtimeSessionRuntime = null;
+            state.runtimeControlClient = null;
+            state.runtimeOperationQueue = null;
+            state.workspaceMetadataReady = false;
+            state.datasetChannelAdapter = null;
+            state.datasetWarmCache = null;
+            state.datasetWarmCacheRuntime = null;
+            state.dialogDatasetResolver = null;
+            state.plotViewerGraphicsWarmupPromise = null;
+            state.plotViewerGraphicsWarm = false;
+            setRuntimeStatus(message || "WebR stopped");
+            notifyConsoleSession();
+        }
+    });
 };
 
 const executeRuntimeMethod = async function (input) {
@@ -4047,6 +4246,7 @@ const executeRuntimeMethod = async function (input) {
     }
 
     return {
+        ...result,
         value: result?.value
     };
 };
@@ -4072,16 +4272,15 @@ const initializeSharedConsole = async function () {
             suppressedTerminalSymbols: rInternalCompletionSymbolNames || [],
             contextParser: getRCompletionContext,
             packageRequestParser: readRRequestedPackages,
-            completionFetch: async function (params) {
+            completionFetch: async function (params, timeoutMs) {
                 return readWebRConsoleCompletionResult(params, {
                     runtimeSessionManager: webRCompletionSessionManager(),
+                    getRuntimeSessionManager: webRCompletionSessionManager,
                     isRuntimeBusy: function () {
                         return Boolean(state.console?.session?.isRuntimeBusy?.());
                     },
-                    workspaceObjectNames,
-                    workspaceEntries,
-                    workspaceColumnNames
-                });
+                    workspaceEntries
+                }, timeoutMs);
             }
         },
         readRuntimeStatus,
@@ -4113,7 +4312,7 @@ const initializeSharedConsole = async function () {
             const packageName = String(input.package || "").trim();
             const operation = input.kind === "home"
                 ? openHelpHomeModal()
-                : openHelpTopicModal(topic, packageName);
+                : openHelpTopicModal(topic, packageName, input);
 
             operation.catch((error) => {
                 appendTranscript(error instanceof Error ? error.message : String(error), "web-transcript__line--stderr");
@@ -4153,6 +4352,12 @@ const initializeSharedConsole = async function () {
             };
         },
         restartRuntime: restartBrowserRuntime,
+        revealRestartFailure: () => browserRuntimeProgress().revealRestartFailure(),
+        getWorkspaceSnapshot: () => state.workspaceSnapshot,
+        applyUnavailableWorkspace(snapshot) {
+            state.workspaceSnapshot = snapshot;
+            renderWorkspacePane();
+        },
         refreshWorkspace: async function () {
             await refreshWebRWorkspacePane({
                 detectChanges: true
@@ -4193,12 +4398,6 @@ const initializeSharedConsole = async function () {
         }
     };
     exposeBrowserConsoleHandle(window, state.console);
-    session.onDidRuntimeBusy(function () {
-        toolbar.render();
-    });
-    session.onDidSessionPhase(function () {
-        toolbar.render();
-    });
     coordinator.initializeFlow();
     await coordinator.initializeInput();
     coordinator.focus();
@@ -4211,7 +4410,7 @@ const initializeSharedConsole = async function () {
         });
     });
     document.getElementById("consoleToolbarStop")?.addEventListener("click", () => {
-        executeRuntimeMethod({ method: "runtime.interrupt", params: {} }).catch((error) => {
+        coordinator.interrupt().catch((error) => {
             appendTranscript(error instanceof Error ? error.message : String(error), "web-transcript__line--stderr");
         });
     });
@@ -4266,24 +4465,25 @@ const closeDialogLayerForMessage = function (message, sourceWindow) {
     }
 };
 
+const deliverBrowserDialogFilterState = createDialogFilterStateDelivery({
+    readFilterState: (dataset) => state.dialogBindingState.filters[dataset] || null,
+    getSessionScope: () => readWorkspaceActiveDatasetScope(
+        webRRuntimeSession()?.runtimeSessionManager?.getWorkspaceSnapshot()
+    ),
+    refreshDialogs: (dataset) => dialogWorkspaceDelivery.refreshWorkspaceData("", { dataset }),
+    publishFilterState: (payload) => postBrowserPreloadEvent(
+        state.dataEditor.frame?.contentWindow,
+        datasetEditorEventChannels.filterStateChanged,
+        payload
+    ),
+    reportWarning: (message) => appendTranscript(`Warning: ${message}\n`, "web-transcript__line--stderr")
+});
 const handleBrowserDialogStateCall = function (callName, parameters) {
     return routeDialogStateCall(callName, parameters, {
         state: state.dialogBindingState,
-        onFilterStateChanged(dataset) {
-            notifyBrowserDialogsStateChanged(dataset);
-            postBrowserPreloadEvent(
-                state.dataEditor.frame?.contentWindow,
-                datasetEditorEventChannels.filterStateChanged,
-                {
-                    dataset,
-                    filter: dataset
-                        ? state.dialogBindingState.filters[dataset] || null
-                        : null
-                }
-            );
-        },
+        onFilterStateChanged: deliverBrowserDialogFilterState,
         onConsoleStateChanged(dataset) {
-            refreshBrowserConsoleStateChips(dataset);
+            return refreshBrowserConsoleStateChips(dataset);
         }
     });
 };
@@ -4293,14 +4493,10 @@ const handleBrowserDialogExternalCall = async function (name, parameters) {
         getActiveDataset() {
             return state.activeDatasetName || "";
         },
-        setActiveDataset(datasetName) {
-            setActiveWorkspaceDataset(datasetName);
+        async setActiveDataset(datasetName) {
+            await setActiveWorkspaceDataset(datasetName);
         },
-        clearActiveDataset() {
-            state.activeDatasetName = "";
-            renderWorkspacePane();
-            refreshBrowserConsoleStateChips("");
-        },
+        clearActiveDataset: clearActiveWorkspaceDataset,
         listDatasets: browserDialogDatasets,
         getDatasetEditorState() {
             return {
@@ -4339,6 +4535,9 @@ const handleBrowserDialogExternalCall = async function (name, parameters) {
 const browserDialogChannels = function () {
     if (!state.dialogChannelAdapter) {
         state.dialogChannelAdapter = createDialogChannelAdapter({
+            getProductId() {
+                return String(state.composition?.product?.id || "base-app");
+            },
             getWorkingDirectory() {
                 return state.workingDirectoryPath || "/";
             },
@@ -4355,23 +4554,10 @@ const browserDialogChannels = function () {
                 return browserRuntimeProgress().runActivity(message, action);
             },
             ensureRuntimePackages(input) {
-                const dependencies = Array.isArray(input.dependencies)
-                    ? input.dependencies
-                    : String(input.dependencies || "").split(/[;,\n]/g);
-                const requirements = Array.isArray(input.rPackageRequirements)
-                    ? input.rPackageRequirements.slice()
-                    : [];
-
-                dependencies.forEach((name) => {
-                    const normalized = String(name || "").trim();
-
-                    if (normalized) {
-                        requirements.push({ name: normalized });
-                    }
-                });
-
                 return browserRuntimePackages().ensureRequirements(
-                    requirements
+                    createRDialogCommandPackageRequirements(
+                        input.dependencies, input.rPackageRequirements
+                    )
                 );
             },
             executeVisibleCommand,
@@ -4431,10 +4617,27 @@ const postSharedDialogCreatedEvent = async function (frame, dialogId, dialogPayl
         return pending;
     }
 
-    const prepareDialog = async function () {
-        let payload = dialogPayload;
+    const isCurrentDialogTarget = captureProductDialogWorkspaceTarget(function () {
+        const layer = frame.closest(".dialogforge-web-dialog-layer");
 
-        try {
+        if (!frame.isConnected || !layer || layer.inert) {
+            return null;
+        }
+
+        return state.preparedDialogs.get(cleanId)?.controlsReady || frame;
+    });
+    let payload = dialogPayload;
+
+    const task = dialogWorkspaceDelivery.publishPreparedWorkspaceData((workspaceData) => {
+        postBrowserPreloadEvent(frame.contentWindow, dialogRuntimeEventChannels.created, {
+            dialogID: cleanId,
+            data: readBrowserDialogSource(payload),
+            lastState: browserDialogSessions().getState(cleanId),
+            workspaceData
+        });
+    }, {
+        isCurrent: isCurrentDialogTarget,
+        async prepare() {
             if (
                 state.workspaceMetadataRefreshPromise
                 && !state.workspaceMetadataReady
@@ -4459,24 +4662,11 @@ const postSharedDialogCreatedEvent = async function (frame, dialogId, dialogPayl
 
                 payload = await response.json();
             }
-
-            const workspaceData = readBrowserDialogWorkspaceData();
-            const dialogSource = readBrowserDialogSource(payload);
-
-            postBrowserPreloadEvent(frame.contentWindow, dialogRuntimeEventChannels.created, {
-                dialogID: cleanId,
-                data: dialogSource,
-                lastState: browserDialogSessions().getState(cleanId),
-                workspaceData
-            });
         }
-        catch (error) {
-            clearDialogOpeningCover(cleanId);
-            throw error;
-        }
-    };
-
-    const task = prepareDialog();
+    }).catch((error) => {
+        clearDialogOpeningCover(cleanId);
+        throw error;
+    });
 
     state.dialogWorkspaceDataPromises.set(frame, task);
 
@@ -4490,36 +4680,52 @@ const readBrowserDialogWorkspaceData = function () {
     );
 };
 
-const invalidateBrowserDataset = async function (datasetName, effect = {}) {
-    state.dataEditor.cache.delete(String(datasetName || "").trim());
+const invalidateBrowserDataset = async function (datasetName, effect = {}, changes = []) {
     const warmCache = browserDatasetWarmCache();
-
-    warmCache?.invalidatePreview(datasetName);
-
-    if (
-        effect.variableMetadataChanged === true
-        && effect.variableMetadataPatched !== true
-    ) {
-        warmCache?.invalidateVariableMetadata(datasetName);
-        warmCache?.warmVariableMetadata(datasetName);
-    }
-
     const manager = webRRuntimeSession()?.runtimeSessionManager;
+    const scopeIsCurrent = captureWorkspaceRuntimeScope(
+        () => webRRuntimeSession()?.runtimeSessionManager
+    );
+    await deliverDatasetMutationEffects({
+        isCurrent: scopeIsCurrent,
+        objectNames: [datasetName],
+        updateCache: name => applyDatasetMutationCacheEffects(warmCache, name, effect),
+        publishChanges: () => {
+            if (changes.length > 0) {
+                postBrowserPreloadEvent(state.dataEditor.frame?.contentWindow,
+                    datasetEditorEventChannels.applyChanges, { changes });
+            }
+        },
+        publishWorkspace: async () => {
+            if (manager) {
+                const previousDatasetNames = workspaceDatasetNames();
+                const snapshot = manager.getWorkspaceSnapshot();
 
-    if (manager) {
-        const previousDatasetNames = workspaceDatasetNames();
-
-        state.workspaceSnapshot = manager.getWorkspaceSnapshot();
-        state.workspaceMetadataReady = true;
-        selectActiveDatasetAfterWorkspaceRefresh(previousDatasetNames);
-        renderWorkspacePane();
-    }
-
-    if (effect.variableMetadataChanged === true) {
-        notifyBrowserDialogsWorkspaceChanged();
-    }
-
-    refreshBrowserConsoleStateChips();
+                state.workspaceSnapshot = snapshot;
+                state.workspaceMetadataReady = true;
+                await selectActiveDatasetAfterWorkspaceRefresh(previousDatasetNames);
+                if (!scopeIsCurrent(snapshot)) {
+                    return false;
+                }
+                renderWorkspacePane();
+                const delivered = await broadcastBrowserWorkspaceSnapshot(
+                    snapshot,
+                    effect.variableMetadataChanged === true
+                        ? notifyBrowserDialogsWorkspaceChanged
+                        : undefined,
+                    { warmActiveDataset: false }
+                );
+                if (!delivered) {
+                    return false;
+                }
+            }
+            else if (effect.variableMetadataChanged === true) {
+                await notifyBrowserDialogsWorkspaceChanged();
+            }
+            return true;
+        },
+        refreshConsumers: refreshBrowserConsoleStateChips
+    });
 };
 
 const browserDatasetWarmCache = function () {
@@ -4533,8 +4739,10 @@ const browserDatasetWarmCache = function () {
         state.datasetWarmCacheRuntime !== manager
         || !state.datasetWarmCache
     ) {
+        state.datasetWarmCache?.invalidate();
         state.datasetWarmCacheRuntime = manager;
         state.datasetWarmCache = createDatasetEditorWarmCache(manager);
+        state.datasetWarmCache.updateRuntimeSession(manager.getSnapshot());
     }
 
     return state.datasetWarmCache;
@@ -4552,9 +4760,25 @@ const browserDatasetChannels = function () {
 
         state.datasetChannelAdapter = createRuntimeSessionDatasetChannelAdapter({
             runtimeSessionManager: manager,
-            initialRows: DATA_EDITOR_INITIAL_ROWS,
-            initialColumns: DATA_EDITOR_INITIAL_COLUMNS,
-            variableOverscanRows: DATA_EDITOR_VARIABLE_OVERSCAN_ROWS,
+            uiCommandVisibility: browserDatasetEditorSettings.uiCommandVisibility,
+            isCurrentRuntime: () => webRRuntimeSession()?.runtimeSessionManager === manager,
+            publishTabularPreview: preview => broadcastBrowserPreloadEvent(
+                applicationEventChannels.tabularPreview, preview
+            ),
+            publishCellUpdate: result => broadcastBrowserPreloadEvent(
+                applicationEventChannels.cellUpdate, result
+            ),
+            publishVariableMetadata: snapshot => broadcastBrowserPreloadEvent(
+                applicationEventChannels.variableMetadata, snapshot
+            ),
+            publishValueLabels: snapshot => broadcastBrowserPreloadEvent(
+                applicationEventChannels.valueLabels, snapshot
+            ),
+            publishDeclaredMissing: snapshot => broadcastBrowserPreloadEvent(
+                applicationEventChannels.declaredMissing, snapshot
+            ),
+            readTabularPreview: warmCache ? warmCache.readPreview : undefined,
+            readFilterState: (name) => state.dialogBindingState.filters[name] || null,
             readVariableMetadataBatch: warmCache
                 ? warmCache.readVariableMetadata
                 : undefined,
@@ -4580,12 +4804,10 @@ const browserWorkspaceChannels = function () {
             getActiveDatasetName() {
                 return state.activeDatasetName || "";
             },
-            setActiveDataset: setActiveWorkspaceDataset,
-            clearActiveDataset() {
-                state.activeDatasetName = "";
-                renderWorkspacePane();
-                refreshBrowserConsoleStateChips("");
-            }
+            async setActiveDataset(name) {
+                await setActiveWorkspaceDataset(name);
+            },
+            clearActiveDataset: clearActiveWorkspaceDataset
         });
     }
 
@@ -4608,8 +4830,8 @@ const waitForPlotViewerRender = function (renderToken, timeoutMs = 1200) {
     return browserPlotViewerHost().waitForRender(renderToken, timeoutMs);
 };
 
-const updatePlotViewerFromCapturedImages = async function (images) {
-    await browserPlotViewerHost().updateFromCapturedImages(images);
+const updatePlotViewerFromCapturedImages = async function (images, pageCount) {
+    await browserPlotViewerHost().updateFromCapturedImages(images, pageCount);
 };
 
 const openPlotViewerModal = function (payload, options = {}) {
@@ -4630,14 +4852,26 @@ const prewarmWebRGraphicsCapture = function (runtime) {
         return state.plotViewerGraphicsWarmupPromise;
     }
 
-    state.plotViewerGraphicsWarmupPromise = runWebRGraphicsPrewarm(runtime, {
-        closeImages: closeBrowserCapturedPlotImages
+    const queue = state.runtimeOperationQueue;
+    if (!queue) {
+        return Promise.resolve(false);
+    }
+    state.plotViewerGraphicsWarmupPromise = queue.run(async function () {
+        if (state.runtime !== runtime || state.runtimeOperationQueue !== queue) {
+            return false;
+        }
+        const result = await runWebRGraphicsPrewarm(runtime, {
+            closeImages: closeBrowserCapturedPlotImages
+        });
+        await cleanupWebRDefaultPlotFile(runtime);
+        return result;
     }).then((result) => {
-        state.plotViewerGraphicsWarm = result;
-        void cleanupWebRDefaultPlotFile(runtime);
+        if (state.runtime === runtime && state.runtimeOperationQueue === queue) {
+            state.plotViewerGraphicsWarm = result;
+        }
 
         return result;
-    });
+    }).catch(() => false);
 
     return state.plotViewerGraphicsWarmupPromise;
 };
@@ -4657,8 +4891,21 @@ const maybeOpenPlotViewerForCommand = function (text) {
 
 const browserRuntimePackages = function () {
     if (!state.runtimePackageAdapter) {
+        const installPrompts = createRPackageInstallPrompts({
+            translate: (text) => state.composition?.i18n?.[text] || text,
+            showMessageBox: (prompt) => showBrowserMessageBox(prompt)
+        });
         state.runtimePackageAdapter = createWebRRuntimePackageAdapter({
-            loadedPackages: state.loadedRuntimePackages,
+            getRuntime: () => webRRuntimeSession()?.runtimeSessionManager,
+            getProductId: () => String(state.composition?.product?.id || "base-app"),
+            chooseInstallLibrary: installPrompts.chooseLibrary,
+            confirmInstallRestart: (packages) => installPrompts.confirmRestart({ packages }),
+            restartForInstall: restartBrowserRuntime,
+            getPackageSourcePolicy: () => state.composition?.productSettings?.packageSources || {},
+            async packagesLoaded() {
+                browserDatasetWarmCache()?.invalidate();
+                await refreshWebRWorkspacePane({ forceRefresh: true });
+            },
             packageRequirements:
                 state.composition?.productSettings?.rPackageRequirements || [],
             createActivity: createVisibleCommandActivity,
@@ -4666,13 +4913,17 @@ const browserRuntimePackages = function () {
             recordRuntimeMessageStream(message) {
                 transcript()?.recordRuntimeMessageStream?.(message);
             },
-            setRuntimeBusy(busy) {
-                state.console?.session?.setRuntimeBusy?.(busy);
+            async ensureRuntime() {
+                const runtime = await ensureRuntime();
+                if (state.runtime !== runtime) {
+                    throw new Error(retiredRPackageRuntimeMessage);
+                }
+                const manager = webRRuntimeSession()?.runtimeSessionManager;
+                if (!manager) {
+                    throw new Error("R runtime is not ready.");
+                }
+                return createRPackageRuntimeStartupReceipt(manager);
             },
-            renderToolbar() {
-                state.console?.toolbar?.render?.();
-            },
-            ensureRuntime,
             evaluateHiddenText: async function (command) {
                 await ensureRuntime();
                 const manager = webRRuntimeSession()?.runtimeSessionManager;
@@ -4900,7 +5151,8 @@ browserCommandPreviewController().bind();
 installBrowserHelpBridge();
 installModelessSurfaceActivation(
     "workbench",
-    document.getElementById("webWorkbenchWindow")
+    document.getElementById("webWorkbenchWindow"),
+    false
 );
 activateModelessSurface("workbench");
 

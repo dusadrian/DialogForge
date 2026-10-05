@@ -310,7 +310,7 @@ export const renderActivityItemInput = (item: ActivityItemInput) =>
 export const renderActivityItemPrompt = (
   runtimeItem: RuntimeItemActivity,
   item: ActivityItemPrompt,
-  activeRequest: { activityId: string } | null
+  activeRequest: { activityId: string; promptId?: string } | null
 ) => {
   const host = document.createElement('div');
   host.style.display = 'flex';
@@ -326,6 +326,7 @@ export const renderActivityItemPrompt = (
 
   const isActiveRequest = !!activeRequest
     && String(activeRequest.activityId || '') === String(runtimeItem.id || '')
+    && (!activeRequest.promptId || activeRequest.promptId === item.id)
     && item.state === ActivityItemPromptState.Unanswered;
   if (isActiveRequest) {
     const slot = document.createElement('div');
@@ -357,7 +358,7 @@ export const renderActivityItemStream = (item: ActivityItemStream) => {
 
 export const renderRuntimeItemActivity = (
   item: RuntimeItemActivity,
-  activeRequest: { activityId: string } | null
+  activeRequest: { activityId: string; promptId?: string } | null
 ) => {
   const host = document.createElement('div');
   host.dataset.executionId = String(item.id || '');

@@ -2,31 +2,28 @@ import {
     addSortByVariables,
     bindSelectExpression,
     buildSortByCommand,
-    clearFilterState,
-    clearSplitByState,
-    clearWeightByState,
     createDialogBindingState,
     getDatasetVariablesForDialog,
-    getFilterState,
     getRememberedVariableDependents,
     getSortByAvailableVariables,
     getSortByButtonDirection,
     getSortByChoiceItems,
     getSortByTargetDataset,
-    getSplitByState,
-    getWeightByState,
-    inheritSubsetDatasetState,
     keepSortByVariables,
     rememberVariableSelections,
     removeSortByVariables,
     refreshSelectExpression,
     setDialogButtonDirection,
-    setFilterState,
-    setSplitByState,
-    setWeightByState,
     type DialogBindingState,
     type DialogDatasetDescriptor
 } from "./dialogBindings";
+import {
+    routeDialogStateCall,
+    type DialogStateCallRouterOptions
+} from "./dialogStateCallRouter";
+import {
+    isDialogStateExternalCall
+} from "./dialogStateExternalCalls";
 import {
     hasSummaryStatisticSelection,
     refreshSummarySyntax,
@@ -45,6 +42,8 @@ export interface DialogExternalCallHostOptions {
     datasets?: DialogDatasetDescriptor[];
     resolveDatasets?: () => Promise<DialogDatasetDescriptor[]> | DialogDatasetDescriptor[];
     state?: DialogBindingState;
+    onFilterStateChanged?: DialogStateCallRouterOptions["onFilterStateChanged"];
+    onConsoleStateChanged?: DialogStateCallRouterOptions["onConsoleStateChanged"];
 }
 
 
@@ -336,70 +335,12 @@ export const createDialogExternalCallHost = function(options: DialogExternalCall
                 });
             }
 
-            if (name === "setFilterState") {
-                return ok(name, setFilterState(state, {
-                    dataset: String(parameters.dataset || ""),
-                    command: String(parameters.command || "")
+            if (isDialogStateExternalCall(name)) {
+                return ok(name, await routeDialogStateCall(name, parameters, {
+                    state,
+                    onFilterStateChanged: options.onFilterStateChanged,
+                    onConsoleStateChanged: options.onConsoleStateChanged
                 }));
-            }
-
-            if (name === "getFilterState") {
-                return ok(name, getFilterState(state, String(parameters.dataset || "")));
-            }
-
-            if (name === "clearFilterState") {
-                clearFilterState(state, String(parameters.dataset || ""));
-                return ok(name, null);
-            }
-
-            if (name === "setSplitByState") {
-                const request: {
-                    dataset: string;
-                    grouping: string[];
-                    sortdataset?: boolean;
-                } = {
-                    dataset: String(parameters.dataset || ""),
-                    grouping: getNameList(parameters.grouping)
-                };
-
-                if (Object.prototype.hasOwnProperty.call(parameters, "sortdataset")) {
-                    request.sortdataset = parameters.sortdataset === true;
-                }
-
-                return ok(name, setSplitByState(state, request));
-            }
-
-            if (name === "getSplitByState") {
-                return ok(name, getSplitByState(state, String(parameters.dataset || "")));
-            }
-
-            if (name === "clearSplitByState") {
-                clearSplitByState(state, String(parameters.dataset || ""));
-                return ok(name, null);
-            }
-
-            if (name === "setWeightByState") {
-                return ok(name, setWeightByState(state, {
-                    dataset: String(parameters.dataset || ""),
-                    weighting: String(parameters.weighting || "")
-                }));
-            }
-
-            if (name === "inheritSubsetDatasetState") {
-                return ok(name, inheritSubsetDatasetState(state, {
-                    source: String(parameters.source || ""),
-                    target: String(parameters.target || ""),
-                    variables: getNameList(parameters.variables)
-                }));
-            }
-
-            if (name === "getWeightByState") {
-                return ok(name, getWeightByState(state, String(parameters.dataset || "")));
-            }
-
-            if (name === "clearWeightByState") {
-                clearWeightByState(state, String(parameters.dataset || ""));
-                return ok(name, null);
             }
 
             if (name === "keepSortByVariables") {

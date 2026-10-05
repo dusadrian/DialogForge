@@ -5,9 +5,12 @@ import {
 import {
     shellWindowEventChannels
 } from "../../base-app/features/main-window/shellWindowIpc";
-
-
-type ZoomShortcutAction = "in" | "out" | "reset";
+import {
+    readMainZoomMenuAction,
+    readMainZoomShortcut,
+    type MainZoomShortcutAction as ZoomShortcutAction
+} from "../../base-app/features/main-window/mainZoomPolicy";
+import { createMainZoomState } from "../../base-app/features/main-window/mainZoomState";
 
 
 export interface MainWindowZoomControllerOptions {
@@ -22,76 +25,34 @@ export interface MainWindowZoomController {
     initialize(): number;
     getZoomFactor(): number;
     applyZoomFactor(value: unknown): void;
+    handleMenuCommand(item: { role?: unknown }): boolean;
     bindShortcuts(win: BrowserWindow): void;
 }
 
 
-const fontShortcutAction = function(
-    input: Input
-): ZoomShortcutAction | null {
-    const key = String(input.key || "");
-    const code = String(input.code || "");
-
-    if (
-        input.type !== "keyDown"
-        || (!input.meta && !input.control)
-        || input.alt
-    ) {
+const fontShortcutAction = function(input: Input): ZoomShortcutAction | null {
+    if (input.type !== "keyDown") {
         return null;
     }
-
-    if (
-        key === "+"
-        || key === "="
-        || key === "Add"
-        || code === "NumpadAdd"
-    ) {
-        return "in";
-    }
-
-    if (
-        key === "-"
-        || key === "_"
-        || key === "Subtract"
-        || code === "NumpadSubtract"
-    ) {
-        return "out";
-    }
-
-    if (
-        key === "0"
-        || code === "Digit0"
-        || code === "Numpad0"
-    ) {
-        return "reset";
-    }
-
-    return null;
+    return readMainZoomShortcut({
+        key: String(input.key || ""),
+        code: String(input.code || ""),
+        ctrlCmd: Boolean(input.meta || input.control),
+        alt: input.alt
+    });
 };
 
 
 export const createMainWindowZoomController = function(
     options: MainWindowZoomControllerOptions
 ): MainWindowZoomController {
-    const defaultZoomFactor = Number(options.defaultZoomFactor) || 1;
-    let zoomFactor = defaultZoomFactor;
-
-    const clampZoomFactor = function(value: unknown): number {
-        const next = Number(value);
-
-        if (!Number.isFinite(next)) {
-            return defaultZoomFactor;
-        }
-
-        return Math.max(0.5, Math.min(3, next));
-    };
-
     const notifyWindow = function(win: BrowserWindow): void {
         if (win.isDestroyed()) {
             return;
         }
 
         try {
+            const zoomFactor = zoomState.readZoomFactor();
             win.webContents.setZoomFactor(zoomFactor);
             win.webContents.send(
                 shellWindowEventChannels.mainZoomFactor,
@@ -103,9 +64,7 @@ export const createMainWindowZoomController = function(
         }
     };
 
-    const applyZoomFactor = function(value: unknown): void {
-        zoomFactor = clampZoomFactor(value);
-
+    const deliverZoomFactor = function(): void {
         const windows = options.listWindows
             ? options.listWindows()
             : BrowserWindow.getAllWindows();
@@ -113,35 +72,27 @@ export const createMainWindowZoomController = function(
         windows.forEach(notifyWindow);
     };
 
-    const updateFromShortcut = function(
-        action: ZoomShortcutAction
-    ): void {
-        const next = action === "reset"
-            ? defaultZoomFactor
-            : clampZoomFactor(
-                zoomFactor + (action === "in" ? 0.1 : -0.1)
-            );
-
-        if (next === zoomFactor && action !== "reset") {
-            return;
-        }
-
-        applyZoomFactor(next);
-        options.persistZoomFactor(zoomFactor);
-    };
+    const zoomState = createMainZoomState({
+        defaultZoomFactor: options.defaultZoomFactor,
+        readStoredZoomFactor: options.readStoredZoomFactor,
+        deliverZoomFactor,
+        persistZoomFactor: options.persistZoomFactor
+    });
 
     return {
-        initialize: function(): number {
-            zoomFactor = clampZoomFactor(
-                options.readStoredZoomFactor()
-            );
+        initialize: zoomState.initialize,
+        getZoomFactor: zoomState.readZoomFactor,
+        applyZoomFactor: zoomState.apply,
+        handleMenuCommand: function(item): boolean {
+            const action = readMainZoomMenuAction(item.role);
 
-            return zoomFactor;
+            if (!action) {
+                return false;
+            }
+
+            zoomState.execute(action);
+            return true;
         },
-        getZoomFactor: function(): number {
-            return zoomFactor;
-        },
-        applyZoomFactor,
         bindShortcuts: function(win: BrowserWindow): void {
             win.webContents.on(
                 "before-input-event",
@@ -153,7 +104,7 @@ export const createMainWindowZoomController = function(
                     }
 
                     event.preventDefault();
-                    updateFromShortcut(action);
+                    zoomState.execute(action);
                 }
             );
             win.webContents.on("did-finish-load", () => {

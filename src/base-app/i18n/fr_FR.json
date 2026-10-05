@@ -2,6 +2,7 @@
     "Settings": "Paramètres",
     "Language": "Langue",
     "Runtime provider": "Fournisseur d’exécution",
+    "Runtime session is not ready.": "La session d’exécution n’est pas prête.",
     "Console font": "Police de la console",
     "Console cursor": "Curseur de la console",
     "Console cursor blink": "Clignotement du curseur de la console",

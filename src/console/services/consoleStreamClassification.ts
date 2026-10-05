@@ -8,6 +8,7 @@ import {
 export interface ConsoleStreamMessage {
     name?: string;
     text?: string;
+    origin?: "runtime" | "console";
 }
 
 
@@ -54,12 +55,13 @@ export const classifyConsoleStreamMessage = function(
         return ActivityItemStreamType.WARNING;
     }
 
-    const last = runtimeActivity
+    const last = runtimeActivity && message.origin !== "console"
         ? runtimeActivity.activityItems[runtimeActivity.activityItems.length - 1]
         : null;
 
     if (
         last instanceof ActivityItemStream
+        && last.origin === "runtime"
         && last.type === ActivityItemStreamType.ERROR
         && (explicitName === "" || explicitName === "stdout")
     ) {
@@ -76,6 +78,7 @@ export const classifyConsoleStreamMessage = function(
 
     if (
         last instanceof ActivityItemStream
+        && last.origin === "runtime"
         && last.type === ActivityItemStreamType.WARNING
         && explicitName !== "stderr"
     ) {

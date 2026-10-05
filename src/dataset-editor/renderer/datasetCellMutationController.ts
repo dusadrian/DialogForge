@@ -1,6 +1,7 @@
 import type {
     CellUpdateRequest,
     CellUpdateResult,
+    RuntimeSessionSnapshot,
     UiCommandVisibility
 } from "../../runtime/provider-contract/runtimeProvider";
 import type {
@@ -13,6 +14,7 @@ import {
     createCellEditFromInputs,
     createEditCommitFromSelection
 } from "../commands/editCommands";
+import { captureDatasetConsumerScope } from "./datasetConsumerScope";
 
 
 interface CellControls {
@@ -28,6 +30,7 @@ export interface DatasetCellMutationBindings {
     setState(state: DatasetEditorState): void;
     getObjectName(): string;
     getUiCommandVisibility(): UiCommandVisibility;
+    getRuntimeSnapshot(): RuntimeSessionSnapshot | null;
     renderSelection(): void;
     renderStatus(
         elementId: string,
@@ -69,19 +72,45 @@ export const createDatasetCellMutationController = function(
 
         command.cellRequest.uiCommandVisibility =
             bindings.getUiCommandVisibility();
+        const isCurrent = captureDatasetConsumerScope(bindings);
+
+        if (!isCurrent()) {
+            return;
+        }
         const result = await bindings.writeCell(command.cellRequest);
 
+        if (!isCurrent()) {
+            return;
+        }
         bindings.renderResult(result);
 
-        if (result.status === "updated") {
+        if (isCurrent() && result.status === "updated") {
             bindings.setState(datasetEditorReducer(bindings.getState(), {
                 type: "endEdit"
             }));
+            if (!isCurrent()) {
+                return;
+            }
             bindings.renderSelection();
+            if (!isCurrent()) {
+                return;
+            }
             bindings.refreshDataset(result.objectName);
+            if (!isCurrent()) {
+                return;
+            }
             bindings.refreshVariableMetadata(result.objectName);
+            if (!isCurrent()) {
+                return;
+            }
             bindings.refreshValueLabels(result.objectName);
+            if (!isCurrent()) {
+                return;
+            }
             bindings.refreshDeclaredMissing(result.objectName);
+            if (!isCurrent()) {
+                return;
+            }
             bindings.refreshRuntimeEvents();
         }
     };

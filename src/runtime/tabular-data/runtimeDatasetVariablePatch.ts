@@ -41,7 +41,8 @@ export const applyRuntimeDatasetVariablePatch = async function(
         createRuntimeExtensionMethodRequest({
             method: "workspace.dataset_update_variable",
             params: collectDatasetViewerVariablePatchParams(input),
-            source
+            source,
+            workspaceEffect: "mutation"
         })
     );
 

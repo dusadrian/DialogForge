@@ -21,6 +21,11 @@ export interface ConsoleVisibleCommandControllerOptions {
 
 
 export interface ConsoleVisibleCommandController {
+    retire(): void;
+    executeWithReceipt(rawText: string, source: string): Promise<{
+        accepted: boolean;
+        result?: unknown;
+    }>;
     executeText(
         rawText: string,
         source: string
@@ -31,24 +36,46 @@ export interface ConsoleVisibleCommandController {
 export const createConsoleVisibleCommandController = function(
     options: ConsoleVisibleCommandControllerOptions
 ): ConsoleVisibleCommandController {
-    const executeText = async function(
+    let executionGeneration = 0;
+
+    const readOutputWidth = function(): number | undefined {
+        try {
+            const width = Number(options.readOutputWidth?.() || 0);
+
+            if (Number.isFinite(width) && width > 0) {
+                return Math.round(width);
+            }
+        }
+        catch {
+            // Width is a presentation hint, not a prerequisite for evaluation.
+        }
+
+        return undefined;
+    };
+
+    const executeWithReceipt = async function(
         rawText: string,
         source: string
-    ): Promise<"ok" | void> {
+    ): Promise<{ accepted: boolean; result?: unknown }> {
         const text = normalizeConsoleCommandText(rawText).trim();
 
         if (!text) {
-            return;
+            return { accepted: false };
         }
 
         const current = options.getSession();
+        const generation = executionGeneration;
         const snapshot = current?.status === "ready"
             ? current
             : await options.startSession();
 
+        if (generation !== executionGeneration) {
+            return { accepted: false };
+        }
+
         if (snapshot.status !== "ready") {
             options.renderStatus(snapshot);
-            return;
+            return { accepted: false };
         }
 
         options.recordHistory(text);
@@ -56,7 +83,7 @@ export const createConsoleVisibleCommandController = function(
         options.setRuntimeBusy(true);
 
         try {
-            const outputWidth = Number(options.readOutputWidth?.() || 0);
+            const outputWidth = readOutputWidth();
             const request: {
                 text: string;
                 source: string;
@@ -66,19 +93,33 @@ export const createConsoleVisibleCommandController = function(
                 source
             };
 
-            if (Number.isFinite(outputWidth) && outputWidth > 0) {
-                request.outputWidth = Math.round(outputWidth);
+            if (outputWidth !== undefined) {
+                request.outputWidth = outputWidth;
             }
 
-            await options.executeCommand(request);
+            const result = await options.executeCommand(request);
 
-            return "ok";
+            if (generation === executionGeneration) {
+                return { accepted: true, result };
+            }
+            return { accepted: false };
         } finally {
-            options.setRuntimeBusy(false);
+            if (generation === executionGeneration) {
+                options.setRuntimeBusy(false);
+            }
         }
     };
 
     return {
-        executeText
+        retire: function(): void {
+            executionGeneration += 1;
+        },
+        executeWithReceipt,
+        executeText: async function(rawText, source): Promise<"ok" | void> {
+            const receipt = await executeWithReceipt(rawText, source);
+            if (receipt.accepted) {
+                return "ok";
+            }
+        }
     };
 };

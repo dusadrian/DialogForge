@@ -1,3 +1,4 @@
+import { warmDatasetEditorFirstScreens } from "../../dataset-editor/datasetEditorWarmCache";
 import type {
     IpcMain,
     IpcMainInvokeEvent
@@ -42,6 +43,12 @@ import {
 import {
     workspaceIpcChannels
 } from "../../core/ipc/workspaceIpc";
+import {
+    createWorkspaceActiveDatasetDelivery,
+    readWorkspaceActiveDatasetScope
+} from "../../runtime/workspace/workspaceActiveDatasetDelivery";
+import { captureWorkspaceRuntimeScope } from "../../runtime/workspace/workspaceSnapshotDelivery";
+import type { RuntimeCommandResult } from "../../runtime/commands/runtimeCommandReceipt";
 
 
 export interface RuntimeSessionIpcControllerOptions {
@@ -49,6 +56,7 @@ export interface RuntimeSessionIpcControllerOptions {
     runtimeSessionManager: Pick<
         RuntimeSessionManager,
         | "getSnapshot"
+        | "getWorkspaceSnapshot"
         | "start"
         | "stop"
         | "executeProductCommand"
@@ -66,7 +74,7 @@ export interface RuntimeSessionIpcControllerOptions {
     >;
     setRuntimeSessionSnapshot(snapshot: RuntimeSessionSnapshot): void;
     sendRuntimeSession(snapshot: RuntimeSessionSnapshot): void;
-    executeVisibleCommand(request: VisibleCommandRequest): Promise<TranscriptEvent[]>;
+    executeVisibleCommand(request: VisibleCommandRequest): Promise<RuntimeCommandResult>;
     captureWorkspaceBaseline(source: string): Promise<void>;
     refreshWorkspaceAndBroadcast(
         options?: WorkspaceListOptions
@@ -74,7 +82,7 @@ export interface RuntimeSessionIpcControllerOptions {
     broadcastRuntimeEvents(): Promise<void>;
     invalidateInitialDatasetPreview(objectName?: string): void;
     sendTranscriptEvents(events: TranscriptEvent[]): void;
-    sendWorkspaceSnapshot(snapshot: WorkspaceSnapshot): void;
+    sendWorkspaceSnapshot(snapshot: WorkspaceSnapshot): void | Promise<void | boolean>;
     sendActiveDataset(snapshot: ActiveDatasetSnapshot): void;
     warmInitialDatasetPreview(objectName: string): void;
     warmInitialVariableMetadata(objectName: string): void;
@@ -84,6 +92,24 @@ export interface RuntimeSessionIpcControllerOptions {
 export const createRuntimeSessionIpcController = function(
     options: RuntimeSessionIpcControllerOptions
 ): void {
+    const activeDatasetDelivery = createWorkspaceActiveDatasetDelivery({
+        getSessionScope: () => readWorkspaceActiveDatasetScope(
+            options.runtimeSessionManager.getWorkspaceSnapshot()
+        ) || options.runtimeSessionManager,
+        getAuthoritativeSnapshot: () => options.runtimeSessionManager.getActiveDataset(),
+        readActiveDataset: async () => options.runtimeSessionManager.getActiveDataset(),
+        requestActiveDataset: (name) => options.runtimeSessionManager.setActiveDataset(name),
+        publish: options.sendActiveDataset,
+        selected: async function(snapshot) {
+            warmDatasetEditorFirstScreens(
+                options.warmInitialDatasetPreview,
+                options.warmInitialVariableMetadata,
+                snapshot.objectName
+            );
+            await options.broadcastRuntimeEvents();
+        }
+    });
+
     const reportUncertainWorkspaceChange = function(snapshot: WorkspaceSnapshot): void {
         if (snapshot.status !== "uncertain") {
             return;
@@ -160,6 +186,9 @@ export const createRuntimeSessionIpcController = function(
             _event: IpcMainInvokeEvent,
             input: { objectNames?: string[] }
         ) => {
+            const scopeIsCurrent = captureWorkspaceRuntimeScope(
+                () => options.runtimeSessionManager
+            );
             (input?.objectNames || []).forEach((objectName) => {
                 options.invalidateInitialDatasetPreview(objectName);
             });
@@ -167,7 +196,12 @@ export const createRuntimeSessionIpcController = function(
             const snapshot = await options.runtimeSessionManager
                 .removeWorkspaceObjects(input?.objectNames || []);
 
-            options.sendWorkspaceSnapshot(snapshot);
+            if (!scopeIsCurrent(snapshot)) {
+                return options.runtimeSessionManager.getWorkspaceSnapshot();
+            }
+            if (await options.sendWorkspaceSnapshot(snapshot) === false) {
+                return options.runtimeSessionManager.getWorkspaceSnapshot();
+            }
             reportUncertainWorkspaceChange(snapshot);
             options.sendActiveDataset(options.runtimeSessionManager.getActiveDataset());
             await options.broadcastRuntimeEvents();
@@ -182,12 +216,20 @@ export const createRuntimeSessionIpcController = function(
             _event: IpcMainInvokeEvent,
             input: { oldName?: string; newName?: string; source?: string }
         ) => {
+            const scopeIsCurrent = captureWorkspaceRuntimeScope(
+                () => options.runtimeSessionManager
+            );
             options.invalidateInitialDatasetPreview(input?.oldName);
 
             const snapshot = await options.runtimeSessionManager
                 .renameWorkspaceObject(createWorkspaceRenameRequest(input || {}));
 
-            options.sendWorkspaceSnapshot(snapshot);
+            if (!scopeIsCurrent(snapshot)) {
+                return options.runtimeSessionManager.getWorkspaceSnapshot();
+            }
+            if (await options.sendWorkspaceSnapshot(snapshot) === false) {
+                return options.runtimeSessionManager.getWorkspaceSnapshot();
+            }
             reportUncertainWorkspaceChange(snapshot);
             options.sendActiveDataset(options.runtimeSessionManager.getActiveDataset());
             await options.broadcastRuntimeEvents();
@@ -197,11 +239,19 @@ export const createRuntimeSessionIpcController = function(
     );
 
     options.ipcMain.handle(workspaceIpcChannels.clear, async () => {
+        const scopeIsCurrent = captureWorkspaceRuntimeScope(
+            () => options.runtimeSessionManager
+        );
         options.invalidateInitialDatasetPreview();
 
         const snapshot = await options.runtimeSessionManager.clearWorkspace();
 
-        options.sendWorkspaceSnapshot(snapshot);
+        if (!scopeIsCurrent(snapshot)) {
+            return options.runtimeSessionManager.getWorkspaceSnapshot();
+        }
+        if (await options.sendWorkspaceSnapshot(snapshot) === false) {
+            return options.runtimeSessionManager.getWorkspaceSnapshot();
+        }
         reportUncertainWorkspaceChange(snapshot);
         options.sendActiveDataset(options.runtimeSessionManager.getActiveDataset());
         await options.broadcastRuntimeEvents();
@@ -263,16 +313,8 @@ export const createRuntimeSessionIpcController = function(
     options.ipcMain.handle(
         workspaceIpcChannels.setActiveDataset,
         async (_event: IpcMainInvokeEvent, objectName: string) => {
-            const snapshot = await options.runtimeSessionManager.setActiveDataset(objectName);
-
-            options.sendActiveDataset(snapshot);
-            if (snapshot.status === "selected") {
-                options.warmInitialDatasetPreview(snapshot.objectName);
-                options.warmInitialVariableMetadata(snapshot.objectName);
-                await options.broadcastRuntimeEvents();
-            }
-
-            return snapshot;
+            const snapshot = await activeDatasetDelivery.select(objectName);
+            return snapshot || options.runtimeSessionManager.getActiveDataset();
         }
     );
 };

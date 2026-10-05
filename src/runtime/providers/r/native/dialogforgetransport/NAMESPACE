@@ -1,0 +1,5 @@
+useDynLib(dialogforgetransport, .registration = TRUE)
+export(read_bounded_runtime_request)
+export(write_checked_runtime_frame)
+export(read_runtime_console_line)
+export(with_runtime_console_input)

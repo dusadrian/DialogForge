@@ -42,6 +42,7 @@ export const createColumn = function(input: Partial<TabularColumnSnapshot>): Tab
         name: input.name || "",
         type: input.type || "",
         role: input.role || "data",
+        decimals: input.decimals,
         numeric: input.numeric,
         character: input.character,
         logical: input.logical,

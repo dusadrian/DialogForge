@@ -1,6 +1,7 @@
 export interface BrowserSharedPageBridgeOptions {
     openHelpCommandUrl(value: unknown): Promise<unknown> | unknown;
     fetchHelpPage(value: unknown): Promise<unknown> | unknown;
+    retireHelpRequest?(): Promise<void> | void;
     runHelpExample(input: unknown): Promise<unknown> | unknown;
     selectImportFile(): Promise<unknown> | unknown;
     planImportFile(input: unknown): Promise<unknown> | unknown;
@@ -57,6 +58,7 @@ export const installBrowserSharedPageBridge = function(
         openHelpCommandUrl: options.openHelpCommandUrl,
         fetchHelpPage: options.fetchHelpPage,
         fetchRHelpPage: options.fetchHelpPage,
+        retireHelpRequest: options.retireHelpRequest,
         runHelpExample: options.runHelpExample,
         selectImportFile: options.selectImportFile,
         planImportFile: options.planImportFile,

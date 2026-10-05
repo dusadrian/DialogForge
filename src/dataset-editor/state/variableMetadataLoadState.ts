@@ -2,6 +2,7 @@ export interface VariableMetadataLoadSnapshot {
     sequence: number;
     loading: boolean;
     loaded: boolean;
+    failed: boolean;
     batchInFlight: boolean;
     totalCount: number;
 }
@@ -28,6 +29,7 @@ export const createVariableMetadataLoadState = function(): VariableMetadataLoadS
     let sequence = 0;
     let loading = false;
     let loaded = false;
+    let failed = false;
     let batchInFlight = false;
     let totalCount = 0;
     let timer: number | null = null;
@@ -46,16 +48,22 @@ export const createVariableMetadataLoadState = function(): VariableMetadataLoadS
         sequence += 1;
         loading = false;
         loaded = false;
+        failed = false;
         batchInFlight = false;
         totalCount = 0;
     };
 
     const schedule = function(callback: () => void, delay: number): void {
         cancelScheduled();
-        timer = window.setTimeout(() => {
+        const scheduledSequence = sequence;
+        const scheduledTimer = window.setTimeout(() => {
+            if (timer !== scheduledTimer || sequence !== scheduledSequence) {
+                return;
+            }
             timer = null;
             callback();
         }, Math.max(0, Number(delay) || 0));
+        timer = scheduledTimer;
     };
 
     const beginBatch = function(): VariableMetadataBatchToken | null {
@@ -85,6 +93,7 @@ export const createVariableMetadataLoadState = function(): VariableMetadataLoadS
         batchInFlight = false;
         totalCount = Math.max(0, Number(nextTotalCount) || itemCount);
         loaded = itemCount >= totalCount;
+        failed = false;
         loading = !loaded;
 
         return true;
@@ -98,6 +107,7 @@ export const createVariableMetadataLoadState = function(): VariableMetadataLoadS
         batchInFlight = false;
         loading = false;
         loaded = true;
+        failed = true;
 
         return true;
     };
@@ -108,6 +118,7 @@ export const createVariableMetadataLoadState = function(): VariableMetadataLoadS
                 sequence,
                 loading,
                 loaded,
+                failed,
                 batchInFlight,
                 totalCount
             };

@@ -24,7 +24,8 @@ export interface RuntimeEventState {
 
 
 export const createRuntimeEventState = function(
-    maximumEvents = 40
+    maximumEvents = 40,
+    getGeneration?: () => number | undefined
 ): RuntimeEventState {
     const events: RuntimeEventRecord[] = [];
 
@@ -37,6 +38,7 @@ export const createRuntimeEventState = function(
             payload
         ): void {
             events.unshift(createRuntimeEvent({
+                lifecycleGeneration: getGeneration?.(),
                 type,
                 providerId,
                 objectName,
@@ -50,6 +52,7 @@ export const createRuntimeEventState = function(
         },
         createSnapshot: function(providerId, providerEvents) {
             return createRuntimeEventSnapshot({
+                lifecycleGeneration: getGeneration?.(),
                 status: "ready",
                 providerId,
                 events: providerEvents.concat(events).slice(0, maximumEvents),

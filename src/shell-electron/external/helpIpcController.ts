@@ -4,20 +4,14 @@ import type {
     IpcMainInvokeEvent
 } from "electron";
 
-import {
-    createVisibleCommandRequest
-} from "../../runtime/commands/commandProtocol";
 import type {
     HelpTopicRequest,
     HelpTopicResult,
     RuntimeSessionManager,
-    TranscriptEvent,
     VisibleCommandRequest
 } from "../../runtime/provider-contract/runtimeProvider";
-import {
-    buildHelpExampleCommand,
-    parseHelpCommandUrl
-} from "../../runtime/help/helpCommandUrl";
+import type { RuntimeCommandResult } from "../../runtime/commands/runtimeCommandReceipt";
+import { createHelpCommandActions } from "../../runtime/help/helpCommandActions";
 import {
     createHelpTopicRequest
 } from "../../runtime/help/helpProtocol";
@@ -32,55 +26,19 @@ export interface HelpIpcControllerOptions {
     runtimeSessionManager: Pick<RuntimeSessionManager, "readHelpTopic">;
     getHelpDocument(): HelpDocumentSnapshot;
     openHelpTopic(input: Partial<HelpTopicRequest>): Promise<HelpTopicResult>;
-    executeVisibleCommand(request: VisibleCommandRequest): Promise<TranscriptEvent[]>;
+    retireHelpRequest?(): void;
+    executeVisibleCommand(request: VisibleCommandRequest): Promise<RuntimeCommandResult>;
     fetchRHelpPage(value: unknown): Promise<unknown>;
 }
-
-
-const createInvalidHelpCommandResult = function() {
-    return {
-        status: "invalid",
-        message: "Invalid help command URL."
-    };
-};
 
 
 export const createHelpIpcController = function(
     options: HelpIpcControllerOptions
 ): void {
-    const openHelpCommandUrl = async function(value: unknown) {
-        const command = parseHelpCommandUrl(value);
-
-        if (!command) {
-            return createInvalidHelpCommandResult();
-        }
-
-        if (command.kind === "help") {
-            return options.openHelpTopic({
-                topic: command.value,
-                allowSearch: true,
-                source: "base-app.help-link"
-            });
-        }
-
-        if (command.kind === "vignette") {
-            return options.openHelpTopic({
-                topic: command.value,
-                allowSearch: true,
-                source: "base-app.help-link"
-            });
-        }
-
-        const events = await options.executeVisibleCommand(createVisibleCommandRequest({
-            text: command.value,
-            source: "base-app.help-link"
-        }));
-
-        return {
-            status: "ready",
-            events
-        };
-    };
+    const helpCommands = createHelpCommandActions({
+        openHelpTopic: options.openHelpTopic,
+        executeVisibleCommand: options.executeVisibleCommand
+    });
 
     options.ipcMain.handle(
         helpIpcChannels.readTopic,
@@ -95,6 +53,10 @@ export const createHelpIpcController = function(
         return options.getHelpDocument();
     });
 
+    options.ipcMain.handle(helpIpcChannels.retireRequest, () => {
+        options.retireHelpRequest?.();
+    });
+
     options.ipcMain.handle(
         helpIpcChannels.openTopic,
         async (_event: IpcMainInvokeEvent, input: Partial<HelpTopicRequest>) => {
@@ -105,12 +67,12 @@ export const createHelpIpcController = function(
     options.ipcMain.handle(
         helpIpcChannels.openCommandUrl,
         async (_event: IpcMainInvokeEvent, value: unknown) => {
-            return openHelpCommandUrl(value);
+            return helpCommands.openCommandUrl(value);
         }
     );
 
     options.ipcMain.on(helpIpcChannels.openRCommandUrl, (_event: IpcMainEvent, value: unknown) => {
-        void openHelpCommandUrl(value);
+        void helpCommands.openCommandUrl(value);
     });
 
     options.ipcMain.handle(
@@ -123,27 +85,7 @@ export const createHelpIpcController = function(
     options.ipcMain.handle(
         helpIpcChannels.runExample,
         async (_event: IpcMainInvokeEvent, input: Record<string, unknown>) => {
-            const command = buildHelpExampleCommand(
-                String(input && input.topic ? input.topic : ""),
-                String(input && input.package ? input.package : "")
-            );
-
-            if (!command) {
-                return {
-                    status: "invalid",
-                    message: "Invalid help example request."
-                };
-            }
-
-            const events = await options.executeVisibleCommand(createVisibleCommandRequest({
-                text: command,
-                source: "base-app.help-example"
-            }));
-
-            return {
-                status: "ready",
-                events
-            };
+            return helpCommands.runExample(input);
         }
     );
 };

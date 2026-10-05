@@ -14,6 +14,14 @@ export type DialogRuntimeRequirementMap = Record<
     ProductDialogRuntimeRequirement
 >;
 
+export interface DialogRuntimeRequirementsSaveInput {
+    requestId: number;
+    dialogId: string;
+    rPackages: RPackageRequirement[];
+}
+
+export type DialogRuntimeRequirementsSaveResult = DialogRuntimeRequirementsSaveInput;
+
 
 export const normalizeDialogRuntimePackages = function(
     value: unknown

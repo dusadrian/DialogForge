@@ -70,6 +70,7 @@ export interface RuntimeSessionSnapshot {
     status: string;
     connection: string;
     message: string;
+    lifecycleGeneration?: number;
     startupOutput?: string;
     workspaceRestored?: boolean;
     workspaceRestoreMessage?: string;
@@ -124,7 +125,11 @@ export interface WorkspaceObjectSnapshot {
 }
 
 
+export type WorkspaceFreshness = "unread" | "pending" | "fresh" | "stale" | "unavailable";
+
+
 export interface WorkspaceSnapshot {
+    freshness?: WorkspaceFreshness;
     workspaceRevision?: WorkspaceUpdate["workspaceRevision"];
     status: string;
     providerId: string;
@@ -191,6 +196,10 @@ export interface ActiveDatasetSnapshot {
     objectName: string;
     message: string;
     selectedAt: string;
+    selectionRevision?: {
+        owner: string;
+        sequence: number;
+    };
 }
 
 
@@ -214,6 +223,7 @@ export interface TabularColumnSnapshot {
     name: string;
     type: string;
     role: string;
+    decimals?: number;
     numeric?: boolean;
     character?: boolean;
     logical?: boolean;
@@ -817,6 +827,7 @@ export interface DialogExecutionResult {
 
 
 export interface RuntimeEventRecord {
+    lifecycleGeneration?: number;
     type: string;
     providerId: string;
     objectName: string;
@@ -827,6 +838,7 @@ export interface RuntimeEventRecord {
 
 
 export interface RuntimeEventSnapshot {
+    lifecycleGeneration?: number;
     status: string;
     providerId: string;
     events: RuntimeEventRecord[];
@@ -837,6 +849,7 @@ export interface RuntimeEventSnapshot {
 
 export interface PromptRequest {
     prompt: string;
+    allowEmpty?: boolean;
     kind: string;
     source: string;
 }
@@ -919,6 +932,8 @@ export interface RuntimeExtensionMethodRequest {
     method: string;
     params: Record<string, unknown>;
     source: string;
+    // A direct write must advance the same baseline as typed tabular writes.
+    workspaceEffect?: "mutation";
 }
 
 
@@ -928,6 +943,7 @@ export interface RuntimeExtensionMethodResult {
     method: string;
     value: unknown;
     workspaceUpdate?: WorkspaceUpdate;
+    workspaceReconciliation?: WorkspaceReconciliation;
     message: string;
     executedAt: string;
 }
@@ -1005,7 +1021,12 @@ export interface RuntimeCommandController {
 export type WorkspaceReconciliation = "unchanged" | "changed" | "not_checked" | "failed";
 
 
+export type RuntimeEvaluationOutcome = "success" | "error" | "interrupted";
+
+
 export interface RuntimeCommandExecutionResult {
+    executionDisposition?: "completed" | "not_started" | "session_lost";
+    evaluationOutcome?: RuntimeEvaluationOutcome;
     activityId?: string;
     transcriptEvents: TranscriptEvent[];
     workspaceUpdate: WorkspaceUpdate | null;

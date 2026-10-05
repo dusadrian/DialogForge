@@ -5,9 +5,9 @@ import {
 import type {
     ActiveDatasetSnapshot,
     RuntimeSessionManager,
-    TranscriptEvent,
     VisibleCommandRequest
 } from "../../runtime/provider-contract/runtimeProvider";
+import type { RuntimeCommandResult } from "../../runtime/commands/runtimeCommandReceipt";
 import type {
     IpcMain
 } from "electron";
@@ -21,6 +21,13 @@ import {
 import {
     createDatasetEditorIpcController
 } from "./datasetEditorIpcController";
+import {
+    createWorkspaceActiveDatasetDelivery,
+    readWorkspaceActiveDatasetScope
+} from "../../runtime/workspace/workspaceActiveDatasetDelivery";
+import { warmDatasetEditorFirstScreens } from "../../dataset-editor/datasetEditorWarmCache";
+import { prepareDatasetEditorOpening } from "../../dataset-editor/datasetEditorOpeningPreparation";
+import { formatDatasetEditorTitle } from "../../dataset-editor/datasetEditorTitle";
 
 
 export interface DatasetEditorCompositionOptions {
@@ -34,18 +41,19 @@ export interface DatasetEditorCompositionOptions {
     showOnOpen: boolean;
     getZoomFactor(): number;
     getLocale(): string;
+    getI18n(): Record<string, string>;
     readVariableColumnWidths(): Record<string, number>;
     readTerminalSettings(): unknown;
     listDatasetNames(): Promise<string[]>;
     runtimeSessionManager: Pick<
         RuntimeSessionManager,
         "getActiveDataset" | "setActiveDataset" | "executeRuntimeMethod"
-    >;
+    > & Partial<Pick<RuntimeSessionManager, "getWorkspaceSnapshot">>;
     writeVariableColumnWidths(payload: unknown): void;
     uiCommandVisibility(): "hidden" | "visible";
     executeVisibleCommand(
         request: VisibleCommandRequest
-    ): Promise<TranscriptEvent[]>;
+    ): Promise<RuntimeCommandResult>;
     refreshWorkspaceAndBroadcast(): Promise<unknown>;
     broadcastRuntimeEvents(): Promise<void>;
     sendActiveDataset(snapshot: ActiveDatasetSnapshot): void;
@@ -64,9 +72,26 @@ export interface DatasetEditorComposition {
 export const createDatasetEditorComposition = function(
     options: DatasetEditorCompositionOptions
 ): DatasetEditorComposition {
+    const activeDatasetDelivery = createWorkspaceActiveDatasetDelivery({
+        getSessionScope: () => readWorkspaceActiveDatasetScope(
+            options.runtimeSessionManager.getWorkspaceSnapshot?.()
+        ) || options.runtimeSessionManager,
+        getAuthoritativeSnapshot: () => options.runtimeSessionManager.getActiveDataset(),
+        readActiveDataset: async () => options.runtimeSessionManager.getActiveDataset(),
+        requestActiveDataset: (name) => options.runtimeSessionManager.setActiveDataset(name),
+        publish: options.sendActiveDataset,
+        selected: function(snapshot) {
+            warmDatasetEditorFirstScreens(
+                options.warmInitialDatasetPreview,
+                options.warmInitialVariableMetadata,
+                snapshot.objectName
+            );
+        }
+    });
+
     let state: DatasetEditorDocumentState = {
         objectName: "",
-        title: "Dataset Editor",
+        title: formatDatasetEditorTitle("", options.translate),
         message: "No dataset loaded."
     };
     const createWindow = createDatasetEditorWindowFactory({
@@ -76,7 +101,7 @@ export const createDatasetEditorComposition = function(
         title: function(): string {
             return state.objectName
                 ? state.title
-                : options.translate("Dataset Editor");
+                : formatDatasetEditorTitle("", options.translate);
         },
         nativeWindowIconPath: options.nativeWindowIconPath
     });
@@ -88,6 +113,7 @@ export const createDatasetEditorComposition = function(
             return {
                 appPath: options.rootDir,
                 languageNS: options.getLocale(),
+                i18n: options.getI18n(),
                 datasetName: "",
                 datasetNames: [],
                 variableColumnWidths: options.readVariableColumnWidths(),
@@ -106,7 +132,7 @@ export const createDatasetEditorComposition = function(
         if (!objectName) {
             state = {
                 objectName: "",
-                title: "Dataset Editor",
+                title: formatDatasetEditorTitle("", options.translate),
                 message: "No dataset selected."
             };
 
@@ -115,23 +141,21 @@ export const createDatasetEditorComposition = function(
 
         state = {
             objectName,
-            title: `${objectName} - ${options.translate("Dataset Editor")}`,
+            title: formatDatasetEditorTitle(objectName, options.translate),
             message: `Opening ${objectName}.`
         };
 
-        void options.runtimeSessionManager.setActiveDataset(objectName)
-            .then((snapshot) => {
-                options.sendActiveDataset(snapshot);
-
-                if (snapshot.status === "selected") {
-                    options.warmInitialDatasetPreview(snapshot.objectName);
-                    options.warmInitialVariableMetadata(snapshot.objectName);
-                }
-            })
-            .catch(() => {});
-
-        options.warmInitialDatasetPreview(objectName);
-        options.warmInitialVariableMetadata(objectName);
+        prepareDatasetEditorOpening(objectName, {
+            selectDataset: activeDatasetDelivery.select,
+            warmFirstScreens: function(name) {
+                warmDatasetEditorFirstScreens(
+                    options.warmInitialDatasetPreview,
+                    options.warmInitialVariableMetadata,
+                    name
+                );
+            },
+            reportError: options.reportError
+        });
 
         windowController.create();
         windowController.setTitle(state.title);
@@ -168,6 +192,7 @@ export const createDatasetEditorComposition = function(
         ipcMain: options.ipcMain,
         runtimeSessionManager: options.runtimeSessionManager,
         datasetEditorWindowController: windowController,
+        translate: options.translate,
         getDatasetEditorState: function() {
             return state;
         },

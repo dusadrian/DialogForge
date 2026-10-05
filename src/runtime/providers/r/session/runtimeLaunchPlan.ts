@@ -31,7 +31,9 @@ export interface RRuntimeLaunchPlan {
 export const requiredRuntimeSourceFileNames = [
     "backend.R",
     "dependencies.R",
+    "runtimeInitialization.R",
     "runtimePrelude.R",
+    "runtimeBindingInspection.R",
     "runtimeDiagnostics.R",
     "runtimeWorkspaceCore.R",
     "runtimeDatasetStateCore.R",
@@ -40,10 +42,13 @@ export const requiredRuntimeSourceFileNames = [
     "runtimeHelpCore.R",
     "runtimeEventCore.R",
     "runtimePromptCore.R",
+    "runtimeWorkerPromptTransport.R",
     "runtimeGraphicsCore.R",
     "runtimeWarningCore.R",
+    "runtimeOrderedCapturePrototype.R",
     "runtimeTransportCore.R",
     "runtimeDispatchCore.R",
+    "runtimeConsoleBindings.R",
     "runtimeControlBootstrap.R",
     "runtimeControlLauncher.R"
 ];
@@ -309,6 +314,12 @@ export const createRRuntimeLaunchPlan = function(options: RRuntimeLaunchPlanOpti
     const launcherPath = path.join(runtimeSourceDir, "runtimeControlLauncher.R");
     const paths = createRuntimeTempPaths(rootDir);
     const sessionKind = options.sessionKind === "dedicated" ? "dedicated" : "interactive";
+    const boundedInput = env.DIALOGFORGE_BOUNDED_INPUT_PROTOTYPE === "1";
+    const orderedOutput = env.DIALOGFORGE_ORDERED_OUTPUT_PROTOTYPE !== "0";
+    const orderedOutputDirectory = orderedOutput ? path.join(paths.tempDir, "ordered-output") : "";
+    if (orderedOutput) {
+        fs.mkdirSync(orderedOutputDirectory, { mode: 0o700 });
+    }
     const baseEnv: Record<string, string> = {};
 
     Object.keys(env).forEach((name) => {
@@ -343,7 +354,26 @@ export const createRRuntimeLaunchPlan = function(options: RRuntimeLaunchPlanOpti
             DM_RUNTIME_CONTROL_PORT: createRuntimeControlPort(),
             DM_RUNTIME_CONTROL_MAX_PAYLOAD: "262144",
             DM_RUNTIME_CONTROL_SESSION_KIND: sessionKind,
+            DM_BOUNDED_INPUT_ENABLED: boundedInput ? "1" : "0",
             DM_RUNTIME_R_DIR: runtimeSourceDir,
+            DM_ORDERED_OUTPUT_ENABLED: orderedOutput ? "1" : "0",
+            DM_ORDERED_OUTPUT_DIR: orderedOutputDirectory,
+            DM_ORDERED_OUTPUT_SESSION: orderedOutput ? createToken() : "",
+            DM_RUNTIME_INSPECTION_ROOT: toUnpackedAsarPath([
+                path.join(rootDir, "r-inspection", "native"),
+                path.join(rootDir, "dist", "r-inspection", "native")
+            ].find((candidate) => fs.existsSync(toUnpackedAsarPath(candidate)))
+                || path.join(rootDir, "dist", "r-inspection", "native")),
+            DM_RUNTIME_TRANSPORT_ROOT: toUnpackedAsarPath([
+                path.join(rootDir, "r-transport-prototype", "native"),
+                path.join(rootDir, "dist", "r-transport-prototype", "native")
+            ].find((candidate) => fs.existsSync(toUnpackedAsarPath(candidate)))
+                || path.join(rootDir, "dist", "r-transport-prototype", "native")),
+            DM_RUNTIME_OUTPUT_ROOT: toUnpackedAsarPath([
+                path.join(rootDir, "r-output-prototype", "native"),
+                path.join(rootDir, "dist", "r-output-prototype", "native")
+            ].find((candidate) => fs.existsSync(toUnpackedAsarPath(candidate)))
+                || path.join(rootDir, "dist", "r-output-prototype", "native")),
             DM_PROFILE_RUNTIME_CONTROL_PATH: options.profileRuntimeControlPath || ""
         }),
         runtimeSourceDir,

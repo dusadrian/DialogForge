@@ -1,6 +1,7 @@
 import {
   datasetViewerClient
 } from './datasetViewerClient';
+import { createDatasetEditorSessionController } from './datasetEditorSessionController';
 import {
   buildVariableMetadataCommand
 } from '../../dataset-editor/commands/visibleCommandText';
@@ -105,6 +106,7 @@ import {
 import {
   createValueLabelsEditorController
 } from '../../dataset-editor/renderer/valueLabelsEditorController';
+import { runDatasetEditorEventAction } from './datasetEditorEventAction';
 import {
   createDatasetViewportController
 } from '../../dataset-editor/renderer/datasetViewportController';
@@ -322,8 +324,13 @@ const datasetEditorChrome = createDatasetEditorChromeView({
     rowCount: Number(datasetSchema.snapshot.schema?.rowCount || 0),
     columnCount: Number(datasetSchema.snapshot.schema?.columnCount || 0)
   }),
+  onDataActivated: () => {
+    renderDataPage();
+  },
   onVariablesActivated: () => {
-    void activateVariablesTab();
+    void activateVariablesTab().catch((error) => {
+      console.error("Dataset editor Variables activation failed.", error);
+    });
   }
 });
 const datasetEditorContextMenus =
@@ -511,8 +518,7 @@ const datasetStructuralActions = createDatasetStructuralActions({
   confirm: (message) => window.confirm(message),
   hideHeaderMenu: hideHeaderContextMenu,
   hideRowMenu: hideRowContextMenu,
-  showLoading: (message) => showLoadingCover(message),
-  hideLoading: hideLoadingCover,
+  showLoading: datasetEditorCover.showOwnedLoadingCover,
   showNotice: showFooterNotice,
   rememberCommand: rememberDatasetEditorCommand,
   resetSelectionAfterSort: (columnName) => {
@@ -682,6 +688,11 @@ const valueLabelsEditor = createValueLabelsEditorController({
     variableMetadataState.replaceItem(rowIndex, variable);
   },
   getDatasetName: () => datasetIdentity.currentName,
+  getLoadSequence: () => variableMetadata.snapshot.sequence,
+  hydrateVariable: async (datasetName, rowIndex) => {
+    const batch = await datasetViewerClient.getVariablesBatch(datasetName, rowIndex + 1, 1);
+    return batch?.items?.[0] || null;
+  },
   translate: (key) => t(key),
   escapeHtml,
   plusIconPath: PLUS_ICON_PATH,
@@ -702,42 +713,15 @@ const valueLabelsEditor = createValueLabelsEditorController({
   refreshDataset: (datasetName) => refreshCurrentDataset(datasetName),
   showNotice: showFooterNotice
 });
-const openValueLabelsEditor = valueLabelsEditor.open;
 const closeValueLabelsEditor = valueLabelsEditor.close;
 const cancelValueLabelsEditor = valueLabelsEditor.cancel;
 const saveValueLabelsEditor = valueLabelsEditor.save;
 const renderValueLabelsEditor = valueLabelsEditor.render;
 
 const openHydratedValueLabelsEditor = function(rowIndex: number): void {
-  void (async () => {
-    const variables = variableMetadataState.items;
-    const current = Array.isArray(variables) ? variables[rowIndex] : null;
-    const hasCategories = Array.isArray(current?.categories)
-      && current.categories.length > 0;
-
-    if (!hasCategories && datasetIdentity.currentName) {
-      const batch = await datasetViewerClient.getVariablesBatch(
-        datasetIdentity.currentName,
-        rowIndex + 1,
-        1
-      );
-      const replacement = batch?.items?.[0] || null;
-
-      if (replacement) {
-        const nextItems = Array.isArray(variableMetadataState.items)
-          ? variableMetadataState.items.slice()
-          : [];
-
-        nextItems[rowIndex] = replacement;
-        variableMetadataState.setItems(nextItems);
-        if (datasetTabs.isVariablesActive()) {
-          renderVariablesTable();
-        }
-      }
-    }
-
-    openValueLabelsEditor(rowIndex);
-  })();
+    void runDatasetEditorEventAction("open-value-labels", () => {
+        return valueLabelsEditor.openHydrated(rowIndex);
+    });
 };
 
 const dataGridInteractions = createDataGridInteractionBindings({
@@ -910,6 +894,7 @@ const datasetTableRenderer = createDatasetTableRenderer({
     variableSelection.snapshot.activeRowIndex
   ),
   isVariableMetadataLoaded: () => variableMetadata.snapshot.loaded,
+  isVariableMetadataFailed: () => variableMetadata.snapshot.failed,
   isVariableCellSelected,
   translate: (key) => t(key),
   escapeHtml,
@@ -1015,11 +1000,16 @@ const variableMetadataLookup =
     getDatasetName: () => datasetIdentity.currentName,
     getVariables: () => variableMetadataState.items,
     isLoaded: () => variableMetadata.snapshot.loaded,
+    isFailed: () => variableMetadata.snapshot.failed,
+    getLoadSequence: () => variableMetadata.snapshot.sequence,
     reset: resetVariableMetadataState,
     loadAll: loadAllVariablesNow,
     renderVariables: () => renderVariablesTable(),
     renderEmpty: () => {
       renderVariablesStatus(t('No variable metadata available'));
+    },
+    renderFailure: () => {
+      renderVariablesStatus(t('Could not load variable metadata'));
     }
   });
 
@@ -1034,6 +1024,7 @@ const datasetColumnClipboardActions =
       readVariableMetadata: readVariableMetadataClipboardPayload
     },
     getDatasetName: () => datasetIdentity.currentName,
+    getMetadataSequence: () => variableMetadata.snapshot.sequence,
     getRowCount: () => Number(
       datasetSchema.snapshot.schema?.rowCount || 0
     ),
@@ -1051,8 +1042,7 @@ const datasetColumnClipboardActions =
     runCommand: runVisibleDatasetEditorCommand,
     refreshDataset: (datasetName) => refreshCurrentDataset(datasetName),
     hideHeaderMenu: hideHeaderContextMenu,
-    showLoading: showLoadingCover,
-    hideLoading: hideLoadingCover,
+    showLoading: datasetEditorCover.showOwnedLoadingCover,
     showNotice: showFooterNotice,
     translate: (key) => t(key)
   });
@@ -1144,7 +1134,14 @@ const datasetOpening = createDatasetOpeningController<
 >({
   initialRowCount: INITIAL_DATA_ROW_COUNT,
   normalizeDatasetName: (value) => String(value || '').trim(),
-  prepareDataset: datasetOpenPreparation.prepare,
+  prepareDataset: (datasetName) => {
+    datasetStructuralActions.invalidate();
+    datasetColumnClipboardActions.invalidate();
+    datasetChanges.invalidate();
+    variableRowRefresh.invalidate();
+    datasetRefresh.invalidate();
+    datasetOpenPreparation.prepare(datasetName);
+  },
   showEmptyDataset: openingPresentation.showEmptyDataset,
   showInitialLoading: openingPresentation.showInitialLoading,
   showContentLoading: openingPresentation.showContentLoading,
@@ -1186,10 +1183,15 @@ const datasetRefresh = createDatasetRefreshController<
   hideHeaderMenu: hideHeaderContextMenu,
   closeValueLabels: closeValueLabelsEditor,
   clearEditState: dataGridState.clearEditing,
-  invalidatePendingLoads: invalidatePendingDataLoads,
+  invalidatePendingLoads: () => {
+    datasetChanges.invalidate();
+    variableRowRefresh.invalidate();
+    invalidatePendingDataLoads();
+  },
   markViewportActivity: dataViewport.markActivity,
   isVariableViewActive: datasetTabs.isVariablesActive,
   isVariableMetadataLoaded: () => variableMetadata.snapshot.loaded,
+  isVariableMetadataFailed: () => variableMetadata.snapshot.failed,
   resetVariableMetadata: resetVariableMetadataState,
   fetchSchema: (datasetName) => {
     return datasetViewerClient.getSchema(datasetName);
@@ -1211,6 +1213,9 @@ const datasetRefresh = createDatasetRefreshController<
   renderVariables: renderVariablesTable,
   renderNoVariables: () => {
     renderVariablesStatus(t('No variable metadata available'));
+  },
+  renderVariableFailure: () => {
+    renderVariablesStatus(t('Could not load variable metadata'));
   },
   scheduleBackgroundVariableLoad,
   queueViewportRefresh
@@ -1279,9 +1284,12 @@ const datasetChanges = createDatasetChangeController({
   applyColumnRenames: applyColumnRenameChanges,
   applyColumnRemovals: applyColumnRemovedChanges,
   refreshSchema: () => refreshCurrentDataset(datasetIdentity.currentName),
-  refreshRowSchema: async () => {
+  refreshRowSchema: async (isCurrent) => {
     const schema = await datasetViewerClient.getSchema(datasetIdentity.currentName);
-    if (schema) datasetSchema.setSchema(schema);
+    if (schema && isCurrent()) {
+        datasetSchema.setSchema(schema);
+        setTitle(datasetIdentity.currentName);
+    }
   },
   refreshViewport: forceCurrentViewportReload,
   refreshVariables: refreshVariableRowsByNames
@@ -1424,14 +1432,50 @@ const datasetFilterState = createDatasetFilterStateController({
 const datasetExternalActions = createDatasetEditorExternalActionsController({
   initialize: datasetEditorInitialization.initialize,
   changeLanguage: datasetEditorInitialization.changeLanguage,
-  setDatasetList: datasetEditorInitialization.setDatasetList,
+  setDatasetList: (datasetNames) => {
+    datasetEditorInitialization.setDatasetList(datasetNames);
+    void runDatasetEditorEventAction("retry-dataset-opening", () => {
+        return datasetOpening.retryAfterWorkspaceUpdate(datasetNames);
+    });
+  },
   getCurrentDatasetName: () => datasetIdentity.currentName,
   loadDataset,
   refreshDataset: refreshCurrentDataset,
   applyFilterStateChanged: datasetFilterState.applyFilterStateChanged,
+  getLoadSequence: () => variableMetadata.snapshot.sequence,
+  hasDatasetSchema: () => Boolean(datasetSchema.snapshot.schema),
   applyDatasetChanges,
   jumpToCase: jumpToCaseRow,
   jumpToVariable: jumpToDataColumnByName
 });
+
+const datasetSession = createDatasetEditorSessionController({
+    invalidatePending: () => {
+        datasetStructuralActions.invalidate();
+        datasetChanges.invalidate();
+        variableRowRefresh.invalidate();
+        datasetExternalActions.invalidate();
+        datasetColumnClipboardActions.invalidate();
+        datasetOpening.invalidate();
+        datasetRefresh.invalidate();
+        invalidatePendingDataLoads();
+        resetVariableMetadataState();
+        dataGridState.clearEditing();
+        closeValueLabelsEditor();
+        hideLoadingCover();
+    },
+    getDatasetName: () => datasetIdentity.currentName,
+    refreshDataset: refreshCurrentDataset
+});
+window.dialogForge?.onRuntimeSession((snapshot) => {
+    void datasetSession.update(snapshot).catch((error) => {
+        console.error("Dataset editor session refresh failed.", error);
+    });
+});
+if (window.dialogForge) {
+    void datasetSession.initialize(() => window.dialogForge.getRuntimeSession()).catch((error) => {
+        console.error("Dataset editor session read failed.", error);
+    });
+}
 
 datasetExternalActions.bindIpc(datasetEditorBridge);

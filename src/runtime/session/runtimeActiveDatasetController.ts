@@ -2,6 +2,7 @@ import type {
     ActiveDatasetSnapshot,
     RuntimeSessionSnapshot,
     WorkspaceObjectSnapshot,
+    WorkspaceSnapshot,
     WorkspaceUpdate
 } from "../provider-contract/runtimeProvider";
 import type {
@@ -26,6 +27,10 @@ export interface RuntimeActiveDatasetController {
         objects: WorkspaceObjectSnapshot[],
         revision?: WorkspaceUpdate["workspaceRevision"]
     ): WorkspaceObjectSnapshot[];
+    rememberWorkspaceSnapshot(
+        objects: WorkspaceObjectSnapshot[],
+        revision?: WorkspaceUpdate["workspaceRevision"]
+    ): { accepted: boolean; snapshot: WorkspaceSnapshot };
     reconcileAfterWorkspaceRefresh(
         objects: WorkspaceObjectSnapshot[],
         reason: string
@@ -97,6 +102,14 @@ export const createRuntimeActiveDatasetController = function(
         rememberWorkspaceObjects: function(objects, revision) {
             return options.workspaceState.remember(objects, revision);
         },
+        rememberWorkspaceSnapshot: function(objects, revision) {
+            const result = options.workspaceState.rememberSnapshot(objects, revision);
+
+            return {
+                accepted: result.accepted,
+                snapshot: options.workspaceState.createSnapshot(options.getSnapshot())
+            };
+        },
         reconcileAfterWorkspaceRefresh,
         selectFromWorkspace: function(objects, objectName, reason) {
             const found = objects.some((object) => {
@@ -156,6 +169,11 @@ export const createRuntimeActiveDatasetController = function(
             }
 
             const activeDataset = options.workspaceState.getActiveDataset();
+
+            if (!objectName) {
+                options.workspaceState.clearSelection(snapshot.providerId);
+                return options.workspaceState.getActiveDataset();
+            }
 
             if (
                 activeDataset.status === "selected" &&

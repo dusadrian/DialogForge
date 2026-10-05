@@ -5,37 +5,22 @@ import type {
 
 import type {
     RuntimeSessionManager,
-    UiCommandVisibility
+    UiCommandVisibility,
+    WorkspaceSnapshot
 } from "../../runtime/provider-contract/runtimeProvider";
-import {
-    createCellUpdateRequest,
-    createColumnInsertRequest,
-    createColumnRemoveRequest,
-    createColumnRenameRequest,
-    createRowInsertRequest,
-    createRowNameUpdateRequest,
-    createRowRemoveRequest,
-    createRowSortRequest
-} from "../../runtime/tabular-data/tabularProtocol";
 import {
     datasetEditorIpcChannels
 } from "../../dataset-editor/datasetEditorIpc";
+import { createDatasetViewerVariableMutation } from "../../runtime/tabular-data/datasetViewerVariableMutation";
+import { createDatasetViewerCellMutation } from "../../runtime/tabular-data/datasetViewerCellMutation";
+import { createDatasetViewerColumnMutation } from "../../runtime/tabular-data/datasetViewerColumnMutation";
+import { createDatasetViewerRowMutation } from "../../runtime/tabular-data/datasetViewerRowMutation";
 import {
-    createDatasetViewerCellUpdateResult,
-    createDatasetViewerColumnInsertResult,
-    createDatasetViewerColumnRemoveResult,
-    createDatasetViewerColumnRenameResult,
-    createDatasetViewerRowInsertResult,
-    createDatasetViewerRowNameResult,
-    createDatasetViewerRowRemoveResult,
-    createDatasetViewerRowSortResult,
-    normalizedDatasetViewerPosition,
-    providerRowIndexFromDatasetViewerPayload,
-    stringFromDatasetViewerPayload
-} from "../../base-app/modules/datasetViewerMutationResults";
-import {
-    applyRuntimeDatasetVariablePatch
-} from "../../runtime/tabular-data/runtimeDatasetVariablePatch";
+    createDatasetMutationCacheEffect,
+    type DatasetMutationCacheEffect
+} from "../../dataset-editor/datasetMutationCacheEffects";
+import { deliverDatasetMutationEffects } from "../../dataset-editor/datasetMutationDelivery";
+import { captureWorkspaceRuntimeScope } from "../../runtime/workspace/workspaceSnapshotDelivery";
 
 
 export interface DatasetViewerMutationIpcControllerOptions {
@@ -43,6 +28,8 @@ export interface DatasetViewerMutationIpcControllerOptions {
     runtimeSessionManager: Pick<
         RuntimeSessionManager,
         | "writeCell"
+        | "getSnapshot"
+        | "getWorkspaceSnapshot"
         | "renameColumn"
         | "updateRowName"
         | "insertRow"
@@ -53,13 +40,17 @@ export interface DatasetViewerMutationIpcControllerOptions {
         | "executeRuntimeMethod"
     >;
     uiCommandVisibility(): UiCommandVisibility;
-    invalidateInitialDatasetPreview(objectName: string): void;
+    invalidateInitialDatasetPreview(objectName: string, effect: DatasetMutationCacheEffect): void;
     patchVariableMetadata(
         objectName: string,
         variableName: string,
         value: unknown
     ): void;
     sendDatasetEditorChanges(changes: Array<Record<string, unknown>>): void;
+    sendWorkspaceSnapshot(
+        snapshot: WorkspaceSnapshot,
+        options: { warmActiveDataset: boolean; refreshProductDialogs: boolean }
+    ): Promise<boolean>;
     broadcastRuntimeEvents(options?: { sendDatasetChanges?: boolean }): Promise<void>;
 }
 
@@ -68,20 +59,56 @@ const notifyMutation = async function(
     options: DatasetViewerMutationIpcControllerOptions,
     objectName: string,
     changes: Array<Record<string, unknown>>,
-    invalidatePreview: boolean
+    variableMetadataPatched = false
 ): Promise<void> {
-    if (invalidatePreview) {
-        options.invalidateInitialDatasetPreview(objectName);
-    }
-
-    options.sendDatasetEditorChanges(changes);
-    await options.broadcastRuntimeEvents({ sendDatasetChanges: false });
+    const effect = createDatasetMutationCacheEffect(changes, variableMetadataPatched);
+    await deliverDatasetMutationEffects({
+        isCurrent: captureWorkspaceRuntimeScope(() => options.runtimeSessionManager),
+        objectNames: [objectName],
+        updateCache: name => options.invalidateInitialDatasetPreview(
+            name, effect
+        ),
+        publishChanges: () => options.sendDatasetEditorChanges(changes),
+        publishWorkspace: () => {
+            // Workspace deltas are not replayed through general event history.
+            return options.sendWorkspaceSnapshot(
+                options.runtimeSessionManager.getWorkspaceSnapshot(),
+                {
+                    warmActiveDataset: false,
+                    refreshProductDialogs: effect.variableMetadataChanged
+                }
+            );
+        },
+        refreshConsumers: () => options.broadcastRuntimeEvents({ sendDatasetChanges: false })
+    });
 };
 
 
 export const createDatasetViewerMutationIpcController = function(
     options: DatasetViewerMutationIpcControllerOptions
 ): void {
+    const cells = createDatasetViewerCellMutation({
+        runtimeSessionManager: options.runtimeSessionManager,
+        uiCommandVisibility: options.uiCommandVisibility,
+        updated: (result, changes) => notifyMutation(options, result.objectName, changes)
+    });
+    const columns = createDatasetViewerColumnMutation({
+        runtimeSessionManager: options.runtimeSessionManager,
+        uiCommandVisibility: options.uiCommandVisibility,
+        updated: (result, changes) => notifyMutation(options, result.objectName, changes)
+    });
+    const rows = createDatasetViewerRowMutation({
+        runtimeSessionManager: options.runtimeSessionManager,
+        uiCommandVisibility: options.uiCommandVisibility,
+        updated: (result, changes) => {
+            return notifyMutation(options, result.objectName, changes);
+        }
+    });
+    const variables = createDatasetViewerVariableMutation({
+        runtimeSessionManager: options.runtimeSessionManager,
+        patchVariableMetadata: options.patchVariableMetadata,
+        updated: (result, changes, patched) => notifyMutation(options, result.objectName, changes, patched)
+    });
     options.ipcMain.handle(
         datasetEditorIpcChannels.updateCell,
         async (
@@ -93,29 +120,7 @@ export const createDatasetViewerMutationIpcController = function(
                 value?: unknown;
             }
         ) => {
-            const result = await options.runtimeSessionManager.writeCell(createCellUpdateRequest({
-                objectName: stringFromDatasetViewerPayload(payload?.name),
-                rowIndex: providerRowIndexFromDatasetViewerPayload(payload?.row),
-                columnName: stringFromDatasetViewerPayload(payload?.column),
-                value: payload?.value,
-                uiCommandVisibility: options.uiCommandVisibility()
-            }));
-
-            if (result.status === "updated") {
-                await notifyMutation(
-                    options,
-                    result.objectName,
-                    [{
-                        name: result.objectName,
-                        kind: "dataset_cells_changed",
-                        rows: [result.rowIndex + 1],
-                        columns: [result.columnName]
-                    }],
-                    true
-                );
-            }
-
-            return createDatasetViewerCellUpdateResult(result);
+            return cells.updateCell(payload);
         }
     );
 
@@ -129,29 +134,7 @@ export const createDatasetViewerMutationIpcController = function(
                 nextName?: string;
             }
         ) => {
-            const result = await options.runtimeSessionManager.renameColumn(createColumnRenameRequest({
-                objectName: stringFromDatasetViewerPayload(payload?.name),
-                fromName: stringFromDatasetViewerPayload(payload?.column),
-                toName: stringFromDatasetViewerPayload(payload?.nextName),
-                uiCommandVisibility: options.uiCommandVisibility()
-            }));
-
-            if (result.status !== "updated") {
-                return null;
-            }
-
-            await notifyMutation(
-                options,
-                result.objectName,
-                [{
-                    name: result.objectName,
-                    kind: "dataset_column_renamed",
-                    columns: [result.fromName, result.toName]
-                }],
-                true
-            );
-
-            return createDatasetViewerColumnRenameResult(result);
+            return columns.updateColumnName(payload);
         }
     );
 
@@ -165,27 +148,7 @@ export const createDatasetViewerMutationIpcController = function(
                 nextName?: string;
             }
         ) => {
-            const result = await options.runtimeSessionManager.updateRowName(createRowNameUpdateRequest({
-                objectName: stringFromDatasetViewerPayload(payload?.name),
-                rowIndex: providerRowIndexFromDatasetViewerPayload(payload?.row),
-                name: stringFromDatasetViewerPayload(payload?.nextName),
-                uiCommandVisibility: options.uiCommandVisibility()
-            }));
-
-            if (result.status === "updated") {
-                await notifyMutation(
-                    options,
-                    result.objectName,
-                    [{
-                        name: result.objectName,
-                        kind: "dataset_rows_changed",
-                        rows: [result.rowIndex + 1]
-                    }],
-                    true
-                );
-            }
-
-            return createDatasetViewerRowNameResult(result);
+            return rows.updateRowName(payload);
         }
     );
 
@@ -200,34 +163,7 @@ export const createDatasetViewerMutationIpcController = function(
                 position?: "before" | "after";
             }
         ) => {
-            const position = normalizedDatasetViewerPosition(payload?.position);
-            const result = await options.runtimeSessionManager.insertRow(createRowInsertRequest({
-                objectName: stringFromDatasetViewerPayload(payload?.name),
-                rowIndex: providerRowIndexFromDatasetViewerPayload(payload?.row),
-                name: stringFromDatasetViewerPayload(payload?.nextName),
-                position,
-                uiCommandVisibility: options.uiCommandVisibility()
-            }));
-
-            if (result.status === "updated") {
-                await notifyMutation(
-                    options,
-                    result.objectName,
-                    [{
-                        name: result.objectName,
-                        kind: "dataset_rows_changed",
-                        rows: [result.rowIndex + 1],
-                        rowCount: result.rowCount,
-                        schemaChanged: true
-                    }],
-                    true
-                );
-            }
-
-            return createDatasetViewerRowInsertResult(result, {
-                name: payload?.nextName,
-                position
-            });
+            return rows.insertRow(payload);
         }
     );
 
@@ -240,28 +176,7 @@ export const createDatasetViewerMutationIpcController = function(
                 row?: number;
             }
         ) => {
-            const result = await options.runtimeSessionManager.removeRow(createRowRemoveRequest({
-                objectName: stringFromDatasetViewerPayload(payload?.name),
-                rowIndex: providerRowIndexFromDatasetViewerPayload(payload?.row),
-                uiCommandVisibility: options.uiCommandVisibility()
-            }));
-
-            if (result.status === "updated") {
-                await notifyMutation(
-                    options,
-                    result.objectName,
-                    [{
-                        name: result.objectName,
-                        kind: "dataset_rows_changed",
-                        rows: [result.rowIndex + 1],
-                        rowCount: result.rowCount,
-                        schemaChanged: true
-                    }],
-                    true
-                );
-            }
-
-            return createDatasetViewerRowRemoveResult(result);
+            return rows.removeRow(payload);
         }
     );
 
@@ -276,35 +191,7 @@ export const createDatasetViewerMutationIpcController = function(
                 position?: "before" | "after";
             }
         ) => {
-            const position = normalizedDatasetViewerPosition(payload?.position);
-            const result = await options.runtimeSessionManager.insertColumn(createColumnInsertRequest({
-                objectName: stringFromDatasetViewerPayload(payload?.name),
-                referenceName: stringFromDatasetViewerPayload(payload?.column),
-                newName: stringFromDatasetViewerPayload(payload?.nextName),
-                position,
-                uiCommandVisibility: options.uiCommandVisibility()
-            }));
-
-            if (result.status === "updated") {
-                await notifyMutation(
-                    options,
-                    result.objectName,
-                    [{
-                        name: result.objectName,
-                        kind: "dataset_columns_changed",
-                        columns: [result.columnName],
-                        columnIndex: result.columnIndex,
-                        columnCount: result.columnCount,
-                        schemaChanged: true
-                    }],
-                    true
-                );
-            }
-
-            return createDatasetViewerColumnInsertResult(result, {
-                column: payload?.column,
-                position
-            });
+            return columns.insertColumn(payload);
         }
     );
 
@@ -317,27 +204,7 @@ export const createDatasetViewerMutationIpcController = function(
                 column?: string;
             }
         ) => {
-            const result = await options.runtimeSessionManager.removeColumn(createColumnRemoveRequest({
-                objectName: stringFromDatasetViewerPayload(payload?.name),
-                columnName: stringFromDatasetViewerPayload(payload?.column),
-                uiCommandVisibility: options.uiCommandVisibility()
-            }));
-
-            if (result.status === "updated") {
-                await notifyMutation(
-                    options,
-                    result.objectName,
-                    [{
-                        name: result.objectName,
-                        kind: "dataset_column_removed",
-                        columns: [result.columnName],
-                        columnCount: result.columnCount
-                    }],
-                    true
-                );
-            }
-
-            return createDatasetViewerColumnRemoveResult(result);
+            return columns.removeColumn(payload);
         }
     );
 
@@ -353,29 +220,7 @@ export const createDatasetViewerMutationIpcController = function(
                 emptyLast?: boolean;
             }
         ) => {
-            const result = await options.runtimeSessionManager.sortRows(createRowSortRequest({
-                objectName: stringFromDatasetViewerPayload(payload?.name),
-                columnName: stringFromDatasetViewerPayload(payload?.column),
-                direction: payload?.decreasing === true ? "descending" : "ascending",
-                naLast: payload?.naLast !== false,
-                emptyLast: payload?.emptyLast !== false,
-                uiCommandVisibility: options.uiCommandVisibility()
-            }));
-
-            if (result.status === "updated") {
-                await notifyMutation(
-                    options,
-                    result.objectName,
-                    [{
-                        name: result.objectName,
-                        kind: "dataset_rows_changed",
-                        rowCount: result.rowCount
-                    }],
-                    false
-                );
-            }
-
-            return createDatasetViewerRowSortResult(result);
+            return rows.sortRows(payload);
         }
     );
 
@@ -403,33 +248,7 @@ export const createDatasetViewerMutationIpcController = function(
                 };
             }
         ) => {
-            const result = await applyRuntimeDatasetVariablePatch(
-                options.runtimeSessionManager,
-                payload
-            );
-
-            if (!result) {
-                return null;
-            }
-
-            options.patchVariableMetadata(
-                result.objectName,
-                result.variableName,
-                result.value
-            );
-
-            await notifyMutation(
-                options,
-                result.objectName,
-                [{
-                    name: result.objectName,
-                    kind: "dataset_variable_meta_changed",
-                    columns: [result.variableName]
-                }],
-                false
-            );
-
-            return result.value;
+            return variables.updateVariable(payload);
         }
     );
 };

@@ -1,16 +1,8 @@
 import type { BrowserWindow } from "electron";
 
 
-export interface AboutWindowPayload {
-    title: string;
-    version: string;
-    body: string[];
-    highlights: string[];
-    authorLabel: string;
-    authorName: string;
-    authorUrl: string;
-    copyright: string;
-}
+import type { AboutWindowPayload } from "../../base-app/features/about/aboutPayload";
+export type { AboutWindowPayload } from "../../base-app/features/about/aboutPayload";
 
 
 export interface AboutWindowControllerOptions {

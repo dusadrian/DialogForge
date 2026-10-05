@@ -31,7 +31,7 @@ export interface RuntimeCommandOperationControllerOptions {
     completeVisibleCommand?(
         request: VisibleCommandRequest
     ): Promise<WorkspaceUpdate | null>;
-    applyWorkspaceUpdate(update: WorkspaceUpdate): void;
+    applyWorkspaceUpdate(update: WorkspaceUpdate): boolean;
     invalidateWorkspace?(): void;
 }
 
@@ -55,6 +55,7 @@ export const createRuntimeCommandOperationController = function(
 
             if (snapshot.status !== "ready") {
                 return {
+                    executionDisposition: "not_started",
                     transcriptEvents: [
                         createTranscriptEvent(
                             "rejected",
@@ -75,6 +76,9 @@ export const createRuntimeCommandOperationController = function(
             if (generation !== options.getWorkspaceGeneration?.()) {
                 return { ...result, workspaceUpdate: null, workspaceReconciliation: "not_checked" };
             }
+            if (result.executionDisposition === "not_started") {
+                return { ...result, workspaceUpdate: null, workspaceReconciliation: "not_checked" };
+            }
             let workspaceUpdate = result.workspaceUpdate;
             let workspaceReconciliation = result.workspaceReconciliation;
 
@@ -87,7 +91,17 @@ export const createRuntimeCommandOperationController = function(
                     { source: request.source }
                 );
             }
-            else if (!workspaceUpdate && result.workspaceReconciliation !== "unchanged") {
+            if (result.executionDisposition === "session_lost") {
+                if (result.workspaceReconciliation !== "failed") {
+                    options.invalidateWorkspace?.();
+                }
+                return { ...result, workspaceUpdate: null };
+            }
+            if (
+                !workspaceUpdate
+                && result.workspaceReconciliation !== "unchanged"
+                && result.workspaceReconciliation !== "failed"
+            ) {
                 try {
                     workspaceUpdate = await options.completeVisibleCommand?.({
                         ...request,
@@ -114,7 +128,11 @@ export const createRuntimeCommandOperationController = function(
                 if (generation !== options.getWorkspaceGeneration?.()) {
                     return { ...result, workspaceUpdate: null, workspaceReconciliation: "not_checked" };
                 }
-                options.applyWorkspaceUpdate(workspaceUpdate);
+                if (!options.applyWorkspaceUpdate(workspaceUpdate)) {
+                    // State rejection also forbids downstream cache effects and
+                    // event replay. Preserve the command's execution outcome.
+                    workspaceUpdate = null;
+                }
             }
 
             if (workspaceUpdateHasChanges(workspaceUpdate)) {

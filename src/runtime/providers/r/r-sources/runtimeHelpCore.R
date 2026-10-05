@@ -366,3 +366,47 @@ json_completion_result <- function(result) {
         "}"
     )
 }
+
+
+runtime_help_browser <- function(url, ...) {
+    url <- as.character(url)
+    port <- get("httpdPort", envir = asNamespace("tools"))()
+    help_origin <- paste0(
+        "^http://(127[.]0[.]0[.]1|localhost):", as.integer(port),
+        "/(library|doc)/"
+    )
+    help_path <- sub("^https?://[^/]+", "", url)
+    help_page_path <- paste0(
+        "^/(library/[^/]+/(html/[^/]+[.]html|help/[^/]+)|",
+        "doc/html/[^/]+[.]html)([?#].*)?$"
+    )
+    if (length(url) == 1L && !is.na(url) && port > 0L &&
+        grepl(help_origin, url) && grepl(help_page_path, help_path)) {
+        push_event(runtime_event_payload("help_page", c(
+            paste0("\"path\":", json_str(help_path))
+        ), runtime_event_parent_id(current_activity_id)))
+        return(invisible(NULL))
+    }
+
+    browser <- app_env$previous_browser
+    if (is.function(browser)) {
+        return(browser(url, ...))
+    }
+    utils::browseURL(url, browser = browser, ...)
+}
+
+
+install_runtime_help_browser <- function() {
+    browser <- getOption("browser")
+    if (!identical(browser, runtime_help_browser)) {
+        app_env$previous_browser <- browser
+    }
+    # WebR serves tools:::httpd through its scoped worker resource channel.
+    # Supply that virtual origin to R's unchanged help printer; no TCP listener
+    # exists in the WASM worker. Native R keeps its real dynamic-help server.
+    if (identical(Sys.info()[["sysname"]], "Emscripten")) {
+        get("httpdPort", envir = asNamespace("tools"))(1L)
+    }
+    options(browser = runtime_help_browser)
+    invisible(TRUE)
+}

@@ -5,6 +5,7 @@ const esbuild = require("esbuild");
 const fs = require("fs");
 const path = require("path");
 const { createHash } = require("crypto");
+const { browserNodeFallbacks, createBrowserNodeFallbackSource } = require("./browser-node-fallbacks");
 
 const rootDir = path.resolve(__dirname, "..");
 const sourceRoot = path.resolve(process.env.DIALOGFORGE_SOURCE_ROOT || rootDir);
@@ -160,31 +161,14 @@ const shellEntryPath = path.join(browserModuleOutput, "shellEntry.generated.js")
 // Unbundled, those requires were simply never reached. Bundled, esbuild has to
 // resolve their "fs" and "path" imports, so point them at stubs that keep the
 // same failure if a dead path is ever taken in a browser.
-const nodeStubs = {
-    fs: ["existsSync", "readFileSync"],
-    path: ["dirname", "isAbsolute", "join", "relative", "resolve"]
-};
 const nodeStubPaths = Object.fromEntries(
-    Object.entries(nodeStubs).map(function([moduleName, members]) {
+    Object.keys(browserNodeFallbacks).map(function(moduleName) {
         const stubPath = path.join(
             browserModuleOutput,
             `node-${moduleName}-stub.generated.js`
         );
 
-        fs.writeFileSync(stubPath, [
-            "const unavailable = function() {",
-            `    throw new Error("Node ${moduleName} is not available in the browser shell.");`,
-            "};",
-            "",
-            ...members.map(function(member) {
-                return `export const ${member} = unavailable;`;
-            }),
-            ...(moduleName === "path" ? ['export const sep = "/";'] : []),
-            `export default { ${members.join(", ")}${
-                moduleName === "path" ? ", sep" : ""
-            } };`,
-            ""
-        ].join("\n"));
+        fs.writeFileSync(stubPath, createBrowserNodeFallbackSource(moduleName));
 
         return [moduleName, stubPath];
     })
@@ -259,14 +243,20 @@ const dialogStylesheetHash = dialogStylesheetDigest.digest("hex").slice(0, 16);
 // persistent storage exempts from the automatic eviction the HTTP cache is
 // subject to. The UI build id updates the worker when bundles change; the
 // independent asset stamp keeps unchanged runtime files across those updates.
+// Bundle imports from canonical shared source; the worker must not maintain a
+// second help-response validator. Include its code in the update identity too.
+const serviceWorkerSource = esbuild.buildSync({
+    entryPoints: [path.join(sourceRoot, "src/shell-web/serviceWorker.js")],
+    bundle: true,
+    write: false,
+    platform: "browser",
+    format: "iife",
+    target: "es2022"
+}).outputFiles[0].text;
 const serviceWorkerBuildId = createHash("sha256")
-    .update([assetStamp, shellBundleName, dialogBundleName, dialogStylesheetHash].join("\u0000"))
+    .update([assetStamp, shellBundleName, dialogBundleName, dialogStylesheetHash, serviceWorkerSource].join("\u0000"))
     .digest("hex")
     .slice(0, 16);
-const serviceWorkerSource = fs.readFileSync(
-    path.join(sourceRoot, "src/shell-web/serviceWorker.js"),
-    "utf8"
-);
 
 if (!serviceWorkerSource.includes("DIALOGFORGE_BUILD_ID")) {
     throw new Error(
@@ -472,7 +462,7 @@ const sharedDialogContainerSource = fs.readFileSync(
 );
 
 requireSourceContract(browserShellSource, [
-    "createRuntimeDialogDatasetResolver(manager)",
+    "createRuntimeDialogDatasetResolverOwner(",
     "readDialogContentSizeFromSource(entry.payload)",
     "state.dialogPayloads.get(frame)",
     "state.dialogPayloads.set(entry.surface.frame, entry.payload)",

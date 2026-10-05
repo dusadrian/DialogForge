@@ -1,4 +1,16 @@
 import { BrowserWindow } from "electron";
+import { warmDatasetEditorFirstScreens } from "../../dataset-editor/datasetEditorWarmCache";
+import {
+    createWorkspaceSnapshotDelivery,
+    type WorkspaceSnapshotDeliveryOptions
+} from "../../runtime/workspace/workspaceSnapshotDelivery";
+import {
+    createTranscriptEvent
+} from "../../runtime/commands/commandProtocol";
+import {
+    readProductDialogWorkspaceDeliveryWarning,
+    type ProductDialogWorkspaceDeliveryResult
+} from "../../dialog-runtime/dialog-builder/productDialogWorkspaceDelivery";
 
 import {
     applicationEventChannels
@@ -10,8 +22,9 @@ import {
     scriptEditorEventChannels
 } from "../../script-editor/scriptEditorIpc";
 import {
-    createRuntimeDatasetChangeProjector
-} from "../../runtime/events/runtimeDatasetChanges";
+    createRuntimeEventDelivery,
+    createRuntimeSessionPublication
+} from "../../runtime/events/runtimeEventDelivery";
 import type {
     ClipboardResult
 } from "../../base-app/clipboard/clipboardResult";
@@ -21,7 +34,6 @@ import type {
     CellUpdateResult,
     DeclaredMissingSnapshot,
     ImportResult,
-    RuntimeEventRecord,
     RuntimeEventSnapshot,
     RuntimeSessionManager,
     RuntimeSessionSnapshot,
@@ -35,6 +47,7 @@ import type {
 
 
 export interface RuntimeBroadcastBridge {
+    deferRuntimeSessionReady(): () => void;
     sendRuntimeSession(snapshot: RuntimeSessionSnapshot): void;
     sendTranscriptEvents(events: TranscriptEvent[]): void;
     sendWorkspaceSnapshot(
@@ -42,8 +55,10 @@ export interface RuntimeBroadcastBridge {
         options?: {
             warmActiveDataset?: boolean;
             refreshProductDialogs?: boolean;
+            metadataRefreshes?: WorkspaceSnapshotDeliveryOptions["metadataRefreshes"];
+            reportMetadataError?: WorkspaceSnapshotDeliveryOptions["reportMetadataError"];
         }
-    ): void;
+    ): Promise<boolean>;
     refreshWorkspaceAndBroadcast(
         options?: WorkspaceListOptions
     ): Promise<WorkspaceSnapshot>;
@@ -62,8 +77,9 @@ export interface RuntimeBroadcastBridge {
 
 export interface RuntimeBroadcastBridgeOptions {
     runtimeSessionManager: RuntimeSessionManager;
+    updateDatasetRuntimeSession(snapshot: RuntimeSessionSnapshot): void;
     scriptEditorSessionState(channel: string, payload: unknown): void;
-    refreshProductDialogWorkspaceData(snapshot: WorkspaceSnapshot): Promise<void>;
+    refreshProductDialogWorkspaceData(snapshot: WorkspaceSnapshot): Promise<ProductDialogWorkspaceDeliveryResult | void>;
     hasDatasetEditorWindow(): boolean;
     sendDatasetEditor(channel: string, payload: unknown): void;
     presentRuntimeEvents(snapshot: RuntimeEventSnapshot): void;
@@ -93,66 +109,91 @@ const sendToAllWindows = function(channel: string, payload: unknown): void {
 export const createRuntimeBroadcastBridge = function(
     options: RuntimeBroadcastBridgeOptions
 ): RuntimeBroadcastBridge {
-    const datasetChangeProjector = createRuntimeDatasetChangeProjector();
+    const runtimeEventDelivery = createRuntimeEventDelivery({
+        getRuntime: () => options.runtimeSessionManager,
+        publish: function(snapshot, changes): void {
+            sendToAllWindows(applicationEventChannels.runtimeEvents, snapshot);
+            if (options.hasDatasetEditorWindow() && changes.length > 0) {
+                options.sendDatasetEditor(datasetEditorEventChannels.applyChanges, { changes });
+            }
+        },
+        publishEffects: options.presentRuntimeEvents
+    });
 
-    const newDatasetEditorChanges = function(
-        events: RuntimeEventRecord[]
-    ): Array<Record<string, unknown>> {
-        return datasetChangeProjector.project(events);
-    };
-
+    const sessionPublication = createRuntimeSessionPublication({
+        publishSession: value => sendToAllWindows(applicationEventChannels.runtimeSession, value),
+        publishScriptPhase: value => options.scriptEditorSessionState(
+            scriptEditorEventChannels.sessionState, value
+        )
+    });
     const sendRuntimeSession = function(snapshot: RuntimeSessionSnapshot): void {
-        sendToAllWindows(applicationEventChannels.runtimeSession, snapshot);
-
-        options.scriptEditorSessionState(
-            scriptEditorEventChannels.sessionState,
-            { phase: snapshot.status }
-        );
+        options.updateDatasetRuntimeSession(snapshot);
+        sessionPublication.publish(snapshot);
     };
 
     const sendTranscriptEvents = function(events: TranscriptEvent[]): void {
         sendToAllWindows(applicationEventChannels.runtimeTranscript, events);
     };
 
+    const refreshWorkspaceDialogs = async function(snapshot: WorkspaceSnapshot): Promise<void> {
+        try {
+            const result = await options.refreshProductDialogWorkspaceData(snapshot);
+            const warning = readProductDialogWorkspaceDeliveryWarning(result);
+
+            if (warning) {
+                sendTranscriptEvents([createTranscriptEvent("output", {
+                    kind: "workspace.notification",
+                    source: "workspace",
+                    text: ""
+                }, {
+                    id: `dialog-workspace-warning-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+                    streamName: "warning",
+                    message: `Warning: ${warning}\n`
+                })]);
+            }
+        }
+        catch (error) {
+            console.error("Unable to refresh product dialog workspace data.", error);
+        }
+    };
+
+    const workspaceDelivery = createWorkspaceSnapshotDelivery({
+        getRuntime: () => options.runtimeSessionManager,
+        getActiveDataset: () => options.runtimeSessionManager.getActiveDataset(),
+        warmDatasetFirstScreens(objectName) {
+            warmDatasetEditorFirstScreens(
+                options.warmInitialDatasetPreview,
+                options.warmInitialVariableMetadata,
+                objectName
+            );
+        },
+        publishWorkspace(current) {
+            sendToAllWindows(applicationEventChannels.workspace, current);
+        },
+        publishDatasetNames(names) {
+            options.sendDatasetEditor(datasetEditorEventChannels.setDatasetList, {
+                datasetNames: names
+            });
+        }
+    });
+
     const sendWorkspaceSnapshot = function(
         snapshot: WorkspaceSnapshot,
         sendOptions: {
             warmActiveDataset?: boolean;
             refreshProductDialogs?: boolean;
+            metadataRefreshes?: WorkspaceSnapshotDeliveryOptions["metadataRefreshes"];
+            reportMetadataError?: WorkspaceSnapshotDeliveryOptions["reportMetadataError"];
         } = {}
-    ): void {
-        const datasetNames = snapshot.objects.filter((object) => {
-            return object.capabilities.includes("tabular.read");
-        }).map((object) => {
-            return object.name;
+    ): Promise<boolean> {
+        return workspaceDelivery.deliver(snapshot, {
+            warmActiveDataset: sendOptions.warmActiveDataset,
+            metadataRefreshes: sendOptions.metadataRefreshes,
+            reportMetadataError: sendOptions.reportMetadataError,
+            refreshDialogs: sendOptions.refreshProductDialogs !== false
+                ? refreshWorkspaceDialogs
+                : undefined
         });
-        const activeDataset = options.runtimeSessionManager.getActiveDataset();
-
-        if (
-            sendOptions.warmActiveDataset !== false
-            &&
-            activeDataset.status === "selected" &&
-            datasetNames.includes(activeDataset.objectName)
-        ) {
-            options.warmInitialDatasetPreview(activeDataset.objectName);
-            options.warmInitialVariableMetadata(activeDataset.objectName);
-        }
-
-        sendToAllWindows(applicationEventChannels.workspace, snapshot);
-
-        if (sendOptions.refreshProductDialogs !== false) {
-            void options.refreshProductDialogWorkspaceData(snapshot).catch((error) => {
-                console.error(
-                    "Unable to refresh product dialog workspace data.",
-                    error
-                );
-            });
-        }
-
-        options.sendDatasetEditor(
-            datasetEditorEventChannels.setDatasetList,
-            { datasetNames }
-        );
     };
 
     const sendActiveDataset = function(snapshot: ActiveDatasetSnapshot): void {
@@ -166,27 +207,15 @@ export const createRuntimeBroadcastBridge = function(
             refreshOptions
         );
 
-        sendWorkspaceSnapshot(snapshot);
+        if (!await sendWorkspaceSnapshot(snapshot)) {
+            return options.runtimeSessionManager.getWorkspaceSnapshot();
+        }
         sendActiveDataset(options.runtimeSessionManager.getActiveDataset());
 
         return snapshot;
     };
 
-    const sendRuntimeEvents = function(snapshot: RuntimeEventSnapshot): void {
-        sendToAllWindows(applicationEventChannels.runtimeEvents, snapshot);
-
-        const changes = newDatasetEditorChanges(snapshot.events);
-
-        if (
-            options.hasDatasetEditorWindow()
-            && changes.length > 0
-        ) {
-            options.sendDatasetEditor(
-                datasetEditorEventChannels.applyChanges,
-                { changes }
-            );
-        }
-    };
+    const sendRuntimeEvents = runtimeEventDelivery.publishSnapshot;
 
     const sendTabularPreview = function(preview: TabularPreviewSnapshot): void {
         sendToAllWindows(applicationEventChannels.tabularPreview, preview);
@@ -235,19 +264,11 @@ export const createRuntimeBroadcastBridge = function(
     const broadcastRuntimeEvents = async function(
         broadcastOptions?: { sendDatasetChanges?: boolean }
     ): Promise<void> {
-        const snapshot = await options.runtimeSessionManager.listRuntimeEvents();
-
-        if (broadcastOptions?.sendDatasetChanges === false) {
-            sendToAllWindows(applicationEventChannels.runtimeEvents, snapshot);
-        }
-        else {
-            sendRuntimeEvents(snapshot);
-        }
-
-        options.presentRuntimeEvents(snapshot);
+        await runtimeEventDelivery.refresh(broadcastOptions);
     };
 
     return {
+        deferRuntimeSessionReady: sessionPublication.deferReady,
         sendRuntimeSession,
         sendTranscriptEvents,
         sendWorkspaceSnapshot,

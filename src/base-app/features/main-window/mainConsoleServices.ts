@@ -1,5 +1,6 @@
 import type {
-    RuntimeSessionSnapshot
+    RuntimeSessionSnapshot,
+    WorkspaceSnapshot
 } from "../../../runtime/provider-contract/runtimeProvider";
 import type {
     ConsoleCommandHistory
@@ -23,6 +24,9 @@ import {
     readRRequestedPackages
 } from "../../../runtime/providers/r/completions/rRequestedPackages";
 import {
+    createRConsoleCompletionReader
+} from "../../../runtime/providers/r/completions/rConsoleRuntimeCompletion";
+import {
     buildRContextualHelpRequest,
     parseRConsoleHelpCommand
 } from "../../../runtime/providers/r/help/rContextualHelp";
@@ -36,6 +40,7 @@ export interface MainConsoleServicesOptions {
     dialogForge: DialogForgeApi;
     session: ConsoleSessionState;
     getRuntimeSession(): RuntimeSessionSnapshot | null;
+    getWorkspaceSnapshot?(): WorkspaceSnapshot | null;
     startRuntimeSession(): Promise<RuntimeSessionSnapshot>;
     renderStatus(snapshot: RuntimeSessionSnapshot): void;
     recordHistory(text: string): void;
@@ -52,6 +57,17 @@ export interface MainConsoleServices {
 export const createMainConsoleServices = function(
     options: MainConsoleServicesOptions
 ): MainConsoleServices {
+    const readConsoleCompletions = createRConsoleCompletionReader({
+        source: "base-app.console-input",
+        readSession: function() {
+            const snapshot = options.getRuntimeSession();
+            return snapshot ? { owner: snapshot.providerId, snapshot } : null;
+        },
+        isRuntimeBusy: () => options.session.isRuntimeBusy(),
+        workspaceEntries: () => options.getWorkspaceSnapshot?.()?.objects || [],
+        readCompletions: (request) => options.dialogForge.readCompletions(request)
+    });
+
     return createConsoleServices({
         document: options.document,
         session: options.session,
@@ -60,33 +76,14 @@ export const createMainConsoleServices = function(
             suppressedTerminalSymbols: [...rInternalCompletionSymbolNames],
             contextParser: getRCompletionContext,
             packageRequestParser: readRRequestedPackages,
-            completionFetch: async function(params, timeoutMs) {
-                const result = await options.dialogForge.readCompletions({
-                    prefix: String(params.prefix || ""),
-                    code: String(params.code || ""),
-                    cursorColumn: params.cursorColumn,
-                    timeoutMs,
-                    packageName: String(params.packageName || ""),
-                    includeInternals: params.includeInternals === true,
-                    source: "base-app.console-input"
-                });
-
-                return {
-                    ok: result.status === "ready",
-                    value: result
-                };
-            }
+            completionFetch: readConsoleCompletions
         },
         history: {
-            maximumItems: 500,
             readHistory: function(scope) {
                 return options.dialogForge.readConsoleHistory(scope);
             },
             writeHistory: function(request) {
                 return options.dialogForge.writeConsoleHistory(request);
-            },
-            excludeFromHistory: function(command) {
-                return command.includes("__DIALOGFORGE_DATASET_READY_");
             }
         },
         coordinator: {

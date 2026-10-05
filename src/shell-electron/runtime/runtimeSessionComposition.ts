@@ -19,11 +19,14 @@ import {
     getFilterState
 } from "../../dialog-runtime/custom-js/dialogBindings";
 import {
-    createRuntimeDialogDatasetResolver
+    createRuntimeDialogDatasetResolverOwner
 } from "../../dialog-runtime/custom-js/runtimeDatasetResolver";
 import {
     createDialogExternalCallHost
 } from "../../dialog-runtime/custom-js/externalCallHost";
+import type {
+    DialogStateCallRouterOptions
+} from "../../dialog-runtime/custom-js/dialogStateCallRouter";
 import {
     createCompositeDialogExternalCallHost
 } from "../../dialog-runtime/custom-js/compositeExternalCallHost";
@@ -40,6 +43,9 @@ export interface RuntimeSessionCompositionOptions {
     readRuntimeLocation(): string;
     readRuntimeDetectionAtStartup(): boolean;
     forwardTranscriptEvents(events: TranscriptEvent[]): void;
+    retireRuntimeResources?(): void;
+    onFilterStateChanged?: DialogStateCallRouterOptions["onFilterStateChanged"];
+    onConsoleStateChanged?: DialogStateCallRouterOptions["onConsoleStateChanged"];
     handleUnexpectedExit(details: {
         code: number | null;
         signal: NodeJS.Signals | null;
@@ -53,13 +59,15 @@ export const createRuntimeSessionComposition = function(
 ) {
     let runtimeSessionManager: ReturnType<typeof createRuntimeSessionManager>;
     const dialogBindingState = createDialogBindingState();
-    const resolveDialogDatasets = function() {
-        return createRuntimeDialogDatasetResolver(runtimeSessionManager)();
-    };
+    const resolveDialogDatasets = createRuntimeDialogDatasetResolverOwner(
+        () => runtimeSessionManager
+    );
     const productContribution = getProductContribution(options.location);
     const sharedDialogExternalCallHost = createDialogExternalCallHost({
         resolveDatasets: resolveDialogDatasets,
-        state: dialogBindingState
+        state: dialogBindingState,
+        onFilterStateChanged: options.onFilterStateChanged,
+        onConsoleStateChanged: options.onConsoleStateChanged
     });
     const productContext = {
         executeRuntimeMethod: function(request: Parameters<RuntimeSessionManager["executeRuntimeMethod"]>[0]) {
@@ -100,6 +108,7 @@ export const createRuntimeSessionComposition = function(
                 options.composition.productDialogs
             ),
             startupTasks: options.composition.startupTasks,
+            retireRuntimeResources: options.retireRuntimeResources,
             dialogExternalCallHost
         }
     );

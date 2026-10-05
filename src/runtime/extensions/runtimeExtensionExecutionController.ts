@@ -46,7 +46,20 @@ export const createRuntimeExtensionExecutionController = function(
         }
 
         if (providerController?.executeRuntimeMethod) {
-            return providerController.executeRuntimeMethod(request, snapshot);
+            const result = await providerController.executeRuntimeMethod(request, snapshot);
+            if (
+                request.method === "reply_prompt"
+                && result.status === "ready"
+                && result.value
+                && typeof result.value === "object"
+                && (result.value as { ok?: unknown }).ok === false
+            ) {
+                return {
+                    ...result,
+                    status: "failed"
+                };
+            }
+            return result;
         }
 
         return createRuntimeExtensionMethodResult(createUnsupportedOperationResult({

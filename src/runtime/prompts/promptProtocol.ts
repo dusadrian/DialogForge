@@ -10,6 +10,7 @@ import type {
 export const createPromptRequest = function(input: Partial<PromptRequest>): PromptRequest {
     return {
         prompt: String(input && input.prompt ? input.prompt : ""),
+        ...(input?.allowEmpty === true ? { allowEmpty: true } : {}),
         kind: String(input && input.kind ? input.kind : "text"),
         source: String(input && input.source ? input.source : "base-app.prompt")
     };

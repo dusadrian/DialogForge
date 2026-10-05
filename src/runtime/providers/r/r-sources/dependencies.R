@@ -3,7 +3,7 @@ dialog_required_packages <- c("digest", "utils")
 
 dialog_package_available <- function(package) {
     isTRUE(tryCatch(
-        requireNamespace(package, quietly = TRUE),
+        base::requireNamespace(package, quietly = TRUE),
         error = function(error) FALSE
     ))
 }
@@ -118,8 +118,7 @@ missing_packages <- dialog_required_packages[
 
 if (length(missing_packages)) {
     dialog_emit_dependency_error(missing_packages)
-}
-else {
+} else {
     dialog_initialize_backend()
 }
 

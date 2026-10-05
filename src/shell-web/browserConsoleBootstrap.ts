@@ -21,7 +21,8 @@ import type {
 } from "../core/contracts/productContribution";
 import type {
     RuntimeSessionSnapshot,
-    TranscriptEvent
+    TranscriptEvent,
+    WorkspaceSnapshot
 } from "../runtime/provider-contract/runtimeProvider";
 import {
     createRuntimeRestartMessage
@@ -43,7 +44,7 @@ export interface BrowserConsoleBootstrapOptions {
         method: string;
         params: Record<string, unknown>;
         source: string;
-    }): Promise<{ value?: unknown }>;
+    }): Promise<{ status?: string; message?: string; value?: unknown }>;
     executeVisibleCommand(input: {
         text: string;
         source: string;
@@ -69,6 +70,9 @@ export interface BrowserConsoleBootstrapOptions {
     setWorkingDirectoryPaths(path: string, home: string): void;
     readWorkingDirectory(): Promise<{ path?: unknown; home?: unknown }>;
     restartRuntime(action: "clean" | "restore"): Promise<RuntimeSessionSnapshot>;
+    revealRestartFailure?(): void;
+    getWorkspaceSnapshot?(): WorkspaceSnapshot | null;
+    applyUnavailableWorkspace?(snapshot: WorkspaceSnapshot): void;
     refreshWorkspace(): Promise<void>;
 }
 
@@ -102,14 +106,8 @@ export const createBrowserConsoleBootstrap = async function(
         session,
         completion: options.completionOptions,
         history: {
-            maximumItems: 500,
             readHistory: options.readHistory,
-            writeHistory: options.writeHistory,
-            excludeFromHistory: function(command) {
-                return String(command || "").includes(
-                    "__DIALOGFORGE_DATASET_READY_"
-                );
-            }
+            writeHistory: options.writeHistory
         },
         coordinator: {
             getRuntimeSession: options.readRuntimeSnapshot,
@@ -151,6 +149,8 @@ export const createBrowserConsoleBootstrap = async function(
         document: options.document,
         getRuntimeSession: options.readRuntimeSnapshot,
         isRuntimeBusy: session.isRuntimeBusy,
+        onDidRuntimeBusy: session.onDidRuntimeBusy,
+        onDidSessionPhase: session.onDidSessionPhase,
         getWorkingDirectoryPath: options.getWorkingDirectoryPath,
         getHomeDirectoryPath: options.getHomeDirectoryPath,
         getActiveDatasetName: options.getActiveDatasetName,
@@ -176,7 +176,12 @@ export const createBrowserConsoleBootstrap = async function(
         focusInput: function() {
             coordinator.focus();
         },
+        interruptRuntime: coordinator.interrupt,
         restartRuntime: options.restartRuntime,
+        revealRestartFailure: options.revealRestartFailure,
+        getWorkspaceSnapshot: options.getWorkspaceSnapshot,
+        applyUnavailableWorkspace: options.applyUnavailableWorkspace,
+        retireRuntimeExecution: coordinator.retireRuntimeExecution,
         appendRestartMessage: async function(action, phase, message): Promise<void> {
             const version = phase === "completed"
                 ? await options.readRestartVersion?.()

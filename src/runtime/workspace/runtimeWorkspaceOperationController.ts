@@ -42,9 +42,21 @@ export interface RuntimeWorkspaceOperationControllerOptions {
 
 export interface RuntimeWorkspaceOperationController {
     listWorkspaceObjects(options?: WorkspaceListOptions): Promise<WorkspaceSnapshot>;
-    removeWorkspaceObjects(objectNames: string[]): Promise<WorkspaceSnapshot>;
-    renameWorkspaceObject(request: WorkspaceRenameRequest): Promise<WorkspaceSnapshot>;
-    clearWorkspace(): Promise<WorkspaceSnapshot>;
+    removeWorkspaceObjects(
+        objectNames: string[],
+        ownership?: WorkspaceMutationOwnership
+    ): Promise<WorkspaceSnapshot>;
+    renameWorkspaceObject(
+        request: WorkspaceRenameRequest,
+        ownership?: WorkspaceMutationOwnership
+    ): Promise<WorkspaceSnapshot>;
+    clearWorkspace(ownership?: WorkspaceMutationOwnership): Promise<WorkspaceSnapshot>;
+}
+
+
+export interface WorkspaceMutationOwnership {
+    begin(): void;
+    readWorkspace(): WorkspaceSnapshot;
 }
 
 
@@ -71,6 +83,8 @@ export const createRuntimeWorkspaceOperationController = function(
         }
 
         const generation = options.getWorkspaceGeneration?.();
+        const selectionRevision = options.activeDatasetController
+            .getActiveDataset().selectionRevision;
         const workspace = await options.workspaceListController.list(
             listOptions
         );
@@ -82,33 +96,40 @@ export const createRuntimeWorkspaceOperationController = function(
         if (workspace.status !== "ready") {
             return workspace;
         }
-        const objects = options.activeDatasetController.rememberWorkspaceObjects(
+        const remembered = options.activeDatasetController.rememberWorkspaceSnapshot(
             workspace.objects,
             workspace.workspaceRevision
         );
 
-        const acceptedWorkspace = options.getWorkspaceSnapshot?.();
+        const acceptedWorkspace = options.getWorkspaceSnapshot?.() || remembered.snapshot;
 
-        if (acceptedWorkspace && acceptedWorkspace.status !== "ready") {
+        if (!remembered.accepted || acceptedWorkspace.status !== "ready") {
             return acceptedWorkspace;
         }
 
-        options.activeDatasetController.reconcileAfterWorkspaceRefresh(
-            objects,
-            "workspace-refresh"
-        );
+        const currentSelectionRevision = options.activeDatasetController
+            .getActiveDataset().selectionRevision;
+
+        // A read can refresh objects without owning a newer explicit selection.
+        if (
+            selectionRevision?.owner === currentSelectionRevision?.owner
+            && selectionRevision?.sequence === currentSelectionRevision?.sequence
+        ) {
+            options.activeDatasetController.reconcileAfterWorkspaceRefresh(
+                acceptedWorkspace.objects,
+                "workspace-refresh"
+            );
+        }
 
         return createWorkspaceSnapshot({
-            status: workspace.status,
-            workspaceRevision: acceptedWorkspace?.workspaceRevision || workspace.workspaceRevision,
-            providerId: snapshot.providerId,
-            objects,
+            ...acceptedWorkspace,
             message: workspace.message
         });
     };
 
     const acceptMutationWorkspace = function(
-        result: WorkspaceSnapshot | WorkspaceObjectSnapshot[]
+        result: WorkspaceSnapshot | WorkspaceObjectSnapshot[],
+        ownership?: WorkspaceMutationOwnership
     ): WorkspaceSnapshot {
         const workspace = Array.isArray(result)
             ? createWorkspaceSnapshot({
@@ -127,7 +148,7 @@ export const createRuntimeWorkspaceOperationController = function(
             workspace.workspaceRevision
         );
 
-        return options.getWorkspaceSnapshot?.() || createWorkspaceSnapshot({
+        return ownership?.readWorkspace() || options.getWorkspaceSnapshot?.() || createWorkspaceSnapshot({
             ...workspace,
             objects
         });
@@ -135,11 +156,13 @@ export const createRuntimeWorkspaceOperationController = function(
 
     const performWorkspaceMutation = async function(
         operation: "remove" | "rename" | "clear",
-        mutate: () => Promise<WorkspaceSnapshot | WorkspaceObjectSnapshot[]>
+        mutate: () => Promise<WorkspaceSnapshot | WorkspaceObjectSnapshot[]>,
+        ownership?: WorkspaceMutationOwnership
     ): Promise<WorkspaceSnapshot | WorkspaceObjectSnapshot[]> {
         const generation = options.getWorkspaceGeneration?.();
 
         try {
+            ownership?.begin();
             return await mutate();
         }
         catch (error) {
@@ -157,7 +180,7 @@ export const createRuntimeWorkspaceOperationController = function(
             );
 
             return createWorkspaceSnapshot({
-                ...options.getWorkspaceSnapshot?.(),
+                ...(ownership?.readWorkspace() || options.getWorkspaceSnapshot?.()),
                 providerId: options.getSnapshot().providerId,
                 status: "uncertain",
                 message
@@ -167,7 +190,7 @@ export const createRuntimeWorkspaceOperationController = function(
 
     return {
         listWorkspaceObjects,
-        removeWorkspaceObjects: async function(objectNames) {
+        removeWorkspaceObjects: async function(objectNames, ownership) {
             const snapshot = options.getSnapshot();
             const generation = options.getWorkspaceGeneration?.();
             const names = Array.from(new Set(objectNames.map((name) => {
@@ -200,12 +223,12 @@ export const createRuntimeWorkspaceOperationController = function(
 
             const result = await performWorkspaceMutation("remove", () => {
                 return options.workspaceMutationController.remove(names);
-            });
+            }, ownership);
 
             if (generation !== options.getWorkspaceGeneration?.()) {
                 return unavailable();
             }
-            const workspace = acceptMutationWorkspace(result);
+            const workspace = acceptMutationWorkspace(result, ownership);
 
             if (workspace.status !== "ready") {
                 return workspace;
@@ -226,7 +249,7 @@ export const createRuntimeWorkspaceOperationController = function(
                 message: "Workspace object(s) removed."
             });
         },
-        renameWorkspaceObject: async function(request) {
+        renameWorkspaceObject: async function(request, ownership) {
             const snapshot = options.getSnapshot();
             const generation = options.getWorkspaceGeneration?.();
             const oldName = String(request.oldName || "").trim();
@@ -306,12 +329,12 @@ export const createRuntimeWorkspaceOperationController = function(
                     newName,
                     source: request.source
                 });
-            });
+            }, ownership);
 
             if (generation !== options.getWorkspaceGeneration?.()) {
                 return unavailable();
             }
-            const workspace = acceptMutationWorkspace(result);
+            const workspace = acceptMutationWorkspace(result, ownership);
 
             if (workspace.status !== "ready") {
                 return workspace;
@@ -339,7 +362,7 @@ export const createRuntimeWorkspaceOperationController = function(
                 message: "Workspace object renamed."
             });
         },
-        clearWorkspace: async function() {
+        clearWorkspace: async function(ownership) {
             const snapshot = options.getSnapshot();
             const generation = options.getWorkspaceGeneration?.();
 
@@ -358,12 +381,12 @@ export const createRuntimeWorkspaceOperationController = function(
             const previousNames = previousWorkspace.objects.map((object) => object.name);
             const result = await performWorkspaceMutation("clear", () => {
                 return options.workspaceMutationController.clear();
-            });
+            }, ownership);
 
             if (generation !== options.getWorkspaceGeneration?.()) {
                 return unavailable();
             }
-            const workspace = acceptMutationWorkspace(result);
+            const workspace = acceptMutationWorkspace(result, ownership);
 
             if (workspace.status !== "ready") {
                 return workspace;

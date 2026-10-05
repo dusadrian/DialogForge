@@ -7,6 +7,16 @@ export interface RHelpTopicUrl {
 }
 
 
+// Temporary text-only transport fallback. A host with a resource connection
+// must pass the original document through instead of discarding its assets.
+export const prepareRHelpDocumentWithoutResources = function(html: unknown): string {
+    return String(html || "")
+        .replace(/<link\b[^>]*>/gi, "")
+        .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "")
+        .replace(/<img\b[^>]*class=["'][^"']*\btoplogo\b[^"']*["'][^>]*>/gi, "");
+};
+
+
 const escapeHelpHtml = function(value: unknown): string {
     return String(value || "")
         .replace(/&/g, "&amp;")
@@ -85,7 +95,9 @@ export const parseRHelpHttpdPath = function(
 
     if (
         pathname.startsWith("/library/")
-        || pathname.startsWith("/doc/html/")
+        || pathname.startsWith("/doc/")
+        || pathname === "/favicon.ico"
+        || /^\/NEWS(?:\.\d+)?$/.test(pathname)
     ) {
         return pathname;
     }

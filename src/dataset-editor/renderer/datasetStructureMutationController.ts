@@ -13,6 +13,7 @@ import type {
     RowRemoveResult,
     RowSortRequest,
     RowSortResult,
+    RuntimeSessionSnapshot,
     TabularPreviewSnapshot,
     UiCommandVisibility
 } from "../../runtime/provider-contract/runtimeProvider";
@@ -33,6 +34,7 @@ import {
     createRowSortFromSelection,
     createSuggestedColumnName
 } from "../commands/structuralCommands";
+import { captureDatasetConsumerScope } from "./datasetConsumerScope";
 
 
 interface StructureControls {
@@ -56,6 +58,7 @@ export interface DatasetStructureMutationBindings {
     controls: StructureControls;
     getSelection(): DatasetEditorSelection;
     getPreview(): TabularPreviewSnapshot | null;
+    getRuntimeSnapshot(): RuntimeSessionSnapshot | null;
     getUiCommandVisibility(): UiCommandVisibility;
     confirm(message: string): boolean;
     prompt(message: string, defaultValue: string): string | null;
@@ -99,6 +102,13 @@ export interface DatasetStructureMutationController {
 export const createDatasetStructureMutationController = function(
     bindings: DatasetStructureMutationBindings
 ): DatasetStructureMutationController {
+    const captureMutationScope = function(): () => boolean {
+        return captureDatasetConsumerScope({
+            getRuntimeSnapshot: bindings.getRuntimeSnapshot,
+            getObjectName: () => bindings.getPreview()?.objectName || ""
+        });
+    };
+
     const applyVisibility = function<T extends { uiCommandVisibility: string }>(
         request: T
     ): T {
@@ -106,20 +116,40 @@ export const createDatasetStructureMutationController = function(
         return request;
     };
 
-    const refreshAll = function(result: MutationResult): void {
+    const refreshAll = function(result: MutationResult, isCurrent: () => boolean): void {
+        if (!isCurrent()) {
+            return;
+        }
         bindings.refreshDataset(result.objectName);
+        if (!isCurrent()) {
+            return;
+        }
         bindings.refreshVariableMetadata(result.objectName);
+        if (!isCurrent()) {
+            return;
+        }
         bindings.refreshValueLabels(result.objectName);
+        if (!isCurrent()) {
+            return;
+        }
         bindings.refreshDeclaredMissing(result.objectName);
-        bindings.refreshRuntimeEvents();
+        if (isCurrent()) {
+            bindings.refreshRuntimeEvents();
+        }
     };
 
-    const refreshRows = function(result: MutationResult): void {
+    const refreshRows = function(result: MutationResult, isCurrent: () => boolean): void {
+        if (!isCurrent()) {
+            return;
+        }
         bindings.refreshDataset(result.objectName);
-        bindings.refreshRuntimeEvents();
+        if (isCurrent()) {
+            bindings.refreshRuntimeEvents();
+        }
     };
 
     const renameColumn = async function(): Promise<void> {
+        const isCurrent = captureMutationScope();
         const selection = bindings.getSelection();
         const controls = bindings.controls;
         const command = selection.kind === "data-column" ||
@@ -139,20 +169,27 @@ export const createDatasetStructureMutationController = function(
             return;
         }
 
+        if (!isCurrent()) {
+            return;
+        }
         const result = await bindings.renameColumn(
             applyVisibility(command.request)
         );
 
+        if (!isCurrent()) {
+            return;
+        }
         bindings.renderColumnRename(result);
 
         if (result.status === "updated") {
-            refreshAll(result);
+            refreshAll(result, isCurrent);
         }
     };
 
     const insertColumn = async function(
         positionOverride?: string
     ): Promise<void> {
+        const isCurrent = captureMutationScope();
         const controls = bindings.controls;
         const selection = bindings.getSelection();
         const selectedPosition = positionOverride ||
@@ -177,18 +214,25 @@ export const createDatasetStructureMutationController = function(
             controls.columnInsertName.value = command.request.newName;
         }
 
+        if (!isCurrent()) {
+            return;
+        }
         const result = await bindings.insertColumn(
             applyVisibility(command.request)
         );
 
+        if (!isCurrent()) {
+            return;
+        }
         bindings.renderColumnStructure(result);
 
         if (result.status === "updated") {
-            refreshAll(result);
+            refreshAll(result, isCurrent);
         }
     };
 
     const removeColumn = async function(): Promise<void> {
+        const isCurrent = captureMutationScope();
         const command = createColumnRemoveFromSelection(
             bindings.getSelection()
         );
@@ -198,9 +242,15 @@ export const createDatasetStructureMutationController = function(
             return;
         }
 
+        if (!isCurrent()) {
+            return;
+        }
         if (!bindings.confirm(
             createColumnRemoveConfirmationMessage(command.request)
         )) {
+            if (!isCurrent()) {
+                return;
+            }
             bindings.renderStatus("columnStructureStatus", {
                 status: "cancelled",
                 message: "Column removal cancelled."
@@ -208,18 +258,25 @@ export const createDatasetStructureMutationController = function(
             return;
         }
 
+        if (!isCurrent()) {
+            return;
+        }
         const result = await bindings.removeColumn(
             applyVisibility(command.request)
         );
 
+        if (!isCurrent()) {
+            return;
+        }
         bindings.renderColumnStructure(result);
 
         if (result.status === "updated") {
-            refreshAll(result);
+            refreshAll(result, isCurrent);
         }
     };
 
     const updateRowName = async function(): Promise<void> {
+        const isCurrent = captureMutationScope();
         const controls = bindings.controls;
         const command = createRowNameUpdateFromInputs(
             bindings.getPreview()?.objectName || "",
@@ -232,22 +289,35 @@ export const createDatasetStructureMutationController = function(
             return;
         }
 
+        if (!isCurrent()) {
+            return;
+        }
         const result = await bindings.updateRowName(
             applyVisibility(command.request)
         );
 
+        if (!isCurrent()) {
+            return;
+        }
         bindings.renderRowNameUpdate(result);
 
         if (result.status === "updated") {
-            refreshRows(result);
+            refreshRows(result, isCurrent);
         }
     };
 
     const renameSelectedRow = async function(): Promise<void> {
+        const isCurrent = captureMutationScope();
+        if (!isCurrent()) {
+            return;
+        }
         const defaultName = bindings.controls.rowNameValue.value || "";
         const nextName = String(
             bindings.prompt("Rename row", defaultName) || ""
         ).trim();
+        if (!isCurrent()) {
+            return;
+        }
         const command = createRowNameUpdateFromSelection(
             bindings.getSelection(),
             nextName
@@ -258,20 +328,27 @@ export const createDatasetStructureMutationController = function(
             return;
         }
 
+        if (!isCurrent()) {
+            return;
+        }
         const result = await bindings.updateRowName(
             applyVisibility(command.request)
         );
 
+        if (!isCurrent()) {
+            return;
+        }
         bindings.renderRowNameUpdate(result);
 
         if (result.status === "updated") {
-            refreshRows(result);
+            refreshRows(result, isCurrent);
         }
     };
 
     const insertRow = async function(
         positionOverride?: string
     ): Promise<void> {
+        const isCurrent = captureMutationScope();
         const command = createRowInsertFromSelection(
             bindings.getSelection(),
             positionOverride || bindings.controls.rowStructurePosition.value
@@ -282,18 +359,25 @@ export const createDatasetStructureMutationController = function(
             return;
         }
 
+        if (!isCurrent()) {
+            return;
+        }
         const result = await bindings.insertRow(
             applyVisibility(command.request)
         );
 
+        if (!isCurrent()) {
+            return;
+        }
         bindings.renderRowStructure(result);
 
         if (result.status === "updated") {
-            refreshRows(result);
+            refreshRows(result, isCurrent);
         }
     };
 
     const removeRow = async function(): Promise<void> {
+        const isCurrent = captureMutationScope();
         const command = createRowRemoveFromSelection(bindings.getSelection());
 
         if (!command.request) {
@@ -301,9 +385,15 @@ export const createDatasetStructureMutationController = function(
             return;
         }
 
+        if (!isCurrent()) {
+            return;
+        }
         if (!bindings.confirm(
             createRowRemoveConfirmationMessage(command.request)
         )) {
+            if (!isCurrent()) {
+                return;
+            }
             bindings.renderStatus("rowStructureStatus", {
                 status: "cancelled",
                 message: "Row deletion cancelled."
@@ -311,18 +401,25 @@ export const createDatasetStructureMutationController = function(
             return;
         }
 
+        if (!isCurrent()) {
+            return;
+        }
         const result = await bindings.removeRow(
             applyVisibility(command.request)
         );
 
+        if (!isCurrent()) {
+            return;
+        }
         bindings.renderRowStructure(result);
 
         if (result.status === "updated") {
-            refreshRows(result);
+            refreshRows(result, isCurrent);
         }
     };
 
     const sortRows = async function(direction: string): Promise<void> {
+        const isCurrent = captureMutationScope();
         const command = createRowSortFromSelection(
             bindings.getSelection(),
             direction
@@ -333,14 +430,20 @@ export const createDatasetStructureMutationController = function(
             return;
         }
 
+        if (!isCurrent()) {
+            return;
+        }
         const result = await bindings.sortRows(
             applyVisibility(command.request)
         );
 
+        if (!isCurrent()) {
+            return;
+        }
         bindings.renderRowStructure(result);
 
         if (result.status === "updated") {
-            refreshRows(result);
+            refreshRows(result, isCurrent);
         }
     };
 

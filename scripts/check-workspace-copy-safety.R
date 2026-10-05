@@ -2,6 +2,13 @@
 # Uses a disposable R process; never sources the interactive application backend.
 local({
     runtime <- new.env(parent = baseenv())
+    runtime$runtime_inspection_library <- Sys.getenv("DIALOGFORGE_TEST_INSPECTION_LIBRARY", unset = file.path(
+        "dist/r-inspection/native", paste(R.version$platform, getRversion(), sep = "-")
+    ))
+    sys.source(
+        "src/runtime/providers/r/r-sources/runtimeBindingInspection.R",
+        envir = runtime
+    )
     runtime$`%||%` <- function(value, fallback) {
         if (is.null(value)) fallback else value
     }
@@ -19,6 +26,20 @@ local({
         reusable(matrix(1:6, nrow = 2)),
         reusable(data.frame(value = 1:3, label = c("a", "b", "c")))
     )
+
+    # Stock attached exports are allowed by provenance, not environment names.
+    matrix_scope <- "DF_copy_matrix_methods"
+    matrix_hits <- 0L
+    matrix_value <- matrix(1:6, nrow = 2)
+    stopifnot(!is.element(matrix_scope, search()))
+    attach(list(head.matrix = function(...) {
+        matrix_hits <<- matrix_hits + 1L
+        stop("Copy eligibility invoked an attached method")
+    }), name = matrix_scope)
+    tryCatch({
+        stopifnot(!reusable(matrix_value), matrix_hits == 0L)
+    }, finally = detach(matrix_scope, character.only = TRUE))
+    stopifnot(reusable(matrix_value), matrix_hits == 0L)
 
     reference <- new.env(parent = emptyenv())
     makeActiveBinding("active", function() {

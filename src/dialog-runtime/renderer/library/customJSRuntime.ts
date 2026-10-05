@@ -5,9 +5,16 @@ import type {
   ProfileCustomJSModule
 } from "../modules/profileCustomJSApi";
 import {
+  createDialogImportFileResult,
   dialogRuntimeEventChannels,
-  dialogRuntimeIpcChannels
+  dialogRuntimeIpcChannels,
+  type DialogImportFileResult
 } from "../../dialogRuntimeIpc";
+import { readProductDialogCommandText } from "../../dialogCommandResult";
+import {
+  createImportPreviewResult,
+  type ImportPreviewResult
+} from "../../../runtime/tabular-data/importPreviewResult";
 import {
   datasetEditorIpcChannels
 } from "../../../dataset-editor/datasetEditorIpc";
@@ -98,6 +105,12 @@ const customJSRuntime = {
   ): Promise<void> {
     const code = (dialogSpec && dialogSpec.customJS) ? String(dialogSpec.customJS) : '';
     if (!code.trim()) return;
+    const dialogControlObjects = objects?.objList;
+    const dialogId = String(objects?.dialogID || '');
+    const isCurrentDialogControlSet = function(): boolean {
+        return objects?.objList === dialogControlObjects
+            && String(objects?.dialogID || '') === dialogId;
+    };
     const localizedMessages = (() => {
       const raw = dialogSpec && typeof dialogSpec === 'object' ? dialogSpec.messages : null;
       if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {} as Record<string, string>;
@@ -267,50 +280,57 @@ const customJSRuntime = {
     };
 
     const callMainExternal = async (
-      name: string,
-      parameters?: Record<string, unknown>
+        name: string,
+        parameters?: Record<string, unknown>
     ): Promise<unknown> => {
-      if (!coms || typeof coms.invoke !== 'function') {
-        throw new TypeError(`Missing coms.invoke for ${name}`);
-      }
+        if (!isCurrentDialogControlSet()) {
+            throw new Error(`Dialog controls were replaced before external call: ${name}`);
+        }
+        if (!coms || typeof coms.invoke !== 'function') {
+            throw new TypeError(`Missing coms.invoke for ${name}`);
+        }
 
-      const needsControlSnapshot =
-        name === 'hasSummaryStatisticSelection'
-        || name === 'bindObjects'
-        || name === 'refreshSummarySyntax'
-        || name === 'syncSummaryStatisticSelection';
-      if (needsControlSnapshot && typeof objects.refreshCurrentStateSnapshot === 'function') {
-        objects.refreshCurrentStateSnapshot();
-      }
-      const parametersWithSnapshot = needsControlSnapshot
-        ? (
-            parameters && typeof parameters === 'object' && !Array.isArray(parameters)
-              ? { ...parameters, __controlSnapshot: objects.dialogCurrentData || {} }
-              : { __controlSnapshot: objects.dialogCurrentData || {} }
-          )
-        : (parameters || {});
-      const result = await coms.invoke(
-        dialogRuntimeIpcChannels.callExternal,
-        name,
-        parametersWithSnapshot
-      );
-
-      if (!result || typeof result !== 'object') {
-        throw new Error(`Dialog external call did not return a result: ${name}`);
-      }
-
-      if (result.status !== 'ready') {
-        throw new Error(
-          String(result.message || `Dialog external call failed: ${name}`)
+        const needsControlSnapshot =
+            name === 'hasSummaryStatisticSelection'
+            || name === 'bindObjects'
+            || name === 'refreshSummarySyntax'
+            || name === 'syncSummaryStatisticSelection';
+        if (needsControlSnapshot && typeof objects.refreshCurrentStateSnapshot === 'function') {
+            objects.refreshCurrentStateSnapshot();
+        }
+        const parametersWithSnapshot = needsControlSnapshot
+            ? (
+                parameters && typeof parameters === 'object' && !Array.isArray(parameters)
+                    ? { ...parameters, __controlSnapshot: objects.dialogCurrentData || {} }
+                    : { __controlSnapshot: objects.dialogCurrentData || {} }
+            )
+            : (parameters || {});
+        const result = await coms.invoke(
+            dialogRuntimeIpcChannels.callExternal,
+            name,
+            parametersWithSnapshot
         );
-      }
 
-      applyExternalControlUpdate(result.value);
-      if (name === 'refreshSummarySyntax' && typeof result.value === 'string') {
-        updateSyntax(result.value);
-      }
+        if (!result || typeof result !== 'object') {
+            throw new Error(`Dialog external call did not return a result: ${name}`);
+        }
 
-      return result.value;
+        if (result.status !== 'ready') {
+            throw new Error(
+                String(result.message || `Dialog external call failed: ${name}`)
+            );
+        }
+
+        if (!isCurrentDialogControlSet()) {
+            return result.value;
+        }
+
+        applyExternalControlUpdate(result.value);
+        if (name === 'refreshSummarySyntax' && typeof result.value === 'string') {
+            updateSyntax(result.value);
+        }
+
+        return result.value;
     };
 
     registerObjectSource('datasets', {
@@ -1095,44 +1115,68 @@ const customJSRuntime = {
     };
 
     const run = async (command: DialogScriptValue, options: DialogScriptValue) => {
-      const normalized = normalizeCommandText(command);
-      const dependencyOverride = (() => {
-        if (Array.isArray(options)) return parseDependencies(options);
-        if (options && typeof options === 'object' && Object.prototype.hasOwnProperty.call(options, 'dependencies')) {
-          return parseDependencies(options.dependencies);
+        const normalized = normalizeCommandText(command);
+
+        if (!isCurrentDialogControlSet()) {
+            return {
+                ok: false,
+                status: 'rejected',
+                printed: '',
+                error: 'Dialog controls were replaced before the command was submitted.',
+                command: readProductDialogCommandText({ command: normalized })
+            };
         }
-        return null;
-      })();
-      const requirementOverride = options
-        && typeof options === 'object'
-        && Array.isArray(options.rPackageRequirements)
-          ? options.rPackageRequirements.slice()
-          : [];
-      coms.sendTo('main', dialogRuntimeEventChannels.commandUpdate, normalized);
-      const result = await coms.invoke(dialogRuntimeIpcChannels.runVisibleCommand, {
-        command: normalized,
-        dependencies: dependencyOverride !== null ? dependencyOverride : dialogDependencies.slice(),
-        rPackageRequirements: dependencyOverride !== null
-          ? dialogRPackageRequirements.concat(
-              dependencyOverride.map((name) => ({ name })),
-              requirementOverride
-            )
-          : dialogRPackageRequirements.slice(),
-        dialogID: String(objects?.dialogID || '')
-      });
-      if (result?.status === 'r-package-update-required') {
-        coms.sendTo(
-          'main',
-          dialogRuntimeEventChannels.showMessage,
-          'warning',
-          'Package update required',
-          String(result.error || '')
-        );
-      }
-      if (result?.ok && objects?.dialogID) {
-        coms.sendTo('main', dialogRuntimeEventChannels.closeWindow, { dialogID: String(objects.dialogID) });
-      }
-      return result;
+
+        const dependencyOverride = (() => {
+            if (Array.isArray(options)) {
+                return parseDependencies(options);
+            }
+            if (
+                options && typeof options === 'object'
+                && Object.prototype.hasOwnProperty.call(options, 'dependencies')
+            ) {
+                return parseDependencies(options.dependencies);
+            }
+            return null;
+        })();
+        const requirementOverride = options
+            && typeof options === 'object'
+            && Array.isArray(options.rPackageRequirements)
+                ? options.rPackageRequirements.slice()
+                : [];
+
+        coms.sendTo('main', dialogRuntimeEventChannels.commandUpdate, normalized);
+        const result = await coms.invoke(dialogRuntimeIpcChannels.runVisibleCommand, {
+            command: normalized,
+            dependencies: dependencyOverride !== null ? dependencyOverride : dialogDependencies.slice(),
+            rPackageRequirements: dependencyOverride !== null
+                ? dialogRPackageRequirements.concat(
+                    dependencyOverride.map((name) => ({ name })),
+                    requirementOverride
+                )
+                : dialogRPackageRequirements.slice(),
+            dialogID: String(objects?.dialogID || '')
+        });
+
+        // A rebuild replaces objList even when it reuses the same dialog ID.
+        // Keep the command receipt, but do not close or warn a replacement UI.
+        if (!isCurrentDialogControlSet()) {
+            return result;
+        }
+
+        if (result?.status === 'r-package-update-required') {
+            coms.sendTo(
+                'main',
+                dialogRuntimeEventChannels.showMessage,
+                'warning',
+                'Package update required',
+                String(result.error || '')
+            );
+        }
+        if (result?.ok && dialogId) {
+            coms.sendTo('main', dialogRuntimeEventChannels.closeWindow, { dialogID: dialogId });
+        }
+        return result;
     };
 
     const closeDialog = () => {
@@ -1483,27 +1527,45 @@ const customJSRuntime = {
       }
     };
 
-    const openImportFile = async () => {
-      try {
-        if (!coms || typeof coms.invoke !== 'function') throw new TypeError('coms.invoke is not a function');
-        return await coms.invoke(dialogRuntimeIpcChannels.openImportFile);
-      } catch (error) {
-        console.error('[customJS openImportFile error]', error);
-        return null;
-      }
+    const openImportFile = async function(): Promise<DialogImportFileResult> {
+        try {
+            if (!coms || typeof coms.invoke !== 'function') {
+                throw new TypeError('coms.invoke is not a function');
+            }
+
+            return await coms.invoke(dialogRuntimeIpcChannels.openImportFile);
+        }
+        catch (error) {
+            console.error('[customJS openImportFile error]', error);
+
+            return createDialogImportFileResult({
+                status: 'failed',
+                message: 'File selection did not complete. Please try again.'
+            });
+        }
     };
 
-    const getImportPreview = async (payload: DialogScriptValue) => {
-      try {
-        if (!coms || typeof coms.invoke !== 'function') throw new TypeError('coms.invoke is not a function');
-        return await coms.invoke(
-          dialogRuntimeIpcChannels.previewImportFile,
-          payload || {}
-        );
-      } catch (error) {
-        console.error('[customJS getImportPreview error]', error);
-        return null;
-      }
+    const getImportPreview = async function(
+        payload: DialogScriptValue
+    ): Promise<ImportPreviewResult> {
+        try {
+            if (!coms || typeof coms.invoke !== 'function') {
+                throw new TypeError('coms.invoke is not a function');
+            }
+
+            return await coms.invoke(
+                dialogRuntimeIpcChannels.previewImportFile,
+                payload || {}
+            );
+        }
+        catch (error) {
+            console.error('[customJS getImportPreview error]', error);
+
+            return createImportPreviewResult({
+                status: 'failed',
+                error: 'Import preview did not complete. Please try again.'
+            });
+        }
     };
 
     const getWorkingDirectory = async () => {
@@ -1910,6 +1972,9 @@ const customJSRuntime = {
         if (!callName) {
           throw new SyntaxError('callExternal() expects a non-empty function name');
         }
+        if (!isCurrentDialogControlSet()) {
+            throw new Error(`Dialog controls were replaced before external call: ${callName}`);
+        }
         const handler = externalCalls.get(callName);
 
         if (typeof handler === 'function') {
@@ -2015,6 +2080,10 @@ const customJSRuntime = {
     api.renderPlot = renderPlot;
 
     await extendApiFromProfile(api, { dialogSpec, objects, coms });
+
+    if (!isCurrentDialogControlSet()) {
+        return;
+    }
 
     {
       const identifiers = new Set();

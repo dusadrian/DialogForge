@@ -11,6 +11,11 @@ import type {
 import {
     rWorkspaceObjectCapabilities
 } from "../rRuntimeCapabilities";
+export {
+    hasValidRWorkspaceRevision,
+    hasValidRWorkspaceObjectList,
+    hasValidRWorkspaceReconciliationPayload
+} from "../protocol/rWorkspacePayloadValidation";
 
 
 const enrichRWorkspaceObject = function(

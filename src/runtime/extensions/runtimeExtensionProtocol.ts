@@ -12,7 +12,10 @@ export const createRuntimeExtensionMethodRequest = function(
         params: input && input.params && typeof input.params === "object" && !Array.isArray(input.params)
             ? input.params
             : {},
-        source: String(input && input.source ? input.source : "base-app.extension")
+        source: String(input && input.source ? input.source : "base-app.extension"),
+        ...(input?.workspaceEffect === "mutation"
+            ? { workspaceEffect: "mutation" as const }
+            : {})
     };
 };
 
@@ -26,6 +29,9 @@ export const createRuntimeExtensionMethodResult = function(
         method: input.method || "",
         value: input.value === undefined ? null : input.value,
         workspaceUpdate: input.workspaceUpdate,
+        ...(input.workspaceReconciliation
+            ? { workspaceReconciliation: input.workspaceReconciliation }
+            : {}),
         message: input.message || "",
         executedAt: new Date().toISOString()
     };

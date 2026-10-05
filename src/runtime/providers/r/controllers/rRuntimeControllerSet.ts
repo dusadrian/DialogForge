@@ -7,9 +7,11 @@ import type {
     RuntimeSessionSnapshot,
     RuntimeTabularController,
     RuntimeToolController,
-    RuntimeWorkspaceController,
-    TranscriptEvent
+    RuntimeWorkspaceController
 } from "../../../provider-contract/runtimeProvider";
+import {
+    transcriptHasFailure
+} from "../../../commands/commandProtocol";
 import type {
     RRuntimeControlClient
 } from "../protocol/runtimeControlClient";
@@ -61,8 +63,10 @@ export interface RRuntimeControllerSetOptions {
         source: string,
         snapshot: RuntimeSessionSnapshot
     ): Promise<RuntimeCommandExecutionResult>;
-    transcriptHasFailure(events: TranscriptEvent[]): boolean;
     interrupt(): boolean | null;
+    interruptUnavailableMessage?: string;
+    interruptAcceptedMessage?: string;
+    interruptFailedMessage?: string;
     onVisibleWorkspaceRefresh?(): void;
 }
 
@@ -78,13 +82,13 @@ export const createRRuntimeControllerSet = function(
         getClient: options.getClient,
         createRequestId: options.createRequestId,
         executeVisibleCommand: options.executeVisibleCommand,
-        transcriptHasFailure: options.transcriptHasFailure
+        transcriptHasFailure
     });
     const mutationController = createRTabularMutationController({
         getClient: options.getClient,
         createRequestId: options.createRequestId,
         executeVisibleCommand: options.executeVisibleCommand,
-        transcriptHasFailure: options.transcriptHasFailure
+        transcriptHasFailure
     });
 
     return {
@@ -101,7 +105,7 @@ export const createRRuntimeControllerSet = function(
             getClient: options.getClient,
             createRequestId: options.createRequestId,
             executeVisibleCommand: options.executeVisibleCommand,
-            transcriptHasFailure: options.transcriptHasFailure
+            transcriptHasFailure
         }),
         queryController: createRQueryController({
             getClient: options.getClient,
@@ -119,7 +123,10 @@ export const createRRuntimeControllerSet = function(
         extensionController: createRExtensionController({
             getClient: options.getClient,
             createRequestId: options.createRequestId,
-            interrupt: options.interrupt
+            interrupt: options.interrupt,
+            interruptUnavailableMessage: options.interruptUnavailableMessage,
+            interruptAcceptedMessage: options.interruptAcceptedMessage,
+            interruptFailedMessage: options.interruptFailedMessage
         })
     };
 };

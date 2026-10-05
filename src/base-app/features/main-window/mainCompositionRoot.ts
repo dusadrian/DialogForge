@@ -1,3 +1,4 @@
+import { readAcceptedRuntimeCommandResult } from "../../../runtime/commands/runtimeCommandReceipt";
 import type {
     ApplicationComposition,
     DialogDefinition,
@@ -26,6 +27,13 @@ import type {
     ProductConsoleStateChipSnapshot
 } from "../../../core/contracts/productContribution";
 import type { CopyPayload } from "../../../dataset-editor/clipboard/copyPayload";
+import {
+    createActiveDatasetStateChipReader
+} from "../workspace-pane/activeDatasetStateChips";
+import {
+    readSelectedWorkspaceDatasetName,
+    readWorkspaceActiveDatasetScope
+} from "../../../runtime/workspace/workspaceActiveDatasetDelivery";
 import type { PastePayload } from "../../../dataset-editor/clipboard/pastePayload";
 import type { DatasetEditorState } from "../../../dataset-editor/state/datasetEditorState";
 import { datasetEditorStateApi } from "../../../dataset-editor/state/datasetEditorState";
@@ -41,6 +49,7 @@ import {
     createRuntimeRestartMessage
 } from "../../../runtime/lifecycle/runtimeRestartMessages";
 import { createConsoleSessionState } from "../../../console/services/consoleSessionState";
+import { createConsoleCoverController } from "../../../console/renderer/consoleCoverController";
 import {
     createConsoleToolbarController
 } from "../../../console/renderer/consoleToolbarController";
@@ -213,6 +222,7 @@ const mainConsoleServices = createMainConsoleServices({
     document,
     dialogForge: dialogForge,
     session: consoleSessionState,
+    getWorkspaceSnapshot: () => workspaceSnapshot,
     getRuntimeSession: function() {
         return runtimeSessionSnapshot;
     },
@@ -270,6 +280,7 @@ const workspacePaneVisibility = createWorkspacePaneVisibility({
 });
 const mainRuntimeWorkflows = createMainRuntimeWorkflows({
     dialogForge: dialogForge,
+    getRuntimeSnapshot: () => runtimeSessionSnapshot,
     getRuntimeProviderId: function(): string {
         return runtimeProviderId;
     },
@@ -279,8 +290,9 @@ const mainRuntimeWorkflows = createMainRuntimeWorkflows({
     getPackageSourcePolicy: function(): ProductPackageSourcePolicy {
         return packageSourcePolicy;
     },
-    executeVisibleCommand: async function(command, source): Promise<void> {
-        await executeVisibleCommandText(command, source);
+    executeVisibleCommand: async function(command, source) {
+        const receipt = await mainConsoleCoordinator.executeWithReceipt(command, source);
+        return readAcceptedRuntimeCommandResult(receipt.result, receipt.accepted);
     },
     renderImportFileResult: function(result): void {
         renderImportFileResult(result);
@@ -384,9 +396,10 @@ const renderTranscript = function(events: TranscriptEvent[]) {
     byId("consoleTerminal").scrollTop = byId("consoleTerminal").scrollHeight;
 };
 
+const consoleCover = createConsoleCoverController({ document });
+
 const renderConsoleStatus = function(session: RuntimeSessionSnapshot): void {
     const status = byId("consoleStatus");
-    const coverMessage = byId("consoleCoverMessage");
     const runtimeStatus = String(session.status || "unknown");
     const failure = String(session.message || "").trim();
     const message = runtimeStatus === "starting"
@@ -402,8 +415,7 @@ const renderConsoleStatus = function(session: RuntimeSessionSnapshot): void {
         runtimeStatus,
         session.connection || ""
     ].filter(Boolean).join(" - ");
-    coverMessage.textContent = message;
-    document.body.classList.toggle("console-cover-visible", Boolean(message));
+    consoleCover.renderStatus(message, Boolean(message));
 };
 
 const renderUpdateDownloadProgress = function(state: {
@@ -506,6 +518,8 @@ const consoleToolbar = createConsoleToolbarController({
     document,
     getRuntimeSession: () => runtimeSessionSnapshot,
     isRuntimeBusy: consoleSessionState.isRuntimeBusy,
+    onDidRuntimeBusy: consoleSessionState.onDidRuntimeBusy,
+    onDidSessionPhase: consoleSessionState.onDidSessionPhase,
     getWorkingDirectoryPath: () => consoleWorkingDirectoryPath,
     getHomeDirectoryPath: () => consoleHomeDirectoryPath,
     getActiveDatasetName: () => (
@@ -537,10 +551,14 @@ const consoleToolbar = createConsoleToolbarController({
     setInputText: setVisibleCommandText,
     focusInput: focusVisibleCommandInput,
     interruptRuntime: interruptConsoleExecution,
+    retireRuntimeExecution: mainConsoleCoordinator.retireRuntimeExecution,
     restartRuntime: (action) => {
         return dialogForge.restartRuntime(action);
     },
     appendRestartMessage: appendConsoleRestartMessage,
+    revealRestartFailure: () => consoleCover.renderStatus("", false),
+    getWorkspaceSnapshot: () => workspaceSnapshot,
+    applyUnavailableWorkspace: (snapshot) => renderWorkspace(snapshot),
     applyRuntimeSession: (snapshot) => {
         setConsoleRuntimeBusy(false);
         renderRuntimeSession(snapshot);
@@ -561,9 +579,11 @@ const renderProductConsoleStateChips = function(
     snapshot: ProductConsoleStateChipSnapshot
 ): void {
     if (
-        String(snapshot.dataset || "").trim() !== String(
-            activeDatasetSnapshot?.objectName || ""
-        ).trim()
+        String(snapshot.dataset || "").trim() !== (
+            activeDatasetSnapshot
+                ? readSelectedWorkspaceDatasetName(activeDatasetSnapshot)
+                : ""
+        )
     ) {
         return;
     }
@@ -573,24 +593,17 @@ const renderProductConsoleStateChips = function(
         : [];
     renderConsoleToolbar();
 };
-const refreshProductConsoleStateChips = async function(
-    dataset: string
-): Promise<void> {
-    const activeDataset = String(dataset || "").trim();
-    const chips = activeDataset
-        ? await dialogForge.readConsoleStateChips(activeDataset)
-        : [];
-
-    if (
-        activeDataset === String(
-            activeDatasetSnapshot?.objectName || ""
-        ).trim()
-    ) {
-        renderProductConsoleStateChips({
-            dataset: activeDataset,
-            chips
-        });
-    }
+const activeDatasetStateChipReader = createActiveDatasetStateChipReader({
+    getActiveDatasetName: () => activeDatasetSnapshot
+        ? readSelectedWorkspaceDatasetName(activeDatasetSnapshot)
+        : "",
+    getSessionScope: () => readWorkspaceActiveDatasetScope(workspaceSnapshot),
+    getSelectionRevision: () => activeDatasetSnapshot?.selectionRevision,
+    read: (dataset) => dialogForge.readConsoleStateChips(dataset),
+    publish: renderProductConsoleStateChips
+});
+const refreshProductConsoleStateChips = function(dataset: string): Promise<void> {
+    return activeDatasetStateChipReader.refresh(dataset);
 };
 
 const workspaceServices = createMainWorkspaceServices({
@@ -969,6 +982,7 @@ const executeProductGoToDialog =
 
 
 const runtimeCommandServices = createMainRuntimeCommandServices({
+    executeProductCommand: (request) => dialogForge.executeProductCommand(request),
     getProductId: function(): string {
         return productId;
     },
@@ -1043,6 +1057,7 @@ const mainImportController = createMainImportController({
 });
 
 const datasetCommandServices = createMainDatasetCommandServices({
+    getRuntimeSnapshot: () => runtimeSessionSnapshot,
     window,
     document,
     dialogForge: dialogForge,
@@ -1260,9 +1275,7 @@ const applyMainTranslations = function(): void {
     workspacePaneVisibility.refreshLabels();
     renderConsoleToolbar();
 
-    if (workspaceSnapshot) {
-        renderWorkspace(workspaceSnapshot);
-    }
+    workspaceServices.refreshWorkspaceTranslations();
 };
 const applyLiveLanguage = function(): void {
     void dialogForge.getComposition().then((nextComposition) => {
@@ -1286,7 +1299,10 @@ const mainRendererEventController = createMainRendererEventController({
     getRuntimeSession: function() {
         return runtimeSessionSnapshot;
     },
-    renderRuntimeSession,
+    renderRuntimeSession: function(snapshot): void {
+        renderRuntimeSession(snapshot);
+        renderConsoleStatus(snapshot);
+    },
     recordTranscriptEvents,
     renderWorkspace,
     applyWorkspaceRuntimeEvents: applyWorkspaceRuntimeEventsToPane,
@@ -1463,7 +1479,7 @@ dialogForge.onTerminalSettingsUpdated(function(settings): void {
 const bindMainUi = function(): void {
     dialogCommandPreviewController.bind();
     bindFileDropHandling();
-    mainUiBindingController.bind();
+    mainUiBindingController.bindControls();
 };
 
 
@@ -1485,6 +1501,22 @@ const mainStartupController = createMainStartupController({
     refreshConsoleWorkingDirectory,
     initializeConsoleFlow,
     bindMainUi,
+    bindRuntimeSessionEvents: mainUiBindingController.bindRendererEvents,
+    readRuntimeSession: async function(): Promise<RuntimeSessionSnapshot> {
+        const sessionBeforeRead = runtimeSessionSnapshot;
+        const snapshot = await dialogForge.getRuntimeSession();
+
+        // A lifecycle event can overtake the IPC response. Keep the event
+        // snapshot rather than painting an older read over a newer phase.
+        if (
+            runtimeSessionSnapshot
+            && runtimeSessionSnapshot !== sessionBeforeRead
+        ) {
+            return runtimeSessionSnapshot;
+        }
+
+        return snapshot;
+    },
     refreshWorkspace,
     initializeVisibleCommandEditor,
     focusVisibleCommandInput,

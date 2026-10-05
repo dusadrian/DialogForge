@@ -16,16 +16,13 @@ import type {
     RuntimeSessionSnapshot,
     RuntimeWorkspaceController,
     TranscriptEvent,
-    VisibleCommandRequest,
-    RuntimeEventRecord
+    VisibleCommandRequest
 } from "../../../provider-contract/runtimeProvider";
 import {
-    createRuntimeControlClient,
+    createRuntimeControlClient
 } from "../protocol/runtimeControlClient";
 import {
-    asRuntimeControlArray,
-    createProviderRuntimeEvent,
-    createTranscriptEventsFromRuntimeControl
+    createLiveTranscriptEventsFromRuntimeControl
 } from "../protocol/runtimeControlEvents";
 import {
     createRVisibleCommandExecutor
@@ -34,7 +31,11 @@ import { createRRuntimeProcessHost } from "./runtimeProcessHost";
 import {
     createRRuntimeControllerSet
 } from "../controllers/rRuntimeControllerSet";
+import {
+    createRRuntimeEventController
+} from "../controllers/rRuntimeEventController";
 import type { RRuntimeLaunchPlan } from "./runtimeLaunchPlan";
+import { prepareNativeOrderedOutput } from "./runtimeOrderedOutputExecutionPrototype";
 
 
 export interface RRuntimeProcessControllerOptions {
@@ -68,54 +69,31 @@ const createRequestId = function(prefix: string): string {
 };
 
 
-const transcriptHasFailure = function(transcriptEvents: TranscriptEvent[]): boolean {
-    return transcriptEvents.some((event) => {
-        return event.type === "failed" || event.type === "rejected";
-    });
-};
-
-
 export const createRRuntimeProcessController = function(
     options: RRuntimeProcessControllerOptions
 ): RRuntimeProcessController {
     let client: ReturnType<typeof createRuntimeControlClient> | null = null;
+    let orderedOutputContext: { directory: string; sessionId: string } | null = null;
+    let processOutputSequence = 0;
+    let processOutputOwner = createRequestId("runtime-process-output");
+    const orderedCaptures = new Set<ReturnType<typeof prepareNativeOrderedOutput>>();
     const startupTimeoutMs = options.startupTimeoutMs ?? 7000;
-    const providerRuntimeEvents: RuntimeEventRecord[] = [];
+    const runtimeEvents = createRRuntimeEventController();
     let activeVisibleCommand: {
         request: VisibleCommandRequest;
         parentId: string;
     } | null = null;
-    let pendingVisibleCommandClear: NodeJS.Immediate | null = null;
-
-    const recordRuntimeControlEvents = function(
-        events: unknown[] | undefined,
-        snapshot: RuntimeSessionSnapshot
-    ): void {
-        asRuntimeControlArray(events).forEach((event) => {
-            const runtimeEvent = createProviderRuntimeEvent(event, snapshot);
-
-            if (
-                runtimeEvent
-                && runtimeEvent.type !== "workspace.update"
-            ) {
-                providerRuntimeEvents.unshift(runtimeEvent);
-            }
-        });
-
-        if (providerRuntimeEvents.length > 40) {
-            providerRuntimeEvents.length = 40;
-        }
-    };
 
     const streamRuntimeControlEvent = function(event: unknown): void {
         if (!activeVisibleCommand || !options.onTranscriptEvents) {
             return;
         }
 
-        const events = createTranscriptEventsFromRuntimeControl(
-            [event],
+        const events = createLiveTranscriptEventsFromRuntimeControl(
+            event,
             activeVisibleCommand.request,
-            activeVisibleCommand.parentId
+            activeVisibleCommand.parentId,
+            Boolean(orderedOutputContext)
         );
 
         if (events.length > 0) {
@@ -127,52 +105,59 @@ export const createRRuntimeProcessController = function(
         streamName: "stdout" | "stderr";
         text: string;
     }): void {
-        if (
-            !activeVisibleCommand
-            || !options.onTranscriptEvents
-            || !output.text
-        ) {
+        if (!client || !options.onTranscriptEvents || !output.text) {
             return;
         }
-
+        // OS pipes have no command identity, regardless of R capture mode.
+        // Typed R output retains its shared reader/receipt path; these bytes
+        // use the SAME transcript constructor as both runtime compositions.
+        const id = `process-output:${JSON.stringify([
+            orderedOutputContext?.sessionId || processOutputOwner, ++processOutputSequence
+        ])}`;
         options.onTranscriptEvents([
-            createTranscriptEvent(
-                "output",
-                activeVisibleCommand.request,
-                {
-                    id: createRequestId("process-stream"),
-                    parentId: activeVisibleCommand.parentId,
-                    streamName: output.streamName,
-                    message: output.text
-                }
-            )
+            createTranscriptEvent("output", {
+                kind: "runtime.process", source: "runtime.process", text: ""
+            }, {
+                id, parentId: id,
+                streamName: output.streamName,
+                message: output.text
+            })
         ]);
     };
 
     const visibleCommandController = createRVisibleCommandExecutor({
+        onTranscriptEvents: options.onTranscriptEvents,
+        prepareOutputCapture: function(request, parentId, ownerClient) {
+            if (!orderedOutputContext) {
+                return null;
+            }
+            const capture = prepareNativeOrderedOutput({
+                ...orderedOutputContext, request, parentId,
+                isCurrent: () => client === ownerClient,
+                onTranscriptEvents: options.onTranscriptEvents
+            });
+            orderedCaptures.add(capture);
+            return {
+                ...capture,
+                retire: async () => {
+                    orderedCaptures.delete(capture);
+                    await capture.retire();
+                }
+            };
+        },
         getClient: function() {
             return client;
         },
         createRequestId,
-        onRuntimeControlEvents: recordRuntimeControlEvents,
+        onRuntimeControlEvents: runtimeEvents.recordRuntimeControlEvents,
         onExecutionStarted: function(request, parentId) {
-            if (pendingVisibleCommandClear) {
-                clearImmediate(pendingVisibleCommandClear);
-                pendingVisibleCommandClear = null;
-            }
-
             activeVisibleCommand = { request, parentId };
         },
-        onExecutionFinished: function() {
-            const completedCommand = activeVisibleCommand;
-
-            pendingVisibleCommandClear = setImmediate(() => {
-                pendingVisibleCommandClear = null;
-
-                if (activeVisibleCommand === completedCommand) {
-                    activeVisibleCommand = null;
-                }
-            });
+        onExecutionFinished: function(parentId) {
+            if (activeVisibleCommand?.parentId !== parentId) {
+                return;
+            }
+            activeVisibleCommand = null;
         }
     });
     const executeVisibleRCommandWithEffects = function(
@@ -194,8 +179,30 @@ export const createRRuntimeProcessController = function(
     const processHost = createRRuntimeProcessHost({
         createLaunchPlan: options.createLaunchPlan,
         startupTimeoutMs,
-        onClientChanged: (nextClient) => {
+        onClientChanged: (nextClient, context) => {
+            if (client !== nextClient) {
+                for (const capture of orderedCaptures) {
+                    void capture.retire();
+                }
+                orderedCaptures.clear();
+                orderedOutputContext = null;
+                processOutputSequence = 0;
+                processOutputOwner = createRequestId("runtime-process-output");
+                activeVisibleCommand = null;
+            }
             client = nextClient;
+            if (context?.plan.env.DM_ORDERED_OUTPUT_ENABLED === "1") {
+                if (
+                    context.meta.orderedOutputEncoding !== "utf8"
+                    || context.meta.orderedOutputSession !== context.plan.env.DM_ORDERED_OUTPUT_SESSION
+                ) {
+                    throw new Error("Native ordered output startup did not confirm encoding and ownership.");
+                }
+                orderedOutputContext = {
+                    directory: context.plan.env.DM_ORDERED_OUTPUT_DIR,
+                    sessionId: context.meta.orderedOutputSession
+                };
+            }
         },
         onRuntimeEvent: streamRuntimeControlEvent,
         onProcessOutput: streamRuntimeProcessOutput,
@@ -208,7 +215,6 @@ export const createRRuntimeProcessController = function(
         },
         createRequestId,
         executeVisibleCommand: executeVisibleRCommandWithEffects,
-        transcriptHasFailure,
         interrupt: processHost.interrupt
     });
 
@@ -218,11 +224,7 @@ export const createRRuntimeProcessController = function(
             stop: processHost.stop
         },
         ...runtimeControllers,
-        eventController: {
-            listRuntimeEvents: async function(): Promise<RuntimeEventRecord[]> {
-                return providerRuntimeEvents.slice(0);
-            }
-        },
+        eventController: runtimeEvents,
         commandController: {
             executeVisibleCommand: async function(
                 request: VisibleCommandRequest,

@@ -12,6 +12,9 @@ import {
 import {
     createWorkspaceRuntimeEventController
 } from "../workspace-pane/workspaceRuntimeEventController";
+import {
+    readWorkspaceActiveDatasetScope
+} from "../../../runtime/workspace/workspaceActiveDatasetDelivery";
 
 
 export interface MainWorkspaceServicesOptions {
@@ -65,6 +68,10 @@ export const createMainWorkspaceServices = function(
         renderConsoleToolbar: options.renderConsoleToolbar
     });
     const workspaceController = createMainWorkspaceController({
+        getSessionScope: function() {
+            return readWorkspaceActiveDatasetScope(options.getWorkspaceSnapshot())
+                || options.getRuntimeProviderId();
+        },
         renderWorkspace: paneCoordinator.renderWorkspace,
         renderObjectInspection: options.renderObjectInspection,
         renderActiveDataset: paneCoordinator.renderActiveDataset,
@@ -84,6 +91,7 @@ export const createMainWorkspaceServices = function(
         initializeWorkspacePane: paneCoordinator.initialize,
         renderWorkspace: paneCoordinator.renderWorkspace,
         renderActiveDataset: paneCoordinator.renderActiveDataset,
+        refreshWorkspaceTranslations: paneCoordinator.refreshTranslations,
         refreshWorkspace: workspaceController.refresh,
         inspectWorkspaceObject: workspaceController.inspectObject,
         removeWorkspaceObject: workspaceController.removeObject,

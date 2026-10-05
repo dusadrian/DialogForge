@@ -8,6 +8,12 @@ import {
 import type {
     WorkspaceVariableViewItem
 } from "./workspacePane.types";
+import {
+    createWorkspaceActiveDatasetPresenter
+} from "./workspaceActiveDatasetPresentation";
+import {
+    readSelectedWorkspaceDatasetName
+} from "../../../runtime/workspace/workspaceActiveDatasetDelivery";
 
 
 export interface MainWorkspacePaneBindings {
@@ -34,6 +40,8 @@ export const createMainWorkspacePaneCoordinator = function(
     bindings: MainWorkspacePaneBindings
 ) {
     let pane: ReturnType<typeof createWorkspacePane> | null = null;
+    const retiredSessions = new Set<string>();
+    const presentActiveDataset = createWorkspaceActiveDatasetPresenter();
 
     const objectNameFromItem = function(
         item: WorkspaceVariableViewItem
@@ -89,13 +97,58 @@ export const createMainWorkspacePaneCoordinator = function(
         }
 
         if (activeDataset) {
-            pane.setActiveDataset(activeDataset.objectName);
+            pane.setActiveDataset(readSelectedWorkspaceDatasetName(activeDataset));
         }
 
         bindings.applyPaneVisibility(false);
     };
 
     const renderWorkspace = function(snapshot: WorkspaceSnapshot): void {
+        const current = bindings.getWorkspaceSnapshot();
+        const previousRevision = current?.workspaceRevision;
+        const revision = snapshot.workspaceRevision;
+
+        if (revision && retiredSessions.has(revision.session)) {
+            return;
+        }
+
+        if (previousRevision && current) {
+            if (!revision) {
+                if (![
+                    "uncertain", "unavailable", "failed", "error"
+                ].includes(snapshot.status)) {
+                    return;
+                }
+                // Lifecycle/failure messages may have no receipt. Preserve the
+                // known baseline so an old response cannot establish it again.
+                snapshot = {
+                    ...snapshot,
+                    objects: current.objects,
+                    workspaceRevision: previousRevision
+                };
+            }
+            else if (revision.session === previousRevision.session) {
+                if (
+                    revision.sequence < previousRevision.sequence
+                    || (revision.sequence === previousRevision.sequence
+                        && snapshot.status === "ready")
+                ) {
+                    return;
+                }
+                if (revision.sequence === previousRevision.sequence) {
+                    snapshot = { ...snapshot, objects: current.objects };
+                }
+            }
+            else {
+                // A full ready snapshot may establish the replacement runtime;
+                // history deltas cannot. Never return to the retired runtime.
+                if (snapshot.status !== "ready") {
+                    return;
+                }
+                retiredSessions.add(previousRevision.session);
+            }
+        }
+
         bindings.setWorkspaceSnapshot(snapshot);
         pane?.setSnapshot(snapshot);
         bindings.ingestCompletionNames(
@@ -109,21 +162,27 @@ export const createMainWorkspacePaneCoordinator = function(
 
     const renderActiveDataset = function(
         snapshot: ActiveDatasetSnapshot
-    ): void {
-        bindings.setActiveDatasetSnapshot(snapshot);
-        pane?.setActiveDataset(snapshot.objectName);
-        bindings.renderConsoleToolbar();
+    ): boolean {
+        return presentActiveDataset(snapshot, {
+            remember: bindings.setActiveDatasetSnapshot,
+            renderActiveName: (name) => pane?.setActiveDataset(name),
+            renderToolbar: bindings.renderConsoleToolbar,
+            updated: function() {
+                const workspace = bindings.getWorkspaceSnapshot();
 
-        const workspace = bindings.getWorkspaceSnapshot();
-
-        if (workspace) {
-            renderWorkspace(workspace);
-        }
+                if (workspace) {
+                    renderWorkspace(workspace);
+                }
+            }
+        });
     };
 
     return {
         initialize,
         renderWorkspace,
-        renderActiveDataset
+        renderActiveDataset,
+        refreshTranslations: function(): void {
+            pane?.setTranslator(bindings.translate);
+        }
     };
 };

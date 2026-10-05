@@ -63,6 +63,7 @@ export interface BrowserFrameSurfaceControllerOptions {
 export interface BrowserFrameSurfaceController {
     open(definition: BrowserFrameSurfaceDefinition): BrowserFrameSurfaceResult;
     close(id: string): void;
+    updateTitle(id: string, title: string): void;
     show(id: string): void;
     get(id: string): BrowserFrameSurfaceResult | null;
 }
@@ -76,7 +77,11 @@ export interface BrowserModelessSurfaceEntry {
 
 export interface BrowserModelessSurfaceController {
     activate(surfaceId: string): void;
-    installActivation(surfaceId: string, element?: HTMLElement | null): void;
+    installActivation(
+        surfaceId: string,
+        element?: HTMLElement | null,
+        activateOnFocus?: boolean
+    ): void;
     activeSurfaceId(): string;
 }
 
@@ -236,7 +241,8 @@ export const createBrowserModelessSurfaceController = function(
 
     const installActivation = function(
         surfaceId: string,
-        element?: HTMLElement | null
+        element?: HTMLElement | null,
+        activateOnFocus = true
     ): void {
         if (!element) {
             return;
@@ -247,7 +253,9 @@ export const createBrowserModelessSurfaceController = function(
         };
 
         element.addEventListener("pointerdown", run, true);
-        element.addEventListener("focusin", run, true);
+        if (activateOnFocus) {
+            element.addEventListener("focusin", run, true);
+        }
     };
 
     return {
@@ -370,6 +378,17 @@ export const createBrowserFrameSurfaceController = function(
     return {
         open,
         close,
+        updateTitle: function(id: string, title: string): void {
+            const stored = surfaces.get(id);
+
+            if (!stored) {
+                return;
+            }
+
+            stored.title.textContent = title;
+            stored.shell.setAttribute("aria-label", title);
+            stored.frame.title = title;
+        },
         show: function(id: string): void {
             const stored = surfaces.get(id);
 

@@ -1,6 +1,7 @@
 import {
-    encodeHelpDocumentHtml
-} from "../runtime/help/helpDocumentEncoding";
+    createHelpViewerParameters,
+    createHelpViewerOpenEntry
+} from "../runtime/help/helpViewerDocument";
 import {
     createRHelpTopicTitle
 } from "../runtime/providers/r/help/rHelpPresentation";
@@ -14,6 +15,7 @@ export interface BrowserHelpViewerDocument {
     html?: string;
     baseUrl?: string;
     packageName?: string;
+    resourceBaseUrl?: string;
 }
 
 
@@ -25,6 +27,7 @@ export interface BrowserHelpViewerSurface {
 
 export interface BrowserHelpViewerSurfaceOptions {
     frameSurfaces: BrowserFrameSurfaceController;
+    onClose?(): void;
 }
 
 
@@ -52,22 +55,11 @@ const buildHelpViewerSrc = function(
     title: string,
     document: BrowserHelpViewerDocument
 ): string {
-    const params = new URLSearchParams();
-
-    params.set("title", title);
-    if (document.topic) {
-        params.set("topic", String(document.topic || ""));
-    }
-    if (document.packageName) {
-        params.set("package", String(document.packageName || ""));
-    }
-    if (document.baseUrl) {
-        params.set("src", String(document.baseUrl || ""));
-        params.set("base", String(document.baseUrl || ""));
-    }
-    else {
-        params.set("doc", encodeHelpDocumentHtml(document.html));
-    }
+    const params = createHelpViewerParameters({
+        ...document,
+        title,
+        sourceUrl: document.baseUrl
+    });
 
     return `/src/base-app/pages/help.html?${params.toString()}`;
 };
@@ -84,15 +76,11 @@ export const createBrowserHelpViewerSurface = function(
 
         if (frame?.contentWindow) {
             try {
-                frame.contentWindow.postMessage({
-                    id: "app-help-open",
+                frame.contentWindow.postMessage(createHelpViewerOpenEntry({
+                    ...document,
                     title,
-                    html: String(document.html || ""),
-                    baseUrl: String(document.baseUrl || ""),
-                    base: String(document.baseUrl || ""),
-                    topic: String(document.topic || ""),
-                    packageName: String(document.packageName || "")
-                }, "*");
+                    sourceUrl: document.baseUrl
+                }), "*");
             }
             catch {}
 
@@ -113,6 +101,7 @@ export const createBrowserHelpViewerSurface = function(
             onClose: function() {
                 layer = null;
                 frame = null;
+                options.onClose?.();
             }
         });
 

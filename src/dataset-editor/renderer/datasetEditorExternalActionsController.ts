@@ -4,6 +4,7 @@ import {
     type DatasetEditorInitMessage,
     type DatasetEditorLanguageMessage
 } from "./datasetEditorIpcBindings";
+import { runDatasetEditorEventAction } from "./datasetEditorEventAction";
 
 
 export interface DatasetEditorExternalActionsOptions {
@@ -11,6 +12,8 @@ export interface DatasetEditorExternalActionsOptions {
     changeLanguage(payload: DatasetEditorLanguageMessage): void;
     setDatasetList(datasetNames: string[]): void;
     getCurrentDatasetName(): string;
+    getLoadSequence(): number;
+    hasDatasetSchema(): boolean;
     loadDataset(datasetName: string): Promise<void>;
     refreshDataset(datasetName: string): Promise<void>;
     applyFilterStateChanged(payload: unknown): void;
@@ -21,6 +24,7 @@ export interface DatasetEditorExternalActionsOptions {
 
 
 export interface DatasetEditorExternalActionsController {
+    invalidate(): void;
     bindIpc(bridge: DatasetEditorIpcBridge): void;
     openDataset(datasetName: string): void;
     refreshDataset(datasetName: string): void;
@@ -32,16 +36,47 @@ export interface DatasetEditorExternalActionsController {
 export const createDatasetEditorExternalActionsController = function(
     options: DatasetEditorExternalActionsOptions
 ): DatasetEditorExternalActionsController {
+    let navigationSequence = 0;
+
     const openDataset = function(datasetName: string): void {
-        void options.loadDataset(datasetName);
+        navigationSequence += 1;
+        void runDatasetEditorEventAction("open-dataset", () => options.loadDataset(datasetName));
     };
 
     const refreshDataset = function(datasetName: string): void {
-        void options.refreshDataset(datasetName);
+        navigationSequence += 1;
+        void runDatasetEditorEventAction("refresh-dataset", () => options.refreshDataset(datasetName));
     };
 
     const applyDatasetChanges = function(changes: unknown): void {
-        void options.applyDatasetChanges(changes);
+        navigationSequence += 1;
+        void runDatasetEditorEventAction("apply-dataset-changes", () => options.applyDatasetChanges(changes));
+    };
+
+    const navigateAfterOpening = async function(
+        datasetName: string,
+        request: number,
+        jump: () => void
+    ): Promise<void> {
+        const targetName = datasetName || options.getCurrentDatasetName();
+        let loadSequence = options.getLoadSequence();
+        if (targetName && targetName !== options.getCurrentDatasetName()) {
+            const loading = options.loadDataset(targetName);
+            // Opening prepares/reset state synchronously; retain that new owner.
+            loadSequence = options.getLoadSequence();
+            await loading;
+        }
+
+        if (
+            request !== navigationSequence
+            || loadSequence !== options.getLoadSequence()
+            || targetName !== options.getCurrentDatasetName()
+            || !options.hasDatasetSchema()
+        ) {
+            return;
+        }
+
+        jump();
     };
 
     const goToCase = function(
@@ -50,17 +85,10 @@ export const createDatasetEditorExternalActionsController = function(
     ): void {
         const nextDataset = String(datasetName || "").trim();
 
-        if (
-            nextDataset
-            && nextDataset !== options.getCurrentDatasetName()
-        ) {
-            void options.loadDataset(nextDataset).then(() => {
-                options.jumpToCase(caseNumber);
-            });
-            return;
-        }
-
-        options.jumpToCase(caseNumber);
+        const request = ++navigationSequence;
+        void runDatasetEditorEventAction("go-to-case", () =>
+            navigateAfterOpening(nextDataset, request, () => options.jumpToCase(caseNumber))
+        );
     };
 
     const goToVariable = function(
@@ -75,29 +103,25 @@ export const createDatasetEditorExternalActionsController = function(
 
         const nextDataset = String(datasetName || "").trim();
 
-        if (
-            nextDataset
-            && nextDataset !== options.getCurrentDatasetName()
-        ) {
-            void options.loadDataset(nextDataset).then(() => {
-                options.jumpToVariable(nextVariable);
-            });
-            return;
-        }
-
-        options.jumpToVariable(nextVariable);
+        const request = ++navigationSequence;
+        void runDatasetEditorEventAction("go-to-variable", () =>
+            navigateAfterOpening(nextDataset, request, () => options.jumpToVariable(nextVariable))
+        );
     };
 
-        return {
-            openDataset,
-            refreshDataset,
-            goToCase,
-            goToVariable,
-            bindIpc: function(bridge: DatasetEditorIpcBridge): void {
-                bindDatasetEditorIpc(bridge, {
-                    initialize: options.initialize,
-                    changeLanguage: options.changeLanguage,
-                    setDatasetList: options.setDatasetList,
+    return {
+        invalidate: function(): void {
+            navigationSequence += 1;
+        },
+        openDataset,
+        refreshDataset,
+        goToCase,
+        goToVariable,
+        bindIpc: function(bridge: DatasetEditorIpcBridge): void {
+            bindDatasetEditorIpc(bridge, {
+                initialize: options.initialize,
+                changeLanguage: options.changeLanguage,
+                setDatasetList: options.setDatasetList,
                 openDataset,
                 refreshDataset,
                 filterStateChanged: options.applyFilterStateChanged,

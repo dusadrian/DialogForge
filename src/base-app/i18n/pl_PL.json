@@ -2,6 +2,7 @@
     "Settings": "Ustawienia",
     "Language": "Język",
     "Runtime provider": "Dostawca środowiska wykonawczego",
+    "Runtime session is not ready.": "Sesja środowiska wykonawczego nie jest gotowa.",
     "Console font": "Czcionka konsoli",
     "Console cursor": "Kursor konsoli",
     "Console cursor blink": "Miganie kursora konsoli",

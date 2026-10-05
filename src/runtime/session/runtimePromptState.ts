@@ -12,17 +12,30 @@ import type {
 
 
 export interface RuntimePromptState {
+    invalidate(): void;
     createSnapshot(providerId: string): PromptSnapshot;
     request(providerId: string, request: PromptRequest): PromptResult;
     answer(providerId: string, request: PromptAnswerRequest): PromptResult;
 }
 
 
+let nextPromptNamespace = 1;
+
+
 export const createRuntimePromptState = function(): RuntimePromptState {
+    const promptNamespace = nextPromptNamespace;
+    nextPromptNamespace += 1;
     const prompts: PromptSnapshot["prompts"] = [];
     let nextPromptId = 1;
 
     return {
+        invalidate: function() {
+            for (const prompt of prompts) {
+                if (prompt.status === "pending") {
+                    prompt.status = "retired";
+                }
+            }
+        },
         createSnapshot: function(providerId) {
             return createPromptSnapshot({
                 status: "ready",
@@ -32,7 +45,7 @@ export const createRuntimePromptState = function(): RuntimePromptState {
             });
         },
         request: function(providerId, request) {
-            if (!request.prompt) {
+            if (!request.prompt && request.allowEmpty !== true) {
                 return createPromptResult({
                     status: "invalid",
                     providerId,
@@ -41,7 +54,7 @@ export const createRuntimePromptState = function(): RuntimePromptState {
             }
 
             const prompt = createPromptRecord({
-                id: "prompt-" + nextPromptId,
+                id: "prompt-" + promptNamespace + "-" + nextPromptId,
                 providerId,
                 prompt: request.prompt,
                 kind: request.kind,

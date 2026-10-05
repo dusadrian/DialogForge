@@ -2,6 +2,9 @@ import * as path from "path";
 import {
     BrowserWindow
 } from "electron";
+import {
+    developerDiagnosticsWindowTitle
+} from "../../base-app/features/auxiliary-surfaces/auxiliarySurfaces";
 
 import {
     applySavedWindowState,
@@ -43,7 +46,7 @@ export const createDevDiagnosticsWindowController = function(
                 minWidth: 640,
                 minHeight: 420,
                 show: options.showOnOpen,
-                title: "Developer Diagnostics",
+                title: developerDiagnosticsWindowTitle,
                 icon: options.nativeWindowIconPath || undefined,
                 webPreferences: {
                     preload: path.join(

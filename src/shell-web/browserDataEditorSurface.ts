@@ -40,6 +40,7 @@ export interface BrowserDataEditorSurfaceOptions {
 
 export interface BrowserDataEditorSurface {
     open(datasetName: string): Promise<void>;
+    refreshTitle(): void;
     gotoVariable(datasetName: string, variableName: string): Promise<void>;
     gotoCase(datasetName: string, caseNumber: number): Promise<void>;
     state(): BrowserDataEditorSurfaceState;
@@ -147,6 +148,12 @@ export const createBrowserDataEditorSurface = function(
 
     return {
         open,
+        refreshTitle: function(): void {
+            options.frameSurfaces.updateTitle(
+                surfaceId,
+                options.formatTitle(datasetName)
+            );
+        },
         gotoVariable: async function(name: string, variableName: string): Promise<void> {
             options.postEvent(
                 frame?.contentWindow,

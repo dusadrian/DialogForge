@@ -84,6 +84,8 @@ export const bindVariableMetadataFields = function(
             "[data-variable-field]"
         )
         .forEach((field) => {
+            let committedValue: string | number | undefined;
+
             const notifyInput = function(): void {
                 const change = fieldChange(field, bindings.rowCount);
 
@@ -91,6 +93,7 @@ export const bindVariableMetadataFields = function(
                     return;
                 }
 
+                committedValue = undefined;
                 updateTextFieldTitle(field, change.value);
                 bindings.input(change);
             };
@@ -102,6 +105,15 @@ export const bindVariableMetadataFields = function(
                     return;
                 }
 
+                if (
+                    field instanceof HTMLInputElement
+                    && committedValue === change.value
+                ) {
+                    return;
+                }
+
+                // A text edit can emit change and blur before its write settles.
+                committedValue = change.value;
                 updateTextFieldTitle(field, change.value);
                 bindings.commit(change);
             };

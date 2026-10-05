@@ -2,7 +2,9 @@ import type {
     RPackageRequirement
 } from "../../../core/contracts/applicationComposition";
 import {
-    normalizeDialogRuntimePackages
+    normalizeDialogRuntimePackages,
+    type DialogRuntimeRequirementsSaveInput,
+    type DialogRuntimeRequirementsSaveResult
 } from "../../requirements/dialogRuntimeRequirements";
 
 
@@ -20,10 +22,7 @@ export interface DialogRuntimeRequirementsPayload {
 
 export interface DialogRuntimeRequirementsBindings {
     document: Document;
-    save(input: {
-        dialogId: string;
-        rPackages: RPackageRequirement[];
-    }): void;
+    save(input: DialogRuntimeRequirementsSaveInput): void;
     close(): void;
 }
 
@@ -33,6 +32,9 @@ export const createDialogRuntimeRequirementsController = function(
 ) {
     let requirements: Record<string, DialogRuntimeRequirement> = {};
     let helpText = "";
+    let initialized = false;
+    let nextSaveRequestId = 0;
+    const pendingSaves = new Map<string, { requestId: number; text: string }>();
 
     const byId = function<T extends HTMLElement>(id: string): T {
         const element = bindings.document.getElementById(id);
@@ -91,19 +93,27 @@ export const createDialogRuntimeRequirementsController = function(
         return `${requirement.name} ${operator} ${requirement.minimumVersion}`;
     };
 
-    const renderSelection = function(): void {
-        const requirement = requirements[selectedDialogId()] || {};
-
-        byId<HTMLInputElement>("rPackages").value = Array.isArray(
-            requirement.rPackages
-        )
+    const formatPackages = function(
+        requirement: DialogRuntimeRequirement | undefined
+    ): string {
+        return Array.isArray(requirement?.rPackages)
             ? requirement.rPackages.map(formatRequirement).join("; ")
             : "";
+    };
+
+    const renderSelection = function(): void {
+        byId<HTMLInputElement>("rPackages").value = formatPackages(
+            requirements[selectedDialogId()]
+        );
     };
 
     const load = function(
         payload: DialogRuntimeRequirementsPayload
     ): void {
+        const previousDialogId = selectedDialogId();
+        const draftPackages = byId<HTMLInputElement>("rPackages").value;
+        const hasUnsavedPackages = initialized
+            && draftPackages !== formatPackages(requirements[previousDialogId]);
         const strings = payload.strings || {};
         const translate = function(key: string): string {
             return String(strings[key] || key);
@@ -133,24 +143,46 @@ export const createDialogRuntimeRequirementsController = function(
                 label: `${dialog.title} (${dialog.id})`
             };
         }));
-        renderSelection();
-    };
+        const retainsDialog = initialized && dialogs.some((dialog) => {
+            return dialog.id === previousDialogId;
+        });
 
-    const applySaved = function(payload: {
-        dialogId?: string;
-        rPackages?: RPackageRequirement[];
-    }): void {
-        const dialogId = String(payload?.dialogId || "");
-
-        if (dialogId) {
-            requirements[dialogId] = {
-                rPackages: Array.isArray(payload.rPackages)
-                    ? payload.rPackages
-                    : []
-            };
+        if (retainsDialog) {
+            (byId<HTMLElement>("dialogSelect") as HTMLElement & {
+                value: string;
+            }).value = previousDialogId;
         }
 
         renderSelection();
+
+        if (retainsDialog && hasUnsavedPackages) {
+            byId<HTMLInputElement>("rPackages").value = draftPackages;
+        }
+
+        initialized = true;
+    };
+
+    const applySaved = function(
+        payload: Partial<DialogRuntimeRequirementsSaveResult>
+    ): void {
+        const dialogId = String(payload?.dialogId || "");
+        const pending = pendingSaves.get(dialogId);
+
+        if (!pending || pending.requestId !== payload?.requestId) {
+            return;
+        }
+
+        pendingSaves.delete(dialogId);
+        requirements[dialogId] = {
+            rPackages: Array.isArray(payload.rPackages) ? payload.rPackages : []
+        };
+
+        if (
+            dialogId === selectedDialogId()
+            && byId<HTMLInputElement>("rPackages").value === pending.text
+        ) {
+            renderSelection();
+        }
     };
 
     const bind = function(): void {
@@ -160,17 +192,26 @@ export const createDialogRuntimeRequirementsController = function(
         );
         byId<HTMLButtonElement>("saveBtn").addEventListener("click", () => {
             const help = byId<HTMLDivElement>("help");
+            const dialogId = selectedDialogId();
+            const text = byId<HTMLInputElement>("rPackages").value;
+            let pending: { requestId: number; text: string } | undefined;
 
             try {
+                const rPackages = normalizeDialogRuntimePackages(text);
+                pending = { requestId: ++nextSaveRequestId, text };
+                pendingSaves.set(dialogId, pending);
                 bindings.save({
-                    dialogId: selectedDialogId(),
-                    rPackages: normalizeDialogRuntimePackages(
-                        byId<HTMLInputElement>("rPackages").value
-                    )
+                    requestId: pending.requestId,
+                    dialogId,
+                    rPackages
                 });
                 help.textContent = helpText;
             }
             catch (error) {
+                if (pending && pendingSaves.get(dialogId) === pending) {
+                    pendingSaves.delete(dialogId);
+                }
+
                 help.textContent = error instanceof Error
                     ? error.message
                     : String(error);

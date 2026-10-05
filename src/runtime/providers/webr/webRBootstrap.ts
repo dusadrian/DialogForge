@@ -51,7 +51,40 @@ const readStringArray = function(value: unknown): string[] {
 export const installWebRPackageInstallShim = async function(runtime: WebR): Promise<void> {
     await runtime.evalRVoid([
         "webr::shim_install()",
-        "webr::pager_install()"
+        "local({",
+        "    transport <- list(",
+        "        contrib = function(repositories) {",
+        "            minor <- strsplit(R.version$minor, \".\", fixed = TRUE)[[1L]][[1L]]",
+        '            version <- paste(R.version$major, minor, sep = ".")',
+        "            contributions <- character(0)",
+        "            for (repository in repositories) {",
+        '                roots <- if (identical(sub("/$", "", repository), "https://cloud.r-project.org")) {',
+        '                    getOption("webr_pkg_repos")',
+        "                } else {",
+        "                    repository",
+        "                }",
+        "                contributions <- c(contributions, paste0(",
+        '                    sub("/$", "", roots), "/bin/emscripten/contrib/", version',
+        "                ))",
+        "            }",
+        "            contributions",
+        "        },",
+        "        install = function(packages, library, available) {",
+        "            for (package in packages) {",
+        // Extract exactly the common plan's selected packages, including required
+        // dependency updates. The SDK's presence-based skip is not admission.
+        "                webr:::install_tgz(",
+        '                    sub("file:", "", available[package, "Repository"], fixed = TRUE),',
+        '                    library, package, available[package, "Version"]',
+        "                )",
+        "            }",
+        "            invisible(NULL)",
+        "        }",
+        "    )",
+        "    transport$contrib <- compiler::cmpfun(transport$contrib)",
+        "    transport$install <- compiler::cmpfun(transport$install)",
+        "    options(dialogforge.r.package.transport = transport)",
+        "})"
     ].join("\n"));
 };
 

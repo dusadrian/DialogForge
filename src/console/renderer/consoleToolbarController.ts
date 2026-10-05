@@ -1,6 +1,8 @@
 import type {
-    RuntimeSessionSnapshot
+    RuntimeSessionSnapshot,
+    WorkspaceSnapshot
 } from "../../runtime/provider-contract/runtimeProvider";
+import { createUnavailableWorkspaceSnapshot } from "../../runtime/workspace/workspaceProtocol";
 import { renderConsoleToolbar } from "./consoleToolbarView";
 import type {
     ProductConsoleStateChip
@@ -17,6 +19,8 @@ export interface ConsoleToolbarControllerOptions {
     document: Document;
     getRuntimeSession(): RuntimeSessionSnapshot | null;
     isRuntimeBusy(): boolean;
+    onDidRuntimeBusy?(listener: (busy: boolean) => void): () => void;
+    onDidSessionPhase?(listener: (phase: string) => void): () => void;
     getWorkingDirectoryPath(): string;
     getHomeDirectoryPath(): string;
     getActiveDatasetName(): string;
@@ -27,6 +31,7 @@ export interface ConsoleToolbarControllerOptions {
     clearTranscriptEvents(): void;
     clearTranscriptIdentity(): void;
     clearConsoleSurface(): void;
+    retireRuntimeExecution?(): void;
     renderTranscript(): void;
     setInputText(value: string): void;
     focusInput(): void;
@@ -39,6 +44,9 @@ export interface ConsoleToolbarControllerOptions {
         phase: "starting" | "completed" | "failed",
         message?: string
     ): void | Promise<void>;
+    revealRestartFailure?(): void;
+    getWorkspaceSnapshot?(): WorkspaceSnapshot | null;
+    applyUnavailableWorkspace?(snapshot: WorkspaceSnapshot): void;
     applyRuntimeSession(snapshot: RuntimeSessionSnapshot): void;
     refreshRuntimeEvents(): void;
     refreshPrompts(): void;
@@ -51,6 +59,7 @@ export interface ConsoleToolbarController {
     refreshWorkingDirectory(): Promise<void>;
     clearTranscript(): void;
     resetInput(): void;
+    dispose(): void;
     restartClean(): Promise<void>;
     restartRestoreWorkspace(): Promise<void>;
 }
@@ -101,6 +110,25 @@ export const createConsoleToolbarController = function(
         options.focusInput();
     };
 
+    const reportRestartFailure = async function(
+        action: "clean" | "restore",
+        message: string
+    ): Promise<void> {
+        await options.appendRestartMessage?.(action, "failed", message);
+
+        const session = options.getRuntimeSession();
+        const status = session?.status;
+        if (session && (
+            status === "failed" || status === "stopped" || status === "not-started"
+        )) {
+            options.applyUnavailableWorkspace?.(createUnavailableWorkspaceSnapshot(
+                session, options.getWorkspaceSnapshot?.()
+            ));
+            render();
+            options.revealRestartFailure?.();
+        }
+    };
+
     const restart = async function(
         action: "clean" | "restore"
     ): Promise<void> {
@@ -115,28 +143,33 @@ export const createConsoleToolbarController = function(
             snapshot = await options.restartRuntime(action);
         }
         catch (error) {
-            await options.appendRestartMessage?.(
+            await reportRestartFailure(
                 action,
-                "failed",
                 error instanceof Error ? error.message : String(error)
             );
-            throw error;
+            // The toolbar owns the visible failure; retain the live session and input.
+            return;
+        }
+
+        if (snapshot.status === "ready") {
+            options.retireRuntimeExecution?.();
         }
 
         options.clearTranscriptIdentity();
         options.applyRuntimeSession(snapshot);
-        options.refreshRuntimeEvents();
-        options.refreshPrompts();
-        await options.refreshWorkspace();
 
-        if (snapshot.status === "failed") {
-            await options.appendRestartMessage?.(
+        if (snapshot.status !== "ready") {
+            await reportRestartFailure(
                 action,
-                "failed",
-                snapshot.message || "Runtime restart failed."
+                snapshot.workspaceRestoreMessage
+                    || snapshot.message || "Runtime restart did not complete."
             );
             return;
         }
+
+        options.refreshRuntimeEvents();
+        options.refreshPrompts();
+        await options.refreshWorkspace();
 
         await options.appendRestartMessage?.(
             action,
@@ -145,8 +178,15 @@ export const createConsoleToolbarController = function(
         );
     };
 
+    const unsubscribeBusy = options.onDidRuntimeBusy?.(render);
+    const unsubscribeSession = options.onDidSessionPhase?.(render);
+
     return {
         render,
+        dispose(): void {
+            unsubscribeBusy?.();
+            unsubscribeSession?.();
+        },
         refreshWorkingDirectory,
         clearTranscript,
         resetInput,

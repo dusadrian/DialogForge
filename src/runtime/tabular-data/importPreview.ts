@@ -9,18 +9,16 @@ import {
     createImportPreviewResult,
     createDelimitedImportPreviewOptions,
     createImportPreviewResultFromDelimitedTable,
-    createImportPreviewResultFromRuntimeValue,
     createImportPreviewNotFoundResult,
     createImportPreviewUnsupportedResult,
     type ImportPreviewResult
 } from "./importPreviewResult";
 import {
-    createImportPreviewRequest,
     isRuntimeImportPreviewRequest,
     type ImportPreviewRequest
 } from "./importPreviewRequest";
 import {
-    createRuntimeImportPreviewRequest
+    previewImportFileThroughRuntime
 } from "./runtimeImportPreview";
 
 
@@ -38,53 +36,17 @@ export {
 } from "./importPreviewRequest";
 
 
-const shouldTryRuntimeImportPreview = function(request: ImportPreviewRequest): boolean {
-    return Boolean(request.file);
-};
-
-
-const shouldUseDelimitedPreviewFallback = function(
-    request: ImportPreviewRequest,
-    result: RuntimeExtensionMethodResult
-): boolean {
-    if (isRuntimeImportPreviewRequest(request)) {
-        return false;
-    }
-    if (request.binary || request.command === "convert") {
-        return false;
-    }
-
-    return result.status === "unavailable" || result.status === "unsupported";
-};
-
-
 export const previewImportFileWithRuntime = async function(
     input: Partial<ImportPreviewRequest>,
-    executeRuntimeMethod: (request: RuntimeExtensionMethodRequest) => Promise<RuntimeExtensionMethodResult>
+    executeRuntimeMethod: (
+        request: RuntimeExtensionMethodRequest
+    ) => Promise<RuntimeExtensionMethodResult>
 ): Promise<ImportPreviewResult> {
-    const request = createImportPreviewRequest(input || {});
-
-    if (shouldTryRuntimeImportPreview(request)) {
-        const result = await executeRuntimeMethod(
-            createRuntimeImportPreviewRequest(request)
-        );
-
-        if (result.status === "ready") {
-            return createImportPreviewResultFromRuntimeValue(
-                result.value,
-                "Runtime returned an empty import preview."
-            );
-        }
-
-        if (!shouldUseDelimitedPreviewFallback(request, result)) {
-            return createImportPreviewResult({
-                status: result.status,
-                error: result.message || "Runtime import preview is not available."
-            });
-        }
-    }
-
-    return readDelimitedImportPreview(request);
+    return previewImportFileThroughRuntime(
+        input,
+        executeRuntimeMethod,
+        readDelimitedImportPreview
+    );
 };
 
 

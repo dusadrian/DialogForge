@@ -12,6 +12,9 @@ import type {
     VariableMetadataSnapshot,
     WorkspaceSnapshot
 } from "../../../runtime/provider-contract/runtimeProvider";
+import {
+    readSelectedWorkspaceDatasetName
+} from "../../../runtime/workspace/workspaceActiveDatasetDelivery";
 import type {
     ClipboardResult
 } from "../../clipboard/clipboardResult";
@@ -24,6 +27,7 @@ import type {
 import type {
     MainRendererEventBindings
 } from "./mainRendererEventBindings";
+import { publishRuntimeSessionSnapshot } from "../../../runtime/events/runtimeEventDelivery";
 
 
 export interface MainRendererEventControllerBindings {
@@ -36,7 +40,7 @@ export interface MainRendererEventControllerBindings {
     renderRuntimeEvents(snapshot: RuntimeEventSnapshot): void;
     setZoomFactor(zoomFactor: number): void;
     applyZoomLayout(zoomFactor: number): void;
-    renderActiveDataset(snapshot: ActiveDatasetSnapshot): void;
+    renderActiveDataset(snapshot: ActiveDatasetSnapshot): void | boolean;
     applyLanguageChanged(payload: Record<string, unknown>): void;
     refreshProductConsoleStateChips(dataset: string): void;
     renderProductConsoleStateChips(snapshot: ProductConsoleStateChipSnapshot): void;
@@ -62,11 +66,9 @@ export const createMainRendererEventController = function(
     return {
         handleMenuCommand: bindings.handleMenuCommand,
         handleRuntimeSession: function(snapshot): void {
-            const current = bindings.getRuntimeSession();
-
-            if (!current || current.status !== snapshot.status) {
-                bindings.renderRuntimeSession(snapshot);
-            }
+            publishRuntimeSessionSnapshot(snapshot, {
+                publishSession: bindings.renderRuntimeSession
+            });
         },
         handleRuntimeTranscript: bindings.recordTranscriptEvents,
         handleWorkspace: bindings.renderWorkspace,
@@ -84,8 +86,10 @@ export const createMainRendererEventController = function(
             bindings.applyZoomLayout(zoomFactor);
         },
         handleActiveDataset: function(snapshot): void {
-            bindings.renderActiveDataset(snapshot);
-            bindings.refreshProductConsoleStateChips(snapshot.objectName);
+            if (bindings.renderActiveDataset(snapshot) === false) {
+                return;
+            }
+            bindings.refreshProductConsoleStateChips(readSelectedWorkspaceDatasetName(snapshot));
         },
         handleLanguageChanged: bindings.applyLanguageChanged,
         handleProductConsoleStateChips: bindings.renderProductConsoleStateChips,

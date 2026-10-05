@@ -1,4 +1,7 @@
-import { createTranscriptEvent } from "../../../commands/commandProtocol";
+import {
+    commandExecutionDidNotSucceed,
+    createTranscriptEvent
+} from "../../../commands/commandProtocol";
 import { createImportResult } from "../../../tabular-data/importProtocol";
 import type {
     ImportRequest,
@@ -64,7 +67,9 @@ export const createRImportController = function(
                     snapshot
                 );
                 const transcriptEvents = commandResult.transcriptEvents;
-                const failed = options.transcriptHasFailure(transcriptEvents);
+                const failed = commandExecutionDidNotSucceed(
+                    commandResult, options.transcriptHasFailure
+                );
 
                 return createImportResult({
                     status: failed ? "failed" : "imported",

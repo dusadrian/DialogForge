@@ -8,13 +8,6 @@ export interface WebROutputRuntime {
 }
 
 
-export interface WebRRuntimeMessageStreamRecord {
-    id: string;
-    parent_id: string;
-    name: "stderr" | "stdout";
-    text: string;
-}
-
 
 export const readWebRMessageText = function(
     message: WebROutputMessage | null
@@ -40,37 +33,6 @@ export const readWebRMessageText = function(
     }
 
     return "";
-};
-
-
-export const readWebRMessageStreamName = function(
-    message: WebROutputMessage | null
-): "stderr" | "stdout" {
-    const type = String(message?.type || "").toLowerCase();
-
-    return type.includes("stderr") || type.includes("error") || type.includes("warning")
-        ? "stderr"
-        : "stdout";
-};
-
-
-export const createWebRInstallProgressStreamRecord = function(
-    activityId: string,
-    message: WebROutputMessage | null,
-    idSuffix: string
-): WebRRuntimeMessageStreamRecord | null {
-    const text = readWebRMessageText(message);
-
-    if (!text.trim()) {
-        return null;
-    }
-
-    return {
-        id: `${activityId}_install_progress_${idSuffix}`,
-        parent_id: activityId,
-        name: readWebRMessageStreamName(message),
-        text
-    };
 };
 
 

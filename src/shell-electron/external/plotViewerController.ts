@@ -4,10 +4,11 @@ import type {
     RuntimeEventSnapshot
 } from "../../runtime/provider-contract/runtimeProvider";
 import {
-    createPlotViewerState,
-    createWaitingPlotViewerState,
     type PlotViewerState
 } from "./plotViewerState";
+import {
+    createPlotViewerPresentationState
+} from "../../base-app/features/plot-viewer/plotViewerPresentationState";
 import {
     plotExternalEventChannels
 } from "../../base-app/features/plot-viewer/plotExternalIpc";
@@ -26,38 +27,8 @@ export interface PlotViewerController {
     getWindow(): BrowserWindow | null;
     open(input: unknown): PlotViewerState;
     presentRuntimeEvents(snapshot: RuntimeEventSnapshot): boolean;
+    retireResources(): void;
 }
-
-
-const latestPlotEvent = function(snapshot: RuntimeEventSnapshot): {
-    key: string;
-    payload: Record<string, unknown>;
-} | null {
-    const event = snapshot.events.find((candidate) => {
-        return candidate.type === "plot";
-    });
-    const payload = event?.payload && typeof event.payload === "object"
-        ? event.payload as Record<string, unknown>
-        : {};
-    const url = String(payload.viewerUrl || payload.url || "").trim();
-
-    if (!event || !url) {
-        return null;
-    }
-
-    return {
-        key: [
-            String(event.createdAt || ""),
-            String(payload.count || ""),
-            String(payload.upid || ""),
-            url
-        ].join("\n"),
-        payload: Object.assign({}, payload, {
-            url,
-            viewerUrl: url
-        })
-    };
-};
 
 
 export const createPlotViewerController = function(
@@ -65,15 +36,14 @@ export const createPlotViewerController = function(
 ): PlotViewerController {
     let win: BrowserWindow | null = null;
     let readyToShow = false;
-    let state = createWaitingPlotViewerState();
-    let lastPresentedEventKey = "";
+    const presentation = createPlotViewerPresentationState();
 
     const sendState = function(): void {
         if (!win || win.isDestroyed()) {
             return;
         }
 
-        win.webContents.send(plotExternalEventChannels.viewerUpdate, state);
+        win.webContents.send(plotExternalEventChannels.viewerUpdate, presentation.getState());
     };
     const show = function(): void {
         if (!options.showOnOpen || !win || win.isDestroyed()) {
@@ -94,8 +64,12 @@ export const createPlotViewerController = function(
         win = nextWindow;
         readyToShow = false;
         nextWindow.webContents.setZoomFactor(options.getZoomFactor());
-        nextWindow.webContents.on("page-title-updated", (event) => {
+        nextWindow.webContents.on("page-title-updated", (event, title) => {
             event.preventDefault();
+
+            if (win === nextWindow && !nextWindow.isDestroyed()) {
+                nextWindow.setTitle(title);
+            }
         });
         nextWindow.webContents.setWindowOpenHandler(() => {
             return { action: "deny" };
@@ -129,7 +103,7 @@ export const createPlotViewerController = function(
         return nextWindow;
     };
     const open = function(input: unknown): PlotViewerState {
-        state = createPlotViewerState(input);
+        const state = presentation.open(input);
 
         if (state.status !== "ready") {
             return state;
@@ -144,25 +118,28 @@ export const createPlotViewerController = function(
     const presentRuntimeEvents = function(
         snapshot: RuntimeEventSnapshot
     ): boolean {
-        const event = latestPlotEvent(snapshot);
-
-        if (!event || event.key === lastPresentedEventKey) {
+        const state = presentation.presentRuntimeEvents(snapshot);
+        if (!state || state.status !== "ready") {
             return false;
         }
-
-        lastPresentedEventKey = event.key;
-
-        return open(event.payload).status === "ready";
+        create();
+        show();
+        sendState();
+        return true;
     };
 
     return {
         getState: function(): PlotViewerState {
-            return state;
+            return presentation.getState();
         },
         getWindow: function(): BrowserWindow | null {
             return win && !win.isDestroyed() ? win : null;
         },
         open,
-        presentRuntimeEvents
+        presentRuntimeEvents,
+        retireResources: function(): void {
+            presentation.retireImages();
+            sendState();
+        }
     };
 };

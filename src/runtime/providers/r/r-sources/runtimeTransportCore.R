@@ -162,6 +162,9 @@ runtime_transport_dedicated_params <- function(raw) {
         commentChar = runtime_transport_value(raw, "commentChar"),
         fileEncoding = runtime_transport_value(raw, "fileEncoding"),
         parentId = runtime_transport_value(raw, "parentId"),
+        outputCaptureName = runtime_transport_value(raw, "outputCaptureName"),
+        outputCaptureSession = runtime_transport_value(raw, "outputCaptureSession"),
+        promptId = runtime_transport_value(raw, "promptId"),
         reply = runtime_transport_value(raw, "reply"),
         names = runtime_transport_vector(raw, "names"),
         name = runtime_transport_value(raw, "name"),
@@ -248,6 +251,7 @@ runtime_transport_interactive_params <- function(parts) {
         includeInternals = identical(runtime_transport_part(parts, 12L), "1"),
         path = runtime_transport_part(parts, 13L),
         parentId = runtime_transport_part(parts, 14L),
+        promptId = runtime_transport_part(parts, 21L),
         reply = runtime_transport_part(parts, 15L),
         name = runtime_transport_part(parts, 16L),
         rowStart = suppressWarnings(as.numeric(runtime_transport_part(parts, 17L))),
@@ -262,21 +266,64 @@ runtime_transport_interactive_params <- function(parts) {
 }
 
 
-runtime_transport_decode_request <- function(raw, dedicated) {
+runtime_transport_validate_json_request <- function(raw, require_auth = TRUE) {
+    # Both host adapters use compact, flat URL-encoded string fields.
+    field <- "\"[A-Za-z][A-Za-z0-9]*\":\"[A-Za-z0-9_.!~*'()%+-]*\""
+    envelope <- paste0("\\A\\{", field, "(?:,", field, ")*\\}\\z")
+    if (!grepl(envelope, raw, perl = TRUE)) {
+        return(FALSE)
+    }
+    if (grepl("%(?![A-Fa-f0-9]{2})", raw, perl = TRUE)) {
+        return(FALSE)
+    }
+    if (grepl("%00", raw, fixed = TRUE)) {
+        return(FALSE)
+    }
+    matches <- gregexpr('"[A-Za-z][A-Za-z0-9]*":', raw, perl = TRUE)
+    keys <- regmatches(raw, matches)[[1L]]
+    if (length(keys) > 256L) {
+        return(FALSE)
+    }
+    for (index in seq_along(keys)) {
+        if (base::match(keys[[index]], keys) != index) {
+            return(FALSE)
+        }
+    }
+    required <- c("prefix", "id", "method")
+    if (isTRUE(require_auth)) {
+        required <- c(required, "auth")
+    }
+    for (key in required) {
+        if (!nzchar(runtime_transport_extract_json_string(raw, key))) {
+            return(FALSE)
+        }
+    }
+    TRUE
+}
+
+
+runtime_transport_decode_request <- function(raw, dedicated, require_auth = TRUE) {
     if (isTRUE(dedicated)) {
+        if (!runtime_transport_validate_json_request(raw, require_auth)) {
+            return(list(valid = FALSE, error = "invalid-request-envelope"))
+        }
         prefix <- runtime_transport_value(raw, "prefix")
 
         if (!identical(prefix, "DMRUNTIME1")) {
             return(list(valid = FALSE, error = "invalid-request"))
         }
 
-        return(list(
+        request <- tryCatch(list(
             valid = TRUE,
             id = runtime_transport_value(raw, "id"),
             method = runtime_transport_value(raw, "method"),
             auth = runtime_transport_value(raw, "auth"),
+            transportNonce = runtime_transport_value(raw, "transportNonce"),
             params = runtime_transport_dedicated_params(raw)
-        ))
+        ), error = function(error) {
+            list(valid = FALSE, error = "invalid-request-encoding")
+        })
+        return(request)
     }
 
     parts <- strsplit(raw, "\t", fixed = FALSE)[[1L]]
@@ -373,6 +420,16 @@ runtime_transport_result_json <- function(method, output) {
         return(runtime_transport_inspection_json(output$result %||% list()))
     }
 
+    if (identical(method, "execute_input") && !is.null(output$output_capture)) {
+        receipt <- output$output_capture
+        return(paste0(
+            "{\"sessionId\":", json_str(receipt$sessionId),
+            ",\"parentId\":", json_str(receipt$parentId),
+            ",\"captureStatus\":", json_str(receipt$captureStatus),
+            ",\"outputSequence\":", if (is.null(receipt$outputSequence)) "null" else
+                as.character(receipt$outputSequence), "}"
+        ))
+    }
     if (is.element(method, c("execute_input", "reply_prompt", "load_workspace"))) {
         return("true")
     }
@@ -425,6 +482,76 @@ runtime_transport_error_payload <- function(error, dedicated) {
 }
 
 
+runtime_evaluate_control_request <- function(request, collect_events = FALSE) {
+    method <- request$method
+    if (
+        nzchar(as.character(current_activity_id %||% "")) &&
+        !identical(method, "reply_prompt")
+    ) {
+        return(list(
+            id = request$id, method = method,
+            ok = FALSE, error = "runtime-command-active"
+        ))
+    }
+
+    previous_live_events <- live_events_enabled
+    if (is.element(method, c("execute_input", "reply_prompt"))) {
+        live_events_enabled <<- TRUE
+    }
+    on.exit(live_events_enabled <<- previous_live_events, add = TRUE)
+
+    previous_event_nonce <- runtime_begin_transport_event_scope(
+        request$transportNonce,
+        preserve_current = identical(method, "reply_prompt")
+    )
+    on.exit(runtime_transport_event_nonce <<- previous_event_nonce, add = TRUE)
+    previous_diagnostics <- runtime_diagnostic_begin(request$params)
+    on.exit(runtime_diagnostics <<- previous_diagnostics, add = TRUE)
+
+    if (isTRUE(collect_events)) {
+        previous_events <- runtime_collected_events
+        runtime_begin_event_collection()
+        on.exit(runtime_collected_events <<- previous_events, add = TRUE)
+    }
+
+    output <- tryCatch(
+        eval_method(method, request$params),
+        error = function(error) list(ok = FALSE, error = conditionMessage(error))
+    )
+    if (is.null(output)) {
+        output <- list(ok = FALSE, error = "control-eval-failed")
+    }
+
+    flush_error <- ""
+    tryCatch(
+        flush_completion_queue(),
+        error = function(error) {
+            flush_error <<- conditionMessage(error)
+            invisible(NULL)
+        }
+    )
+    if (nzchar(flush_error)) {
+        output$ok <- FALSE
+        output$completionFailure <- TRUE
+        if (!nzchar(as.character(output$error %||% ""))) {
+            output$error <- flush_error
+        }
+        runtime_diagnostic_mark("completion.flush_failed")
+    }
+
+    output$id <- request$id
+    output$method <- method
+    output$transportNonce <- request$transportNonce
+    output$diagnostics_json <- runtime_diagnostic_json()
+    if (isTRUE(collect_events)) {
+        events <- runtime_take_collected_events()
+        output$events_json <- paste0("[", paste(events, collapse = ","), "]")
+    }
+
+    output
+}
+
+
 runtime_transport_response_payload <- function(output, result_json, dedicated) {
     if (isTRUE(dedicated)) {
         events_json <- as.character(output$events_json %||% "[]")
@@ -432,7 +559,11 @@ runtime_transport_response_payload <- function(output, result_json, dedicated) {
         return(paste0(
             "{\"id\":", json_str(output$id %||% ""),
             ",\"method\":", json_str(output$method %||% ""),
+            if (nzchar(output$transportNonce %||% "")) {
+                paste0(",\"transportNonce\":", json_str(output$transportNonce))
+            } else "",
             ",\"ok\":", json_bool(isTRUE(output$ok)),
+            if (isTRUE(output$completionFailure)) ",\"completionFailure\":true" else "",
             ",\"result\":", result_json,
             ",\"error\":", json_str(output$error %||% ""),
             ",\"mode\":", json_str(output$mode %||% ""),
@@ -479,7 +610,17 @@ runtime_transport_meta_json <- function(meta) {
         ",\"port\":", encoded_port,
         ",\"token\":", json_str(as.character(meta$token %||% "")),
         ",\"protocol\":", json_str(as.character(meta$protocol %||% "")),
+        ",\"responseIdentity\":", json_str(meta$responseIdentity %||% ""),
+        ",\"eventIdentity\":", json_str(meta$eventIdentity %||% ""),
+        if (identical(meta$boundedInput, "native-v1")) {
+            paste0(
+                ",\"boundedInput\":", json_str(meta$boundedInput),
+                ",\"maxRequestBytes\":", as.character(meta$maxRequestBytes)
+            )
+        } else "",
         ",\"pid\":", encoded_pid,
+        ",\"orderedOutputEncoding\":", json_str(meta$orderedOutputEncoding %||% ""),
+        ",\"orderedOutputSession\":", json_str(meta$orderedOutputSession %||% ""),
         ",\"error\":", json_str(as.character(meta$error %||% "")),
         "}"
     )

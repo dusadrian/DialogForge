@@ -12,10 +12,13 @@ export interface BrowserScriptSavePromptLabels {
 }
 
 
-export const showBrowserScriptSavePrompt = function(
-    labels: BrowserScriptSavePromptLabels,
+export const showBrowserMessageBox = function(
+    labels: {
+        title: string; message: string; detail?: string;
+        buttons: string[]; cancelId: number; defaultId: number;
+    },
     documentRef: Document = document
-): Promise<ScriptSaveDecision> {
+): Promise<{ response: number }> {
     return new Promise((resolve) => {
         const layer = documentRef.createElement("div");
         const dialog = documentRef.createElement("section");
@@ -24,9 +27,6 @@ export const showBrowserScriptSavePrompt = function(
         const close = documentRef.createElement("button");
         const body = documentRef.createElement("div");
         const actions = documentRef.createElement("div");
-        const cancel = documentRef.createElement("button");
-        const dontSave = documentRef.createElement("button");
-        const save = documentRef.createElement("button");
         let settled = false;
 
         layer.className = "dialogforge-web-dialog-layer dialogforge-web-confirm-layer";
@@ -39,9 +39,15 @@ export const showBrowserScriptSavePrompt = function(
         title.textContent = labels.title;
         close.className = "dialogforge-web-dialog__close";
         close.type = "button";
-        close.setAttribute("aria-label", labels.cancel);
+        close.setAttribute("aria-label", labels.buttons[labels.cancelId]);
         body.className = "dialogforge-web-confirm__body";
         body.textContent = labels.message;
+        if (labels.detail) {
+            const detail = documentRef.createElement("p");
+            detail.textContent = labels.detail;
+            detail.style.whiteSpace = "pre-line";
+            body.appendChild(detail);
+        }
         actions.className = "dialogforge-web-confirm__actions";
 
         const prepareButton = function(
@@ -55,11 +61,7 @@ export const showBrowserScriptSavePrompt = function(
             button.textContent = label;
         };
 
-        prepareButton(cancel, labels.cancel);
-        prepareButton(dontSave, labels.dontSave);
-        prepareButton(save, labels.save, true);
-
-        const finish = function(decision: ScriptSaveDecision): void {
+        const finish = function(response: number): void {
             if (settled) {
                 return;
             }
@@ -67,7 +69,7 @@ export const showBrowserScriptSavePrompt = function(
             settled = true;
             documentRef.removeEventListener("keydown", handleKeyDown, true);
             layer.remove();
-            resolve(decision);
+            resolve({ response });
         };
 
         const handleKeyDown = function(event: KeyboardEvent): void {
@@ -77,20 +79,43 @@ export const showBrowserScriptSavePrompt = function(
 
             event.preventDefault();
             event.stopPropagation();
-            finish("cancel");
+            finish(labels.cancelId);
         };
 
-        close.addEventListener("click", () => finish("cancel"));
-        cancel.addEventListener("click", () => finish("cancel"));
-        dontSave.addEventListener("click", () => finish("dont-save"));
-        save.addEventListener("click", () => finish("save"));
+        close.addEventListener("click", () => finish(labels.cancelId));
+        const buttons = labels.buttons.map((label, index) => {
+            const button = documentRef.createElement("button");
+            prepareButton(button, label, index === labels.defaultId);
+            button.addEventListener("click", () => finish(index));
+            return button;
+        });
         documentRef.addEventListener("keydown", handleKeyDown, true);
 
         titlebar.append(title, close);
-        actions.append(cancel, dontSave, save);
+        actions.append(...buttons);
         dialog.append(titlebar, body, actions);
         layer.appendChild(dialog);
         documentRef.body.appendChild(layer);
-        save.focus();
+        buttons[labels.defaultId].focus();
     });
+};
+
+
+export const showBrowserScriptSavePrompt = async function(
+    labels: BrowserScriptSavePromptLabels,
+    documentRef: Document = document
+): Promise<ScriptSaveDecision> {
+    const result = await showBrowserMessageBox({
+        title: labels.title, message: labels.message,
+        buttons: [labels.cancel, labels.dontSave, labels.save],
+        cancelId: 0, defaultId: 2
+    }, documentRef);
+
+    if (result.response === 2) {
+        return "save";
+    }
+    if (result.response === 1) {
+        return "dont-save";
+    }
+    return "cancel";
 };

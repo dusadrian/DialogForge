@@ -43,6 +43,7 @@ export interface DatasetTableRendererOptions {
     getSelectedVariableRow(): number;
     getActiveVariableRow(): number;
     isVariableMetadataLoaded(): boolean;
+    isVariableMetadataFailed(): boolean;
     isVariableCellSelected(
         rowIndex: number,
         key: DatasetVariableColumnKey
@@ -99,6 +100,20 @@ export const createDatasetTableRenderer = function(
             return;
         }
 
+        const activeEdit = options.getActiveDataEdit();
+        const currentInput = host.querySelector<HTMLInputElement>(
+            '[data-data-editor="true"]'
+        );
+        const retainedInput = activeEdit && currentInput
+            && Number(currentInput.dataset.dataRow) === activeEdit.row
+            && currentInput.dataset.dataColumn === activeEdit.column
+            ? currentInput : null;
+        const restoreFocus = retainedInput !== null
+            && retainedInput.ownerDocument.activeElement === retainedInput;
+
+        // A current viewport refresh must retain the user's draft and its one
+        // commit handler while updating the surrounding cells.
+        retainedInput?.remove();
         host.innerHTML = renderDataTable({
             viewportWidth: host.clientWidth || 0,
             viewportHeight: host.clientHeight || 0,
@@ -116,13 +131,24 @@ export const createDatasetTableRenderer = function(
             selectedColumnName: options.getSelectedDataColumn(),
             selectedRowNumber: options.getSelectedDataRow(),
             activeCell: options.getActiveDataCell(),
-            activeEdit: options.getActiveDataEdit(),
+            activeEdit,
             activeColumnHeaderEdit:
                 options.getActiveColumnHeaderEdit(),
             activeRowNameEdit: options.getActiveRowNameEdit(),
             translate: options.translate,
             escapeHtml: options.escapeHtml
         });
+        if (retainedInput) {
+            const replacement = host.querySelector<HTMLInputElement>(
+                '[data-data-editor="true"]'
+            );
+            if (replacement) {
+                replacement.replaceWith(retainedInput);
+                if (restoreFocus) {
+                    retainedInput.focus();
+                }
+            }
+        }
         options.bindDataInteractions(host);
     };
 
@@ -139,6 +165,12 @@ export const createDatasetTableRenderer = function(
             : [];
 
         if (!items.length) {
+            if (options.isVariableMetadataFailed()) {
+                options.renderVariablesStatus(
+                    options.translate("Could not load variable metadata")
+                );
+                return;
+            }
             options.renderVariablesStatus(
                 options.isVariableMetadataLoaded()
                     ? options.translate(

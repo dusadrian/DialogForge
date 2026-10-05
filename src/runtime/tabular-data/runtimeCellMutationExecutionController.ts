@@ -17,6 +17,7 @@ export interface RuntimeCellMutationExecutionControllerOptions {
     providerTabularController?: RuntimeTabularController;
     fallbackCellMutationController: RuntimeFallbackCellMutationController;
     getSnapshot(): RuntimeSessionSnapshot;
+    getWorkspaceGeneration(): number;
     getActiveObjectName(): string;
     materializeRows(objectName: string): boolean;
 }
@@ -78,17 +79,31 @@ export const createRuntimeCellMutationExecutionController = function(
     return {
         writeCell,
         writeCells: async function(requests) {
+            const generation = options.getWorkspaceGeneration();
+            const snapshot = options.getSnapshot();
+            const activeObjectName = options.getActiveObjectName();
             const results = [];
 
             for (const request of requests || []) {
+                if (generation !== options.getWorkspaceGeneration()) {
+                    results.push(createCellUpdateResult({
+                        status: "unavailable",
+                        providerId: snapshot.providerId,
+                        objectName: request.objectName || activeObjectName,
+                        rowIndex: request.rowIndex,
+                        columnName: request.columnName,
+                        value: request.value,
+                        message: "Runtime session changed; this cell edit was not attempted."
+                    }));
+                    continue;
+                }
+
                 results.push(await writeCell(request));
             }
 
-            const snapshot = options.getSnapshot();
-
             return options.fallbackCellMutationController.createBatchResult(
                 snapshot.providerId,
-                options.getActiveObjectName(),
+                activeObjectName,
                 results
             );
         }

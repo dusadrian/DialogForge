@@ -10,13 +10,14 @@ export interface DatasetChangeControllerOptions {
     applyColumnRenames(changes: DatasetChange[]): void;
     applyColumnRemovals(changes: DatasetChange[]): void;
     refreshSchema(): Promise<void>;
-    refreshRowSchema(): Promise<void>;
+    refreshRowSchema(isCurrent: () => boolean): Promise<void>;
     refreshViewport(): Promise<void>;
     refreshVariables(variableNames: string[]): Promise<void>;
 }
 
 
 export interface DatasetChangeController {
+    invalidate(): void;
     apply(value: unknown): Promise<void>;
 }
 
@@ -24,7 +25,10 @@ export interface DatasetChangeController {
 export const createDatasetChangeController = function(
     options: DatasetChangeControllerOptions
 ): DatasetChangeController {
+    let changeGeneration = 0;
+
     const apply = async function(value: unknown): Promise<void> {
+        const generation = changeGeneration;
         const datasetName = options.getDatasetName();
 
         if (!datasetName) {
@@ -32,6 +36,10 @@ export const createDatasetChangeController = function(
         }
 
         const plan = planDatasetChanges(value, datasetName);
+        const isCurrent = function(): boolean {
+            return generation === changeGeneration
+                && datasetName === options.getDatasetName();
+        };
 
         if (plan.removed) {
             await options.removeDataset();
@@ -39,7 +47,13 @@ export const createDatasetChangeController = function(
         }
 
         options.applyColumnRenames(plan.columnRenames);
+        if (!isCurrent()) {
+            return;
+        }
         options.applyColumnRemovals(plan.columnRemovals);
+        if (!isCurrent()) {
+            return;
+        }
 
         if (plan.refreshSchema) {
             await options.refreshSchema();
@@ -47,21 +61,36 @@ export const createDatasetChangeController = function(
         }
 
         if (plan.refreshRows) {
-            await options.refreshRowSchema();
+            await options.refreshRowSchema(isCurrent);
+            if (!isCurrent()) {
+                return;
+            }
             await options.refreshViewport();
+            if (!isCurrent()) {
+                return;
+            }
         }
 
         if (plan.refreshCells) {
             await options.refreshViewport();
+            if (!isCurrent()) {
+                return;
+            }
         }
 
         if (plan.variableColumns.length) {
             await options.refreshVariables(plan.variableColumns);
+            if (!isCurrent()) {
+                return;
+            }
             await options.refreshViewport();
         }
     };
 
     return {
+        invalidate: function(): void {
+            changeGeneration += 1;
+        },
         apply
     };
 };

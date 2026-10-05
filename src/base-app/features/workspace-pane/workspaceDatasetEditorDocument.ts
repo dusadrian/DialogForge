@@ -2,8 +2,8 @@ export interface WorkspaceDatasetEditorDocumentState {
     getDataEditorDatasetName(): string;
     setDataEditorDatasetName(name: string): void;
     getActiveDatasetName(): string;
-    setActiveDataset(name: string): void;
-    clearActiveDataset(): void;
+    setActiveDataset(name: string): void | Promise<void>;
+    clearActiveDataset(): void | Promise<void>;
 }
 
 export interface WorkspaceDatasetEditorDocument {
@@ -40,17 +40,17 @@ export const createWorkspaceDatasetEditorDocument = function(
     };
 };
 
-export const openWorkspaceDatasetEditorDocument = function(
+export const openWorkspaceDatasetEditorDocument = async function(
     state: WorkspaceDatasetEditorDocumentState,
     value: unknown,
     args: unknown[]
-): WorkspaceDatasetEditorDocument {
+): Promise<WorkspaceDatasetEditorDocument> {
     const input = readInput(value);
     const datasetName = normalizeName(args?.[0] || input.name || value);
 
     if (datasetName) {
         state.setDataEditorDatasetName(datasetName);
-        state.setActiveDataset(datasetName);
+        await state.setActiveDataset(datasetName);
     }
 
     return createWorkspaceDatasetEditorDocument(state);
@@ -62,28 +62,28 @@ export const readWorkspaceActiveDatasetName = function(
     return state.getActiveDatasetName();
 };
 
-export const setWorkspaceActiveDatasetName = function(
+export const setWorkspaceActiveDatasetName = async function(
     state: Pick<
         WorkspaceDatasetEditorDocumentState,
         "getActiveDatasetName" | "setActiveDataset"
     >,
     value: unknown,
     args: unknown[]
-): string {
+): Promise<string> {
     const input = readInput(value);
     const datasetName = normalizeName(input.name || args?.[0]);
 
     if (datasetName) {
-        state.setActiveDataset(datasetName);
+        await state.setActiveDataset(datasetName);
     }
 
     return state.getActiveDatasetName();
 };
 
-export const clearWorkspaceActiveDatasetName = function(
-    state: Pick<WorkspaceDatasetEditorDocumentState, "clearActiveDataset">
-): string {
-    state.clearActiveDataset();
+export const clearWorkspaceActiveDatasetName = async function(
+    state: Pick<WorkspaceDatasetEditorDocumentState, "clearActiveDataset" | "getActiveDatasetName">
+): Promise<string> {
+    await state.clearActiveDataset();
 
-    return "";
+    return state.getActiveDatasetName();
 };

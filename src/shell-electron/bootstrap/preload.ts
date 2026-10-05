@@ -626,6 +626,9 @@ const api: DialogForgeApi = {
     openHelpTopic: function(input: Partial<HelpTopicRequest>) {
         return invokeHelpRoute(ipcRenderer, helpIpcChannels.openTopic, input);
     },
+    retireHelpRequest: function() {
+        return invokeHelpRoute(ipcRenderer, helpIpcChannels.retireRequest);
+    },
     getHelpDocument: function() {
         return invokeHelpRoute(ipcRenderer, helpIpcChannels.getDocument);
     },

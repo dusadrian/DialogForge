@@ -35,7 +35,7 @@ export const createRPackageVersionReader = function(
 
         const packageLiteral = rString(packageName);
         const command = [
-            `cat(if (requireNamespace(${packageLiteral}, quietly = TRUE)) `,
+            `cat(if (base::requireNamespace(${packageLiteral}, quietly = TRUE)) `,
             `as.character(utils::packageVersion(${packageLiteral})) `,
             "else \"\")"
         ].join("");

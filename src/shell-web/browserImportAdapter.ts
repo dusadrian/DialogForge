@@ -2,9 +2,8 @@ import type {
     RuntimeExtensionMethodRequest,
     RuntimeExtensionMethodResult
 } from "../runtime/provider-contract/runtimeProvider";
-import {
-    createImportPreviewNotFoundResult,
-    type ImportPreviewResult
+import type {
+    ImportPreviewResult
 } from "../runtime/tabular-data/importPreviewResult";
 import type {
     ImportPreviewRequest
@@ -308,12 +307,14 @@ export const createBrowserImportAdapter = function(
         ): Promise<ImportPreviewResult> {
             const request = payload || {};
             const record = readRecord(request.file);
+            const filePath = record
+                ? record.virtualPath
+                : String(request.file || "");
 
-            if (!record) {
-                return createImportPreviewNotFoundResult();
+            if (record) {
+                await writeFileToWebR(record);
             }
 
-            await writeFileToWebR(record);
             const requestedFormat = String(
                 (request as Record<string, unknown>).format || ""
             ).trim();
@@ -321,9 +322,9 @@ export const createBrowserImportAdapter = function(
                 ? request
                 : {
                     ...createImportPreviewRequestForFormat({
-                        file: record.virtualPath,
+                        file: filePath,
                         format: requestedFormat
-                            || inferImportFormat(record.virtualPath),
+                            || inferImportFormat(filePath),
                         nrows: request.nrows
                     }),
                     ...request
@@ -331,7 +332,7 @@ export const createBrowserImportAdapter = function(
 
             return previewImportFileThroughRuntime({
                 ...runtimeRequest,
-                file: record.virtualPath
+                file: filePath
             }, bindings.executeRuntimeMethod);
         },
         restoreFilesToWebR,

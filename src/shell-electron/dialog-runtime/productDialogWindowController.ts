@@ -19,6 +19,11 @@ import {
 import type {
     ProductDialogDefinition
 } from "../../dialog-runtime/dialog-builder/productDialogDefinition";
+import {
+    captureProductDialogWorkspaceTarget,
+    createProductDialogWorkspaceDelivery,
+    type ProductDialogWorkspaceDeliveryResult
+} from "../../dialog-runtime/dialog-builder/productDialogWorkspaceDelivery";
 
 
 export interface ProductDialogOpenReadiness {
@@ -38,6 +43,7 @@ export interface ProductDialogWindowControllerOptions<WorkspaceSource> {
     readWorkspaceData(source?: WorkspaceSource): Promise<unknown>;
     readInitialWorkspaceData(source?: WorkspaceSource): Promise<unknown>;
     getActiveDatasetName(): string;
+    getSessionScope?(): unknown;
     getParentWindow(): BrowserWindow | null;
     windowClosed(dialogId: string): void;
     prepareDialog?(
@@ -53,7 +59,7 @@ export interface ProductDialogWindowController<WorkspaceSource> {
     refreshWorkspaceData(
         dialogId?: string,
         source?: WorkspaceSource
-    ): Promise<void>;
+    ): Promise<ProductDialogWorkspaceDeliveryResult>;
     refreshLanguage(): Promise<void>;
 }
 
@@ -106,11 +112,6 @@ const readGrowingElementSize = function(
 export const createProductDialogWindowController = function<WorkspaceSource>(
     options: ProductDialogWindowControllerOptions<WorkspaceSource>
 ): ProductDialogWindowController<WorkspaceSource> {
-    let lastWorkspaceData: unknown = null;
-    let lastWorkspaceSource: WorkspaceSource | undefined;
-    let pendingWorkspaceData: Promise<unknown> | null = null;
-    let workspaceRequestSequence = 0;
-
     const sendWorkspaceData = function(
         workspaceData: unknown,
         dialogId = ""
@@ -135,76 +136,14 @@ export const createProductDialogWindowController = function<WorkspaceSource>(
             );
         });
     };
-    const withCurrentActiveDataset = function(
-        workspaceData: unknown
-    ): unknown {
-        if (
-            !workspaceData
-            || typeof workspaceData !== "object"
-            || Array.isArray(workspaceData)
-        ) {
-            return workspaceData;
-        }
-
-        return {
-            ...workspaceData,
-            activeDataset: options.getActiveDatasetName()
-        };
-    };
-    const refreshWorkspaceData = async function(
-        dialogId = "",
-        source?: WorkspaceSource
-    ): Promise<void> {
-        if (source !== undefined) {
-            if (source !== lastWorkspaceSource) {
-                lastWorkspaceData = null;
-            }
-
-            lastWorkspaceSource = source;
-        }
-
-        const sequence = ++workspaceRequestSequence;
-        const request = options.readWorkspaceData(
-            source ?? lastWorkspaceSource
-        );
-        pendingWorkspaceData = request;
-        let workspaceData: unknown;
-
-        try {
-            workspaceData = await request;
-        }
-        finally {
-            if (pendingWorkspaceData === request) {
-                pendingWorkspaceData = null;
-            }
-        }
-
-        if (sequence < workspaceRequestSequence) {
-            if (dialogId && lastWorkspaceData) {
-                sendWorkspaceData(lastWorkspaceData, dialogId);
-            }
-
-            return;
-        }
-
-        lastWorkspaceData = withCurrentActiveDataset(workspaceData);
-        sendWorkspaceData(lastWorkspaceData, dialogId);
-    };
-    const readPreparedWorkspaceData = async function(): Promise<unknown> {
-        if (lastWorkspaceData) {
-            return lastWorkspaceData;
-        }
-
-        if (pendingWorkspaceData) {
-            await pendingWorkspaceData;
-
-            if (lastWorkspaceData) {
-                return lastWorkspaceData;
-            }
-        }
-
-        return options.readInitialWorkspaceData(lastWorkspaceSource);
-    };
+    const workspaceDelivery = createProductDialogWorkspaceDelivery({
+        readWorkspaceData: options.readWorkspaceData,
+        readInitialWorkspaceData: options.readInitialWorkspaceData,
+        getActiveDatasetName: options.getActiveDatasetName,
+        getSessionScope: options.getSessionScope,
+        sendWorkspaceData
+    });
+    const refreshWorkspaceData = workspaceDelivery.refreshWorkspaceData;
     const prepareOpen = async function(
         dialogId: string
     ): Promise<ProductDialogOpenReadiness> {
@@ -229,9 +168,7 @@ export const createProductDialogWindowController = function<WorkspaceSource>(
             return;
         }
 
-        const currentWorkspaceData = withCurrentActiveDataset(workspaceData);
-
-        lastWorkspaceData = currentWorkspaceData;
+        const currentWorkspaceData = workspaceData;
         window.setTitle(String(
             runtimeDialog.properties?.title || dialogId
         ));
@@ -328,6 +265,9 @@ export const createProductDialogWindowController = function<WorkspaceSource>(
         }
 
         options.windows.register(dialogId, window);
+        const isCurrentDialogTarget = captureProductDialogWorkspaceTarget(
+            () => options.windows.get(dialogId)
+        );
         wireWindowStatePersistence(
             window,
             settingsPath,
@@ -342,7 +282,7 @@ export const createProductDialogWindowController = function<WorkspaceSource>(
             "src/base-app/pages/dialogBuilder.html"
         ));
         window.webContents.once("did-finish-load", function(): void {
-            void readPreparedWorkspaceData().then(function(
+            void workspaceDelivery.publishPreparedWorkspaceData(function(
                 initialWorkspaceData
             ): void {
                 sendCreated(
@@ -351,6 +291,8 @@ export const createProductDialogWindowController = function<WorkspaceSource>(
                     runtimeDialog,
                     initialWorkspaceData
                 );
+            }, { isCurrent: isCurrentDialogTarget }).catch((error) => {
+                console.error("Unable to prepare dialog workspace data.", error);
             });
         });
         window.once("ready-to-show", function(): void {
@@ -373,15 +315,15 @@ export const createProductDialogWindowController = function<WorkspaceSource>(
         prepareOpen,
         refreshWorkspaceData,
         refreshLanguage: async function(): Promise<void> {
-            const workspaceData = await readPreparedWorkspaceData();
-
-            options.windows.forEachLive(function(dialogId, window): void {
-                sendCreated(
-                    window,
-                    dialogId,
-                    options.readDialog(dialogId),
-                    workspaceData
-                );
+            await workspaceDelivery.publishPreparedWorkspaceData((workspaceData) => {
+                options.windows.forEachLive(function(dialogId, window): void {
+                    sendCreated(
+                        window,
+                        dialogId,
+                        options.readDialog(dialogId),
+                        workspaceData
+                    );
+                });
             });
         }
     };

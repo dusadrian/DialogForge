@@ -281,6 +281,7 @@ export const createRuntimeLifecycleComposition = function(
         const snapshot = await options.runtimeSessionManager.start();
 
         options.composition.runtimeSession = snapshot;
+        options.sendRuntimeSession(snapshot);
         options.appendBootLog(
             `autoStartRuntime snapshot status=${snapshot.status} `
             + `connection=${snapshot.connection} `

@@ -2,6 +2,7 @@
     "Settings": "Ρυθμίσεις",
     "Language": "Γλώσσα",
     "Runtime provider": "Πάροχος περιβάλλοντος εκτέλεσης",
+    "Runtime session is not ready.": "Η συνεδρία εκτέλεσης δεν είναι έτοιμη.",
     "Console font": "Γραμματοσειρά κονσόλας",
     "Console cursor": "Δρομέας κονσόλας",
     "Console cursor blink": "Αναβόσβημα δρομέα κονσόλας",

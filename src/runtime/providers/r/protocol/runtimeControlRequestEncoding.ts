@@ -1,12 +1,28 @@
 export interface RuntimeControlRequestInput {
     id: string;
     method: string;
+    transportNonce?: string;
     params?: Record<string, unknown>;
 }
 
 
 const dedicatedRuntimeRequestPrefix = "DMRUNTIME1";
 const arrayParamSeparator = "\u001f";
+
+
+export const createRuntimeControlRequestSizeLimit = function(maxRequestBytes = 262144) {
+    if (!Number.isSafeInteger(maxRequestBytes) || maxRequestBytes < 512 || maxRequestBytes > 16777216) {
+        throw new Error("Unsupported runtime request payload limit.");
+    }
+    const encoder = new TextEncoder();
+    return {
+        check: function(encodedRequest: string): void {
+            if (encoder.encode(encodedRequest).byteLength > maxRequestBytes) {
+                throw new Error("runtime-session-request-too-large");
+            }
+        }
+    };
+};
 
 
 const safeEncode = function(value: unknown): string {
@@ -16,6 +32,19 @@ const safeEncode = function(value: unknown): string {
     catch {
         return "";
     }
+};
+
+
+export const encodeRuntimeControlOutputCapture = function(
+    encodedRequest: string,
+    capture: { outputCaptureName: string; outputCaptureSession: string }
+): string {
+    const payload = JSON.parse(encodedRequest);
+    return JSON.stringify({
+        ...payload,
+        outputCaptureName: safeEncode(capture.outputCaptureName),
+        outputCaptureSession: safeEncode(capture.outputCaptureSession)
+    });
 };
 
 
@@ -129,8 +158,11 @@ export const encodeRuntimeControlRequest = function(
         prefix: safeEncode(dedicatedRuntimeRequestPrefix),
         id: safeEncode(request.id),
         method: safeEncode(request.method),
+        ...(request.transportNonce ? { transportNonce: safeEncode(request.transportNonce) } : {}),
         auth: safeEncode(token),
         code: safeEncode(params.code),
+        outputCaptureName: safeEncode(params.outputCaptureName),
+        outputCaptureSession: safeEncode(params.outputCaptureSession),
         mode: safeEncode(params.mode),
         outputWidth: safeEncode(params.outputWidth),
         timeoutMs: safeEncode(params.timeoutMs),
@@ -163,6 +195,7 @@ export const encodeRuntimeControlRequest = function(
         commentChar: safeEncode(params.commentChar),
         fileEncoding: safeEncode(params.fileEncoding),
         parentId: safeEncode(params.parentId),
+        promptId: safeEncode(params.promptId),
         reply: safeEncode(params.reply),
         names: safeEncode(encodeArray(params.names)),
         name: safeEncode(params.name),

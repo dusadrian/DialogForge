@@ -1318,6 +1318,12 @@ const createWebProductDevServer = function(options) {
             : {};
 
         try {
+            // The web shell has no favicon asset; explicitly answer the browser's
+            // automatic probe instead of reporting a missing application resource.
+            if (pathname === "/favicon.ico") {
+                send(response, 204, {}, "");
+                return;
+            }
             if (webEntryPaths.includes(pathname) || pathname === launchPolicy.startPath) {
                 const launchToken = pathname === launchPolicy.startPath
                     ? readLaunchTokenQuery(launchPolicy, parsed)
@@ -1596,6 +1602,19 @@ const createWebProductDevServer = function(options) {
                     rootDir,
                     "node_modules/sortablejs/modular/sortable.esm.js"
                 ));
+                return;
+            }
+
+            if (/^\/r-inspection\/webr\/\d+\.\d+\.\d+\/dialogforgeinspect_0\.4\.3\.tgz$/.test(pathname)) {
+                serveFile(response, resolveSafeFile(rootDir, pathname));
+                return;
+            }
+            if (/^\/r-transport-prototype\/webr\/\d+\.\d+\.\d+\/dialogforgetransport_0\.0\.4\.tgz$/.test(pathname)) {
+                serveFile(response, resolveSafeFile(rootDir, pathname));
+                return;
+            }
+            if (/^\/r-output-prototype\/webr\/\d+\.\d+\.\d+\/dialogforgeoutput_0\.0\.1\.tgz$/.test(pathname)) {
+                serveFile(response, resolveSafeFile(rootDir, pathname));
                 return;
             }
 

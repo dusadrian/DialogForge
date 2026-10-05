@@ -18,9 +18,9 @@ import {
 } from "../../runtime/extensions/runtimeExtensionProtocol";
 import type {
     RuntimeSessionManager,
-    TranscriptEvent,
     VisibleCommandRequest
 } from "../../runtime/provider-contract/runtimeProvider";
+import type { RuntimeCommandResult } from "../../runtime/commands/runtimeCommandReceipt";
 import type {
     ScriptEditorCloseSaveCoordinator
 } from "./scriptEditorCloseSaveCoordinator";
@@ -71,7 +71,7 @@ export interface ScriptEditorIpcControllerOptions {
     openScriptFilePathInScriptEditor(filePath: string): Promise<ScriptFileResult>;
     runtimeSessionManager: Pick<RuntimeSessionManager, "executeRuntimeMethod">;
     ensureRuntimeReady(): Promise<boolean>;
-    executeVisibleCommand(request: VisibleCommandRequest): Promise<TranscriptEvent[]>;
+    executeVisibleCommand(request: VisibleCommandRequest): Promise<RuntimeCommandResult>;
 }
 
 

@@ -1,73 +1,15 @@
-remove_runtime_global_bindings <- function() {
-    for (name in c(".app_runtime_control_status")) {
-        if (exists(name, envir = .GlobalEnv, inherits = FALSE)) {
-            safe(rm(list = name, envir = .GlobalEnv))
-        }
-    }
-
-    invisible(NULL)
-}
-
-
-ensure_dialog_app_search_position <- function() {
-    if (length(search()) >= 2L && identical(search()[[2L]], "DialogApp")) {
-        return(invisible(TRUE))
-    }
-
-    environment <- app_env
-
-    if (is.element("DialogApp", search())) {
-        safe(detach("DialogApp", character.only = TRUE))
-    }
-
-    safe(attach(
-        environment,
-        name = "DialogApp",
-        pos = 2L,
-        warn.conflicts = FALSE
-    ))
-    app_env <<- as.environment("DialogApp")
-
-    invisible(TRUE)
-}
-
-
-runtime_console_pager <- function(
-    files,
-    header = rep("", length(files)),
-    title = "R Information",
-    delete.file = FALSE
-) {
-    files <- path.expand(as.character(files))
-    headers <- rep_len(as.character(header), length(files))
-
-    if (isTRUE(delete.file)) {
-        on.exit(unlink(files), add = TRUE)
-    }
-
-    for (index in seq_along(files)) {
-        if (index > 1L) writeLines("")
-        if (nzchar(headers[[index]])) writeLines(headers[[index]])
-        if (file.exists(files[[index]])) {
-            writeLines(readLines(files[[index]], warn = FALSE))
-        }
-    }
-
-    invisible(title)
-}
-
-
-install_runtime_console_bindings <- function() {
-    ensure_dialog_app_search_position()
-    app_env$plot <- graphics::plot
-    options(pager = runtime_console_pager)
-
-    invisible(TRUE)
-}
 
 
 if (!exists("current_activity_id", inherits = FALSE)) {
     current_activity_id <- ""
+}
+
+if (!exists("active_prompt_id", inherits = FALSE)) {
+    active_prompt_id <- ""
+}
+
+if (!exists("pending_prompt_reply", inherits = FALSE)) {
+    pending_prompt_reply <- NULL
 }
 
 
@@ -124,6 +66,17 @@ runtime_output_width <- function(value) {
 }
 
 
+runtime_evaluate_input_with_console_owner <- function(evaluate) {
+    evaluator <- get0(
+        "runtime_console_input_evaluator", envir = environment(), inherits = TRUE
+    )
+    if (is.null(evaluator)) {
+        return(evaluate())
+    }
+    evaluator(evaluate, wait_for_prompt_reply)
+}
+
+
 runtime_capture_input <- function(code, parent_id, output_width = NULL) {
     runtime_diagnostic_mark("evaluation.started")
     on.exit(runtime_diagnostic_mark("evaluation.finished"), add = TRUE)
@@ -135,6 +88,9 @@ runtime_capture_input <- function(code, parent_id, output_width = NULL) {
     stderr_connection <- NULL
     output_sink_active <- FALSE
     message_sink_active <- FALSE
+    original_output_depth <- sink.number(type = "output")
+    original_message_number <- sink.number(type = "message")
+    original_message_connection <- getConnection(original_message_number)
     previous_width <- NULL
     next_width <- runtime_output_width(output_width)
 
@@ -144,20 +100,27 @@ runtime_capture_input <- function(code, parent_id, output_width = NULL) {
         on.exit(options(width = previous_width), add = TRUE)
     }
 
-    output_connection <- textConnection("output", "w", local = TRUE)
-    stderr_connection <- textConnection("stderr", "w", local = TRUE)
-    sink(output_connection, type = "output")
-    output_sink_active <- TRUE
-    sink(stderr_connection, type = "message")
-    message_sink_active <- TRUE
-    on.exit({
+    restore_input_capture_sinks <- function() {
         if (isTRUE(message_sink_active)) {
-            sink(type = "message")
+            if (original_message_number == 2L) {
+                sink(type = "message")
+            } else {
+                sink(original_message_connection, type = "message")
+            }
+            message_sink_active <<- FALSE
         }
 
         if (isTRUE(output_sink_active)) {
-            sink(type = "output")
+            while (sink.number(type = "output") > original_output_depth) {
+                sink(type = "output")
+            }
+            output_sink_active <<- FALSE
         }
+
+        invisible(NULL)
+    }
+    on.exit({
+        suspendInterrupts(restore_input_capture_sinks())
 
         if (!is.null(output_connection)) {
             close(output_connection)
@@ -167,6 +130,13 @@ runtime_capture_input <- function(code, parent_id, output_width = NULL) {
             close(stderr_connection)
         }
     }, add = TRUE)
+
+    output_connection <- textConnection("output", "w", local = TRUE)
+    stderr_connection <- textConnection("stderr", "w", local = TRUE)
+    sink(output_connection, type = "output")
+    output_sink_active <- TRUE
+    sink(stderr_connection, type = "message")
+    message_sink_active <- TRUE
 
     result <- tryCatch({
         allowInterrupts(withCallingHandlers({
@@ -183,7 +153,9 @@ runtime_capture_input <- function(code, parent_id, output_width = NULL) {
             messages <<- c(messages, conditionMessage(message))
             tryInvokeRestart("muffleMessage")
         }, warning = function(warning) {
-            warnings <<- c(warnings, conditionMessage(warning))
+            if (runtime_accept_input_warning(warning, code)) {
+                warnings <<- c(warnings, conditionMessage(warning))
+            }
             tryInvokeRestart("muffleWarning")
         }, error = function(error) {
             app_env$dialog_record_traceback()
@@ -194,10 +166,7 @@ runtime_capture_input <- function(code, parent_id, output_width = NULL) {
         list(ok = FALSE, error = conditionMessage(error))
     })
 
-    sink(type = "message")
-    message_sink_active <- FALSE
-    sink(type = "output")
-    output_sink_active <- FALSE
+    suspendInterrupts(restore_input_capture_sinks())
     close(output_connection)
     output_connection <- NULL
     close(stderr_connection)
@@ -240,6 +209,19 @@ runtime_warning_text <- function(warnings) {
 }
 
 
+runtime_emit_package_warning_diagnostic <- function(warnings, code, parent_id) {
+    if (!length(warnings)) {
+        return(invisible(NULL))
+    }
+
+    diagnostic <- package_loading_warning_diagnostics(code, warnings[[1]])
+    emit_stream_event(diagnostic, "stderr", parent_id)
+    trace(gsub("\n", " | ", diagnostic, fixed = TRUE))
+
+    invisible(NULL)
+}
+
+
 runtime_emit_input_result <- function(result, code, parent_id, visible) {
     if (!isTRUE(visible)) return(invisible(NULL))
 
@@ -270,14 +252,7 @@ runtime_emit_input_result <- function(result, code, parent_id, visible) {
             vapply(warnings, is_package_loading_warning, logical(1))
         ]
 
-        if (length(package_warnings)) {
-            diagnostic <- package_loading_warning_diagnostics(
-                code,
-                package_warnings[[1]]
-            )
-            emit_stream_event(diagnostic, "stderr", parent_id)
-            trace(gsub("\n", " | ", diagnostic, fixed = TRUE))
-        }
+        runtime_emit_package_warning_diagnostic(package_warnings, code, parent_id)
     }
 
     invisible(NULL)
@@ -290,6 +265,8 @@ runtime_finish_input <- function(
     visible,
     workspace_code = ""
 ) {
+    outcome <- if (identical(state, "idle")) "success" else state
+    emit_execution_phase_event("evaluated", parent_id, outcome)
     queue_completion_event(
         state,
         parent_id,
@@ -298,6 +275,8 @@ runtime_finish_input <- function(
         emit_plot = FALSE
     )
     current_activity_id <<- ""
+    active_prompt_id <<- ""
+    pending_prompt_reply <<- NULL
 
     list(ok = TRUE, result = TRUE)
 }
@@ -313,7 +292,25 @@ runtime_execute_input <- function(params) {
         return(list(ok = FALSE, error = "missing-input-or-parent"))
     }
 
+    ordered_config <- if (exists("runtime_ordered_output_config", inherits = TRUE)) {
+        runtime_ordered_output_config
+    } else NULL
+    ordered_capture <- visible && !is.null(ordered_config)
+    if (ordered_capture) {
+        capture_name <- as.character(params$outputCaptureName %||% "")
+        if (
+            length(capture_name) != 1L || is.na(capture_name) ||
+            !grepl("^[[:alnum:]_-]+[.]bin$", capture_name) ||
+            !identical(params$outputCaptureSession, ordered_config$session_id) ||
+            !isTRUE(l10n_info()$`UTF-8`)
+        ) {
+            return(list(ok = FALSE, error = "ordered-output-owner-or-encoding-invalid"))
+        }
+    }
+
     current_activity_id <<- parent_id
+    active_prompt_id <<- ""
+    pending_prompt_reply <<- NULL
     trace(paste0(
         "execute_input:start parent=", parent_id,
         " visible=", visible
@@ -327,12 +324,48 @@ runtime_execute_input <- function(params) {
     }
 
     previous_plot <- plot_signature()
+    emit_execution_phase_event("running", parent_id)
     emit_state_event("busy", parent_id)
-    result <- runtime_capture_input(code, parent_id, output_width)
-    runtime_emit_input_result(result, code, parent_id, visible)
+    if (ordered_capture) {
+        evaluate_ordered_input <- function() {
+            previous_width <- getOption("width")
+            if (!is.null(output_width)) {
+                options(width = output_width)
+                on.exit(options(width = previous_width), add = TRUE)
+            }
+            runtime_capture_ordered_input(
+                code, file.path(ordered_config$directory, capture_name), ordered_config$backend
+            )
+        }
+        result <- tryCatch(runtime_evaluate_input_with_console_owner(evaluate_ordered_input), error = function(error) {
+            list(ok = FALSE, interrupted = FALSE, error = conditionMessage(error),
+                capture_status = "failed", output_sequence = NULL)
+        }, interrupt = function(interrupt) {
+            list(ok = TRUE, interrupted = TRUE, error = "",
+                capture_status = "failed", output_sequence = NULL)
+        })
+        if (!isTRUE(l10n_info()$`UTF-8`)) {
+            result$capture_status <- "failed"
+        }
+        runtime_emit_package_warning_diagnostic(result$package_warnings, code, parent_id)
+    } else {
+        result <- runtime_evaluate_input_with_console_owner(function() {
+            runtime_capture_input(code, parent_id, output_width)
+        })
+        runtime_emit_input_result(result, code, parent_id, visible)
+    }
+    attach_output_receipt <- function(response) {
+        if (ordered_capture) {
+            response$output_capture <- list(
+                sessionId = ordered_config$session_id, parentId = parent_id,
+                captureStatus = result$capture_status, outputSequence = result$output_sequence
+            )
+        }
+        response
+    }
 
     if (result$interrupted) {
-        return(runtime_finish_input("interrupted", parent_id, visible, code))
+        return(attach_output_receipt(runtime_finish_input("interrupted", parent_id, visible, code)))
     }
 
     if (!result$ok) {
@@ -344,7 +377,7 @@ runtime_execute_input <- function(params) {
             )
         }
 
-        return(runtime_finish_input("error", parent_id, visible, code))
+        return(attach_output_receipt(runtime_finish_input("error", parent_id, visible, code)))
     }
 
     runtime_finish_input(
@@ -355,24 +388,58 @@ runtime_execute_input <- function(params) {
     )
 
     if (visible) {
-        sync_httpgd_plot(parent_id, previous_plot)
+        sync_runtime_plot(parent_id, previous_plot)
     }
 
     trace(paste0("execute_input:done parent=", parent_id))
 
-    list(ok = TRUE, result = TRUE)
+    attach_output_receipt(list(ok = TRUE, result = TRUE))
 }
 
 
 runtime_reply_prompt <- function(params) {
     parent_id <- as.character(params$parentId %||% "")
-    reply <- as.character(params$reply %||% "")
+    active_parent_id <- as.character(current_activity_id %||% "")
 
-    if (!nzchar(reply)) {
+    if (
+        length(active_parent_id) != 1L ||
+        length(parent_id) != 1L ||
+        !nzchar(active_parent_id) ||
+        !nzchar(parent_id) ||
+        !identical(parent_id, active_parent_id)
+    ) {
+        return(list(ok = FALSE, error = "prompt-activity-mismatch"))
+    }
+
+    prompt_id <- as.character(params$promptId %||% "")
+
+    if (
+        length(prompt_id) != 1L ||
+        !nzchar(active_prompt_id) ||
+        !identical(prompt_id, active_prompt_id)
+    ) {
+        return(list(ok = FALSE, error = "prompt-instance-mismatch"))
+    }
+
+    if (!is.null(pending_prompt_reply)) {
+        return(list(ok = FALSE, error = "prompt-already-answered"))
+    }
+
+    if (is.null(params$reply)) {
         return(list(ok = FALSE, error = "missing-prompt-reply"))
     }
 
-    pending_prompt_reply <<- list(parent_id = parent_id, reply = reply)
+    reply <- as.character(params$reply)
+
+    if (length(reply) != 1L) {
+        return(list(ok = FALSE, error = "invalid-prompt-reply"))
+    }
+
+    pending_prompt_reply <<- list(
+        parent_id = parent_id,
+        prompt_id = prompt_id,
+        reply = reply
+    )
 
     list(ok = TRUE, result = TRUE)
 }

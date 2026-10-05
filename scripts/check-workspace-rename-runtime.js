@@ -118,6 +118,16 @@ const main = async function() {
         assert.deepEqual(names(recovered), ["occupied", "rename_attempts", "rename_recovered"]);
         assert.ok(recovered.workspaceRevision.sequence > baseline.workspaceRevision.sequence);
 
+        const edits = await manager.writeCells([
+            { objectName: "rename_recovered", rowIndex: 0, columnName: "value", value: 33 },
+            { objectName: "rename_recovered", rowIndex: 1, columnName: "value", value: 44 }
+        ]);
+        assert.equal(edits.updated, 2);
+        assert.equal(edits.failed, 0);
+        assert.ok(manager.getWorkspaceSnapshot().workspaceRevision.sequence > recovered.workspaceRevision.sequence);
+        await execute("stopifnot(identical(rename_recovered$value, c(33, 44)))");
+        console.log("Real native R cell batch: both edits committed, R values verified and workspace revision advanced.");
+
         console.log("Real R Rename: host delivery, active dataset, receipts, rejection cases, uncertain outcome and single-attempt recovery passed.");
     }
     finally {

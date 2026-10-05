@@ -200,6 +200,11 @@ export const createConsoleSessionState = function(
         onDidRuntimeBusy,
         getActivityId,
         getTranscriptEventKey: (event) => {
+            // Dispatch publication and the later runtime input event describe
+            // one submission, even when their transport identities differ.
+            if (event.type === "submitted" && event.parentId) {
+                return [event.type, event.parentId].join("::");
+            }
             return event.id ? [event.type, event.id].join("::") : "";
         },
         hasTranscriptEvent: (key) => transcriptEventKeys.has(key),

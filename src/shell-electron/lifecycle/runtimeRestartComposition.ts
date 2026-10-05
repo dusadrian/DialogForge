@@ -22,6 +22,7 @@ export interface RuntimeRestartCompositionOptions {
     getMainWindow(): BrowserWindow | null;
     productId: string;
     invalidateDatasetPreview(): void;
+    deferRuntimeSessionReady(): () => void;
     setRuntimeSession(snapshot: RuntimeSessionSnapshot): void;
     sendRuntimeSession(snapshot: RuntimeSessionSnapshot): void;
     refreshWorkspace(): Promise<unknown>;
@@ -34,6 +35,8 @@ export const registerRuntimeRestartComposition = function(
 ): void {
     const controller = createRuntimeRestartController({
         runtimeSessionManager: options.runtimeSessionManager,
+        // The native control socket can persist while the console waits for input.
+        canPersistWorkspaceNow: () => true,
         createWorkspacePath: function(): string {
             return path.join(
                 options.temporaryDirectory,
@@ -46,6 +49,7 @@ export const registerRuntimeRestartComposition = function(
             } catch {}
         },
         invalidateDatasetPreview: options.invalidateDatasetPreview,
+        deferRuntimeSessionReady: options.deferRuntimeSessionReady,
         setRuntimeSession: options.setRuntimeSession,
         sendRuntimeSession: options.sendRuntimeSession,
         refreshWorkspace: options.refreshWorkspace,

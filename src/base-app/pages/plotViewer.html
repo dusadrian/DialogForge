@@ -788,12 +788,14 @@
       </div>
     </div>
     <script src="./shared/plotViewportInteractions.js"></script>
+    <script src="./shared/plotViewerLanguage.js"></script>
     <script>
       (function () {
         if (window.dialogForge) return;
 
         const plotViewerCallbacks = [];
         const zoomCallbacks = [];
+        const languageCallbacks = [];
         const plotViewportModifierCallbacks = [];
 
         window.dialogForge = {
@@ -805,6 +807,11 @@
           onMainZoomFactor: function (callback) {
             if (typeof callback === 'function') {
               zoomCallbacks.push(callback);
+            }
+          },
+          onLanguageChanged: function (callback) {
+            if (typeof callback === 'function') {
+              languageCallbacks.push(callback);
             }
           },
           onPlotViewportModifier: function (callback) {
@@ -821,12 +828,7 @@
             ) {
               return window.parent.dialogForge.executeInvisibleMutation(request || {});
             }
-            window.parent.postMessage({
-              source: 'dialogforge.browser-plot-viewer',
-              type: 'executeInvisibleMutation',
-              request: request || {}
-            }, window.location.origin);
-            return Promise.resolve({ ok: true });
+            return Promise.reject(new Error('Plot runtime bridge is unavailable.'));
           },
           savePlot: function (request) {
             if (
@@ -837,12 +839,7 @@
             ) {
               return window.parent.dialogForge.savePlot(request || {});
             }
-            window.parent.postMessage({
-              source: 'dialogforge.browser-plot-viewer',
-              type: 'savePlot',
-              request: request || {}
-            }, window.location.origin);
-            return Promise.resolve({ ok: true });
+            return Promise.reject(new Error('Plot save bridge is unavailable.'));
           },
           copyPlot: function (url) {
             if (
@@ -853,12 +850,7 @@
             ) {
               return window.parent.dialogForge.copyPlot(String(url || ''));
             }
-            window.parent.postMessage({
-              source: 'dialogforge.browser-plot-viewer',
-              type: 'copyPlot',
-              url: String(url || '')
-            }, window.location.origin);
-            return Promise.resolve({ ok: true });
+            return Promise.reject(new Error('Plot clipboard bridge is unavailable.'));
           }
         };
 
@@ -880,6 +872,12 @@
           if (event.data.type === 'mainZoomFactor') {
             zoomCallbacks.forEach(function (callback) {
               try { callback(event.data.value); } catch {}
+            });
+          }
+
+          if (event.data.type === 'languageChanged') {
+            languageCallbacks.forEach(function (callback) {
+              try { callback(event.data.payload || {}); } catch {}
             });
           }
 
@@ -1014,8 +1012,8 @@
           }
 
           applyPlotTranslations();
-          applySquareMode(squareMode);
-          applyHistoryVisible(historyVisible);
+          applySquareMode(squareMode, false);
+          applyHistoryVisible(historyVisible, false);
         };
         const resolveAvailablePlotArea = function () {
           if (!bodyEl || !sidebarEl) return { width: 720, height: 576 };
@@ -1203,6 +1201,9 @@
         const deriveExportUrl = function (rawUrl, index, width, height, format) {
           const url = derivePlotUrl(rawUrl, index, width, height);
           if (!url) return '';
+          // Captured bitmap URLs already identify the physical PNG resource;
+          // only an HTTP graphics device accepts renderer query parameters.
+          if (/^(?:blob|data):/.test(url)) return url;
           try {
             const parsed = new URL(url);
             let renderer = String(format || 'png').trim().toLowerCase();
@@ -1216,6 +1217,31 @@
           } catch {
             return url;
           }
+        };
+
+        const preparePlotExportUrl = async function (rawUrl, index, width, height, format) {
+            const url = deriveExportUrl(rawUrl, index, width, height, format);
+
+            if (!url || !/^(?:blob|data):/.test(url)) {
+                return url;
+            }
+
+            const image = new Image();
+            image.src = url;
+            await image.decode();
+
+            const canvas = document.createElement('canvas');
+            canvas.width = Math.max(160, Math.round(Number(width) || image.naturalWidth));
+            canvas.height = Math.max(160, Math.round(Number(height) || image.naturalHeight));
+            const context = canvas.getContext('2d');
+
+            if (!context) {
+                throw new Error('Plot image export is unavailable.');
+            }
+
+            context.drawImage(image, 0, 0, canvas.width, canvas.height);
+
+            return canvas.toDataURL('image/png');
         };
 
         const parseRendererIds = function (payload) {
@@ -1294,7 +1320,7 @@
           return { width, height };
         };
 
-        const applySquareMode = function (enabled) {
+        const applySquareMode = function (enabled, updateLayout = true) {
           if (squareToggleEl) {
             const title = enabled
               ? translatePlotText('Disable square plot viewport', 'Disable square plot viewport')
@@ -1304,7 +1330,9 @@
             squareToggleEl.setAttribute('title', title);
             squareToggleEl.setAttribute('aria-label', title);
           }
-          scheduleLayout();
+          if (updateLayout) {
+            scheduleLayout();
+          }
         };
 
         const applyZoomMode = function (mode) {
@@ -1329,7 +1357,7 @@
           scheduleLayout();
         };
 
-        const applyHistoryVisible = function (visible) {
+        const applyHistoryVisible = function (visible, updateLayout = true) {
           if (historyToggleEl) {
             const title = visible
               ? translatePlotText('Hide plot history pane', 'Hide plot history pane')
@@ -1360,7 +1388,9 @@
               visible ? `${Math.max(0, Math.round(sidebarWidth + 4))}px` : '0px'
             );
           } catch {}
-          scheduleLayout();
+          if (updateLayout) {
+            scheduleLayout();
+          }
         };
 
         const renderCurrentPlot = function () {
@@ -1715,9 +1745,9 @@
             if (!rawUrl || currentPlotIndex < 0) return;
             const format = String((saveFormatSelectEl && saveFormatSelectEl.value) || 'png').trim().toLowerCase();
             const dims = getSaveDimensions();
-            const exportUrl = deriveExportUrl(rawUrl, currentPlotIndex, dims.width, dims.height, format);
-            if (!exportUrl) return;
             try {
+              const exportUrl = await preparePlotExportUrl(rawUrl, currentPlotIndex, dims.width, dims.height, format);
+              if (!exportUrl) return;
               await window.dialogForge.savePlot({
                 url: exportUrl,
                 format,
@@ -1732,9 +1762,9 @@
             const rawUrl = String((latestPayload && latestPayload.url) || '').trim();
             if (!rawUrl || currentPlotIndex < 0) return;
             const dims = resolvePlotDimensions();
-            const exportUrl = deriveExportUrl(rawUrl, currentPlotIndex, dims.width, dims.height, 'png');
-            if (!exportUrl) return;
             try {
+              const exportUrl = await preparePlotExportUrl(rawUrl, currentPlotIndex, dims.width, dims.height, 'png');
+              if (!exportUrl) return;
               await window.dialogForge.copyPlot(exportUrl);
             } catch {}
           });
@@ -1827,19 +1857,13 @@
 
         applyPlotTranslations();
 
-        if (
-          window.dialogForge
-          && typeof window.dialogForge.getComposition === 'function'
-        ) {
-          window.dialogForge.getComposition()
-            .then(function (composition) {
-              applyPlotI18n((composition && composition.i18n) || {});
-              applySquareMode(squareMode);
-              applyHistoryVisible(historyVisible);
-              renderHistory(latestPayload);
-            })
-            .catch(function () {});
-        }
+        void window.DialogForgePlotViewerLanguage.bindPlotViewerLanguage({
+          bridge: window.dialogForge,
+          applyTranslations: applyPlotI18n,
+          refreshHistory: function () {
+            renderHistory(latestPayload);
+          }
+        });
 
         window.dialogForge.onPlotViewerUpdate(function (payload) {
           if (payload && payload.i18n) {

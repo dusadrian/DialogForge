@@ -5,28 +5,23 @@ import type {
 
 import type { DialogExternalCallHost } from "../../core/contracts/dialogExternalCall";
 import type {
-    ProductConsoleStateChip,
-    ProductConsoleStateChipSnapshot
+    ProductConsoleStateChip
 } from "../../core/contracts/productContribution";
 import {
     dialogRuntimeIpcChannels
 } from "../../dialog-runtime/dialogRuntimeIpc";
+import {
+    isDialogStateExternalCall
+} from "../../dialog-runtime/custom-js/dialogStateExternalCalls";
 
 
 export interface DialogExternalCallIpcControllerOptions {
     ipcMain: IpcMain;
     host: Pick<DialogExternalCallHost, "call">;
-    publishFilterState(dataset: string): void;
     shouldPublishConsoleStateChips(name: string): boolean;
     readConsoleStateChips(dataset: string): Promise<ProductConsoleStateChip[]>;
-    publishConsoleStateChips(snapshot: ProductConsoleStateChipSnapshot): void;
+    refreshConsoleStateChips(dataset: string): Promise<void>;
 }
-
-
-const filterMutationCalls = new Set([
-    "setFilterState",
-    "clearFilterState"
-]);
 
 
 export const createDialogExternalCallIpcController = function(
@@ -41,23 +36,17 @@ export const createDialogExternalCallIpcController = function(
         const callParameters = parameters || {};
         const result = await options.host.call(externalName, callParameters);
 
-        if (filterMutationCalls.has(externalName)) {
-            options.publishFilterState(
-                String(callParameters.dataset || "").trim()
-            );
-        }
-
-        if (options.shouldPublishConsoleStateChips(externalName)) {
+        if (
+            !isDialogStateExternalCall(externalName)
+            && options.shouldPublishConsoleStateChips(externalName)
+        ) {
             const dataset = externalName === "inheritSubsetDatasetState"
                 ? callParameters.target
                 : callParameters.dataset;
 
             const datasetName = String(dataset || "").trim();
 
-            options.publishConsoleStateChips({
-                dataset: datasetName,
-                chips: await options.readConsoleStateChips(datasetName)
-            });
+            await options.refreshConsoleStateChips(datasetName);
         }
 
         return result;

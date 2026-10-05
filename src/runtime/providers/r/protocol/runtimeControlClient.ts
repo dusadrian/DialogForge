@@ -1,12 +1,30 @@
 import * as fs from "fs";
 import * as net from "net";
+import { randomUUID } from "node:crypto";
 import {
-    encodeRuntimeControlRequest
+    createRuntimeControlRequestSizeLimit
 } from "./runtimeControlRequestEncoding";
 import { createRuntimeControlDiagnostics } from "./runtimeControlDiagnostics";
+import { createRuntimeControlFrameReader } from "./runtimeControlFrameReader";
+import { createRuntimeOperationQueue } from "../../../session/runtimeOperationQueue";
+import { createRuntimeControlRequestAdmission } from "./runtimeControlRequestAdmission";
+import { readRuntimeControlEventError, readRuntimeControlResponseError, createValidatedRuntimeControlResponse,
+    RuntimeControlTransportError, maximumRuntimeControlFrameBytes } from "./runtimeControlResponseValidation";
+import {
+    createRuntimeControlEventRetention,
+    type RuntimeControlEventBudget
+} from "./runtimeControlEventRetention";
+import { executeRuntimeControlRequestWithDeadline } from "./runtimeControlRequestDeadline";
+import { createRuntimeControlRequestPreparation } from "./runtimeControlRequestPreparation";
 
 
 export interface RRuntimeControlMeta {
+    boundedInput?: string;
+    maxRequestBytes?: number;
+    responseIdentity?: string;
+    eventIdentity?: string;
+    orderedOutputEncoding?: string;
+    orderedOutputSession?: string;
     ok?: boolean;
     host?: string;
     port?: number;
@@ -20,6 +38,7 @@ export interface RRuntimeControlMeta {
 export interface RRuntimeControlRequest {
     id: string;
     method: string;
+    transportNonce?: string;
     params?: Record<string, unknown>;
 }
 
@@ -30,20 +49,36 @@ export interface RRuntimeControlResponse {
     ok: boolean;
     result?: unknown;
     error?: string;
+    requestRejected?: boolean;
+    transportFailure?: boolean;
+    completionFailure?: boolean;
     mode?: string;
     events?: unknown[];
 }
 
 export interface RRuntimeControlClientOptions {
+    writeTimeoutMs?: number;
+    maxOutstandingRequests?: number;
+    maxRetainedEventBytes?: number;
+    maxRetainedEvents?: number;
+    maxFrameBytes?: number;
     onEvent?: (event: unknown) => void;
     diagnostics?: ReturnType<typeof createRuntimeControlDiagnostics>;
+}
+
+
+export interface RRuntimeControlDispatchOptions {
+    onDispatched?(): void;
+    onResponseReceived?(response: RRuntimeControlResponse): void;
+    waitForResponseDelivery?(): Promise<void>;
 }
 
 
 export interface RRuntimeControlClient {
     getWorkspaceEpoch?(): number;
     execute(
-        request: RRuntimeControlRequest
+        request: RRuntimeControlRequest,
+        options?: RRuntimeControlDispatchOptions
     ): Promise<RRuntimeControlResponse>;
     detach(): void;
 }
@@ -51,12 +86,13 @@ export interface RRuntimeControlClient {
 
 interface PendingRuntimeRequest {
     request: RRuntimeControlRequest;
+    dispatchOptions?: RRuntimeControlDispatchOptions;
     method: string;
     parentId: string;
     collectEvents: boolean;
     resolve: (response: RRuntimeControlResponse) => void;
-    timeout: NodeJS.Timeout | null;
     events: unknown[];
+    eventBudget: RuntimeControlEventBudget;
 }
 
 
@@ -99,7 +135,7 @@ const runtimeEventParentId = function(event: unknown): string {
 
     return String(
         (event as Record<string, unknown>).parent_id || ""
-    ).trim();
+    );
 };
 
 
@@ -108,7 +144,7 @@ const runtimeEventType = function(event: unknown): string {
         return "";
     }
 
-    return String((event as Record<string, unknown>).type || "").trim();
+    return String((event as Record<string, unknown>).type || "");
 };
 
 
@@ -116,14 +152,69 @@ export const createRuntimeControlClient = function(
     meta: RRuntimeControlMeta,
     options: RRuntimeControlClientOptions = {}
 ): RRuntimeControlClient {
+    const maxFrameBytes = options.maxFrameBytes ?? maximumRuntimeControlFrameBytes;
+    const writeTimeoutMs = options.writeTimeoutMs ?? 2500;
+    if (!Number.isSafeInteger(writeTimeoutMs) || writeTimeoutMs < 1 || writeTimeoutMs > 2147483647) {
+        throw new Error("Runtime write deadline must be an integer from 1 to 2147483647 milliseconds.");
+    }
+    const requestSizeLimit = createRuntimeControlRequestSizeLimit(meta.maxRequestBytes);
+    const maxOutstandingRequests = options.maxOutstandingRequests ?? 64;
+    const eventRetention = createRuntimeControlEventRetention(options);
+    if (!Number.isSafeInteger(maxFrameBytes) || maxFrameBytes < 512) {
+        throw new Error("Runtime frame limit must be an integer of at least 512 bytes.");
+    }
     const diagnostics = options.diagnostics || createRuntimeControlDiagnostics("native");
-    let workspaceEpoch = 0;
+    if (meta.responseIdentity && meta.responseIdentity !== "attachment-request-v1") {
+        throw new Error("Unsupported native response identity contract.");
+    }
+    const responseIdentity = meta.responseIdentity === "attachment-request-v1";
+    if (
+        meta.eventIdentity
+        && (meta.eventIdentity !== "request-nonce-v1" || !responseIdentity)
+    ) {
+        throw new Error("Unsupported native event identity contract.");
+    }
+    const eventIdentity = meta.eventIdentity === "request-nonce-v1";
+    const attachmentId = randomUUID();
+    const connectionHost = String(meta.host || "127.0.0.1");
+    const connectionPort = Number(meta.port || 0);
+    const connectionToken = String(meta.token || "");
+    let requestSequence = 0;
     let socket: net.Socket | null = null;
     let connectPromise: Promise<void> | null = null;
-    let receiveBuffer = "";
+    let writeBarrier: Promise<void> | null = null;
+    let finishSocketWrite: (() => void) | null = null;
     const pending = new Map<string, PendingRuntimeRequest>();
+    let attached = true;
+    const requestAdmission = createRuntimeControlRequestAdmission(maxOutstandingRequests);
+    const requestQueue = createRuntimeOperationQueue();
+    const requestPreparation = createRuntimeControlRequestPreparation({
+        admission: requestAdmission,
+        diagnostics,
+        sizeLimit: requestSizeLimit,
+        connectionToken,
+        decorateRequest(request) {
+            if (requestSequence >= Number.MAX_SAFE_INTEGER) {
+                throw new Error("runtime-session-request-sequence-exhausted");
+            }
+            return {
+                ...request,
+                transportNonce: responseIdentity
+                    ? `${attachmentId}:${++requestSequence}` : undefined
+            };
+        }
+    });
+
+    const releaseRequest = function(id: string): void {
+        requestAdmission.release(id);
+    };
 
     const collectRuntimeEvent = function(event: unknown): void {
+        const retainEvent = function(item: PendingRuntimeRequest): void {
+            item.eventBudget.check([event]);
+            diagnostics.receiveEvent(item.request, event);
+            item.events.push(event);
+        };
         const parentId = runtimeEventParentId(event);
         const collectors = Array.from(pending.values()).filter((item) => {
             return item.collectEvents;
@@ -132,8 +223,7 @@ export const createRuntimeControlClient = function(
         if (parentId) {
             collectors.forEach((item) => {
                 if (item.parentId === parentId) {
-                    diagnostics.receiveEvent(item.request, event);
-                    item.events.push(event);
+                    retainEvent(item);
                 }
             });
             return;
@@ -143,75 +233,158 @@ export const createRuntimeControlClient = function(
             runtimeEventType(event) === "prompt_state"
             && collectors.length === 1
         ) {
-            diagnostics.receiveEvent(collectors[0].request, event);
-            collectors[0].events.push(event);
+            retainEvent(collectors[0]);
         }
     };
 
     const failPending = function(error: string): void {
+        attached = false;
+        finishSocketWrite?.();
+        requestAdmission.retire(error);
+        requestQueue.retire(new Error(error));
         Array.from(pending.entries()).forEach(([id, item]) => {
-            if (item.timeout) {
-                clearTimeout(item.timeout);
-            }
             pending.delete(id);
             diagnostics.record(item.request, "request.failed");
             item.resolve({
                 id,
                 method: item.method,
                 ok: false,
-                error
+                error,
+                transportFailure: true,
+                events: item.events.slice()
             });
         });
     };
 
     const bindSocket = function(sock: net.Socket): void {
-        sock.setEncoding("utf8");
-        sock.on("data", (chunk: string) => {
-            receiveBuffer += String(chunk || "");
-            let index = receiveBuffer.indexOf("\n");
-
-            while (index >= 0) {
-                const line = receiveBuffer.slice(0, index).replace(/\r$/, "");
-                receiveBuffer = receiveBuffer.slice(index + 1);
-
-                if (line.trim()) {
-                    try {
-                        const message = JSON.parse(line.trim());
-                        const id = String(message.id || "");
-                        const item = id ? pending.get(id) : null;
-
-                        if (item) {
-                            diagnostics.record(
-                                item.request, "response.received",
-                                diagnostics.enabled ? Buffer.byteLength(line) : 0
-                            );
-                            diagnostics.receiveDiagnostics(item.request, message.diagnostics);
-                            for (const event of Array.isArray(message.events) ? message.events : []) {
-                                diagnostics.receiveEvent(item.request, event);
-                            }
-                            if (item.timeout) {
-                                clearTimeout(item.timeout);
-                            }
-                            pending.delete(id);
-                            item.resolve({
-                                id,
-                                method: String(message.method || item.method),
-                                ok: message.ok === true,
-                                result: message.result,
-                                error: message.error ? String(message.error) : undefined,
-                                mode: message.mode ? String(message.mode) : undefined,
-                                events: item.events.concat(Array.isArray(message.events) ? message.events : [])
-                            });
-                        } else if (String(message.type || "")) {
-                            collectRuntimeEvent(message);
-                            options.onEvent?.(message);
-                        }
-                    } catch {
-                        diagnostics.record({ id: "transport", method: "runtime.transport" }, "frame.delivery_failed", 1);
-                    }
+        const validateEventOwner = function(
+            event: unknown, responseOwner?: PendingRuntimeRequest
+        ): void {
+            const eventError = readRuntimeControlEventError(event);
+            if (eventError) {
+                throw new Error(eventError);
+            }
+            if (!eventIdentity) {
+                // Legacy socket senders lack nonces, not a captured operation.
+                // Prompt replies may overlap the one serialized input owner.
+                const dispatched = Array.from(pending.values());
+                const owner = responseOwner
+                    || dispatched.find(item => item.method === "execute_input")
+                    || dispatched[0];
+                if (!owner) {
+                    throw new Error("runtime-session-event-identity-mismatch");
                 }
+                const ownershipError = readRuntimeControlEventError(event, owner.request, !responseOwner);
+                if (ownershipError) {
+                    throw new Error(ownershipError);
+                }
+                return;
+            }
+            const value = event as Record<string, unknown>;
+            if (typeof value.transportNonce !== "string" || !value.transportNonce) {
+                throw new Error("runtime-session-invalid-event-envelope");
+            }
+            const owner = Array.from(pending.values()).find((item) => {
+                return item.request.transportNonce === value.transportNonce;
+            });
+            if (!owner) {
+                throw new Error("runtime-session-event-identity-mismatch");
+            }
+            const ownershipError = readRuntimeControlEventError(event, owner.request, !responseOwner);
+            if (ownershipError) {
+                throw new Error(ownershipError);
+            }
+            if (
+                responseOwner && responseOwner !== owner
+                && !(responseOwner.method === "reply_prompt"
+                    && owner.method === "execute_input"
+                    && responseOwner.parentId === owner.parentId)
+            ) {
+                throw new Error("runtime-session-event-response-owner-mismatch");
+            }
+        };
+        const frames = createRuntimeControlFrameReader((line) => {
+            if (!attached || socket !== sock) {
+                return;
+            }
+            const message = JSON.parse(line.trim());
+            if (!message || typeof message !== "object" || Array.isArray(message)) {
+                throw new Error("runtime-session-invalid-frame");
+            }
+            // R responses carry method/ok headers; events have their own IDs.
+            // A generated event ID may equal a caller's admitted request ID.
+            const eventFrame = message.method === undefined && message.ok === undefined;
+            if (!eventFrame && message.id !== undefined && typeof message.id !== "string") {
+                throw new Error("runtime-session-invalid-frame-identity");
+            }
+            const id = typeof message.id === "string" ? message.id : "";
+            const item = !eventFrame && id ? pending.get(id) : null;
 
-                index = receiveBuffer.indexOf("\n");
+            if (item) {
+                const responseError = readRuntimeControlResponseError(message, item.request, responseIdentity);
+                if (responseError) {
+                    throw new Error(responseError);
+                }
+                const responseEvents = Array.isArray(message.events) ? message.events : [];
+                item.eventBudget.check(responseEvents);
+                for (const event of responseEvents) {
+                    validateEventOwner(event, item);
+                }
+                diagnostics.receiveResponse(
+                    item.request, message,
+                    diagnostics.enabled ? Buffer.byteLength(line) : 0
+                );
+                const response = createValidatedRuntimeControlResponse(
+                    message, item.events.concat(responseEvents)
+                );
+                item.dispatchOptions?.onResponseReceived?.(response);
+                pending.delete(id);
+                item.resolve(response);
+                requestAdmission.releaseAfterResponseDelivery(
+                    id, item.dispatchOptions?.waitForResponseDelivery, function(error): void {
+                        if (attached && socket === sock) {
+                            failPending(error);
+                            sock.destroy();
+                        }
+                    }
+                );
+            } else if (eventFrame) {
+                validateEventOwner(message);
+                collectRuntimeEvent(message);
+                options.onEvent?.(message);
+            } else {
+                throw new Error("runtime-session-unmatched-response");
+            }
+        }, maxFrameBytes);
+        const failTransport = function(error: unknown): void {
+            diagnostics.record({ id: "transport", method: "runtime.transport" }, "frame.delivery_failed", 1);
+            // Do not surface remote JSON fragments or consumer exception contents.
+            const detail = new RuntimeControlTransportError(
+                error, "runtime-session-frame-delivery-failed"
+            ).message;
+            failPending(detail);
+            sock.destroy();
+        };
+        sock.on("data", (chunk: Buffer) => {
+            try {
+                frames.push(chunk);
+            } catch (error) {
+                failTransport(error);
+            }
+        });
+        sock.on("end", () => {
+            if (!attached || socket !== sock) {
+                return;
+            }
+
+            try {
+                frames.end();
+                // EOF forbids another response even if the local write side
+                // has not emitted close yet. Retire through the shared owners.
+                failPending("runtime-session-socket-ended");
+                sock.destroy();
+            } catch (error) {
+                failTransport(error);
             }
         });
         sock.on("error", () => {
@@ -235,9 +408,14 @@ export const createRuntimeControlClient = function(
 
         const nextConnectPromise = new Promise<void>((resolve, reject) => {
             const sock = net.createConnection({
-                host: String(meta.host || "127.0.0.1"),
-                port: Number(meta.port || 0)
+                host: connectionHost,
+                port: connectionPort
             }, () => {
+                if (!attached) {
+                    sock.destroy();
+                    resolve(undefined);
+                    return;
+                }
                 sock.setNoDelay(true);
                 sock.unref();
                 socket = sock;
@@ -259,91 +437,156 @@ export const createRuntimeControlClient = function(
         return nextConnectPromise;
     };
 
-    return {
-        getWorkspaceEpoch: () => workspaceEpoch,
-        execute: async function(request: RRuntimeControlRequest): Promise<RRuntimeControlResponse> {
-            if (request.method !== "workspace.update" && request.method !== "workspace.snapshot") {
-                workspaceEpoch += 1;
+    const sendRequest = async function(
+        request: RRuntimeControlRequest,
+        encodedFrame: string,
+        dispatchOptions?: RRuntimeControlDispatchOptions
+    ): Promise<RRuntimeControlResponse> {
+        try {
+            diagnostics.record(request, "request.dequeued");
+            await ensureConnected();
+            while (attached && writeBarrier) {
+                await writeBarrier;
             }
-            request = diagnostics.prepare(request);
-            const requestedTimeoutMs = Number(request.params?.timeoutMs);
-            const timeoutMs = Number.isFinite(requestedTimeoutMs) && requestedTimeoutMs > 0
-                ? Math.max(250, requestedTimeoutMs)
-                : request.method === "execute_input"
-                    ? null
-                    : 2500;
 
-            try {
-                await ensureConnected();
-
-                if (!socket || socket.destroyed) {
-                    return {
-                        id: request.id,
-                        method: request.method,
-                        ok: false,
-                        error: "runtime-session-connect-failed"
-                    };
-                }
-
-                const activeSocket = socket;
-
-                return await new Promise<RRuntimeControlResponse>((resolve) => {
-                    const timeout = timeoutMs === null
-                        ? null
-                        : setTimeout(() => {
-                            pending.delete(request.id);
-                            diagnostics.record(request, "request.timed_out");
-                            resolve({
-                                id: request.id,
-                                method: request.method,
-                                ok: false,
-                                error: "runtime-session-timeout"
-                            });
-                        }, timeoutMs + 120);
-
-                    pending.set(request.id, {
-                        request,
-                        method: request.method,
-                        parentId: String(request.params?.parentId || "").trim(),
-                        collectEvents: request.method === "execute_input",
-                        resolve,
-                        timeout,
-                        events: []
-                    });
-
-                    try {
-                        const frame = `${encodeRuntimeControlRequest(request, String(meta.token || ""))}\n`;
-                        diagnostics.record(
-                            request, "request.sent",
-                            diagnostics.enabled ? Buffer.byteLength(frame) : 0
-                        );
-                        activeSocket.write(frame);
-                    } catch {
-                        if (timeout) {
-                            clearTimeout(timeout);
-                        }
-                        pending.delete(request.id);
-                        resolve({
-                            id: request.id,
-                            method: request.method,
-                            ok: false,
-                            error: "runtime-session-write-failed"
-                        });
-                    }
-                });
-            } catch (error) {
+            if (!attached || !socket || socket.destroyed) {
+                releaseRequest(request.id);
                 return {
                     id: request.id,
                     method: request.method,
                     ok: false,
-                    error: error instanceof Error ? error.message : String(error)
+                    transportFailure: true,
+                    error: attached ? "runtime-session-connect-failed" : "runtime-session-detached"
                 };
-            } finally {
-                diagnostics.record(request, "response.resolved");
             }
+
+            const activeSocket = socket;
+
+            return await new Promise<RRuntimeControlResponse>((resolve) => {
+                pending.set(request.id, {
+                    request,
+                    dispatchOptions,
+                    method: request.method,
+                    parentId: String(request.params?.parentId || ""),
+                    collectEvents: request.method === "execute_input",
+                    resolve,
+                    events: [],
+                    eventBudget: eventRetention.createRequestBudget()
+                });
+
+                try {
+                    const frame = encodedFrame;
+                    let releaseWrite: () => void;
+                    const barrier = new Promise<void>((resolveWrite) => {
+                        releaseWrite = resolveWrite;
+                    });
+                    writeBarrier = barrier;
+                    let writeDeadline: NodeJS.Timeout | null = null;
+                    const settleWrite = function(): void {
+                        if (writeDeadline) {
+                            clearTimeout(writeDeadline);
+                            writeDeadline = null;
+                        }
+                        if (finishSocketWrite === settleWrite) {
+                            finishSocketWrite = null;
+                            writeBarrier = null;
+                        }
+                        releaseWrite!();
+                    };
+                    finishSocketWrite = settleWrite;
+                    writeDeadline = setTimeout(() => {
+                        if (finishSocketWrite === settleWrite && attached && socket === activeSocket) {
+                            failPending("runtime-session-write-timeout");
+                            activeSocket.destroy();
+                        }
+                    }, writeTimeoutMs);
+                    dispatchOptions?.onDispatched?.();
+                    if (!attached || socket !== activeSocket || activeSocket.destroyed) {
+                        failPending("runtime-session-detached");
+                        activeSocket.destroy();
+                        return;
+                    }
+                    diagnostics.record(
+                        request, "request.sent",
+                        diagnostics.enabled ? Buffer.byteLength(frame) : 0
+                    );
+                    activeSocket.write(frame, (error) => {
+                        if (finishSocketWrite !== settleWrite) {
+                            return;
+                        }
+                        if (error && attached && socket === activeSocket) {
+                            failPending("runtime-session-write-failed");
+                            activeSocket.destroy();
+                            return;
+                        }
+                        settleWrite();
+                    });
+                } catch {
+                    // A failed dispatch/write cannot establish whether R ran it.
+                    failPending("runtime-session-write-failed");
+                    activeSocket.destroy();
+                }
+            });
+        } catch (error) {
+            releaseRequest(request.id);
+            return {
+                id: request.id,
+                method: request.method,
+                ok: false,
+                transportFailure: true,
+                error: error instanceof Error ? error.message : String(error)
+            };
+        } finally {
+            diagnostics.record(request, "response.resolved");
+        }
+    };
+
+    return {
+        getWorkspaceEpoch: requestPreparation.getWorkspaceEpoch,
+        execute: function(
+            request: RRuntimeControlRequest,
+            dispatchOptions?: RRuntimeControlDispatchOptions
+        ): Promise<RRuntimeControlResponse> {
+            if (!attached) {
+                return Promise.resolve({
+                    id: request.id, method: request.method,
+                    ok: false, error: "runtime-session-detached", transportFailure: true
+                });
+            }
+            const prepared = requestPreparation.prepare(request);
+            if (!prepared.accepted) {
+                return Promise.resolve(prepared.response);
+            }
+            request = prepared.request;
+            const frame = `${prepared.encodedRequest}\n`;
+            if (request.method === "reply_prompt") {
+                return executeRuntimeControlRequestWithDeadline(request,
+                    (dispatch) => sendRequest(request, frame, dispatch), dispatchOptions,
+                    () => diagnostics.record(request, "request.timed_out"), {
+                        subscribe: requestAdmission.subscribeRetirement,
+                        readEvents: () => pending.get(request.id)?.events.slice() || []
+                    });
+            }
+
+            return requestQueue.run(
+                () => executeRuntimeControlRequestWithDeadline(request,
+                    (dispatch) => sendRequest(request, frame, dispatch), dispatchOptions,
+                    () => diagnostics.record(request, "request.timed_out"), {
+                        subscribe: requestAdmission.subscribeRetirement,
+                        readEvents: () => pending.get(request.id)?.events.slice() || []
+                    }),
+                () => requestAdmission.waitForRelease(request.id)
+            ).catch((error) => {
+                releaseRequest(request.id);
+                return {
+                    id: request.id, method: request.method, ok: false,
+                    error: error instanceof Error ? error.message : String(error),
+                    transportFailure: true
+                };
+            });
         },
         detach: function(): void {
-            workspaceEpoch += 1;
+            requestPreparation.retireWorkspaceEpoch();
             failPending("runtime-session-detached");
             if (socket) {
                 try {
@@ -352,7 +595,6 @@ export const createRuntimeControlClient = function(
             }
             socket = null;
             connectPromise = null;
-            receiveBuffer = "";
         }
     };
 };

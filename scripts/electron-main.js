@@ -33,6 +33,9 @@ const runtimeRecoveryDialogControllerModule = require("../src/shell-electron/lif
 const runtimeRestartComposition = require("../src/shell-electron/lifecycle/runtimeRestartComposition");
 const runtimeIpcCompositionModule = require("../src/shell-electron/runtime/runtimeIpcComposition");
 const runtimeSessionCompositionModule = require("../src/shell-electron/runtime/runtimeSessionComposition");
+const { createDialogFilterStateDelivery } = require("../src/dialog-runtime/custom-js/dialogStateCallRouter");
+const { createActiveDatasetStateChipReader } = require("../src/base-app/features/workspace-pane/activeDatasetStateChips");
+const { readSelectedWorkspaceDatasetName, readWorkspaceActiveDatasetScope } = require("../src/runtime/workspace/workspaceActiveDatasetDelivery");
 const electronSmokeRunner = require("../src/shell-electron/smoke/electronSmokeRunner");
 const rHelpServerModule = require("../src/runtime/providers/r/help/rHelpServer");
 const rHelpPageProxyModule = require("../src/runtime/providers/r/help/rHelpPageProxy");
@@ -178,6 +181,7 @@ const rHelpServer = rHelpServerModule.createRHelpServer({
 const resourceClient = nodeResourceClientModule.createNodeResourceClient();
 const rHelpPageProxy = rHelpPageProxyModule.createRHelpPageProxy({
     rewriteUrl: rHelpServer.rewriteUrl,
+    captureOwner: rHelpServer.captureOwner,
     resourceClient
 });
 let runtimeSessionManager;
@@ -253,6 +257,19 @@ consoleHistoryIpcController.createConsoleHistoryIpcController({
     ipcMain: electron.ipcMain,
     historyStore: consoleHistorySettingsStore
 });
+const deliverDialogFilterState = createDialogFilterStateDelivery({
+    readFilterState: (dataset) => readDialogFilterState(dataset),
+    getSessionScope: () => readWorkspaceActiveDatasetScope(runtimeSessionManager?.getWorkspaceSnapshot()),
+    refreshDialogs: async () => productDialogComposition?.windowController.refreshWorkspaceData(
+        "", runtimeSessionManager.getWorkspaceSnapshot()
+    ),
+    publishFilterState: (payload) => sendToAllWindows("filterStateChanged", payload),
+    reportWarning: (message) => sendTranscriptEvents([{
+        type: "output", commandKind: "visible", source: "dialog-state.filter",
+        text: "", createdAt: new Date().toISOString(),
+        message: `Warning: ${message}\n`, streamName: "stderr"
+    }])
+});
 const runtimeSessionBootstrap = runtimeSessionCompositionModule.createRuntimeSessionComposition({
     location,
     composition,
@@ -267,6 +284,13 @@ const runtimeSessionBootstrap = runtimeSessionCompositionModule.createRuntimeSes
     forwardTranscriptEvents: function (events) {
         sendTranscriptEvents(events);
     },
+    retireRuntimeResources: function () {
+        externalWindowComposition?.plotViewerController.retireResources();
+    },
+    onFilterStateChanged: deliverDialogFilterState,
+    onConsoleStateChanged: async function (dataset) {
+        await activeDatasetStateChipReader.refresh(dataset);
+    },
     handleUnexpectedExit: function (details) {
         void handleUnexpectedRuntimeExit(details);
     }
@@ -275,6 +299,15 @@ runtimeSessionManager = runtimeSessionBootstrap.runtimeSessionManager;
 const dialogExternalCallHost = runtimeSessionBootstrap.dialogExternalCallHost;
 const readDialogFilterState = runtimeSessionBootstrap.readFilterState;
 const readConsoleStateChips = runtimeSessionBootstrap.readConsoleStateChips;
+const activeDatasetStateChipReader = createActiveDatasetStateChipReader({
+    getActiveDatasetName: () => readSelectedWorkspaceDatasetName(runtimeSessionManager.getActiveDataset()),
+    getSessionScope: () => readWorkspaceActiveDatasetScope(runtimeSessionManager.getWorkspaceSnapshot()),
+    getSelectionRevision: () => runtimeSessionManager.getActiveDataset().selectionRevision,
+    read: readConsoleStateChips,
+    publish: function (snapshot) {
+        sendToAllWindows(applicationEvents.applicationEventChannels.productConsoleStateChips, snapshot);
+    }
+});
 const shouldPublishConsoleStateChips = runtimeSessionBootstrap.shouldPublishConsoleStateChips;
 const datasetEditorWarmCache = datasetEditorWarmCacheModule.createDatasetEditorWarmCache(runtimeSessionManager);
 const importFileController = importFileControllerModule.createImportFileController({
@@ -329,21 +362,14 @@ const sendToAllWindows = function (channel, payload) {
 externalCallIpcController.createDialogExternalCallIpcController({
     ipcMain: electron.ipcMain,
     host: dialogExternalCallHost,
-    publishFilterState: function (dataset) {
-        sendToAllWindows("filterStateChanged", {
-            dataset,
-            filter: dataset
-                ? readDialogFilterState(dataset)
-                : null
-        });
-    },
     shouldPublishConsoleStateChips,
     readConsoleStateChips,
-    publishConsoleStateChips: function (chips) {
-        sendToAllWindows(applicationEvents.applicationEventChannels.productConsoleStateChips, chips);
-    }
+    refreshConsoleStateChips: (dataset) => activeDatasetStateChipReader.refresh(dataset)
 });
 const sendMenuCommand = function (command) {
+    if (mainWindowZoomController.handleMenuCommand(command)) {
+        return;
+    }
     if (command.command === "app.showSettings") {
         createSettingsWindow();
         return;
@@ -358,6 +384,16 @@ const sendMenuCommand = function (command) {
     }
     sendToAllWindows(applicationEvents.applicationEventChannels.menuCommand, command);
 };
+const runtimeHelpEventDelivery = require("../src/runtime/help/runtimeHelpEventDelivery")
+    .createRuntimeHelpEventDelivery({
+        getRuntime: () => runtimeSessionManager,
+        requests: {
+            begin: () => externalWindowComposition.helpRequests.begin(),
+            retire: () => externalWindowComposition.helpRequests.retire()
+        },
+        openPage: (path, isCurrent) => externalWindowComposition.openRHelpPage(path, isCurrent),
+        reportError: (error) => console.error(error)
+    });
 const runtimeIpcComposition = runtimeIpcCompositionModule.createRuntimeIpcComposition({
     ipcMain: electron.ipcMain,
     clipboard: electron.clipboard,
@@ -382,6 +418,7 @@ const runtimeIpcComposition = runtimeIpcCompositionModule.createRuntimeIpcCompos
         datasetEditorComposition.windowController.send(channel, payload);
     },
     presentRuntimeEvents: function (snapshot) {
+        runtimeHelpEventDelivery.present(snapshot);
         externalWindowComposition.plotViewerController
             .presentRuntimeEvents(snapshot);
     },
@@ -389,7 +426,7 @@ const runtimeIpcComposition = runtimeIpcCompositionModule.createRuntimeIpcCompos
         console.error(error instanceof Error ? error.stack : String(error));
     }
 });
-const { sendRuntimeSession, sendTranscriptEvents, refreshWorkspaceAndBroadcast, sendActiveDataset, broadcastRuntimeEvents, executeVisibleCommandAndBroadcast } = runtimeIpcComposition;
+const { sendRuntimeSession, sendTranscriptEvents, refreshWorkspaceAndBroadcast, sendActiveDataset, broadcastRuntimeEvents, executeVisibleCommandReceiptAndBroadcast } = runtimeIpcComposition;
 const translateCompositionText = function (key, values = {}) {
     let text = String(composition.i18n[key] || key);
     Object.entries(values).forEach(([name, value]) => {
@@ -417,7 +454,7 @@ const productDialogRuntime = productDialogRuntimeComposition.registerProductDial
         return importFileController.previewFile(input || {});
     },
     getUiCommandVisibility: uiActionCommandVisibility,
-    executeVisibleCommandAndBroadcast,
+    executeVisibleCommandReceiptAndBroadcast,
     sendTranscriptEvents,
     invalidateDatasetPreview: invalidateInitialDatasetPreview,
     refreshWorkspaceAndBroadcast,
@@ -659,7 +696,7 @@ externalWindowComposition = externalWindowCompositionModule.createExternalWindow
     startHelpServer: function () {
         return rHelpServer.start();
     },
-    executeVisibleCommand: executeVisibleCommandAndBroadcast,
+    executeVisibleCommand: executeVisibleCommandReceiptAndBroadcast,
     fetchHelpPage: function (value) {
         return rHelpPageProxy.fetchPage(value);
     }
@@ -695,9 +732,12 @@ scriptEditorComposition = scriptEditorCompositionModule.createScriptEditorCompos
     getLocale: function () {
         return locale;
     },
+    getI18n: function () {
+        return composition.i18n;
+    },
     runtimeSessionManager,
     ensureRuntimeReady: ensureRuntimeReadyForScriptEditor,
-    executeVisibleCommand: executeVisibleCommandAndBroadcast
+    executeVisibleCommand: executeVisibleCommandReceiptAndBroadcast
 });
 const scriptEditorWindowController = scriptEditorComposition.windowController;
 const openScriptEditorWindow = scriptEditorComposition.openWindow;
@@ -718,6 +758,9 @@ datasetEditorComposition = datasetEditorCompositionModule.createDatasetEditorCom
     getLocale: function () {
         return locale;
     },
+    getI18n: function () {
+        return composition.i18n;
+    },
     readVariableColumnWidths: readDatasetEditorVariableColumnWidths,
     readTerminalSettings: function () {
         return settingsStorage.readEffectiveSettings(settingsStoragePaths())
@@ -727,7 +770,7 @@ datasetEditorComposition = datasetEditorCompositionModule.createDatasetEditorCom
     runtimeSessionManager,
     writeVariableColumnWidths: writeDatasetEditorVariableColumnWidths,
     uiCommandVisibility: datasetEditorUiCommandVisibility,
-    executeVisibleCommand: executeVisibleCommandAndBroadcast,
+    executeVisibleCommand: executeVisibleCommandReceiptAndBroadcast,
     refreshWorkspaceAndBroadcast,
     broadcastRuntimeEvents,
     sendActiveDataset,
@@ -762,12 +805,14 @@ runtimeRestartComposition.registerRuntimeRestartComposition({
     },
     sendRuntimeSession,
     refreshWorkspace: refreshWorkspaceAndBroadcast,
+    deferRuntimeSessionReady: runtimeIpcComposition.deferRuntimeSessionReady,
     captureWorkspaceBaseline
 });
 electronApplicationLifecycle.bindElectronApplicationLifecycle({
     app: electron.app,
     smokeMode: electronSmokeMode,
     initializeZoom: mainWindowZoomController.initialize,
+    bindWindowZoom: mainWindowZoomController.bindShortcuts,
     installApplicationMenu,
     createMainWindow,
     setMainWindow: function (win) {

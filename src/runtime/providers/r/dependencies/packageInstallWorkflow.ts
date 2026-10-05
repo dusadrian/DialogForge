@@ -1,6 +1,27 @@
 import type {
     ProductPackageSourcePolicy
 } from "../../../../core/contracts/applicationComposition";
+import {
+    createRequiredInstallCommand,
+    createRUniverseInstallCommand,
+    normalizeRInstallationPackageNames as normalizePackageNames,
+    selectRDevelopmentPackages
+} from "./packageInstallPlan";
+import {
+    captureRPackageRuntimeSnapshot,
+    requireCurrentRPackageRuntime,
+    type RPackageRuntimeSnapshot
+} from "./rPackageRuntimeGuard";
+import {
+    createRRuntimeLoadedPackageCommand, parseRRuntimePackageStatus
+} from "./runtimePackageRequirements";
+import {
+    requireSuccessfulRuntimeCommand,
+    type RuntimeCommandResult
+} from "../../../commands/runtimeCommandReceipt";
+import { readRPackageRequirementReadiness } from "./rPackageRequirementReadiness";
+
+export { selectRDevelopmentPackages } from "./packageInstallPlan";
 
 
 export interface PackageLibraryChoice {
@@ -15,6 +36,8 @@ export interface PackageRestartChoice {
 
 export interface PackageRuntimeSnapshot {
     status: string;
+    providerId?: string;
+    lifecycleGeneration?: number;
 }
 
 
@@ -26,8 +49,13 @@ export interface PackageQueryResult {
 
 
 export interface RPackageInstallWorkflowBindings {
+    getRuntimeSnapshot?(): RPackageRuntimeSnapshot | null;
+    getRuntimeIdentity?(): unknown;
     getProductId(): string;
     getPackageSourcePolicy?(): ProductPackageSourcePolicy;
+    getInstallDependencies?(): boolean;
+    ensureRuntime?(): Promise<unknown>;
+    packagesInstalled?(packages: string[]): void;
     executeQuery(query: string, source: string): Promise<PackageQueryResult>;
     chooseLibrary(input: {
         userLibrary: string;
@@ -37,7 +65,7 @@ export interface RPackageInstallWorkflowBindings {
     restartRuntime(
         action: "clean" | "restore"
     ): Promise<PackageRuntimeSnapshot>;
-    executeVisibleCommand(command: string, source: string): Promise<void>;
+    executeVisibleCommand(command: string, source: string): Promise<RuntimeCommandResult>;
 }
 
 
@@ -45,130 +73,6 @@ export interface RPackageInstallWorkflow {
     installRequired(value: unknown): Promise<void>;
     updateRequired(value: unknown): Promise<void>;
 }
-
-
-interface RequiredPackageSourcePlan {
-    cran: Set<string>;
-    runiverse: Set<string>;
-    both: Set<string>;
-}
-
-
-const CRAN_PACKAGE_REPOSITORY = "https://cloud.r-project.org";
-const RUNIVERSE_PACKAGE_REPOSITORY = "https://dusadrian.r-universe.dev";
-const KNOWN_DEVELOPMENT_PACKAGES = new Set([
-    "admisc",
-    "declared",
-    "DDIwR",
-    "QCA",
-    "statistics",
-    "venn"
-]);
-const DEVELOPMENT_PACKAGE_REPOSITORY = JSON.stringify(
-    RUNIVERSE_PACKAGE_REPOSITORY
-);
-
-
-const normalizePackageNames = function(value: unknown): string[] {
-    const names = Array.isArray(value)
-        ? value
-        : String(value || "").split(/[;,\n]/g);
-
-    return Array.from(new Set(names.map((name) => {
-        return String(name || "").trim();
-    }).filter(Boolean))).sort((left, right) => {
-        return left.localeCompare(right);
-    });
-};
-
-
-const createRCharacterVector = function(values: string[]): string {
-    return `c(${values.map((value) => {
-        return JSON.stringify(value);
-    }).join(", ")})`;
-};
-
-
-const REQUIRED_PACKAGE_REPOSITORIES = createRCharacterVector([
-    RUNIVERSE_PACKAGE_REPOSITORY,
-    CRAN_PACKAGE_REPOSITORY
-]);
-
-
-const requiredPackageSourcePlan = function(
-    policy: ProductPackageSourcePolicy
-): RequiredPackageSourcePlan {
-    const plan: RequiredPackageSourcePlan = {
-        cran: new Set(normalizePackageNames(policy.cran || [])),
-        runiverse: new Set(
-            normalizePackageNames(policy.runiverse || [])
-        ),
-        both: new Set(normalizePackageNames(policy.both || []))
-    };
-
-    return plan;
-};
-
-
-const hasPackageSourcePlan = function(plan: RequiredPackageSourcePlan): boolean {
-    return plan.cran.size > 0
-        || plan.runiverse.size > 0
-        || plan.both.size > 0;
-};
-
-
-const isDevelopmentPackage = function(
-    name: string,
-    plan: RequiredPackageSourcePlan
-): boolean {
-    if (hasPackageSourcePlan(plan)) {
-        return plan.runiverse.has(name)
-            || plan.both.has(name);
-    }
-
-    return KNOWN_DEVELOPMENT_PACKAGES.has(name);
-};
-
-
-const createPackageInstallCommand = function(
-    packages: string[],
-    repository: string,
-    libraryPath = "",
-    dependencies = false
-): string {
-    const normalized = normalizePackageNames(packages);
-
-    if (normalized.length === 0) {
-        return "";
-    }
-
-    const argumentsList = [
-        createRCharacterVector(normalized)
-    ];
-
-    if (libraryPath) {
-        argumentsList.push(`lib = ${JSON.stringify(libraryPath)}`);
-    }
-
-    if (dependencies) {
-        argumentsList.push("dependencies = TRUE");
-    }
-
-    argumentsList.push(`repos = ${repository}`);
-
-    const setup = libraryPath
-        ? [
-            `dir.create(${JSON.stringify(libraryPath)}, recursive = TRUE, showWarnings = FALSE)`,
-            `.libPaths(unique(c(${JSON.stringify(libraryPath)}, .libPaths())))`
-        ]
-        : [];
-
-    return setup.concat([
-        "install.packages(",
-        `    ${argumentsList.join(",\n    ")}`,
-        ")"
-    ]).join("\n");
-};
 
 
 export const createRPackageInstallWorkflow = function(
@@ -180,12 +84,31 @@ export const createRPackageInstallWorkflow = function(
     const packageSourcePolicy = function(): ProductPackageSourcePolicy {
         return bindings.getPackageSourcePolicy?.() || {};
     };
+    const captureInstallationRuntime = function(
+        expected?: RPackageRuntimeSnapshot
+    ): (() => boolean) | undefined {
+        if (!bindings.getRuntimeSnapshot) {
+            return undefined;
+        }
+        const owner = bindings.getRuntimeIdentity?.();
+        const isCurrent = captureRPackageRuntimeSnapshot(
+            bindings.getRuntimeSnapshot,
+            expected || bindings.getRuntimeSnapshot()
+        );
+        return function(): boolean {
+            return isCurrent() && (
+                !bindings.getRuntimeIdentity || bindings.getRuntimeIdentity() === owner
+            );
+        };
+    };
 
-    const query = async function(code: string): Promise<string> {
+    const query = async function(code: string, isCurrent?: () => boolean): Promise<string> {
+        requireCurrentRPackageRuntime(isCurrent);
         const result = await bindings.executeQuery(
             code,
             `${productId()}.packages`
         );
+        requireCurrentRPackageRuntime(isCurrent);
 
         if (result.status !== "ready") {
             throw new Error(
@@ -197,7 +120,8 @@ export const createRPackageInstallWorkflow = function(
     };
 
     const getLoadedPackages = async function(
-        packages: string[]
+        packages: string[],
+        isCurrent?: () => boolean
     ): Promise<string[]> {
         const normalized = normalizePackageNames(packages);
 
@@ -205,20 +129,31 @@ export const createRPackageInstallWorkflow = function(
             return [];
         }
 
-        const value = await query(`
-            local({
-                packages <- ${createRCharacterVector(normalized)}
-                loaded <- packages[
-                    is.element(paste0("package:", packages), search())
-                ]
-                paste(loaded, collapse = ",")
-            })
-        `);
-
-        return normalizePackageNames(value);
+        const value = await query(createRRuntimeLoadedPackageCommand(normalized), isCurrent);
+        // Reuse strict package-name validation, without changing attachment status
+        // used by ordinary library loading. A namespace alone requires restart.
+        return parseRRuntimePackageStatus(`|${value}`, normalized).attached;
     };
 
-    const chooseLibrary = async function(): Promise<string | null> {
+    const verifyInstalledPackages = async function(
+        packages: string[],
+        isCurrent?: () => boolean
+    ): Promise<void> {
+        const readiness = await readRPackageRequirementReadiness(
+            packages.map((name) => ({ name })),
+            async function(command) {
+                return { ok: true, value: await query(command, isCurrent) };
+            }
+        );
+        requireCurrentRPackageRuntime(isCurrent);
+        if (!readiness.ok) {
+            throw new Error(
+                `Package installation did not produce ready packages.\n${readiness.error}`
+            );
+        }
+    };
+
+    const chooseLibrary = async function(isCurrent?: () => boolean): Promise<string | null> {
         const value = await query(`
             local({
                 normalize <- function(path) {
@@ -238,7 +173,7 @@ export const createRPackageInstallWorkflow = function(
                 needs_choice <- nzchar(user_normalized) && !is.element(user_normalized, library_paths)
                 paste(if (needs_choice) "1" else "0", user, default, sep = "\\t")
             })
-        `);
+        `, isCurrent);
         const [needsChoice, userLibrary, defaultLibrary] = value.split("\t");
 
         if (needsChoice !== "1") {
@@ -249,6 +184,7 @@ export const createRPackageInstallWorkflow = function(
             userLibrary,
             defaultLibrary
         });
+        requireCurrentRPackageRuntime(isCurrent);
 
         if (result.action === "user") {
             return userLibrary || null;
@@ -263,81 +199,98 @@ export const createRPackageInstallWorkflow = function(
 
     const prepareRuntime = async function(
         packages: string[]
-    ): Promise<boolean> {
-        const loadedPackages = await getLoadedPackages(packages);
+    ): Promise<{ isCurrent?: () => boolean } | null> {
+        await bindings.ensureRuntime?.();
+        let isCurrent = captureInstallationRuntime();
+        const loadedPackages = await getLoadedPackages(packages, isCurrent);
 
         if (loadedPackages.length === 0) {
-            return true;
+            return { isCurrent };
         }
 
         const restart = await bindings.confirmRestart(loadedPackages);
+        requireCurrentRPackageRuntime(isCurrent);
 
         if (restart.action === "cancel") {
-            return false;
+            return null;
         }
 
         const snapshot = await bindings.restartRuntime(restart.action);
-
-        return snapshot.status === "ready";
+        if (snapshot.status !== "ready") {
+            return null;
+        }
+        isCurrent = captureInstallationRuntime(snapshot);
+        requireCurrentRPackageRuntime(isCurrent);
+        return { isCurrent };
     };
 
     const installRequired = async function(value: unknown): Promise<void> {
         const packages = normalizePackageNames(value);
-
-        if (!await prepareRuntime(packages)) {
+        if (!packages.length) {
             return;
         }
 
-        const libraryPath = await chooseLibrary();
+        const preparation = await prepareRuntime(packages);
+        if (!preparation) {
+            return;
+        }
+
+        const libraryPath = await chooseLibrary(preparation.isCurrent);
 
         if (libraryPath === null) {
             return;
         }
 
-        const command = createPackageInstallCommand(
+        const command = createRequiredInstallCommand(
             packages,
-            REQUIRED_PACKAGE_REPOSITORIES,
-            libraryPath,
-            true
+            { libraryPath, dependencies: bindings.getInstallDependencies?.() ?? true }
         );
 
         if (command) {
-            await bindings.executeVisibleCommand(
+            requireCurrentRPackageRuntime(preparation.isCurrent);
+            const result = await bindings.executeVisibleCommand(
                 command,
                 `${productId()}.packages.installRequired`
             );
+            requireCurrentRPackageRuntime(preparation.isCurrent);
+            requireSuccessfulRuntimeCommand(result, "Failed to install required R packages.");
+            await verifyInstalledPackages(packages, preparation.isCurrent);
+            bindings.packagesInstalled?.(packages);
         }
     };
 
     const updateRequired = async function(value: unknown): Promise<void> {
-        const sourcePlan = requiredPackageSourcePlan(
-            packageSourcePolicy()
-        );
-        const packages = normalizePackageNames(value).filter((name) => {
-            return isDevelopmentPackage(name, sourcePlan);
-        });
-
-        if (!await prepareRuntime(packages)) {
+        const packages = selectRDevelopmentPackages(value, packageSourcePolicy());
+        if (!packages.length) {
             return;
         }
 
-        const libraryPath = await chooseLibrary();
+        const preparation = await prepareRuntime(packages);
+        if (!preparation) {
+            return;
+        }
+
+        const libraryPath = await chooseLibrary(preparation.isCurrent);
 
         if (libraryPath === null) {
             return;
         }
 
-        const command = createPackageInstallCommand(
+        const command = createRUniverseInstallCommand(
             packages,
-            DEVELOPMENT_PACKAGE_REPOSITORY,
-            libraryPath
+            { libraryPath }
         );
 
         if (command) {
-            await bindings.executeVisibleCommand(
+            requireCurrentRPackageRuntime(preparation.isCurrent);
+            const result = await bindings.executeVisibleCommand(
                 command,
                 `${productId()}.packages.updateRequired`
             );
+            requireCurrentRPackageRuntime(preparation.isCurrent);
+            requireSuccessfulRuntimeCommand(result, "Failed to update required R packages.");
+            await verifyInstalledPackages(packages, preparation.isCurrent);
+            bindings.packagesInstalled?.(packages);
         }
     };
 

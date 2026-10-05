@@ -1,116 +1,3 @@
-remove_runtime_global_bindings <- function() {
-    for (name in c(".app_runtime_control_status")) {
-        if (exists(name, envir = .GlobalEnv, inherits = FALSE)) {
-            safe(rm(list = name, envir = .GlobalEnv))
-        }
-    }
-
-    invisible(NULL)
-}
-
-
-remove_runtime_global_bindings()
-
-if (!is.element("DialogApp", search())) {
-    attach(NULL, name = "DialogApp", warn.conflicts = FALSE)
-}
-
-app_env <- as.environment("DialogApp")
-
-if (is.null(app_env$dialog_last_traceback)) {
-    app_env$dialog_last_traceback <- NULL
-}
-
-app_env$dialog_record_traceback <- function() {
-    app_env$dialog_last_traceback <- sys.calls()
-
-    invisible(NULL)
-}
-
-app_env$traceback <- function(
-    x = NULL,
-    max.lines = getOption("traceback.max.lines", getOption("deparse.max.lines", -1L))
-) {
-    if (!is.null(x)) {
-        return(base::traceback(x = x, max.lines = max.lines))
-    }
-
-    calls <- app_env$dialog_last_traceback
-
-    if (is.null(calls) || !length(calls)) {
-        return(base::traceback(x = NULL, max.lines = max.lines))
-    }
-
-    base::traceback(x = calls, max.lines = max.lines)
-}
-
-
-ensure_dialog_app_search_position <- function() {
-    if (length(search()) >= 2L && identical(search()[[2L]], "DialogApp")) {
-        return(invisible(TRUE))
-    }
-
-    environment <- app_env
-
-    if (is.element("DialogApp", search())) {
-        safe(detach("DialogApp", character.only = TRUE))
-    }
-
-    safe(attach(
-        environment,
-        name = "DialogApp",
-        pos = 2L,
-        warn.conflicts = FALSE
-    ))
-    app_env <<- as.environment("DialogApp")
-
-    invisible(TRUE)
-}
-
-
-runtime_console_pager <- function(
-    files,
-    header = rep("", length(files)),
-    title = "R Information",
-    delete.file = FALSE
-) {
-    files <- path.expand(as.character(files))
-    headers <- rep_len(as.character(header), length(files))
-
-    if (isTRUE(delete.file)) {
-        on.exit(unlink(files), add = TRUE)
-    }
-
-    for (index in seq_along(files)) {
-        if (index > 1L) {
-            writeLines("")
-        }
-
-        if (nzchar(headers[[index]])) {
-            writeLines(headers[[index]])
-        }
-
-        if (file.exists(files[[index]])) {
-            writeLines(readLines(files[[index]], warn = FALSE))
-        }
-    }
-
-    invisible(title)
-}
-
-
-install_runtime_console_bindings <- function() {
-    ensure_dialog_app_search_position()
-    app_env$plot <- graphics::plot
-    options(pager = runtime_console_pager)
-
-    invisible(TRUE)
-}
-
-
-install_runtime_console_bindings()
-
-
 trace <- function(message) {
     if (!isTRUE(trace_enabled) || !nzchar(trace_path)) {
         return(invisible(NULL))
@@ -128,6 +15,20 @@ trace <- function(message) {
 
 
 write_meta <- function(meta) {
+    if (exists("runtime_bounded_input_config", envir = environment(write_meta), inherits = FALSE) &&
+        !is.null(runtime_bounded_input_config)) {
+        meta$boundedInput <- "native-v1"
+        meta$maxRequestBytes <- max_payload
+    }
+    if (identical(session_kind, "dedicated")) {
+        meta$responseIdentity <- "attachment-request-v1"
+        meta$eventIdentity <- "request-nonce-v1"
+    }
+    if (exists("runtime_ordered_output_config", envir = environment(write_meta), inherits = FALSE) &&
+        !is.null(runtime_ordered_output_config)) {
+        meta$orderedOutputEncoding <- "utf8"
+        meta$orderedOutputSession <- runtime_ordered_output_config$session_id
+    }
     safe(writeLines(
         runtime_transport_meta_json(meta),
         meta_path,
@@ -142,12 +43,6 @@ runtime_connection_ready <- function(value) {
     !is.null(value) && length(value) && isTRUE(as.logical(value[[1L]]))
 }
 
-
-event_seq <- 0L
-current_activity_id <- ""
-pending_prompt_reply <- NULL
-completion_queue <- list()
-live_events_enabled <- FALSE
 
 trace("bootstrap:start")
 emit_session_event("starting")
@@ -212,12 +107,19 @@ if (is.null(bound_server)) {
 server <- bound_server$socket
 port <- bound_server$port
 client <- NULL
+runtime_control_read_active <- FALSE
+if (!exists("runtime_bounded_input_config", inherits = FALSE)) {
+    runtime_bounded_input_config <- NULL
+}
 input_handlers <- list(server = NULL, client = NULL)
 idle_scheduler_mode <- "none"
 max_payload <- as.integer(Sys.getenv("DM_RUNTIME_CONTROL_MAX_PAYLOAD", "262144"))
 
 if (!is.finite(max_payload) || max_payload < 512L) {
     max_payload <- 262144L
+}
+if (max_payload > 16777216L) {
+    stop("Runtime input exceeds the supported payload ceiling.")
 }
 
 
@@ -305,11 +207,38 @@ evaluate_code_result <- function(code) {
 
 
 runtime_write_payload <- function(payload) {
-    safe(writeLines(payload, client, useBytes = TRUE))
-    safe(flush(client))
-
-    invisible(NULL)
+    if (isTRUE(runtime_transport_write_failed) || is.null(client)) {
+        return(invisible(FALSE))
+    }
+    writing_client <- client
+    written <- tryCatch(
+        {
+            # Bound only this physical write. Restore the socket's read timeout
+            # before returning; an idle console or human prompt is not a write.
+            previous_timeout <- socketTimeout(writing_client, 1)
+            tryCatch(
+                isTRUE(runtime_native_frame_writer(writing_client, payload)),
+                finally = socketTimeout(writing_client, previous_timeout)
+            )
+        },
+        error = function(error) FALSE,
+        interrupt = function(interrupt) FALSE
+    )
+    if (!identical(client, writing_client)) {
+        suspendInterrupts(safe(close(writing_client)))
+        return(invisible(FALSE))
+    }
+    if (!written) {
+        suspendInterrupts({
+            runtime_transport_write_failed <<- TRUE
+            runtime_close_client(identical(session_kind, "dedicated"))
+        })
+    }
+    invisible(written)
 }
+
+
+runtime_live_event_transport_write <- runtime_write_payload
 
 
 runtime_accept_client <- function(dedicated) {
@@ -325,12 +254,13 @@ runtime_accept_client <- function(dedicated) {
     client <<- safe(socketAccept(
         server,
         blocking = TRUE,
-        open = "a+",
+        open = "a+b",
         timeout = if (dedicated) 60 else 1,
         options = "no-delay"
     ))
 
     if (is.null(client)) return(FALSE)
+    runtime_transport_write_failed <<- FALSE
 
     trace("server:accept ok")
     if (!dedicated) register_input_handler("client", client)
@@ -352,14 +282,6 @@ runtime_close_client <- function(dedicated) {
 
 runtime_dispatch_request <- function(request) {
     method <- request$method
-    live_events <- is.element(method, c("execute_input", "reply_prompt"))
-    previous_live_events_enabled <- live_events_enabled
-
-    if (live_events) live_events_enabled <<- TRUE
-    on.exit({
-        live_events_enabled <<- previous_live_events_enabled
-    }, add = TRUE)
-
     if (!identical(request$auth, token)) {
         return(list(
             id = request$id,
@@ -369,23 +291,8 @@ runtime_dispatch_request <- function(request) {
         ))
     }
 
-    previous_diagnostics <- runtime_diagnostic_begin(request$params)
-    on.exit(runtime_diagnostics <<- previous_diagnostics, add = TRUE)
     trace(paste0("request:dispatch-start id=", request$id, " method=", method))
-    output <- tryCatch(
-        eval_method(method, request$params),
-        error = function(error) list(
-            ok = FALSE,
-            error = as.character(conditionMessage(error))
-        )
-    )
-
-    if (is.null(output)) {
-        output <- list(ok = FALSE, error = "control-eval-failed")
-    }
-
-    output$id <- request$id
-    output$method <- method
+    output <- runtime_evaluate_control_request(request)
     trace(paste0(
         "request:dispatch-done id=",
         request$id,
@@ -394,33 +301,88 @@ runtime_dispatch_request <- function(request) {
         " ok=",
         isTRUE(output$ok)
     ))
-    safe(flush_completion_queue())
-    output$diagnostics_json <- runtime_diagnostic_json()
-
     output
 }
 
 
+runtime_read_control_request <- function(dedicated) {
+    reading_client <- client
+    runtime_control_read_active <<- TRUE
+    on.exit(runtime_control_read_active <<- FALSE, add = TRUE)
+    result <- tryCatch({
+        # process_once already waits for bytes without a frame timeout. Once
+        # bytes arrive, an incomplete request must not hold the runtime forever.
+        # The helper checks its monotonic whole-frame budget between reads;
+        # this shorter backstop bounds a blocking read after the last check.
+        previous_timeout <- socketTimeout(reading_client, 1)
+        tryCatch({
+            if (is.null(runtime_bounded_input_config)) {
+                reader <- runtime_native_frame_reader
+            } else {
+                reader <- runtime_bounded_input_config$reader
+            }
+            frame <- reader(reading_client, max_payload)
+            if (
+                !is.list(frame) || !identical(frame$status, "line") ||
+                !is.raw(frame$bytes) || length(frame$bytes) > max_payload
+            ) {
+                frame_status <- "invalid_frame"
+                if (
+                    is.list(frame) && is.character(frame$status) &&
+                    length(frame$status) == 1L && !is.na(frame$status) &&
+                    is.element(frame$status, c(
+                        "truncated", "too_large", "invalid_nul", "closed_or_failed", "deadline"
+                    ))
+                ) {
+                    frame_status <- frame$status
+                }
+
+                list(status = "failed", frame_status = frame_status)
+            } else {
+                list(status = "line", payload = rawToChar(frame$bytes))
+            }
+        }, finally = socketTimeout(reading_client, previous_timeout))
+    }, error = function(error) list(status = "failed", frame_status = "read_exception"),
+        interrupt = function(interrupt) list(status = "interrupted", frame_status = "read_interrupted"))
+    if (!identical(client, reading_client)) {
+        suspendInterrupts(safe(close(reading_client)))
+        return(list(status = "retired"))
+    }
+    if (!identical(result$status, "line")) {
+        trace(paste0(
+            "client:input retired status=", result$status, " frame=", result$frame_status
+        ))
+        suspendInterrupts(runtime_close_client(dedicated))
+    }
+    result
+}
+
+
 process_once <- function() {
+    if (isTRUE(runtime_control_read_active)) {
+        return(invisible(NULL))
+    }
     dedicated <- identical(session_kind, "dedicated")
 
     for (iteration in seq_len(16L)) {
         if (!runtime_accept_client(dedicated)) break
 
-        if (!dedicated) {
-            ready <- safe(socketSelect(list(client), timeout = 0.02))
+        # Do not spend the connection's frame-read timeout while it is idle.
+        ready <- safe(socketSelect(
+            list(client),
+            timeout = if (dedicated) 1 else 0.02
+        ))
 
-            if (!runtime_connection_ready(ready)) break
-        }
+        if (!runtime_connection_ready(ready)) break
 
-        line <- safe(readLines(client, n = 1, warn = FALSE))
-
-        if (is.null(line) || !length(line)) {
-            runtime_close_client(dedicated)
+        input <- runtime_read_control_request(dedicated)
+        if (!identical(input$status, "line")) {
+            if (!is.null(runtime_bounded_input_config)) {
+                break
+            }
             next
         }
-
-        raw <- as.character(line[[1L]])
+        raw <- input$payload
 
         if (nchar(raw, type = "bytes") > max_payload) {
             runtime_write_payload(runtime_transport_error_payload(
@@ -442,13 +404,16 @@ process_once <- function() {
 
         trace(paste0("request id=", request$id, " method=", request$method))
         output <- runtime_dispatch_request(request)
+        output$transportNonce <- request$transportNonce
         result_json <- runtime_transport_result_json(request$method, output)
         payload <- runtime_transport_response_payload(
             output,
             result_json,
             dedicated
         )
-        runtime_write_payload(payload)
+        if (!isTRUE(runtime_write_payload(payload))) {
+            break
+        }
         trace(paste0("response id=", output$id, " ok=", isTRUE(output$ok)))
 
         if (dedicated) break
@@ -463,7 +428,7 @@ start_idle_scheduler <- function() {
         return(invisible(TRUE))
     }
 
-    if (!isTRUE(safe(requireNamespace("later", quietly = TRUE)))) {
+    if (!isTRUE(safe(base::requireNamespace("later", quietly = TRUE)))) {
         trace("idleScheduler:later-unavailable")
         return(invisible(FALSE))
     }
@@ -487,6 +452,8 @@ start_idle_scheduler <- function() {
     invisible(TRUE)
 }
 
+
+runtime_prepare_control_functions(app_env)
 
 trace(paste0(
     "inputHandler:available=",

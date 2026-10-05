@@ -1,49 +1,48 @@
 import type {
-    RuntimeSessionManager
+    RuntimeSessionManager,
+    CellUpdateResult,
+    CellUpdateBatchResult,
+    TabularPreviewSnapshot,
+    VariableMetadataSnapshot,
+    ValueLabelSnapshot,
+    DeclaredMissingSnapshot,
+    UiCommandVisibility
 } from "../provider-contract/runtimeProvider";
 import {
     createRuntimeExtensionMethodRequest
 } from "../extensions/runtimeExtensionProtocol";
-import {
-    createCellUpdateRequest,
-    createColumnInsertRequest,
-    createColumnRemoveRequest,
-    createColumnRenameRequest,
-    createDeclaredMissingUpdateRequest,
-    createRowInsertRequest,
-    createRowNameUpdateRequest,
-    createRowRemoveRequest,
-    createRowSortRequest,
-    createValueLabelUpdateRequest,
-    createVariableMetadataUpdateRequest
-} from "./tabularProtocol";
-import {
-    createDatasetViewerCellUpdateBatchResult,
-    createDatasetViewerCellUpdateResult,
-    createDatasetViewerColumnInsertResult,
-    createDatasetViewerColumnRemoveResult,
-    createDatasetViewerColumnRenameResult,
-    createDatasetViewerRowInsertResult,
-    createDatasetViewerRowNameResult,
-    createDatasetViewerRowRemoveResult,
-    createDatasetViewerRowSortResult,
-    normalizedDatasetViewerPosition,
-    providerRowIndexFromDatasetViewerPayload,
-    stringFromDatasetViewerPayload
-} from "./datasetViewerMutationResults";
-import {
-    applyRuntimeDatasetVariablePatch
-} from "./runtimeDatasetVariablePatch";
+import { createRuntimeTabularMetadataMutation } from "./runtimeTabularMetadataMutation";
+import { createRuntimeCellBatchMutation, createRuntimeCellMutation } from "./runtimeCellBatchMutation";
+import { createDatasetViewerVariableMutation } from "./datasetViewerVariableMutation";
 import {
     createDialogVariableValuesResult
 } from "./dialogVariableValues";
+import { createDatasetViewerReadController } from "./datasetViewerReadController";
+import { createDatasetViewerCellMutation } from "./datasetViewerCellMutation";
+import { createDatasetViewerColumnMutation } from "./datasetViewerColumnMutation";
+import { createDatasetViewerRowMutation } from "./datasetViewerRowMutation";
+import { createRuntimeTabularReadActions } from "./runtimeTabularReadActions";
+import { createRuntimeColumnMutationActions } from "./runtimeColumnMutationActions";
+import { createRuntimeRowMutationActions } from "./runtimeRowMutationActions";
+import { createRuntimeTabularMetadataReads } from "./runtimeTabularMetadataReads";
+import { deliverDatasetMutationTargets } from "../../dataset-editor/datasetMutationDelivery";
+import {
+    createDatasetMutationCacheEffect,
+    type DatasetMutationCacheEffect
+} from "../../dataset-editor/datasetMutationCacheEffects";
 
 
 export interface RuntimeSessionDatasetChannelAdapterOptions {
     runtimeSessionManager: RuntimeSessionManager;
-    initialRows: number;
-    initialColumns: number;
-    variableOverscanRows: number;
+    isCurrentRuntime?(): boolean;
+    uiCommandVisibility?(): UiCommandVisibility;
+    readTabularPreview?: RuntimeSessionManager["readTabularPreview"];
+    publishTabularPreview?(preview: TabularPreviewSnapshot): void;
+    publishCellUpdate?(result: CellUpdateResult | CellUpdateBatchResult): void;
+    publishVariableMetadata?(snapshot: VariableMetadataSnapshot): void;
+    publishValueLabels?(snapshot: ValueLabelSnapshot): void;
+    publishDeclaredMissing?(snapshot: DeclaredMissingSnapshot): void;
+    readFilterState?(name: string): { command?: string } | null | undefined;
     readVariableMetadataBatch?(
         objectName: string,
         start: number,
@@ -56,11 +55,8 @@ export interface RuntimeSessionDatasetChannelAdapterOptions {
     ): void;
     invalidateDataset(
         datasetName: string,
-        effect: {
-            previewChanged: boolean;
-            variableMetadataChanged: boolean;
-            variableMetadataPatched: boolean;
-        }
+        effect: DatasetMutationCacheEffect,
+        changes: Array<Record<string, unknown>>
     ): Promise<void> | void;
 }
 
@@ -72,96 +68,104 @@ const recordInput = function(value: unknown): Record<string, unknown> {
 };
 
 
-const positiveInteger = function(value: unknown, fallback: number): number {
-    const number = Number(value);
-
-    return Number.isFinite(number) && number >= 1
-        ? Math.floor(number)
-        : fallback;
-};
-
-
-const toViewerSchema = function(schema: Awaited<
-    ReturnType<RuntimeSessionManager["readTabularSchema"]>
->) {
-    return schema.status === "ready"
-        ? {
-            name: schema.objectName,
-            rowCount: schema.rowCount,
-            columnCount: schema.columnCount,
-            columns: schema.columns.map((column) => ({
-                name: column.name,
-                type: column.type || "unknown"
-            }))
-        }
-        : null;
-};
-
-
-const toViewerContent = function(
-    preview: Awaited<ReturnType<RuntimeSessionManager["readTabularPreview"]>>
-) {
-    if (preview.status !== "ready") {
-        return null;
-    }
-
-    return {
-        name: preview.objectName,
-        rowStart: Number(preview.rowOffset || 0) + 1,
-        rowCount: preview.rows.length,
-        totalRowCount: Number(preview.totalRowCount || preview.rows.length),
-        columnCount: preview.columns.length,
-        totalColumnCount: Number(
-            preview.totalColumnCount || preview.columns.length
-        ),
-        columns: preview.columns.map((column) => ({
-            name: column.name,
-            type: column.type || "unknown"
-        })),
-        rowNames: preview.rowNames || [],
-        rows: preview.rows.map((row) => {
-            return preview.columns.map((column) => {
-                const value = row[column.name];
-
-                if (value && typeof value === "object" && "display" in value) {
-                    const cell = value as Record<string, unknown>;
-
-                    return {
-                        display: String(cell.display ?? ""),
-                        raw: String(cell.raw ?? cell.display ?? ""),
-                        declaredMissing: cell.declaredMissing === true
-                    };
-                }
-
-                const text = value === null || value === undefined
-                    ? ""
-                    : String(value);
-
-                return {
-                    display: text,
-                    raw: text
-                };
-            });
-        })
-    };
-};
-
-
 export const createRuntimeSessionDatasetChannelAdapter = function(
     options: RuntimeSessionDatasetChannelAdapterOptions
 ) {
     const runtime = options.runtimeSessionManager;
+    const metadataReads = createRuntimeTabularMetadataReads({
+        runtimeSessionManager: runtime,
+        isCurrentRuntime: options.isCurrentRuntime,
+        publishVariableMetadata: options.publishVariableMetadata,
+        publishValueLabels: options.publishValueLabels,
+        publishDeclaredMissing: options.publishDeclaredMissing
+    });
+    const tabularReads = createRuntimeTabularReadActions({
+        runtimeSessionManager: runtime,
+        isCurrentRuntime: options.isCurrentRuntime,
+        readPreview: request => options.readTabularPreview
+            ? options.readTabularPreview(request)
+            : runtime.readTabularPreview(request),
+        previewRead: options.publishTabularPreview
+    });
+    const reads = createDatasetViewerReadController({
+        runtimeSessionManager: runtime,
+        isCurrentRuntime: options.isCurrentRuntime,
+        readTabularPreview: request => options.readTabularPreview
+            ? options.readTabularPreview(request)
+            : runtime.readTabularPreview(request),
+        readFilterState: options.readFilterState || (() => null),
+        readVariableMetadataBatch: options.readVariableMetadataBatch
+    });
     const invalidate = async function(
         name: string,
-        variableMetadataChanged = false,
+        changes: Array<Record<string, unknown>>,
         variableMetadataPatched = false
     ): Promise<void> {
-        await options.invalidateDataset(name, {
-            previewChanged: true,
-            variableMetadataChanged,
-            variableMetadataPatched
-        });
+        await options.invalidateDataset(
+            name,
+            createDatasetMutationCacheEffect(changes, variableMetadataPatched),
+            changes.map(change => ({ ...change, name }))
+        );
     };
+    const cells = createDatasetViewerCellMutation({
+        runtimeSessionManager: runtime,
+        isCurrentRuntime: options.isCurrentRuntime,
+        uiCommandVisibility: options.uiCommandVisibility || (() => "hidden"),
+        updated: (result, changes) => invalidate(result.objectName, changes)
+    });
+    const cellBatch = createRuntimeCellBatchMutation({
+        runtimeSessionManager: runtime,
+        isCurrentRuntime: options.isCurrentRuntime,
+        completed: options.publishCellUpdate,
+        updated: async (_result, objectNames, isCurrent) => {
+            await deliverDatasetMutationTargets({
+                isCurrent,
+                objectNames,
+                deliverTarget: name => invalidate(name, [{ kind: "dataset_cells_changed" }])
+            });
+        }
+    });
+    const cell = createRuntimeCellMutation({
+        runtimeSessionManager: runtime,
+        isCurrentRuntime: options.isCurrentRuntime,
+        completed: options.publishCellUpdate,
+        updated: result => invalidate(result.objectName, [{ kind: "dataset_cells_changed" }])
+    });
+    const columns = createDatasetViewerColumnMutation({
+        runtimeSessionManager: runtime,
+        isCurrentRuntime: options.isCurrentRuntime,
+        uiCommandVisibility: options.uiCommandVisibility || (() => "hidden"),
+        updated: (result, changes) => invalidate(result.objectName, changes)
+    });
+    const tabularColumns = createRuntimeColumnMutationActions({
+        runtimeSessionManager: runtime,
+        isCurrentRuntime: options.isCurrentRuntime,
+        updated: result => invalidate(result.objectName, [
+            { kind: "dataset_columns_changed", schemaChanged: true }
+        ])
+    });
+    const rows = createDatasetViewerRowMutation({
+        runtimeSessionManager: runtime,
+        isCurrentRuntime: options.isCurrentRuntime,
+        uiCommandVisibility: options.uiCommandVisibility || (() => "hidden"),
+        updated: (result, changes) => invalidate(result.objectName, changes)
+    });
+    const tabularRows = createRuntimeRowMutationActions({
+        runtimeSessionManager: runtime,
+        isCurrentRuntime: options.isCurrentRuntime,
+        updated: (result, changes) => invalidate(result.objectName, changes)
+    });
+    const variables = createDatasetViewerVariableMutation({
+        runtimeSessionManager: runtime,
+        isCurrentRuntime: options.isCurrentRuntime,
+        patchVariableMetadata: options.patchVariableMetadata,
+        updated: (result, changes, patched) => invalidate(result.objectName, changes, patched)
+    });
+    const metadata = createRuntimeTabularMetadataMutation({
+        runtimeSessionManager: runtime,
+        isCurrentRuntime: options.isCurrentRuntime,
+        updated: result => invalidate(result.objectName, [{ kind: "dataset_variable_meta_changed" }])
+    });
     const executeDatasetMethod = async function(
         method: string,
         params: Record<string, unknown>
@@ -176,340 +180,46 @@ export const createRuntimeSessionDatasetChannelAdapter = function(
     };
 
     return {
-        async readSchema(value: unknown) {
-            const name = String(value || "").trim();
+        readSchema: reads.readSchema,
+        tabularColumns,
+        tabularRows,
+        readTabularSchema: tabularReads.readTabularSchema,
+        readTabularPreview: tabularReads.readTabularPreview,
+        readContent: reads.readContent,
+        readFilterMask: reads.readFilterMask,
+        readVariables: reads.readVariables,
 
-            return name
-                ? toViewerSchema(await runtime.readTabularSchema(name))
-                : null;
-        },
+        readVariableMetadata: metadataReads.readVariableMetadata,
 
-        async readContent(value: unknown) {
-            const input = recordInput(value);
-            const objectName = String(input.name || "").trim();
+        writeVariableMetadata: metadata.writeVariableMetadata,
 
-            if (!objectName) {
-                return null;
-            }
+        readValueLabels: metadataReads.readValueLabels,
 
-            return toViewerContent(await runtime.readTabularPreview({
-                objectName,
-                rowStart: positiveInteger(input.rowStart, 1),
-                rowCount: positiveInteger(input.rowCount, options.initialRows),
-                columns: Array.isArray(input.columns)
-                    ? input.columns.map(String)
-                    : [],
-                columnCount: positiveInteger(
-                    input.columnCount,
-                    options.initialColumns
-                )
-            }));
-        },
+        writeValueLabels: metadata.writeValueLabels,
 
-        readFilterMask(value: unknown) {
-            const input = recordInput(value);
-            const rowCount = positiveInteger(
-                input.rowCount,
-                options.initialRows
-            );
+        readDeclaredMissing: metadataReads.readDeclaredMissing,
 
-            return {
-                name: String(input.name || ""),
-                rowStart: positiveInteger(input.rowStart, 1),
-                rowCount,
-                filteredOut: Array.from({ length: rowCount }, () => false)
-            };
-        },
+        writeDeclaredMissing: metadata.writeDeclaredMissing,
 
-        async readVariables(value: unknown) {
-            const input = recordInput(value);
-            const name = String(input.name || "").trim();
-            const snapshot = await runtime.readVariableMetadata(name);
+        readVariableBatch: reads.readVariableBatch,
 
-            return snapshot.status === "ready" ? snapshot.variables : null;
-        },
+        updateCell: cells.updateCell,
+        writeCell: cell.writeCell,
 
-        readVariableMetadata(value: unknown) {
-            return runtime.readVariableMetadata(String(value || "").trim());
-        },
+        updateColumnName: columns.updateColumnName,
 
-        async writeVariableMetadata(value: unknown) {
-            const result = await runtime.writeVariableMetadata(
-                createVariableMetadataUpdateRequest(recordInput(value))
-            );
+        updateRowName: rows.updateRowName,
+        insertRow: rows.insertRow,
+        removeRow: rows.removeRow,
 
-            if (result.status === "updated") {
-                await invalidate(result.objectName, true);
-            }
+        insertColumn: columns.insertColumn,
+        removeColumn: columns.removeColumn,
 
-            return result;
-        },
+        sortRows: rows.sortRows,
 
-        readValueLabels(value: unknown) {
-            return runtime.readValueLabels(String(value || "").trim());
-        },
+        writeCells: cellBatch.writeCells,
 
-        async writeValueLabels(value: unknown) {
-            const result = await runtime.writeValueLabels(
-                createValueLabelUpdateRequest(recordInput(value))
-            );
-
-            if (result.status === "updated") {
-                await invalidate(result.objectName, true);
-            }
-
-            return result;
-        },
-
-        readDeclaredMissing(value: unknown) {
-            return runtime.readDeclaredMissing(String(value || "").trim());
-        },
-
-        async writeDeclaredMissing(value: unknown) {
-            const result = await runtime.writeDeclaredMissing(
-                createDeclaredMissingUpdateRequest(recordInput(value))
-            );
-
-            if (result.status === "updated") {
-                await invalidate(result.objectName, true);
-            }
-
-            return result;
-        },
-
-        async readVariableBatch(value: unknown) {
-            const input = recordInput(value);
-            const name = String(input.name || "").trim();
-            const start = positiveInteger(input.start, 1);
-            const count = positiveInteger(
-                input.count,
-                options.variableOverscanRows
-            );
-
-            if (options.readVariableMetadataBatch) {
-                return options.readVariableMetadataBatch(name, start, count);
-            }
-
-            const result = await executeDatasetMethod(
-                "workspace.dataset_variables_batch",
-                { name, start, count }
-            );
-
-            if (result.status === "ready" && result.value) {
-                return result.value;
-            }
-
-            const snapshot = await runtime.readVariableMetadata(name);
-            const variables = snapshot.status === "ready"
-                ? snapshot.variables
-                : [];
-            const items = variables.slice(start - 1, start - 1 + count);
-
-            return {
-                name,
-                total: variables.length,
-                start,
-                count: items.length,
-                items
-            };
-        },
-
-        async updateCell(value: unknown) {
-            const input = recordInput(value);
-            const result = await runtime.writeCell(createCellUpdateRequest({
-                objectName: stringFromDatasetViewerPayload(input.name),
-                rowIndex: providerRowIndexFromDatasetViewerPayload(input.row),
-                columnName: stringFromDatasetViewerPayload(input.column),
-                value: input.value,
-                uiCommandVisibility: "hidden"
-            }));
-
-            if (result.status === "updated") {
-                await invalidate(result.objectName);
-            }
-
-            return createDatasetViewerCellUpdateResult(result);
-        },
-
-        async updateColumnName(value: unknown) {
-            const input = recordInput(value);
-            const result = await runtime.renameColumn(createColumnRenameRequest({
-                objectName: stringFromDatasetViewerPayload(input.name),
-                fromName: stringFromDatasetViewerPayload(input.column),
-                toName: stringFromDatasetViewerPayload(input.nextName),
-                uiCommandVisibility: "hidden"
-            }));
-
-            if (result.status === "updated") {
-                await invalidate(result.objectName, true);
-            }
-
-            return createDatasetViewerColumnRenameResult(result);
-        },
-
-        async updateRowName(value: unknown) {
-            const input = recordInput(value);
-            const result = await runtime.updateRowName(createRowNameUpdateRequest({
-                objectName: stringFromDatasetViewerPayload(input.name),
-                rowIndex: providerRowIndexFromDatasetViewerPayload(input.row),
-                name: stringFromDatasetViewerPayload(input.nextName),
-                uiCommandVisibility: "hidden"
-            }));
-
-            if (result.status === "updated") {
-                await invalidate(result.objectName);
-            }
-
-            return createDatasetViewerRowNameResult(result);
-        },
-
-        async insertRow(value: unknown) {
-            const input = recordInput(value);
-            const position = normalizedDatasetViewerPosition(input.position);
-            const result = await runtime.insertRow(createRowInsertRequest({
-                objectName: stringFromDatasetViewerPayload(input.name),
-                rowIndex: providerRowIndexFromDatasetViewerPayload(input.row),
-                name: stringFromDatasetViewerPayload(input.nextName),
-                position,
-                uiCommandVisibility: "hidden"
-            }));
-
-            if (result.status === "updated") {
-                await invalidate(result.objectName);
-            }
-
-            return createDatasetViewerRowInsertResult(result, {
-                name: input.nextName,
-                position
-            });
-        },
-
-        async removeRow(value: unknown) {
-            const input = recordInput(value);
-            const result = await runtime.removeRow(createRowRemoveRequest({
-                objectName: stringFromDatasetViewerPayload(input.name),
-                rowIndex: providerRowIndexFromDatasetViewerPayload(input.row),
-                uiCommandVisibility: "hidden"
-            }));
-
-            if (result.status === "updated") {
-                await invalidate(result.objectName);
-            }
-
-            return createDatasetViewerRowRemoveResult(result);
-        },
-
-        async insertColumn(value: unknown) {
-            const input = recordInput(value);
-            const position = normalizedDatasetViewerPosition(input.position);
-            const result = await runtime.insertColumn(createColumnInsertRequest({
-                objectName: stringFromDatasetViewerPayload(input.name),
-                referenceName: stringFromDatasetViewerPayload(input.column),
-                newName: stringFromDatasetViewerPayload(input.nextName),
-                position,
-                uiCommandVisibility: "hidden"
-            }));
-
-            if (result.status === "updated") {
-                await invalidate(result.objectName, true);
-            }
-
-            return createDatasetViewerColumnInsertResult(result, {
-                column: input.column,
-                position
-            });
-        },
-
-        async removeColumn(value: unknown) {
-            const input = recordInput(value);
-            const result = await runtime.removeColumn(createColumnRemoveRequest({
-                objectName: stringFromDatasetViewerPayload(input.name),
-                columnName: stringFromDatasetViewerPayload(input.column),
-                uiCommandVisibility: "hidden"
-            }));
-
-            if (result.status === "updated") {
-                await invalidate(result.objectName, true);
-            }
-
-            return createDatasetViewerColumnRemoveResult(result);
-        },
-
-        async sortRows(value: unknown) {
-            const input = recordInput(value);
-            const result = await runtime.sortRows(createRowSortRequest({
-                objectName: stringFromDatasetViewerPayload(input.name),
-                columnName: stringFromDatasetViewerPayload(input.column),
-                direction: input.decreasing === true
-                    ? "descending"
-                    : "ascending",
-                uiCommandVisibility: "hidden"
-            }));
-
-            if (result.status === "updated") {
-                await invalidate(result.objectName);
-            }
-
-            return createDatasetViewerRowSortResult(result);
-        },
-
-        async writeCells(value: unknown) {
-            const inputs = Array.isArray(value)
-                ? value.map(recordInput)
-                : [];
-            const requests = inputs.map((input) => {
-                return createCellUpdateRequest({
-                    objectName: stringFromDatasetViewerPayload(
-                        input.objectName || input.name
-                    ),
-                    rowIndex: providerRowIndexFromDatasetViewerPayload(
-                        input.rowIndex ?? input.row
-                    ),
-                    columnName: stringFromDatasetViewerPayload(
-                        input.columnName || input.column
-                    ),
-                    value: input.value,
-                    uiCommandVisibility: "hidden"
-                });
-            });
-            const result = await runtime.writeCells(requests);
-
-            if (result.updated > 0) {
-                const names = new Set(requests.map((request) => {
-                    return request.objectName;
-                }).filter(Boolean));
-
-                for (const name of names) {
-                    await invalidate(name);
-                }
-            }
-
-            return createDatasetViewerCellUpdateBatchResult(result);
-        },
-
-        async updateVariable(value: unknown) {
-            const result = await applyRuntimeDatasetVariablePatch(
-                runtime,
-                value
-            );
-
-            if (!result) {
-                return null;
-            }
-
-            options.patchVariableMetadata?.(
-                result.objectName,
-                result.variableName,
-                result.value
-            );
-            await invalidate(
-                result.objectName,
-                true,
-                Boolean(options.patchVariableMetadata)
-            );
-
-            return result.value;
-        },
+        updateVariable: variables.updateVariable,
 
         async readDialogVariableValues(value: unknown) {
             const input = recordInput(value);

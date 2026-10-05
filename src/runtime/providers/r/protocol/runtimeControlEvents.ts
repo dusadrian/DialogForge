@@ -1,9 +1,12 @@
+import { isRHelpPagePath } from "../../../help/rHelpResourceProtocol";
 import {
     createTranscriptEvent
 } from "../../../commands/commandProtocol";
 import { createRuntimeEvent } from "../../../events/runtimeEventProtocol";
+import { hasValidRWorkspaceReconciliationPayload } from "./rWorkspacePayloadValidation";
 import type {
     RuntimeEventRecord,
+    RuntimeEvaluationOutcome,
     RuntimeSessionSnapshot,
     TranscriptEvent,
     VisibleCommandRequest
@@ -81,6 +84,7 @@ const createPlotRuntimeEvent = function(
 
     return createRuntimeEvent({
         type: "plot",
+        lifecycleGeneration: snapshot.lifecycleGeneration,
         providerId: snapshot.providerId,
         objectName: String(record.upid || "").trim(),
         detail: message || (status ? `Plot ${status}.` : "Plot event."),
@@ -112,6 +116,9 @@ const createWorkspaceRuntimeEvent = function(
     const payload = type === "workspace"
         ? asRuntimeControlObject(record.snapshot)
         : asRuntimeControlObject(record.update);
+    if (type === "workspace_update" && !hasValidRWorkspaceReconciliationPayload(payload)) {
+        return null;
+    }
     const added = asRuntimeControlArray(payload.added);
     const updated = asRuntimeControlArray(payload.updated);
     const removed = asRuntimeControlArray(payload.removed);
@@ -124,6 +131,7 @@ const createWorkspaceRuntimeEvent = function(
         type: type === "workspace"
             ? "workspace.snapshot"
             : "workspace.update",
+        lifecycleGeneration: snapshot.lifecycleGeneration,
         providerId: snapshot.providerId,
         objectName: "",
         detail,
@@ -137,8 +145,132 @@ export const createProviderRuntimeEvent = function(
     value: unknown,
     snapshot: RuntimeSessionSnapshot
 ): RuntimeEventRecord | null {
+    const record = asRuntimeControlObject(value);
+
+    if (record.type === "help_page") {
+        const path = String(record.path || "");
+        const eventId = String(record.id || "");
+        if (!eventId || !isRHelpPagePath(path)) {
+            return null;
+        }
+        return createRuntimeEvent({
+            type: "help.page",
+            lifecycleGeneration: snapshot.lifecycleGeneration,
+            providerId: snapshot.providerId,
+            payload: { path, eventId },
+            createdAt: String(record.when || "") || new Date().toISOString()
+        });
+    }
+
+    if (record.type === "execution_phase") {
+        const phase = String(record.phase || "");
+        const parentId = String(record.parent_id || "");
+
+        if (
+            parentId
+            && (phase === "running" || phase === "awaiting_input" || phase === "evaluated")
+        ) {
+            return createRuntimeEvent({
+                type: "command.execution",
+                lifecycleGeneration: snapshot.lifecycleGeneration,
+                providerId: snapshot.providerId,
+                detail: `Command evaluation: ${phase}.`,
+                payload: {
+                    activityId: parentId,
+                    phase,
+                    outcome: String(record.outcome || "")
+                },
+                createdAt: String(record.when || "") || new Date().toISOString()
+            });
+        }
+
+        return null;
+    }
+
     return createPlotRuntimeEvent(value, snapshot) ||
         createWorkspaceRuntimeEvent(value, snapshot);
+};
+
+
+export const readRuntimeEvaluationOutcome = function(
+    events: unknown[] | undefined,
+    activityId: string
+): RuntimeEvaluationOutcome | undefined {
+    const terminalEvents = asRuntimeControlArray(events).map(asRuntimeControlObject)
+        .filter((event) => {
+            return event.type === "execution_phase"
+                && event.phase === "evaluated"
+                && event.parent_id === activityId;
+        });
+
+    if (terminalEvents.length !== 1) {
+        return undefined;
+    }
+
+    const outcome = terminalEvents[0].outcome;
+
+    if (outcome === "success" || outcome === "error" || outcome === "interrupted") {
+        return outcome;
+    }
+
+    return undefined;
+};
+
+
+export interface RRuntimeCommandCompletionMarker {
+    status: "valid" | "missing" | "invalid";
+    completion: Record<string, unknown> | null;
+}
+
+
+export const readRuntimeCommandCompletionMarker = function(
+    events: unknown[] | undefined,
+    activityId: string
+): RRuntimeCommandCompletionMarker {
+    const completions = asRuntimeControlArray(events).map(asRuntimeControlObject)
+        .filter((event) => {
+            return event.type === "completion" && event.parent_id === activityId;
+        });
+
+    if (completions.length === 0) {
+        return { status: "missing", completion: null };
+    }
+
+    if (completions.length !== 1) {
+        return { status: "invalid", completion: null };
+    }
+
+    const state = completions[0].state;
+    return {
+        status: state === "idle" || state === "error" || state === "interrupted"
+            ? "valid" : "invalid",
+        completion: completions[0]
+    };
+};
+
+
+export const createLiveTranscriptEventsFromRuntimeControl = function(
+    event: unknown,
+    request: VisibleCommandRequest,
+    parentId: string,
+    orderedOutput: boolean
+): TranscriptEvent[] {
+    const record = asRuntimeControlObject(event);
+    const parent = String(record.parent_id || "");
+
+    if (parent && parent !== parentId) {
+        return [];
+    }
+    if (orderedOutput && (
+        record.type === "stream"
+        || record.type === "completion"
+        || record.type === "state"
+    )) {
+        // Journal-owned tails and terminal state wait for accepted delivery.
+        return [];
+    }
+
+    return createTranscriptEventsFromRuntimeControl([event], request, parentId);
 };
 
 

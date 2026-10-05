@@ -3,8 +3,8 @@ import {
     type DialogRuntimeRequirementsPayload
 } from "../../dialog-runtime/renderer/modules/dialogRuntimeRequirementsController";
 import type {
-    RPackageRequirement
-} from "../../core/contracts/applicationComposition";
+    DialogRuntimeRequirementsSaveResult
+} from "../../dialog-runtime/requirements/dialogRuntimeRequirements";
 
 
 const controller = createDialogRuntimeRequirementsController({
@@ -23,10 +23,7 @@ window.dialogForge.dialogRuntimeRequirements.onLoaded(function(payload: unknown)
 });
 
 window.dialogForge.dialogRuntimeRequirements.onSaved(function(payload: unknown): void {
-    controller.applySaved(payload as {
-        dialogId?: string;
-        rPackages?: RPackageRequirement[];
-    });
+    controller.applySaved(payload as Partial<DialogRuntimeRequirementsSaveResult>);
 });
 
 window.addEventListener("DOMContentLoaded", controller.bind);

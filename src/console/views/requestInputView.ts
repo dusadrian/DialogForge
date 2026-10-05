@@ -5,7 +5,7 @@ import {
 } from '../consoleTypography';
 
 export const createConsoleRequestInputView = (deps: {
-  replyToRequest: (code: string) => Promise<void> | void;
+  replyToRequest: (code: string) => Promise<boolean | void> | boolean | void;
   interruptExecution?: () => Promise<void> | void;
   adjustFontSize?: (delta: number) => number | void;
 }) => {
@@ -15,6 +15,7 @@ export const createConsoleRequestInputView = (deps: {
   let inputEl: HTMLInputElement | null = null;
   let busy = false;
   let passwordMode = false;
+  let replyGeneration = 0;
 
   const clear = () => {
     if (inputEl) inputEl.value = '';
@@ -34,13 +35,19 @@ export const createConsoleRequestInputView = (deps: {
   const submit = async () => {
     if (!inputEl || busy) return;
     const value = String(inputEl.value || '');
-    if (!value.trim()) return;
+    const generation = replyGeneration;
     busy = true;
     try {
-      await deps.replyToRequest(value);
-      clear();
+      const accepted = await deps.replyToRequest(value);
+      if (generation === replyGeneration && accepted !== false && inputEl.value === value) {
+        clear();
+      }
+    } catch {
+      // Keep the input for retry; the reply owner reports the failure.
     } finally {
-      busy = false;
+      if (generation === replyGeneration) {
+        busy = false;
+      }
     }
   };
 
@@ -121,6 +128,12 @@ export const createConsoleRequestInputView = (deps: {
     clear,
     focus,
     submit,
+    retire: function(): void {
+        replyGeneration += 1;
+        busy = false;
+        clear();
+        setPasswordMode(false);
+    },
     setPasswordMode,
     dispose,
     isMounted: () => mounted

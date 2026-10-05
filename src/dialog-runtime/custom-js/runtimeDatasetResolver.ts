@@ -1,5 +1,7 @@
 import type {
     RuntimeSessionManager,
+    RuntimeSessionSnapshot,
+    TabularSchemaSnapshot,
     WorkspaceObjectSnapshot,
     WorkspaceSnapshot
 } from "../../runtime/provider-contract/runtimeProvider";
@@ -7,6 +9,7 @@ import type { DialogDatasetDescriptor } from "./dialogBindings";
 import {
     createProductDialogVariableFlagRecord
 } from "../dialog-builder/productDialogWorkspaceData";
+import { captureWorkspaceRuntimeScope } from "../../runtime/workspace/workspaceSnapshotDelivery";
 
 
 const isTabularObject = function(object: WorkspaceObjectSnapshot): boolean {
@@ -42,9 +45,14 @@ const dialogColumnsFromWorkspaceObject = function(
 
 
 const workspaceObjectRevision = function(
-    object: WorkspaceObjectSnapshot
+    object: WorkspaceObjectSnapshot,
+    workspace: WorkspaceSnapshot,
+    session: RuntimeSessionSnapshot
 ): string {
     return JSON.stringify({
+        providerId: session.providerId,
+        lifecycleGeneration: session.lifecycleGeneration,
+        workspaceRevision: workspace.workspaceRevision,
         columns: object.columns,
         columnEntries: object.columnEntries,
         provenance: object.provenance
@@ -72,11 +80,13 @@ export const createRuntimeDialogDatasetResolver = function(
     }>();
 
     return async function(): Promise<DialogDatasetDescriptor[]> {
+        const scopeIsCurrent = captureWorkspaceRuntimeScope(() => runtimeSessionManager);
         const workspace = await readPreparedWorkspace(runtimeSessionManager);
 
-        if (workspace.status !== "ready") {
+        if (workspace.status !== "ready" || !scopeIsCurrent(workspace)) {
             return [];
         }
+        const session = runtimeSessionManager.getSnapshot();
 
         const descriptors: DialogDatasetDescriptor[] = [];
         const availableDatasets = new Set<string>();
@@ -98,7 +108,7 @@ export const createRuntimeDialogDatasetResolver = function(
                 continue;
             }
 
-            const revision = workspaceObjectRevision(object);
+            const revision = workspaceObjectRevision(object, workspace, session);
             const cached = fallbackColumns.get(object.name);
 
             if (cached?.revision === revision) {
@@ -109,7 +119,19 @@ export const createRuntimeDialogDatasetResolver = function(
                 continue;
             }
 
-            const schema = await runtimeSessionManager.readTabularSchema(object.name);
+            let schema: TabularSchemaSnapshot;
+            try {
+                schema = await runtimeSessionManager.readTabularSchema(object.name);
+            }
+            catch (error) {
+                if (!scopeIsCurrent(workspace)) {
+                    return [];
+                }
+                throw error;
+            }
+            if (!scopeIsCurrent(workspace)) {
+                return [];
+            }
             const columns = schema.status === "ready"
                 ? schema.columns.map(function(column) {
                     return createProductDialogVariableFlagRecord({ ...column });
@@ -135,5 +157,27 @@ export const createRuntimeDialogDatasetResolver = function(
         }
 
         return descriptors;
+    };
+};
+
+
+export const createRuntimeDialogDatasetResolverOwner = function(
+    getRuntime: () => RuntimeSessionManager | null | undefined
+) {
+    let currentRuntime: RuntimeSessionManager | null = null;
+    let resolveDatasets: ReturnType<typeof createRuntimeDialogDatasetResolver> | null = null;
+
+    return async function(): Promise<DialogDatasetDescriptor[]> {
+        const runtime = getRuntime();
+        if (!runtime) {
+            currentRuntime = null;
+            resolveDatasets = null;
+            return [];
+        }
+        if (runtime !== currentRuntime || !resolveDatasets) {
+            currentRuntime = runtime;
+            resolveDatasets = createRuntimeDialogDatasetResolver(runtime);
+        }
+        return resolveDatasets();
     };
 };

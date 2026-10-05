@@ -24,6 +24,9 @@ export interface RuntimeVariableMetadataExecutionControllerOptions {
     readOnlyAdapter?: RuntimeReadOnlyAdapter;
     fallbackVariableMetadataController: RuntimeFallbackVariableMetadataController;
     getSnapshot(): RuntimeSessionSnapshot;
+    getWorkspaceGeneration?(): number;
+    getWorkspaceReadEpoch?(): number;
+    isWorkspaceReadAvailable?(): boolean;
     getActiveObjectName(): string;
     materializeRows(objectName: string): boolean;
     getRows(objectName: string): RuntimeFallbackTabularRow[];
@@ -53,7 +56,8 @@ export interface RuntimeVariableMetadataExecutionController {
     readVariableMetadata(objectName: string): Promise<VariableMetadataSnapshot>;
     writeVariableMetadata(
         request: VariableMetadataUpdateRequest,
-        normalized: NormalizedVariableMetadataUpdateRequest
+        normalized: NormalizedVariableMetadataUpdateRequest,
+        beginMutation?: () => void
     ): Promise<VariableMetadataUpdateResult>;
 }
 
@@ -64,6 +68,7 @@ export const createRuntimeVariableMetadataExecutionController = function(
     return {
         readVariableMetadata: async function(objectName) {
             const snapshot = options.getSnapshot();
+            const epoch = options.getWorkspaceReadEpoch?.();
             const targetName = objectName || options.getActiveObjectName();
 
             if (targetName && options.providerTabularController?.readVariableMetadata) {
@@ -71,6 +76,18 @@ export const createRuntimeVariableMetadataExecutionController = function(
                     targetName,
                     snapshot
                 );
+
+                if (
+                    epoch !== options.getWorkspaceReadEpoch?.()
+                    || options.getSnapshot().status !== "ready"
+                    || options.isWorkspaceReadAvailable?.() === false
+                ) {
+                    return createVariableMetadataSnapshot({
+                        status: "unavailable", providerId: snapshot.providerId,
+                        objectName: targetName,
+                        message: "Workspace changed while reading variable metadata."
+                    });
+                }
 
                 if (metadata) {
                     return metadata;
@@ -94,11 +111,13 @@ export const createRuntimeVariableMetadataExecutionController = function(
                 options.readOnlyAdapter
             );
         },
-        writeVariableMetadata: async function(request, normalized) {
+        writeVariableMetadata: async function(request, normalized, beginMutation) {
             const snapshot = options.getSnapshot();
+            const generation = options.getWorkspaceGeneration?.();
             const targetName = normalized.targetName;
 
             if (targetName && options.providerTabularController?.writeVariableMetadata) {
+                beginMutation?.();
                 return options.providerTabularController.writeVariableMetadata(
                     Object.assign({}, request, {
                         objectName: targetName,
@@ -111,6 +130,19 @@ export const createRuntimeVariableMetadataExecutionController = function(
             }
 
             const metadata = await options.readVariableMetadata(targetName);
+
+            if (
+                generation !== options.getWorkspaceGeneration?.()
+                || options.getSnapshot().status !== "ready"
+            ) {
+                return createVariableMetadataUpdateResult({
+                    status: "unavailable", providerId: snapshot.providerId,
+                    objectName: targetName, variableName: request.variableName,
+                    metadataKey: normalized.metadataKey, value: normalized.value,
+                    label: normalized.label,
+                    message: "Runtime session changed before metadata editing."
+                });
+            }
 
             if (metadata.status !== "ready") {
                 return createVariableMetadataUpdateResult({
@@ -142,6 +174,7 @@ export const createRuntimeVariableMetadataExecutionController = function(
                 });
             }
 
+            beginMutation?.();
             return options.fallbackVariableMetadataController.writeUpdate(
                 snapshot.providerId,
                 targetName,

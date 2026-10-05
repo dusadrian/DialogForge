@@ -2,7 +2,9 @@ import type {
     EvaluatedStartupTask
 } from "../../core/contracts/applicationComposition";
 import {
-    createVisibleCommandRequest
+    createVisibleCommandRequest,
+    commandExecutionDidNotSucceed,
+    isTranscriptFailureEvent
 } from "../commands/commandProtocol";
 import {
     createDependencyCheckRequest
@@ -153,18 +155,19 @@ export const createRuntimeStartupTaskExecutionController = function(
                     source: `${request.source || "startup.task"}.${task.id}`
                 })
             );
-            const failure = events.find((event) => {
-                return event.type === "error" || event.type === "rejected";
-            });
+            const failure = events.find(isTranscriptFailureEvent);
+            const unsuccessful = commandExecutionDidNotSucceed({ transcriptEvents: events });
 
             executedRequirement = true;
             commandMessages.push(
-                failure
-                    ? String(failure.message || `Startup command failed: ${text}`)
+                unsuccessful
+                    ? failure
+                        ? String(failure.message || `Startup command failed: ${text}`)
+                        : `Startup command did not complete successfully: ${text}`
                     : `Executed startup command: ${text}`
             );
 
-            if (failure) {
+            if (unsuccessful) {
                 dependencyStatus = "failed";
             }
         }

@@ -1,4 +1,15 @@
 runtime_collected_events <- NULL
+runtime_transport_event_nonce <- ""
+runtime_transport_write_failed <- FALSE
+
+
+runtime_begin_transport_event_scope <- function(nonce, preserve_current = FALSE) {
+    previous <- runtime_transport_event_nonce
+    if (!isTRUE(preserve_current) || !nzchar(previous)) {
+        runtime_transport_event_nonce <<- as.character(nonce %||% "")
+    }
+    previous
+}
 
 
 runtime_begin_event_collection <- function() {
@@ -31,8 +42,11 @@ runtime_event_identity <- function(type) {
 }
 
 
-runtime_event_payload <- function(type, fields, parent_id = NULL) {
-    identity <- runtime_event_identity(type)
+runtime_event_payload <- function(type, fields, parent_id = NULL, identity = NULL) {
+    if (is.null(identity)) {
+        identity <- runtime_event_identity(type)
+    }
+
     runtime_diagnostic_count("events")
 
     if (identical(type, "stream")) {
@@ -45,6 +59,11 @@ runtime_event_payload <- function(type, fields, parent_id = NULL) {
         paste0("\"type\":", json_str(type)),
         paste0("\"id\":", json_str(identity$id))
     )
+    if (nzchar(runtime_transport_event_nonce)) {
+        parts <- c(parts, paste0(
+            "\"transportNonce\":", json_str(runtime_transport_event_nonce)
+        ))
+    }
 
     if (!is.null(parent_id)) {
         parts <- c(parts, paste0("\"parent_id\":", json_str(parent_id)))
@@ -84,14 +103,26 @@ push_event <- function(line) {
 
     if (!is.null(runtime_collected_events)) {
         runtime_collected_events <<- c(runtime_collected_events, line)
-
-        return(invisible(NULL))
     }
 
-    if (isTRUE(live_events_enabled) && !is.null(client)) {
-        safe(writeLines(line, client, useBytes = TRUE))
-        safe(flush(client))
+    if (isTRUE(live_events_enabled)) {
+        if (isTRUE(runtime_transport_write_failed)) {
+            return(invisible(FALSE))
+        }
+        transport_write <- get0(
+            "runtime_live_event_transport_write",
+            envir = environment(push_event),
+            inherits = FALSE
+        )
+        if (is.function(transport_write)) {
+            return(transport_write(line))
+        }
+        if (!is.null(runtime_collected_events)) {
+            return(invisible(NULL))
+        }
+    }
 
+    if (!is.null(runtime_collected_events)) {
         return(invisible(NULL))
     }
 
@@ -121,8 +152,26 @@ emit_stream_event <- function(text, name = "stdout", parent_id = "") {
     if (!nzchar(text)) return(invisible(NULL))
 
     parent_id <- runtime_event_parent_id(parent_id)
+    channel <- tolower(as.character(name %||% "stdout"))
+    if (
+        exists(
+            "runtime_ordered_capture_active", envir = environment(emit_stream_event),
+            inherits = FALSE
+        ) &&
+        isTRUE(runtime_ordered_capture_active) &&
+        is.element(channel, c("stdout", "stderr"))
+    ) {
+        if (nzchar(parent_id) && !identical(parent_id, current_activity_id)) {
+            stop("Ordered stream does not belong to the active evaluation.")
+        }
+        # Menu choices and other runtime-generated text must share the active
+        # writer's sequence, not a live event filtered out by ordered delivery.
+        connection <- if (identical(channel, "stdout")) stdout() else stderr()
+        cat(text, file = connection, sep = "")
+        return(invisible(NULL))
+    }
     fields <- c(
-        paste0("\"name\":", json_str(tolower(as.character(name %||% "stdout")))),
+        paste0("\"name\":", json_str(channel)),
         paste0("\"text\":", json_str(text))
     )
 
@@ -177,6 +226,26 @@ emit_state_event <- function(state, parent_id = "") {
         paste0("\"state\":", json_str(state)),
         runtime_event_parent_id(parent_id)
     ))
+}
+
+
+emit_execution_phase_event <- function(phase, parent_id = "", outcome = "") {
+    parent_id <- runtime_event_parent_id(parent_id)
+
+    if (!nzchar(parent_id)) {
+        return(invisible(NULL))
+    }
+
+    push_event(runtime_event_payload(
+        "execution_phase",
+        c(
+            paste0("\"phase\":", json_str(phase)),
+            paste0("\"outcome\":", json_str(outcome))
+        ),
+        parent_id
+    ))
+
+    invisible(NULL)
 }
 
 
@@ -438,21 +507,28 @@ emit_session_event <- function(phase) {
 }
 
 
-emit_prompt_event <- function(prompt, password = FALSE, parent_id = "") {
+emit_prompt_event <- function(
+    prompt,
+    password = FALSE,
+    parent_id = "",
+    identity = NULL
+) {
     prompt <- as.character(prompt %||% "")
-
-    if (!nzchar(prompt)) return(invisible(NULL))
 
     fields <- c(
         paste0("\"prompt\":", json_str(prompt)),
         paste0("\"password\":", json_bool(password))
     )
 
-    push_event(runtime_event_payload(
+    payload <- runtime_event_payload(
         "prompt",
         fields,
-        runtime_event_parent_id(parent_id)
-    ))
+        runtime_event_parent_id(parent_id),
+        identity
+    )
+    push_event(payload)
+
+    invisible(payload)
 }
 
 
@@ -677,7 +753,7 @@ flush_completion_queue <- function() {
         )
 
         if (isTRUE(item$emit_plot)) {
-            sync_httpgd_plot(parent_id)
+            sync_runtime_plot(parent_id)
         }
 
         if (isTRUE(item$emit_prompt_state)) {

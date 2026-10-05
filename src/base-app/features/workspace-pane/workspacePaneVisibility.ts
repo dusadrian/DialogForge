@@ -1,6 +1,7 @@
 import type {
     WorkspacePaneWindowRequest
 } from "./workspacePaneWindowState";
+import { renderWorkspacePaneToggle } from "./workspacePaneToggle";
 
 export interface WorkspacePaneVisibilityOptions {
     document: Document;
@@ -97,15 +98,6 @@ export const createWorkspacePaneVisibility = function(
     };
 
     const updateToggle = function(): void {
-        const button = options.document.getElementById(
-            "workspacePaneToggle"
-        ) as HTMLButtonElement | null;
-        const icon = button?.querySelector(".codicon");
-
-        if (!button) {
-            throw new Error("Missing workspace pane toggle button.");
-        }
-
         options.document.body.classList.toggle(
             "workspace-pane-hidden",
             !visible
@@ -115,18 +107,7 @@ export const createWorkspacePaneVisibility = function(
             visible
         );
 
-        const labelKey = visible ? "Hide Workspace" : "Show Workspace";
-        const label = options.translate
-            ? options.translate(labelKey)
-            : labelKey;
-
-        button.dataset.tooltip = label;
-        button.setAttribute("aria-label", label);
-
-        if (icon) {
-            icon.classList.toggle("codicon-chevron-left", visible);
-            icon.classList.toggle("codicon-chevron-right", !visible);
-        }
+        renderWorkspacePaneToggle(options.document, visible, options.translate);
     };
 
     const writePersisted = function(): void {

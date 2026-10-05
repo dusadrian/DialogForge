@@ -43,6 +43,37 @@ const journal = diagnosticGlobal.dialogForgeRuntimeDiagnostics ?? {
 diagnosticGlobal.dialogForgeRuntimeDiagnostics = journal;
 
 
+const recordRuntimeDiagnosticEntry = function(
+    entry: Omit<RuntimeDiagnosticEntry, "sequence">
+): void {
+    if (!journal.enabled) {
+        return;
+    }
+    if (journal.entries.length >= maximumEntries) {
+        journal.entries.shift();
+        journal.dropped += 1;
+    }
+    journal.entries.push({ ...entry, sequence: ++sequence });
+};
+
+
+export const createRuntimeOutputDeliveryDiagnostics = function(session: string, activity: string) {
+    return {
+        record: function(phase: "started" | "accepted" | "failed" | "retired" | "finished"): void {
+            if (!journal.enabled) {
+                return;
+            }
+            recordRuntimeDiagnosticEntry({
+                session: session.slice(0, 160), request: activity.slice(0, 160),
+                activity: activity.slice(0, 160), method: "runtime.output_delivery",
+                clock: "javascript", ms: performance.now(),
+                phase: `output.delivery_${phase}`, count: 0
+            });
+        }
+    };
+};
+
+
 export const createRuntimeControlDiagnostics = function(host: "native" | "webr") {
     const session = `${host}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
     const receivedEvents = new Set<string>();
@@ -58,17 +89,11 @@ export const createRuntimeControlDiagnostics = function(host: "native" | "webr")
             return;
         }
 
-        if (journal.entries.length >= maximumEntries) {
-            journal.entries.shift();
-            journal.dropped += 1;
-        }
-
-        journal.entries.push({
+        recordRuntimeDiagnosticEntry({
             session,
             request: request.id.slice(0, 160),
             activity: String(request.params?.parentId || "").slice(0, 160),
             method: request.method.slice(0, 80),
-            sequence: ++sequence,
             clock,
             ms: ms ?? performance.now(),
             phase,
@@ -76,11 +101,22 @@ export const createRuntimeControlDiagnostics = function(host: "native" | "webr")
         });
     };
 
-    return {
+    const diagnostics = {
         get enabled() {
             return journal.enabled;
         },
         record,
+        receiveResponse: function(
+            request: RRuntimeControlRequest,
+            response: { diagnostics?: unknown; events?: unknown[] },
+            encodedBytes = 0
+        ): void {
+            record(request, "response.received", encodedBytes);
+            diagnostics.receiveDiagnostics(request, response.diagnostics);
+            for (const event of Array.isArray(response.events) ? response.events : []) {
+                diagnostics.receiveEvent(request, event);
+            }
+        },
         prepare: function(request: RRuntimeControlRequest): RRuntimeControlRequest {
             record(request, "request.enqueued");
             if (/^workspace\.dataset_(schema|content|variables|variables_batch|value_labels|declared_missing)$/.test(request.method)) {
@@ -152,4 +188,5 @@ export const createRuntimeControlDiagnostics = function(host: "native" | "webr")
             }
         }
     };
+    return diagnostics;
 };

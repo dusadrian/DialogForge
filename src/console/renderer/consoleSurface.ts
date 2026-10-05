@@ -65,6 +65,7 @@ export interface ConsoleSurface {
     setText: (value: string) => void;
     focus: () => void;
     clear: () => void;
+    retireRuntimeExecution: () => void;
     resize: () => void;
     setSettings: (settings: ConsoleEditorSettings) => void;
     scrollToBottom: () => boolean;
@@ -132,7 +133,7 @@ export const createConsoleSurface = function(
 
         requestInput = createConsoleRequestInputView({
             replyToRequest: async function(value: string) {
-                await transcript?.replyToPrompt?.(value);
+                return await transcript?.replyToPrompt?.(value) || false;
             },
             interruptExecution: options.interruptExecution
         });
@@ -255,6 +256,11 @@ export const createConsoleSurface = function(
         focus,
         clear: function(): void {
             transcript?.clear?.();
+        },
+        retireRuntimeExecution: function(): void {
+            requestInput?.retire();
+            commandInput?.retireSubmission();
+            transcript?.retireRuntimeActivities();
         },
         resize: function(): void {},
         setSettings: function(settings: ConsoleEditorSettings): void {

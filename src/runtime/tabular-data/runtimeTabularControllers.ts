@@ -105,6 +105,9 @@ export interface RuntimeTabularControllersOptions {
     readOnlyAdapter?: RuntimeReadOnlyAdapter;
     fallbackState: RuntimeFallbackTabularState;
     getSnapshot(): RuntimeSessionSnapshot;
+    getWorkspaceGeneration(): number;
+    getWorkspaceReadEpoch?(): number;
+    isWorkspaceReadAvailable?(): boolean;
     getActiveObjectName(): string;
     hasRuntimeCapability(capability: RuntimeCapability): boolean;
     recordRuntimeEvent(
@@ -168,6 +171,9 @@ export const createRuntimeTabularControllers = function(
             readOnlyAdapter: options.readOnlyAdapter,
             fallbackVariableMetadataController,
             getSnapshot: options.getSnapshot,
+            getWorkspaceGeneration: options.getWorkspaceGeneration,
+            getWorkspaceReadEpoch: options.getWorkspaceReadEpoch || options.getWorkspaceGeneration,
+            isWorkspaceReadAvailable: options.isWorkspaceReadAvailable,
             getActiveObjectName: options.getActiveObjectName,
             materializeRows,
             getRows: function(objectName) {
@@ -185,6 +191,8 @@ export const createRuntimeTabularControllers = function(
         createRuntimeVariableMetadataOperationController({
             variableMetadataExecutionController,
             getSnapshot: options.getSnapshot,
+            getWorkspaceReadEpoch: options.getWorkspaceReadEpoch || options.getWorkspaceGeneration,
+            isWorkspaceReadAvailable: options.isWorkspaceReadAvailable,
             getActiveObjectName: options.getActiveObjectName,
             hasRuntimeCapability: options.hasRuntimeCapability,
             readVariableMetadataValue: fallbackVariableMetadataController.readValue
@@ -239,6 +247,7 @@ export const createRuntimeTabularControllers = function(
         });
     const cellMutationExecutionController =
         createRuntimeCellMutationExecutionController({
+            getWorkspaceGeneration: options.getWorkspaceGeneration,
             providerTabularController: options.providerTabularController,
             fallbackCellMutationController,
             getSnapshot: options.getSnapshot,
@@ -258,6 +267,9 @@ export const createRuntimeTabularControllers = function(
             readOnlyAdapter: options.readOnlyAdapter,
             fallbackLabelStateController,
             getSnapshot: options.getSnapshot,
+            getWorkspaceGeneration: options.getWorkspaceGeneration,
+            getWorkspaceReadEpoch: options.getWorkspaceReadEpoch || options.getWorkspaceGeneration,
+            isWorkspaceReadAvailable: options.isWorkspaceReadAvailable,
             getActiveObjectName: options.getActiveObjectName,
             materializeRows,
             recordRuntimeEvent: options.recordRuntimeEvent
@@ -266,6 +278,8 @@ export const createRuntimeTabularControllers = function(
         createRuntimeLabelStateOperationController({
             labelStateExecutionController,
             getSnapshot: options.getSnapshot,
+            getWorkspaceReadEpoch: options.getWorkspaceReadEpoch || options.getWorkspaceGeneration,
+            isWorkspaceReadAvailable: options.isWorkspaceReadAvailable,
             getActiveObjectName: options.getActiveObjectName,
             hasRuntimeCapability: options.hasRuntimeCapability,
             readVariableMetadata: function(objectName) {
@@ -314,11 +328,15 @@ export const createRuntimeTabularControllers = function(
         readOnlyAdapter: options.readOnlyAdapter,
         fallbackWorkspaceController,
         hasFallbackRows: state.has,
-        getSnapshot: options.getSnapshot
+        getSnapshot: options.getSnapshot,
+        getWorkspaceReadEpoch: options.getWorkspaceReadEpoch || options.getWorkspaceGeneration,
+        isWorkspaceReadAvailable: options.isWorkspaceReadAvailable
     });
     const readOperationController = createRuntimeTabularReadOperationController({
         tabularReadController,
         getSnapshot: options.getSnapshot,
+        getWorkspaceReadEpoch: options.getWorkspaceReadEpoch || options.getWorkspaceGeneration,
+        isWorkspaceReadAvailable: options.isWorkspaceReadAvailable,
         getActiveObjectName: options.getActiveObjectName
     });
 

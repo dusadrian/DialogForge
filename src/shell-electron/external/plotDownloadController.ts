@@ -4,6 +4,7 @@ import {
 import type {
     ResourceClient
 } from "../../core/contracts/hostAdapter";
+import { readPlotExportResource } from "../../base-app/features/plot-viewer/plotExportOperations";
 
 
 export interface PlotDownloadController {
@@ -27,13 +28,7 @@ export const createPlotDownloadController = function(
                 throw new Error(request.message || "invalid-plot-url");
             }
 
-            const response = await options.resourceClient.loadBuffer(request.url, {
-                redirect: "follow"
-            });
-
-            if (!response.ok) {
-                throw new Error("plot-download-http-" + response.status);
-            }
+            const response = await readPlotExportResource(options.resourceClient, request.url);
 
             return Buffer.from(response.body);
         }

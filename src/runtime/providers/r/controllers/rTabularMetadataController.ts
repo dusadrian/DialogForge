@@ -1,3 +1,4 @@
+import { commandExecutionDidNotSucceed } from "../../../commands/commandProtocol";
 import {
     createDeclaredMissingSet,
     createDeclaredMissingSnapshot,
@@ -287,7 +288,9 @@ export const createRTabularMetadataController = function(
                 snapshot
             );
             const transcriptEvents = commandResult.transcriptEvents;
-            const failed = options.transcriptHasFailure(transcriptEvents);
+            const failed = commandExecutionDidNotSucceed(
+                commandResult, options.transcriptHasFailure
+            );
 
             return createVariableMetadataUpdateResult({
                 status: failed ? "invalid-variable" : "updated",
@@ -350,7 +353,9 @@ export const createRTabularMetadataController = function(
                 snapshot
             );
             const transcriptEvents = commandResult.transcriptEvents;
-            const failed = options.transcriptHasFailure(transcriptEvents);
+            const failed = commandExecutionDidNotSucceed(
+                commandResult, options.transcriptHasFailure
+            );
 
             return createValueLabelUpdateResult({
                 status: failed ? "invalid-variable" : "updated",
@@ -396,7 +401,9 @@ export const createRTabularMetadataController = function(
                 snapshot
             );
             const transcriptEvents = commandResult.transcriptEvents;
-            const failed = options.transcriptHasFailure(transcriptEvents);
+            const failed = commandExecutionDidNotSucceed(
+                commandResult, options.transcriptHasFailure
+            );
 
             return createDeclaredMissingUpdateResult({
                 status: failed ? "invalid-variable" : "updated",

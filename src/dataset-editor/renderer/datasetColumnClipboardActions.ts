@@ -20,6 +20,7 @@ import {
 export interface DatasetColumnClipboardActionsOptions {
     clipboardState: DatasetEditorClipboardState;
     getDatasetName(): string;
+    getMetadataSequence(): number;
     getRowCount(): number;
     getColumnNames(): string[];
     getContent(
@@ -38,14 +39,14 @@ export interface DatasetColumnClipboardActionsOptions {
     runCommand(command: string, visible: boolean): Promise<boolean>;
     refreshDataset(datasetName: string): Promise<void>;
     hideHeaderMenu(): void;
-    showLoading(message: string): void;
-    hideLoading(): void;
+    showLoading(message: string): () => void;
     showNotice(message: string): void;
     translate(key: string): string;
 }
 
 
 export interface DatasetColumnClipboardActions {
+    invalidate(): void;
     copy(
         columnName: string,
         options?: {
@@ -59,12 +60,14 @@ export interface DatasetColumnClipboardActions {
 export const createDatasetColumnClipboardActions = function(
     options: DatasetColumnClipboardActionsOptions
 ): DatasetColumnClipboardActions {
-    const fetchColumn = async function(
-        columnName: string
-    ): Promise<DatasetViewerCell[] | null> {
-        const datasetName = options.getDatasetName();
-        const rowCount = Math.max(0, options.getRowCount());
+    let operationSequence = 0;
 
+    const fetchColumn = async function(
+        datasetName: string,
+        columnName: string,
+        rowCount: number,
+        isCurrent: () => boolean
+    ): Promise<DatasetViewerCell[] | null> {
         if (!datasetName || !columnName || rowCount === 0) {
             return [];
         }
@@ -77,6 +80,9 @@ export const createDatasetColumnClipboardActions = function(
             rowStart <= rowCount;
             rowStart += batchSize
         ) {
+            if (!isCurrent()) {
+                return null;
+            }
             const page = await options.getContent(
                 datasetName,
                 {
@@ -89,7 +95,7 @@ export const createDatasetColumnClipboardActions = function(
                 }
             );
 
-            if (!page || !Array.isArray(page.rows)) {
+            if (!isCurrent() || !page || !Array.isArray(page.rows)) {
                 return null;
             }
 
@@ -121,8 +127,16 @@ export const createDatasetColumnClipboardActions = function(
             return;
         }
 
+        const sequence = ++operationSequence;
+        const metadataSequence = options.getMetadataSequence();
+        const rowCount = Math.max(0, options.getRowCount());
+        const isCurrent = function(): boolean {
+            return sequence === operationSequence
+                && datasetName === options.getDatasetName()
+                && metadataSequence === options.getMetadataSequence();
+        };
         options.hideHeaderMenu();
-        options.showLoading(
+        const releaseLoading = options.showLoading(
             options.translate(
                 includeLabels
                     ? "Copying values and labels..."
@@ -131,7 +145,11 @@ export const createDatasetColumnClipboardActions = function(
         );
 
         try {
-            const cells = await fetchColumn(columnName);
+            const cells = await fetchColumn(datasetName, columnName, rowCount, isCurrent);
+
+            if (!isCurrent()) {
+                return;
+            }
 
             if (!cells) {
                 options.showNotice(
@@ -143,6 +161,9 @@ export const createDatasetColumnClipboardActions = function(
             const metadata = includeLabels
                 ? await options.getVariableMetadata(columnName)
                 : null;
+            if (!isCurrent()) {
+                return;
+            }
             const rawValues = cells.map(readDatasetCellRawValue);
             const labelValues = includeLabels
                 ? cells.map((cell) => {
@@ -158,6 +179,9 @@ export const createDatasetColumnClipboardActions = function(
                 }).join("\n")
                 : rawValues.map(quoteTsvCell).join("\n");
             const copied = await options.writeClipboard(text);
+            if (!isCurrent()) {
+                return;
+            }
 
             if (!copied) {
                 options.showNotice(
@@ -167,6 +191,9 @@ export const createDatasetColumnClipboardActions = function(
             }
 
             options.clipboardState.clearVariableMetadata();
+            if (!isCurrent()) {
+                return;
+            }
             options.clipboardState.setDataColumn(
                 datasetName,
                 columnName,
@@ -176,6 +203,9 @@ export const createDatasetColumnClipboardActions = function(
                     : "values",
                 text
             );
+            if (!isCurrent()) {
+                return;
+            }
             options.showNotice(
                 options.translate(
                     includeLabels
@@ -185,7 +215,7 @@ export const createDatasetColumnClipboardActions = function(
             );
         }
         finally {
-            options.hideLoading();
+            releaseLoading();
         }
     };
 
@@ -199,8 +229,19 @@ export const createDatasetColumnClipboardActions = function(
             return;
         }
 
+        const sequence = ++operationSequence;
+        const metadataSequence = options.getMetadataSequence();
+        const isCurrentOperation = function(): boolean {
+            return sequence === operationSequence && datasetName === options.getDatasetName();
+        };
+        const isCurrentSource = function(): boolean {
+            return isCurrentOperation() && metadataSequence === options.getMetadataSequence();
+        };
         options.hideHeaderMenu();
         const text = await options.readClipboard();
+        if (!isCurrentSource()) {
+            return;
+        }
         const payload = options.clipboardState.readDataColumn(text);
         const rowCount = Math.max(0, options.getRowCount());
         const hasSourceColumn = Boolean(
@@ -220,9 +261,12 @@ export const createDatasetColumnClipboardActions = function(
             return;
         }
 
-        options.showLoading(options.translate("Pasting column..."));
+        const releaseLoading = options.showLoading(options.translate("Pasting column..."));
 
         try {
+            if (!isCurrentSource()) {
+                return;
+            }
             const datasetReference = asRObjectReference(datasetName);
             const targetReference = (
                 `${datasetReference}[[${asRStringLiteral(columnName)}]]`
@@ -234,6 +278,9 @@ export const createDatasetColumnClipboardActions = function(
                 ? `${targetReference} <- local({ .source <- ${sourceReference}; if (inherits(.source, "declared") && requireNamespace("declared", quietly = TRUE)) .source <- declared::undeclare(.source, drop = TRUE); .source })`
                 : `${targetReference} <- ${sourceReference}`;
             const pasted = await options.runCommand(command, false);
+            if (!isCurrentSource()) {
+                return;
+            }
 
             if (!pasted) {
                 options.showNotice(
@@ -243,14 +290,19 @@ export const createDatasetColumnClipboardActions = function(
             }
 
             await options.refreshDataset(datasetName);
-            options.showNotice(options.translate("Column pasted"));
+            if (isCurrentOperation()) {
+                options.showNotice(options.translate("Column pasted"));
+            }
         }
         finally {
-            options.hideLoading();
+            releaseLoading();
         }
     };
 
     return {
+        invalidate: function(): void {
+            operationSequence += 1;
+        },
         copy,
         paste
     };

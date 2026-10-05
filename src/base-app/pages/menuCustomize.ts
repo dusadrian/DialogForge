@@ -6,8 +6,11 @@ import {
   normalizeDialogRuntimePackages
 } from '../../dialog-runtime/requirements/dialogRuntimeRequirements';
 import type {
-  RPackageRequirement
+    RPackageRequirement
 } from '../../core/contracts/applicationComposition';
+import type {
+    MenuCustomizationSaveResult
+} from '../features/menu-commands/menuCustomizationProtocol';
 
 type MenuNode = {
   id: string;
@@ -26,6 +29,9 @@ type MenuNode = {
 
 let tree: MenuNode[] = [];
 let selectedPath: number[] = [];
+let menuDraftInitialized = false;
+let nextMenuSaveRequestId = 0;
+let pendingMenuSave: { requestId: number; draft: string } | null = null;
 let dialogs: Array<{ id: string; name: string; type: string }> = [];
 let defaultRuntimeProvider = '';
 let expandedNodes = new Set<string>();
@@ -847,10 +853,25 @@ const saveMenu = () => {
     position: i,
     subitems: Array.isArray(x.subitems) ? x.subitems : []
   }));
-  window.dialogForge.menuCustomization.save({
-    menu: payload,
-    runtimeProvider: defaultRuntimeProvider
-  });
+    const pending = {
+        requestId: ++nextMenuSaveRequestId,
+        draft: JSON.stringify(tree)
+    };
+    pendingMenuSave = pending;
+
+    try {
+        window.dialogForge.menuCustomization.save({
+            requestId: pending.requestId,
+            menu: payload,
+            runtimeProvider: defaultRuntimeProvider
+        });
+    } catch (error) {
+        if (pendingMenuSave === pending) {
+            pendingMenuSave = null;
+        }
+
+        throw error;
+    }
 };
 
 const applyLocalizedTexts = () => {
@@ -911,6 +932,15 @@ window.dialogForge.menuCustomization.onLoaded((args: unknown) => {
     ? payloadArgs.newItemList.filter((x: any) => String(x?.type || '') === 'dialog')
     : [];
 
+    // Later host payloads refresh locale and available dialogs, not the draft
+    // the user is editing in this still-open customizer.
+    if (menuDraftInitialized) {
+        renderTree();
+        syncPropsFromSelection();
+        return;
+    }
+
+    menuDraftInitialized = true;
   const incoming = Array.isArray(payloadArgs?.currentMenu)
     ? payloadArgs.currentMenu
     : [];
@@ -964,10 +994,18 @@ window.dialogForge.menuCustomization.onBrowsed((args: unknown) => {
 });
 
 window.dialogForge.menuCustomization.onSaved((args: unknown) => {
-  const payloadArgs = args as any;
-  if (payloadArgs?.ok) {
-    window.close();
-  }
+    const payload = args as Partial<MenuCustomizationSaveResult> | null;
+    const pending = pendingMenuSave;
+
+    if (!pending || payload?.ok !== true || pending.requestId !== payload.requestId) {
+        return;
+    }
+
+    pendingMenuSave = null;
+
+    if (JSON.stringify(tree) === pending.draft) {
+        window.close();
+    }
 });
 
 document.addEventListener('DOMContentLoaded', () => {

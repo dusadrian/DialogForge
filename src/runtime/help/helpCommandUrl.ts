@@ -32,14 +32,16 @@ export const parseHelpCommandUrl = function(value: unknown): HelpCommandUrlResul
         }
 
         const command = String(parsed.searchParams.get("command") || "").trim();
-        const match = command.match(/^x-r-(help|run|vignette):(.+)$/);
+        const match = command.match(/^x-r-(help|run|vignette):([\s\S]+)$/);
 
         if (!match) {
             return null;
         }
 
         const kind = String(match[1] || "").trim();
-        const payload = decodeURIComponent(String(match[2] || "").trim());
+        // URLSearchParams has already decoded the query value. A second pass
+        // would change literal percent escapes or reject ordinary R operators.
+        const payload = String(match[2] || "").trim();
 
         if (!payload) {
             return null;

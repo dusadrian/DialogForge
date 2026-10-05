@@ -196,6 +196,17 @@ workspace_display_value <- function(value) {
 }
 
 
+workspace_object_size_bytes <- function(value) {
+    bytes <- unclass(utils::object.size(value))
+
+    if (!is.double(bytes) || length(bytes) != 1L) {
+        return(0)
+    }
+
+    bytes[[1]]
+}
+
+
 workspace_hash_raw <- function(raw_value) {
     bytes <- tryCatch(
         as.integer(raw_value),
@@ -206,15 +217,17 @@ workspace_hash_raw <- function(raw_value) {
     if (!length_bytes) return("0:0:0:0")
 
     index <- seq_len(length_bytes)
+    # These sums are generated plain numbers. Their representation must not
+    # depend on a workspace format.numeric/default method.
     paste(
         as.character(length_bytes),
-        format(sum(bytes), scientific = FALSE, trim = TRUE),
-        format(
+        base::format.default(sum(bytes), scientific = FALSE, trim = TRUE),
+        base::format.default(
             sum((index %% 104729) * bytes),
             scientific = FALSE,
             trim = TRUE
         ),
-        format(
+        base::format.default(
             sum(((index * 131) %% 524287) * bytes),
             scientific = FALSE,
             trim = TRUE
@@ -225,7 +238,7 @@ workspace_hash_raw <- function(raw_value) {
 
 
 workspace_digest_func <- tryCatch({
-    if (isTRUE(requireNamespace("digest", quietly = TRUE))) {
+    if (isTRUE(base::requireNamespace("digest", quietly = TRUE))) {
         get("digest", envir = asNamespace("digest"), inherits = FALSE)
     }
     else {
@@ -402,7 +415,7 @@ workspace_variable <- function(
         display_value = display$text,
         display_type = workspace_type(value),
         type_info = workspace_type(value),
-        size = as.numeric(utils::object.size(value)),
+        size = workspace_object_size_bytes(value),
         kind = workspace_kind(value),
         length = suppressWarnings(as.integer(length(value %||% list()))),
         has_children = isTRUE(
@@ -565,7 +578,7 @@ workspace_inspect <- function(name) {
             length = suppressWarnings(
                 as.integer(length(object$value %||% list()))
             ),
-            size = as.numeric(utils::object.size(object$value)),
+            size = workspace_object_size_bytes(object$value),
             dim = if (is.null(dimensions)) {
                 integer(0)
             }

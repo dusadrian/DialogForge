@@ -123,8 +123,6 @@ export const createMainWindowComposition = function(
             win.on("closed", () => {
                 options.workspacePaneWindowController.forget(windowId);
             });
-            zoomController.bindShortcuts(win);
-
             return win;
         }
     });

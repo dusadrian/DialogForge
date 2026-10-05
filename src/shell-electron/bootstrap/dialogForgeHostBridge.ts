@@ -1,7 +1,8 @@
-import type {
-    DatasetEditorInitMessage,
-    DatasetEditorLanguageMessage,
-    DatasetEditorIpcBridge
+import {
+    readDatasetEditorLanguageMessage,
+    type DatasetEditorInitMessage,
+    type DatasetEditorLanguageMessage,
+    type DatasetEditorIpcBridge
 } from "../../dataset-editor/renderer/datasetEditorIpcBindings";
 import type {
     DatasetEditorTransportBridge
@@ -261,14 +262,7 @@ export const createDialogForgeHostBridge = function(
             },
             onLanguageChanged: function(callback: (payload: ScriptEditorLanguagePayload) => void) {
                 ipcRenderer.on(applicationEventChannels.languageChanged, (_event, payload) => {
-                    const record = payload && typeof payload === "object"
-                        ? payload as Record<string, unknown>
-                        : {};
-
-                    callback({
-                        appPath: String(record.appPath || ""),
-                        languageNS: String(record.languageNS || "en_US")
-                    });
+                    callback(payload as ScriptEditorLanguagePayload);
                 });
             },
             onTerminalSettingsUpdated: function(callback: (settings: Record<string, unknown>) => void) {
@@ -437,14 +431,7 @@ export const createDialogForgeHostBridge = function(
             },
             onLanguageChanged: function(callback: (payload: DatasetEditorLanguageMessage) => void) {
                 ipcRenderer.on(applicationEventChannels.languageChanged, (_event, payload) => {
-                    const record = payload && typeof payload === "object"
-                        ? payload as Record<string, unknown>
-                        : {};
-
-                    callback({
-                        languageNS: String(record.languageNS || "en_US"),
-                        appPath: String(record.appPath || "")
-                    });
+                    callback(readDatasetEditorLanguageMessage(payload));
                 });
             },
             onSetDatasetList: function(callback: (datasetNames: string[]) => void) {

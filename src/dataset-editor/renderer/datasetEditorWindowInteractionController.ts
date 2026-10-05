@@ -4,6 +4,7 @@ import type {
 import type {
     DatasetEditorDismissalBindings
 } from "./windowDismissalBindings";
+import { runDatasetEditorEventAction } from "./datasetEditorEventAction";
 
 
 export interface DatasetEditorWindowInteractionOptions {
@@ -55,20 +56,20 @@ export const createDatasetEditorWindowInteractionController = function(
             hideHeaderMenu: options.hideHeaderMenu,
             hideRowMenu: options.hideRowMenu,
             copySelectedColumn: () => {
-                void options.copySelectedColumn(
-                    options.getSelectedColumn()
+                void runDatasetEditorEventAction("copy-column", () =>
+                    options.copySelectedColumn(options.getSelectedColumn())
                 );
             },
             pasteSelectedColumn: () => {
-                void options.pasteSelectedColumn(
-                    options.getSelectedColumn()
+                void runDatasetEditorEventAction("paste-column", () =>
+                    options.pasteSelectedColumn(options.getSelectedColumn())
                 );
             },
             copyActiveCell: () => {
-                void options.copyActiveCell();
+                void runDatasetEditorEventAction("copy-cell", () => options.copyActiveCell());
             },
             pasteActiveCell: () => {
-                void options.pasteActiveCell();
+                void runDatasetEditorEventAction("paste-cell", () => options.pasteActiveCell());
             },
             toggleTab: () => {
                 options.setActiveTab(

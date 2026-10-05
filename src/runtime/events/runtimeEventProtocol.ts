@@ -3,6 +3,9 @@ import type { RuntimeEventRecord, RuntimeEventSnapshot } from "../provider-contr
 
 export const createRuntimeEvent = function(input: Partial<RuntimeEventRecord>): RuntimeEventRecord {
     return {
+        ...(input.lifecycleGeneration === undefined ? {} : {
+            lifecycleGeneration: input.lifecycleGeneration
+        }),
         type: input.type || "unknown",
         providerId: input.providerId || "",
         objectName: input.objectName || "",
@@ -15,6 +18,9 @@ export const createRuntimeEvent = function(input: Partial<RuntimeEventRecord>): 
 
 export const createRuntimeEventSnapshot = function(input: Partial<RuntimeEventSnapshot>): RuntimeEventSnapshot {
     return {
+        ...(input.lifecycleGeneration === undefined ? {} : {
+            lifecycleGeneration: input.lifecycleGeneration
+        }),
         status: input.status || "unknown",
         providerId: input.providerId || "",
         events: input.events || [],

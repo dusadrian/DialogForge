@@ -9,6 +9,7 @@ import type {
   DatasetVariableMetadata,
   DatasetVariableUpdatePatch
 } from '../../runtime/tabular-data/datasetViewerTypes';
+import { isDatasetVariableMetadataBatch } from '../../runtime/tabular-data/datasetVariableMetadataBatch';
 
 const normalizeDatasetName = (value: unknown): string => String(value || '').trim();
 
@@ -48,15 +49,27 @@ const normalizeVariableMetadata = (value: unknown): DatasetVariableMetadata | nu
   };
 };
 
-const normalizeVariableMetadataBatch = (value: unknown): DatasetVariableMetadataBatch | null => {
-  if (!value || typeof value !== 'object') return null;
-  const batch = value as DatasetVariableMetadataBatch;
-  return {
-    ...batch,
-    items: Array.isArray(batch.items)
-      ? batch.items.map((item) => normalizeVariableMetadata(item)).filter(Boolean) as DatasetVariableMetadata[]
-      : []
-  };
+const normalizeVariableMetadataBatch = (
+    value: unknown,
+    datasetName: string,
+    start: number,
+    count: number
+): DatasetVariableMetadataBatch | null => {
+    if (!isDatasetVariableMetadataBatch(value, datasetName, start, count)) {
+        return null;
+    }
+
+    const batch = value as DatasetVariableMetadataBatch;
+    const items: DatasetVariableMetadata[] = [];
+    for (const item of batch.items) {
+        const normalized = normalizeVariableMetadata(item);
+        if (!normalized) {
+            return null;
+        }
+        items.push(normalized);
+    }
+
+    return { ...batch, items };
 };
 
 export const createDatasetViewerClient = () => {
@@ -274,12 +287,18 @@ export const createDatasetViewerClient = () => {
     const datasetName = normalizeDatasetName(name);
     if (!datasetName) return null;
     try {
+      const requestedStart = Number.isSafeInteger(Number(start)) && Number(start) > 0
+        ? Number(start)
+        : 1;
+      const requestedCount = Number.isSafeInteger(Number(count)) && Number(count) > 0
+        ? Number(count)
+        : 16;
       const out = await api.getVariablesBatch(
         datasetName,
-        Number.isFinite(Number(start)) ? Number(start) : 1,
-        Number.isFinite(Number(count)) ? Number(count) : 16
+        requestedStart,
+        requestedCount
       );
-      return normalizeVariableMetadataBatch(out);
+      return normalizeVariableMetadataBatch(out, datasetName, requestedStart, requestedCount);
     } catch {
       return null;
     }

@@ -83,7 +83,7 @@ export const renderConsoleToolbar = function(
         state.workingDirectoryPath,
         state.homeDirectoryPath
     );
-    const datasetName = String(state.activeDatasetName || "").trim();
+    const datasetName = isReady ? String(state.activeDatasetName || "").trim() : "";
 
     document.body.classList.toggle(
         "console-runtime-busy",

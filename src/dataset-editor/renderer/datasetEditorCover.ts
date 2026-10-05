@@ -3,6 +3,7 @@ export interface DatasetEditorCover {
     showModalCover: () => void;
     hideModalCover: () => void;
     showLoadingCover: (message: string) => void;
+    showOwnedLoadingCover: (message: string) => () => void;
     hideLoadingCover: () => void;
 }
 
@@ -13,6 +14,7 @@ export const createDatasetEditorCover = function(
     let modalActive = false;
     let loadingActive = false;
     let loadingMessage = "";
+    let loadingSequence = 0;
 
     const update = function(): void {
         const cover = document.getElementById(
@@ -42,6 +44,20 @@ export const createDatasetEditorCover = function(
         label.hidden = !loadingActive;
     };
 
+    const showLoadingCover = function(message: string): void {
+        loadingSequence += 1;
+        loadingActive = true;
+        loadingMessage = String(message || "").trim() || translate("Loading...");
+        update();
+    };
+
+    const hideLoadingCover = function(): void {
+        loadingSequence += 1;
+        loadingActive = false;
+        loadingMessage = "";
+        update();
+    };
+
     return {
         get isLoading(): boolean {
             return loadingActive;
@@ -54,17 +70,16 @@ export const createDatasetEditorCover = function(
             modalActive = false;
             update();
         },
-        showLoadingCover: function(message: string): void {
-            loadingActive = true;
-            loadingMessage =
-                String(message || "").trim()
-                || translate("Loading...");
-            update();
-        },
-        hideLoadingCover: function(): void {
-            loadingActive = false;
-            loadingMessage = "";
-            update();
+        showLoadingCover,
+        hideLoadingCover,
+        showOwnedLoadingCover: function(message: string): () => void {
+            showLoadingCover(message);
+            const sequence = loadingSequence;
+            return function(): void {
+                if (sequence === loadingSequence) {
+                    hideLoadingCover();
+                }
+            };
         }
     };
 };

@@ -52,7 +52,9 @@ export const createVariableMetadataLoader = function<Item>(
     const state = createVariableMetadataLoadState();
 
     const scheduleBackground = function(): void {
-        if (!options.getDatasetName() || state.snapshot.loaded) {
+        const datasetName = options.getDatasetName();
+        const requestSequence = state.snapshot.sequence;
+        if (!datasetName || state.snapshot.loaded) {
             return;
         }
 
@@ -62,7 +64,11 @@ export const createVariableMetadataLoader = function<Item>(
             : (options.shouldPause() ? options.idleDelay : options.activeDelay);
 
         state.schedule(() => {
-            if (!options.getDatasetName() || state.snapshot.loaded) {
+            if (
+                datasetName !== options.getDatasetName()
+                || requestSequence !== state.snapshot.sequence
+                || state.snapshot.loaded
+            ) {
                 return;
             }
 
@@ -76,7 +82,14 @@ export const createVariableMetadataLoader = function<Item>(
                 return;
             }
 
-            void loadNext(options.isVariableViewActive());
+            void loadNext(options.isVariableViewActive()).catch((error) => {
+                if (
+                    requestSequence === state.snapshot.sequence
+                    && datasetName === options.getDatasetName()
+                ) {
+                    console.error("Variable metadata background read failed.", error);
+                }
+            });
         }, delay);
     };
 
@@ -90,25 +103,21 @@ export const createVariableMetadataLoader = function<Item>(
         if (!requestToken) {
             return;
         }
-
-        const currentItems = options.getItems();
-        const start = Array.isArray(currentItems) ? currentItems.length + 1 : 1;
-        const batch = await options.fetchBatch(
-            datasetName,
-            start,
-            options.batchSize
-        );
-
-        if (!state.isCurrent(requestToken)) {
-            return;
-        }
-
-        if (!batch || !Array.isArray(batch.items)) {
+        const isCurrentBatch = function(): boolean {
+            return state.isCurrent(requestToken) && datasetName === options.getDatasetName();
+        };
+        const finishFailedBatch = function(): void {
+            if (!isCurrentBatch()) {
+                return;
+            }
             state.failBatch(requestToken);
             const retainedItems = Array.isArray(options.getItems())
                 ? options.getItems()!
                 : [];
             options.setItems(retainedItems);
+            if (!isCurrentBatch()) {
+                return;
+            }
 
             if (options.isVariableViewActive()) {
                 if (retainedItems.length > 0) {
@@ -117,7 +126,32 @@ export const createVariableMetadataLoader = function<Item>(
                     options.renderFailure();
                 }
             }
+        };
 
+        const currentItems = options.getItems();
+        const start = Array.isArray(currentItems) ? currentItems.length + 1 : 1;
+        let batch: VariableMetadataBatch<Item> | null;
+        try {
+            batch = await options.fetchBatch(datasetName, start, options.batchSize);
+        } catch (error) {
+            finishFailedBatch();
+            throw error;
+        }
+
+        if (!isCurrentBatch()) {
+            return;
+        }
+
+        if (
+            !batch
+            || !Array.isArray(batch.items)
+            || !Number.isSafeInteger(batch.total)
+            || batch.total < 0
+            || batch.items.length > options.batchSize
+            || start - 1 + batch.items.length > batch.total
+            || (batch.items.length === 0 && start - 1 < batch.total)
+        ) {
+            finishFailedBatch();
             return;
         }
 
@@ -130,10 +164,13 @@ export const createVariableMetadataLoader = function<Item>(
         });
 
         options.setItems(nextItems);
+        if (!isCurrentBatch()) {
+            return;
+        }
         state.finishBatch(
             requestToken,
             nextItems.length,
-            Number(batch.total) || nextItems.length
+            batch.total
         );
 
         if (options.isVariableViewActive()) {
@@ -144,7 +181,7 @@ export const createVariableMetadataLoader = function<Item>(
             }
         }
 
-        if (!state.snapshot.loaded) {
+        if (isCurrentBatch() && !state.snapshot.loaded) {
             scheduleBackground();
         }
     };
@@ -163,7 +200,7 @@ export const createVariableMetadataLoader = function<Item>(
         state.cancelScheduled();
 
         while (
-            options.getDatasetName()
+            datasetName === options.getDatasetName()
             && requestSequence === state.snapshot.sequence
             && !state.snapshot.loaded
             && (options.getItems()?.length || 0) < targetCount
@@ -187,7 +224,7 @@ export const createVariableMetadataLoader = function<Item>(
         state.cancelScheduled();
 
         while (
-            options.getDatasetName()
+            datasetName === options.getDatasetName()
             && requestSequence === state.snapshot.sequence
             && !state.snapshot.loaded
         ) {
@@ -221,8 +258,21 @@ export const createVariableMetadataLoader = function<Item>(
     };
 
     const startBackground = function(): void {
-        void loadUntil(options.batchSize, false).finally(() => {
-            if (!state.snapshot.loaded) {
+        const requestSequence = state.snapshot.sequence;
+        const datasetName = options.getDatasetName();
+        void loadUntil(options.batchSize, false).catch((error) => {
+            if (
+                requestSequence === state.snapshot.sequence
+                && datasetName === options.getDatasetName()
+            ) {
+                console.error("Variable metadata background read failed.", error);
+            }
+        }).finally(() => {
+            if (
+                requestSequence === state.snapshot.sequence
+                && datasetName === options.getDatasetName()
+                && !state.snapshot.loaded
+            ) {
                 scheduleBackground();
             }
         });

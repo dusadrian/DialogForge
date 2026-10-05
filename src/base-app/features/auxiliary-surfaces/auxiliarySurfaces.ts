@@ -4,6 +4,11 @@ export type AuxiliarySurfaceKind =
     | "route";
 
 
+// Diagnostics keeps its developer-facing caption, like the shared page body,
+// independent of the application locale in both hosting media.
+export const developerDiagnosticsWindowTitle = "Developer Diagnostics";
+
+
 export interface AuxiliarySurfaceDefinition {
     id: string;
     label: string;

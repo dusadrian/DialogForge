@@ -35,11 +35,26 @@ export interface MainUiBindingControllerOptions {
 export const createMainUiBindingController = function(
     options: MainUiBindingControllerOptions
 ) {
+    let controlsBound = false;
+    let rendererEventsBound = false;
+
     return {
-        bind: function(): void {
+        bindControls: function(): void {
+            if (controlsBound) {
+                return;
+            }
+
+            controlsBound = true;
             bindMainWindowInput(options.mainWindowInput);
             bindMainControls(options.mainControls);
             bindDatasetPanelControls(options.datasetPanel);
+        },
+        bindRendererEvents: function(): void {
+            if (rendererEventsBound) {
+                return;
+            }
+
+            rendererEventsBound = true;
             bindMainRendererEvents(options.rendererEvents);
         }
     };

@@ -57,6 +57,7 @@
         ],
         "asar": true,
         "asarUnpack": [
+            "dist/r-inspection/native/**/*",
             "dist/src/runtime/providers/r/r-sources/**/*",
             "product/runtime/runtimeControlProfile.R",
             "dist/node_modules/@number0/**/*.node"

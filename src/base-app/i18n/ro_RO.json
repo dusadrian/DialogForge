@@ -2,6 +2,7 @@
     "Settings": "Setări",
     "Language": "Limbă",
     "Runtime provider": "Furnizor runtime",
+    "Runtime session is not ready.": "Sesiunea de execuție nu este pregătită.",
     "Console font": "Font consolă",
     "Console cursor": "Cursor consolă",
     "Console cursor blink": "Clipirea cursorului consolei",

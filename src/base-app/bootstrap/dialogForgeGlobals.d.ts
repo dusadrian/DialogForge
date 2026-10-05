@@ -129,7 +129,9 @@ declare global {
         startRuntime(): Promise<RuntimeSessionSnapshot>;
         stopRuntime(): Promise<RuntimeSessionSnapshot>;
         restartRuntime(action: "clean" | "restore"): Promise<RuntimeSessionSnapshot>;
-        executeVisibleCommand(input: Partial<VisibleCommandRequest>): Promise<TranscriptEvent[]>;
+        executeVisibleCommand(input: Partial<VisibleCommandRequest>): Promise<
+            import("../../runtime/commands/runtimeCommandReceipt").RuntimeCommandReceipt
+        >;
         checkScriptFragment(input: { code?: string }): Promise<{ ok: boolean; state: string; message?: string }>;
         runScriptCodeBatch(input: { chunks?: string[] }): Promise<{ status: string; events: TranscriptEvent[] }>;
         executeProductCommand(input: Partial<ProductCommandRequest>): Promise<ProductCommandResult>;
@@ -174,6 +176,7 @@ declare global {
         getWorkingDirectory(): Promise<{ path: string; home: string }>;
         readHelpTopic(input: Partial<HelpTopicRequest>): Promise<HelpTopicResult>;
         openHelpTopic(input: Partial<HelpTopicRequest>): Promise<HelpTopicResult>;
+        retireHelpRequest(): Promise<void>;
         getHelpDocument(): Promise<{ title: string; body: string }>;
         openHelpCommandUrl(url: string): Promise<unknown>;
         fetchHelpPage(url: string): Promise<unknown>;

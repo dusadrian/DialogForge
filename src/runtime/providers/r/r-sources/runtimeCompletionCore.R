@@ -211,30 +211,26 @@ completion_dollar_context <- function(code, cursor_column) {
 }
 
 
-completion_named_member <- function(value, name) {
-    if (is.data.frame(value)) {
-        members <- tryCatch(
-            as.character(colnames(value) %||% character(0)),
-            error = function(error) character(0)
-        )
-    }
-    else if (is.list(value)) {
-        members <- tryCatch(
-            as.character(names(value) %||% character(0)),
-            error = function(error) character(0)
-        )
-    }
-    else {
-        return(NULL)
+completion_stored_list_fields <- function(value, name, overridden_classes) {
+    fields <- runtime_stored_list_fields(value, name)
+    if (
+        !isTRUE(fields$inspectable) ||
+        any(is.element(fields$classes, overridden_classes)) ||
+        is.element("default", overridden_classes)
+    ) {
+        return(list(names = character(0), value = NULL))
     }
 
-    if (!length(members) || !is.element(name, members)) return(NULL)
-
-    tryCatch(value[[name]], error = function(error) NULL)
+    fields
 }
 
 
-completion_resolve_chain <- function(chain) {
+completion_named_member <- function(value, name, overridden_classes) {
+    completion_stored_list_fields(value, name, overridden_classes)$value
+}
+
+
+completion_resolve_chain <- function(chain, overridden_classes) {
     chain <- as.character(chain %||% "")
 
     if (!nzchar(chain)) return(NULL)
@@ -243,14 +239,12 @@ completion_resolve_chain <- function(chain) {
     parts <- parts[nzchar(parts)]
 
     if (!length(parts)) return(NULL)
-    if (!exists(parts[[1]], envir = .GlobalEnv, inherits = FALSE)) {
+    binding <- runtime_binding_info(.GlobalEnv, parts[[1L]])
+    if (!is.element(binding$state, c("value", "forced"))) {
         return(NULL)
     }
 
-    value <- tryCatch(
-        get(parts[[1]], envir = .GlobalEnv, inherits = FALSE),
-        error = function(error) NULL
-    )
+    value <- binding$value
 
     if (is.null(value) || length(parts) == 1L) return(value)
 
@@ -259,7 +253,7 @@ completion_resolve_chain <- function(chain) {
 
         if (!nzchar(member)) return(NULL)
 
-        value <- completion_named_member(value, member)
+        value <- completion_named_member(value, member, overridden_classes)
 
         if (is.null(value)) return(NULL)
     }
@@ -268,36 +262,17 @@ completion_resolve_chain <- function(chain) {
 }
 
 
-completion_members <- function(value) {
-    if (is.data.frame(value)) {
-        columns <- tryCatch(
-            colnames(value),
-            error = function(error) NULL
-        )
-
-        if (is.null(columns) || !length(columns)) {
-            return(paste0("V", seq_len(max(1L, ncol(value)))))
-        }
-
-        return(as.character(columns))
-    }
-
-    if (is.list(value)) {
-        return(as.character(
-            tryCatch(names(value), error = function(error) NULL) %||%
-                character(0)
-        ))
-    }
-
-    character(0)
+completion_members <- function(value, overridden_classes) {
+    completion_stored_list_fields(value, NULL, overridden_classes)$names
 }
 
 
 completion_dollar_result <- function(context) {
     context <- context %||% list()
-    value <- completion_resolve_chain(context$chain %||% "")
+    overridden_classes <- workspace_overridden_inspection_classes()
+    value <- completion_resolve_chain(context$chain %||% "", overridden_classes)
     token <- as.character(context$token %||% "")
-    members <- completion_members(value)
+    members <- completion_members(value, overridden_classes)
 
     if (nzchar(token)) {
         members <- members[startsWith(members, token)]

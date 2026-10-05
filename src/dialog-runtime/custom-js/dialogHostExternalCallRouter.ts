@@ -69,7 +69,7 @@ export const routeDialogHostExternalCall = async function(
 
     if (name === "activeDataset:clear") {
         await options.clearActiveDataset();
-        return ready(name, "");
+        return ready(name, options.getActiveDataset());
     }
 
     if (name === "datasetViewer:getVariables") {

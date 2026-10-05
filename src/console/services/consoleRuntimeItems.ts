@@ -123,7 +123,8 @@ export class ActivityItemStream extends ActivityItem {
     parentId: string,
     when: Date,
     readonly type: ActivityItemStreamType,
-    public text: string
+    public text: string,
+    readonly origin: "runtime" | "console" = "runtime"
   ) {
     super(id, parentId, when);
     this._chunks.push(String(text || ''));
@@ -158,7 +159,11 @@ export class RuntimeItemActivity extends RuntimeItem {
     if (this._activityItems.length) {
       const last = this._activityItems[this._activityItems.length - 1];
       if (activityItem instanceof ActivityItemStream && last instanceof ActivityItemStream) {
-        if (last.type === activityItem.type && last.parentId === activityItem.parentId) {
+        if (
+            last.type === activityItem.type
+            && last.parentId === activityItem.parentId
+            && last.origin === activityItem.origin
+        ) {
           last.addActivityItemStream(activityItem);
           return;
         }

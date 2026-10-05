@@ -8,6 +8,8 @@ import {
     registerEmergencyProcessTreeTermination,
     terminateProcessTree
 } from "../../../session/processTree";
+import { runOwnedRuntimeStartupStage } from "../../../session/runtimeStartupStage";
+import { releaseOwnedRuntimeResource } from "../../../session/runtimeResourceRelease";
 
 
 export interface RHelpServerOptions {
@@ -72,17 +74,26 @@ export const createRHelpServer = function(options: RHelpServerOptions = {}) {
     let port = 0;
     let startPromise: Promise<number> | null = null;
     let unregisterEmergencyTermination: (() => void) | null = null;
+    let lifecycleGeneration = 0;
 
-    const reset = function(): void {
+    const reset = function(owner: ChildProcessWithoutNullStreams | null, generation: number): void {
+        if (processHandle !== owner) {
+            return;
+        }
         unregisterEmergencyTermination?.();
         unregisterEmergencyTermination = null;
         processHandle = null;
         port = 0;
-        startPromise = null;
+        if (generation === lifecycleGeneration) {
+            startPromise = null;
+        }
     };
 
     const start = async function(): Promise<number> {
-        if (port > 0 && processHandle && !processHandle.killed) {
+        if (
+            port > 0 && processHandle && !processHandle.killed
+            && processHandle.exitCode === null && processHandle.signalCode === null
+        ) {
             return port;
         }
 
@@ -90,7 +101,8 @@ export const createRHelpServer = function(options: RHelpServerOptions = {}) {
             return startPromise;
         }
 
-        startPromise = (async () => {
+        const generation = ++lifecycleGeneration;
+        const pendingStart = (async () => {
             const environment = Object.assign({}, normalizedEnvironment(), {
                 LANG: String(process.env.LANG || "en_US.UTF-8"),
                 HOME: String(process.env.HOME || os.homedir())
@@ -111,7 +123,10 @@ export const createRHelpServer = function(options: RHelpServerOptions = {}) {
                 "try(flush(stdout()), silent=TRUE)",
                 "repeat Sys.sleep(3600)"
             ].join("; ");
-            const command = await resolveRHelpServerCommand(options);
+            const command = await runOwnedRuntimeStartupStage({
+                isCurrent: () => generation === lifecycleGeneration,
+                run: () => resolveRHelpServerCommand(options)
+            });
             const child = spawn(command, [
                 "-e",
                 script
@@ -123,86 +138,107 @@ export const createRHelpServer = function(options: RHelpServerOptions = {}) {
             });
 
             processHandle = child;
-            unregisterEmergencyTermination =
+            const unregisterChildTermination =
                 registerEmergencyProcessTreeTermination(child.pid);
+            unregisterEmergencyTermination = unregisterChildTermination;
 
-            return new Promise<number>((resolve, reject) => {
-                let stdoutBuffer = "";
-                let stderrBuffer = "";
-                let settled = false;
+            return runOwnedRuntimeStartupStage({
+                isCurrent: () => generation === lifecycleGeneration && processHandle === child,
+                discard: async function() {
+                    await terminateProcessTree({ pid: child.pid, sync: process.platform === "win32" });
+                    unregisterChildTermination();
+                },
+                run: () => new Promise<number>((resolve, reject) => {
+                    let stdoutBuffer = "";
+                    let stderrBuffer = "";
+                    let settled = false;
 
-                const finish = function(callback: () => void): void {
-                    if (settled) {
-                        return;
-                    }
-
-                    settled = true;
-                    callback();
-                };
-
-                const timeout = setTimeout(() => {
-                    finish(() => {
-                        reject(new Error(
-                            `R help server start timed out.${stderrBuffer ? ` ${stderrBuffer.trim()}` : ""}`.trim()
-                        ));
-                    });
-                    void terminateProcessTree({
-                        pid: child.pid,
-                        sync: process.platform === "win32"
-                    }).finally(reset);
-                }, 12000);
-
-                child.stdout.on("data", (chunk: Buffer | string) => {
-                    stdoutBuffer += String(chunk || "");
-                    const lines = stdoutBuffer.split(/\r?\n/);
-
-                    stdoutBuffer = lines.pop() || "";
-
-                    lines.forEach((line) => {
-                        const match = line.match(/DM_HELP_PORT=(\d+)/);
-                        const nextPort = Number(match && match[1] ? match[1] : 0);
-
-                        if (!settled && Number.isFinite(nextPort) && nextPort > 0) {
-                            port = nextPort;
-                            clearTimeout(timeout);
-                            finish(() => {
-                                resolve(nextPort);
-                            });
+                    const finish = function(callback: () => void): void {
+                        if (settled) {
+                            return;
                         }
-                    });
-                });
 
-                child.stderr.on("data", (chunk: Buffer | string) => {
-                    stderrBuffer += String(chunk || "");
-                });
+                        settled = true;
+                        callback();
+                    };
 
-                child.once("error", (error) => {
-                    clearTimeout(timeout);
-                    finish(() => {
-                        reject(error);
-                    });
-                    reset();
-                });
+                    const timeout = setTimeout(() => {
+                        finish(() => {
+                            reject(new Error(
+                                `R help server start timed out.${stderrBuffer ? ` ${stderrBuffer.trim()}` : ""}`.trim()
+                            ));
+                        });
+                        void terminateProcessTree({
+                            pid: child.pid,
+                            sync: process.platform === "win32"
+                        }).finally(() => {
+                            unregisterChildTermination();
+                            reset(child, generation);
+                        });
+                    }, 12000);
 
-                child.once("exit", (code) => {
-                    clearTimeout(timeout);
-                    void terminateProcessTree({
-                        pid: child.pid,
-                        sync: true
+                    child.stdout.on("data", (chunk: Buffer | string) => {
+                        stdoutBuffer += String(chunk || "");
+                        const lines = stdoutBuffer.split(/\r?\n/);
+
+                        stdoutBuffer = lines.pop() || "";
+
+                        lines.forEach((line) => {
+                            const match = line.match(/DM_HELP_PORT=(\d+)/);
+                            const nextPort = Number(match && match[1] ? match[1] : 0);
+
+                            if (!settled && Number.isFinite(nextPort) && nextPort > 0) {
+                                if (processHandle !== child || generation !== lifecycleGeneration) {
+                                    clearTimeout(timeout);
+                                    finish(() => reject(new Error("Runtime help startup was retired.")));
+                                    return;
+                                }
+                                port = nextPort;
+                                clearTimeout(timeout);
+                                finish(() => {
+                                    resolve(nextPort);
+                                });
+                            }
+                        });
                     });
-                    finish(() => {
-                        reject(new Error(
-                            `R help server exited before reporting a port (${String(code ?? "")}).${stderrBuffer ? ` ${stderrBuffer.trim()}` : ""}`.trim()
-                        ));
+
+                    child.stderr.on("data", (chunk: Buffer | string) => {
+                        stderrBuffer += String(chunk || "");
                     });
-                    reset();
-                });
-            }).finally(() => {
-                startPromise = null;
+
+                    child.once("error", (error) => {
+                        clearTimeout(timeout);
+                        finish(() => {
+                            reject(error);
+                        });
+                        unregisterChildTermination();
+                        reset(child, generation);
+                    });
+
+                    child.once("exit", (code) => {
+                        clearTimeout(timeout);
+                        void terminateProcessTree({
+                            pid: child.pid,
+                            sync: true
+                        });
+                        finish(() => {
+                            reject(new Error(
+                                `R help server exited before reporting a port (${String(code ?? "")}).${stderrBuffer ? ` ${stderrBuffer.trim()}` : ""}`.trim()
+                            ));
+                        });
+                        unregisterChildTermination();
+                        reset(child, generation);
+                    });
+                })
             });
         })();
+        startPromise = pendingStart;
 
-        return startPromise;
+        return pendingStart.finally(() => {
+            if (startPromise === pendingStart) {
+                startPromise = null;
+            }
+        });
     };
 
     const createUrl = async function(pathValue: string): Promise<string> {
@@ -235,21 +271,38 @@ export const createRHelpServer = function(options: RHelpServerOptions = {}) {
     };
 
     const stop = async function(): Promise<void> {
-        if (!processHandle) {
+        lifecycleGeneration += 1;
+        startPromise = null;
+        port = 0;
+        const child = processHandle;
+        const unregisterChildTermination = unregisterEmergencyTermination;
+        if (!child) {
             return;
         }
 
-        const pid = processHandle.pid;
-
-        await terminateProcessTree({
-            pid,
-            sync: process.platform === "win32"
+        await releaseOwnedRuntimeResource({
+            resource: child,
+            release: async function(owned) {
+                await terminateProcessTree({ pid: owned.pid, sync: process.platform === "win32" });
+            },
+            disposeReleased: () => { unregisterChildTermination?.(); },
+            isCurrent: (owned) => processHandle === owned,
+            clearCurrent: function() {
+                unregisterEmergencyTermination = null;
+                processHandle = null;
+                port = 0;
+            }
         });
-
-        reset();
     };
 
     return {
+        captureOwner: function(): () => boolean {
+            const child = processHandle;
+            const generation = lifecycleGeneration;
+            const capturedPort = port;
+            return () => Boolean(child) && processHandle === child
+                && lifecycleGeneration === generation && port === capturedPort && capturedPort > 0;
+        },
         createUrl,
         rewriteUrl,
         start,

@@ -1,5 +1,5 @@
 runtime_time_ms <- function() {
-    as.numeric(floor(as.numeric(Sys.time()) * 1000))
+    floor(unclass(Sys.time())[[1]] * 1000)
 }
 
 
@@ -13,25 +13,31 @@ runtime_global_object <- function(name) {
 }
 
 
-workspace_active_binding_entry <- function(name, updated_at) {
-    if (!bindingIsActive(name, .GlobalEnv)) {
+workspace_active_binding_entry <- function(
+    name,
+    updated_at,
+    binding = runtime_binding_info(.GlobalEnv, name)
+) {
+    if (is.element(binding$state, c("value", "forced"))) {
         return(NULL)
     }
 
-    runtime_diagnostic_count("active_bindings_skipped")
+    active <- identical(binding$state, "active")
+    type <- if (active) "active binding" else paste(binding$state, "binding")
+    runtime_diagnostic_count(if (active) "active_bindings_skipped" else "unevaluated_bindings_skipped")
     list(
         access_key = name,
         display_name = name,
-        display_value = "<active binding; value not evaluated>",
-        display_type = "active binding",
-        type_info = "active binding",
+        display_value = paste0("<", type, "; value not evaluated>"),
+        display_type = type,
+        type_info = type,
         kind = "binding",
         length = 0L,
         size = 0,
         has_children = FALSE,
         has_viewer = FALSE,
         is_truncated = FALSE,
-        signature = "active-binding:not-evaluated",
+        signature = paste0(binding$state, "-binding:not-evaluated"),
         updated_time = updated_at
     )
 }
@@ -49,16 +55,17 @@ dataset_changed_columns <- function(previous_columns, current_columns) {
         return(character(0))
     }
 
-    changed <- union(
-        setdiff(previous_columns, current_columns),
-        setdiff(current_columns, previous_columns)
+    # These are internal character names, not values for S3 dispatch.
+    changed <- c(
+        previous_columns[!is.element(previous_columns, current_columns)],
+        current_columns[!is.element(current_columns, previous_columns)]
     )
 
     if (!length(changed)) {
         changed <- current_columns
     }
 
-    unique(as.character(changed %||% character(0)))
+    base::unique.default(as.character(changed %||% character(0)))
 }
 
 
@@ -347,7 +354,7 @@ dataset_changed_value_columns <- function(previous_dataset, current_dataset) {
         logical(1)
     )]
 
-    unique(as.character(changed %||% character(0)))
+    base::unique.default(as.character(changed %||% character(0)))
 }
 
 
@@ -372,7 +379,7 @@ dataset_changed_variable_meta <- function(previous_dataset, current_dataset) {
         logical(1)
     )]
 
-    unique(as.character(changed %||% character(0)))
+    base::unique.default(as.character(changed %||% character(0)))
 }
 
 
@@ -474,10 +481,11 @@ dataset_change <- function(previous_dataset, current_dataset) {
         )
     }
 
-    value_columns <- setdiff(
-        dataset_changed_value_columns(previous_dataset, current_dataset),
-        metadata_columns
-    )
+    value_columns <- dataset_changed_value_columns(previous_dataset, current_dataset)
+    # One replacement can change both values and metadata. A metadata receipt
+    # cannot suppress the value receipt: Data and Variables have separate caches.
+    # Column hashes include attributes, so metadata-only edits conservatively
+    # refresh their bounded Data viewport too.
 
     if (length(value_columns)) {
         changes[[length(changes) + 1L]] <- list(
@@ -541,7 +549,7 @@ workspace_copy_select_state <- function(select, source_name, target_name) {
         values <- as.character(select[[kind]] %||% character(0))
 
         if (is.element(source_name, values)) {
-            select[[kind]] <- unique(c(values, target_name))
+            select[[kind]] <- base::unique.default(c(values, target_name))
         }
     }
 
@@ -549,7 +557,173 @@ workspace_copy_select_state <- function(select, source_name, target_name) {
 }
 
 
-workspace_stored_value_is_inspectable <- function(value, standard_classes = FALSE) {
+workspace_inspection_method_names <- function(class_name, generics) {
+    if (identical(class_name, "default")) {
+        # These preview fallbacks may be reached through generated values,
+        # even when the original object has a supported explicit class.
+        # Package lookup used by metadata inference also dispatches unique().
+        # Its default override is unsafe even though our own name bookkeeping
+        # calls base::unique.default directly.
+        methods <- c("head.default", "format.default", "str.default", "unique.default")
+        if (runtime_inspection_names_contain("undeclare", generics)) {
+            methods <- c(methods, "undeclare.default")
+        }
+        return(methods)
+    }
+
+    paste0(generics, ".", class_name)
+}
+
+
+workspace_registered_inspection_classes <- function(
+    classes,
+    generics,
+    namespaces = list(asNamespace("base"), asNamespace("utils"))
+) {
+    overridden <- character(0)
+
+    for (namespace in namespaces) {
+        methods <- get(".__S3MethodsTable__.", envir = namespace, inherits = FALSE)
+        bindings <- ls(envir = methods, all.names = TRUE)
+
+        # These are our plain character vectors. Set operations call generic
+        # unique(), so use membership filtering before trusting any methods.
+        for (class_name in classes[!runtime_inspection_names_contain(classes, overridden)]) {
+            candidates <- workspace_inspection_method_names(class_name, generics)
+            method_names <- candidates[runtime_inspection_names_contain(candidates, bindings)]
+
+            for (method_name in method_names) {
+                stock <- FALSE
+                for (owner in namespaces) {
+                    if (runtime_registered_method_is_stock(
+                        methods, method_name, owner
+                    )) {
+                        stock <- TRUE
+                        break
+                    }
+                }
+
+                if (!stock) {
+                    overridden <- c(overridden, class_name)
+                    break
+                }
+            }
+        }
+    }
+
+    overridden
+}
+
+
+workspace_overridden_inspection_classes <- function() {
+    classes <- c(
+        "data.frame", "factor", "ordered", "Date", "POSIXct", "POSIXlt",
+        "POSIXt", "difftime", "declared",
+        "NULL", "logical", "integer", "double", "numeric", "complex",
+        "character", "raw", "list", "matrix", "array", "default"
+    )
+    namespaces <- list(asNamespace("base"), asNamespace("utils"))
+    # This is a method inventory, not a package-loading action. Package lookup
+    # itself calls generic unique() and can invoke a workspace override.
+    # Metadata operations retain their existing declared namespace loader.
+    declared_namespace <- runtime_inspection_declared_namespace()
+    if (is.environment(declared_namespace)) {
+        namespaces <- c(namespaces, list(declared_namespace))
+    }
+    # Include the secondary dispatch used by standard formatting and column flags.
+    generics <- c(
+        "dim", "dimnames", "length", "names", "[", "[[", "$",
+        "head", "str", "format", "print", "as.character", "as.vector",
+        "as.list", "as.double", "as.integer", "as.logical", "as.Date",
+        "as.POSIXct", "as.POSIXlt", "is.na", "is.numeric", "is.finite",
+        "anyNA", "unique", "levels", "droplevels", "Summary", "Math",
+        "Ops", "summary", "c", "rep", "units",
+        # Individual methods take precedence over their group method. Checking
+        # Ops/Math/Summary alone does not detect these replacements.
+        "+", "-", "*", "/", "^", "%%", "%/%", "&", "|", "!",
+        "==", "!=", "<", "<=", ">=", ">",
+        "all", "any", "sum", "prod", "min", "max", "range",
+        "abs", "sign", "sqrt", "floor", "ceiling", "trunc", "round", "signif",
+        "exp", "expm1", "log", "log10", "log2", "log1p",
+        "cos", "sin", "tan", "cospi", "sinpi", "tanpi",
+        "acos", "asin", "atan", "cosh", "sinh", "tanh",
+        "acosh", "asinh", "atanh", "lgamma", "gamma", "digamma", "trigamma",
+        "cumsum", "cumprod", "cummax", "cummin"
+    )
+    # Include search-path overrides even before the namespace is loaded;
+    # measurement inference can subsequently need declared::undeclare().
+    generics <- c(generics, "undeclare")
+    overridden <- workspace_registered_inspection_classes(
+        classes,
+        generics,
+        namespaces
+    )
+    # Production helpers live in an attached environment below .GlobalEnv.
+    # Start at the global environment so its method bindings are not skipped.
+    scope <- .GlobalEnv
+    while (!identical(scope, emptyenv())) {
+        # Only namespaces are trusted wholesale. Attached package environments
+        # do not need to export these method bindings and can be name-spoofed.
+        trusted <- identical(scope, baseenv()) ||
+            identical(scope, asNamespace("base")) ||
+            identical(scope, asNamespace("utils"))
+
+        if (!trusted) {
+            bindings <- ls(envir = scope, all.names = TRUE)
+
+            for (class_name in classes[!runtime_inspection_names_contain(classes, overridden)]) {
+                candidates <- workspace_inspection_method_names(class_name, generics)
+                method_names <- candidates[runtime_inspection_names_contain(candidates, bindings)]
+                for (method_name in method_names) {
+                    # An attached export can be the stock method (head.matrix
+                    # is exported by utils). Verify the binding's provenance;
+                    # never trust an attached environment by its display name.
+                    stock <- FALSE
+                    for (namespace in namespaces) {
+                        if (runtime_registered_method_is_stock(
+                            scope, method_name, namespace
+                        )) {
+                            stock <- TRUE
+                            break
+                        }
+                    }
+                    if (!stock) {
+                        overridden <- c(overridden, class_name)
+                        break
+                    }
+                }
+            }
+        }
+
+        scope <- parent.env(scope)
+    }
+
+    # Date and POSIXct formatting constructs POSIXlt intermediates. An override
+    # on that intermediate (or its POSIXt parent) also restricts the source.
+    if (any(runtime_inspection_names_contain(c("POSIXlt", "POSIXt"), overridden))) {
+        dependencies <- c("Date", "POSIXct", "POSIXt")
+        overridden <- c(overridden, dependencies[!runtime_inspection_names_contain(dependencies, overridden)])
+    }
+
+    overridden
+}
+
+
+workspace_stored_value_is_inspectable <- function(
+    value,
+    standard_classes = FALSE,
+    overridden_classes = workspace_overridden_inspection_classes()
+) {
+    # A replaced preview fallback can be reached by intermediate values as well
+    # as the stored object. Keep entries opaque until the stock method returns.
+    if (runtime_inspection_names_contain("default", overridden_classes)) {
+        return(FALSE)
+    }
+
+    # Run before R-level attributes, traversal, lengths, previews or hashing.
+    if (!runtime_stored_graph_is_inspectable(value)) {
+        return(FALSE)
+    }
     pending <- list(value)
     inspected <- 0L
     supported_classes <- list("data.frame")
@@ -559,6 +733,18 @@ workspace_stored_value_is_inspectable <- function(value, standard_classes = FALS
             "factor", c("ordered", "factor"), "Date",
             c("POSIXct", "POSIXt"), "difftime"
         ))
+
+        # Stored classes survive workspace restore without loading namespaces.
+        # Eligibility must not depend on whether a dialog has already requested
+        # declared. Existing metadata readers own namespace loading; this scan
+        # still rejects registered/search-path overrides and unsafe value graphs.
+        declared_classes <- c(
+            list("logical", "integer", "numeric", "complex", "character", "raw"),
+            supported_classes[-1L]
+        )
+        for (classes in declared_classes) {
+            supported_classes <- c(supported_classes, list(c("declared", classes)))
+        }
     }
 
     while (length(pending)) {
@@ -571,10 +757,20 @@ workspace_stored_value_is_inspectable <- function(value, standard_classes = FALS
             return(FALSE)
         }
 
+        # S3 generics such as head also dispatch on implicit classes. class()
+        # is a primitive stored-class query; the compiled preflight has already
+        # rejected callback-backed attributes. Include the underlying numeric
+        # classes because matrix/array class() omits that dispatch fallback.
+        inspection_classes <- c(class(current), typeof(current))
+        if (runtime_inspection_names_contain(typeof(current), c("integer", "double"))) {
+            inspection_classes <- c(inspection_classes, "numeric")
+        }
+
         # Only inspect stored values, never class methods or reference contents.
         if (
             isS4(current) ||
-            !is.element(typeof(current), c(
+            any(runtime_inspection_names_contain(inspection_classes, overridden_classes)) ||
+            !runtime_inspection_names_contain(typeof(current), c(
                 "NULL", "logical", "integer", "double", "complex",
                 "character", "raw", "list"
             )) ||
@@ -619,15 +815,25 @@ workspace_copy_value_is_reusable <- function(value) {
 }
 
 
-workspace_restricted_variable <- function(name, value, updated_at) {
-    if (workspace_stored_value_is_inspectable(value, standard_classes = TRUE)) {
+workspace_restricted_variable <- function(
+    name,
+    value,
+    updated_at,
+    overridden_classes = workspace_overridden_inspection_classes()
+) {
+    if (workspace_stored_value_is_inspectable(
+        value, standard_classes = TRUE, overridden_classes = overridden_classes
+    )) {
         return(NULL)
     }
 
     classes <- attr(value, "class", exact = TRUE)
     type <- typeof(value)
 
-    if (typeof(classes) == "character" && is.null(attributes(classes))) {
+    if (
+        runtime_stored_graph_is_inspectable(classes) &&
+        typeof(classes) == "character" && is.null(attributes(classes))
+    ) {
         type <- paste(classes, collapse = "/")
     }
 
@@ -670,24 +876,26 @@ workspace_copy_cached_state <- function(
         is.null(variables[[source_name]]) ||
         !is.null(signatures[[target_name]]) ||
         !exists(source_name, envir = .GlobalEnv, inherits = FALSE) ||
-        !exists(target_name, envir = .GlobalEnv, inherits = FALSE) ||
-        bindingIsActive(source_name, .GlobalEnv) ||
-        bindingIsActive(target_name, .GlobalEnv) ||
-        !identical(
-            get(source_name, envir = .GlobalEnv, inherits = FALSE),
-            get(target_name, envir = .GlobalEnv, inherits = FALSE)
-        )
+        !exists(target_name, envir = .GlobalEnv, inherits = FALSE)
+    ) {
+        return(NULL)
+    }
+
+    source_binding <- runtime_binding_info(.GlobalEnv, source_name)
+    target_binding <- runtime_binding_info(.GlobalEnv, target_name)
+    if (
+        !is.element(source_binding$state, c("value", "forced")) ||
+        !is.element(target_binding$state, c("value", "forced")) ||
+        !workspace_copy_value_is_reusable(source_binding$value) ||
+        !workspace_copy_value_is_reusable(target_binding$value) ||
+        !identical(source_binding$value, target_binding$value)
     ) {
         return(NULL)
     }
 
     updated_at <- runtime_time_ms()
     entry <- variables[[source_name]]
-    source_value <- get(source_name, envir = .GlobalEnv, inherits = FALSE)
-
-    if (!workspace_copy_value_is_reusable(source_value)) {
-        return(NULL)
-    }
+    source_value <- source_binding$value
 
     entry$access_key <- target_name
     entry$display_name <- target_name
@@ -744,12 +952,12 @@ workspace_copy_cached_state <- function(
 
 workspace_remove_cached_state <- function(previous_state, removed_names) {
     previous_state <- previous_state %||% list()
-    removed_names <- unique(as.character(removed_names %||% character(0)))
+    removed_names <- base::unique.default(as.character(removed_names %||% character(0)))
     removed_names <- removed_names[nzchar(removed_names)]
     signatures <- previous_state$signatures %||% list()
     variables <- previous_state$variables %||% list()
     dataset_states <- previous_state$datasetStates %||% list()
-    known_names <- union(names(signatures), names(variables))
+    known_names <- base::unique.default(c(names(signatures), names(variables)))
     still_exists <- vapply(
         removed_names,
         exists,
@@ -766,7 +974,7 @@ workspace_remove_cached_state <- function(previous_state, removed_names) {
         return(NULL)
     }
 
-    removed_datasets <- intersect(removed_names, names(dataset_states))
+    removed_datasets <- removed_names[is.element(removed_names, names(dataset_states))]
 
     for (name in removed_names) {
         signatures[[name]] <- NULL
@@ -777,10 +985,8 @@ workspace_remove_cached_state <- function(previous_state, removed_names) {
     select <- previous_state$select %||% list()
 
     for (kind in c("list", "matrix", "vector")) {
-        select[[kind]] <- setdiff(
-            as.character(select[[kind]] %||% character(0)),
-            removed_names
-        )
+        values <- as.character(select[[kind]] %||% character(0))
+        select[[kind]] <- base::unique.default(values[!is.element(values, removed_names)])
     }
 
     updated_at <- runtime_time_ms()
@@ -867,9 +1073,11 @@ collect_workspace_update <- function(previous_state = NULL) {
     matrices <- character(0)
     lists <- character(0)
     updated_at <- runtime_time_ms()
+    overridden_classes <- workspace_overridden_inspection_classes()
 
     for (name in object_names) {
-        binding_entry <- workspace_active_binding_entry(name, updated_at)
+        binding <- runtime_binding_info(.GlobalEnv, name)
+        binding_entry <- workspace_active_binding_entry(name, updated_at, binding)
 
         if (!is.null(binding_entry)) {
             signatures[[name]] <- binding_entry$signature
@@ -884,9 +1092,11 @@ collect_workspace_update <- function(previous_state = NULL) {
             next
         }
 
-        value <- runtime_global_object(name)
+        value <- binding$value
 
-        restricted_entry <- workspace_restricted_variable(name, value, updated_at)
+        restricted_entry <- workspace_restricted_variable(
+            name, value, updated_at, overridden_classes
+        )
 
         if (!is.null(restricted_entry)) {
             signatures[[name]] <- restricted_entry$signature
@@ -1096,18 +1306,22 @@ workspace_snapshot <- function() {
         list()
     }
     previous_dataset_states <- previous_state$datasetStates %||% list()
+    overridden_classes <- workspace_overridden_inspection_classes()
 
     for (name in object_names) {
-        binding_entry <- workspace_active_binding_entry(name, updated_at)
+        binding <- runtime_binding_info(.GlobalEnv, name)
+        binding_entry <- workspace_active_binding_entry(name, updated_at, binding)
 
         if (!is.null(binding_entry)) {
             variables[[length(variables) + 1L]] <- binding_entry
             next
         }
 
-        value <- runtime_global_object(name)
+        value <- binding$value
 
-        restricted_entry <- workspace_restricted_variable(name, value, updated_at)
+        restricted_entry <- workspace_restricted_variable(
+            name, value, updated_at, overridden_classes
+        )
 
         if (!is.null(restricted_entry)) {
             variables[[length(variables) + 1L]] <- restricted_entry
@@ -1224,7 +1438,7 @@ workspace_inspect <- function(name) {
             type = as.character(typeof(value)),
             kind = workspace_kind(value),
             length = suppressWarnings(as.integer(length(value %||% list()))),
-            size = as.numeric(utils::object.size(value)),
+            size = workspace_object_size_bytes(value),
             dim = if (is.null(dimensions)) {
                 integer(0)
             }

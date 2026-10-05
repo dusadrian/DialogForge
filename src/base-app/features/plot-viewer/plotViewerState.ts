@@ -25,7 +25,7 @@ export interface PlotSaveRequest {
 
 
 export interface PlotSaveResult {
-    status: "saved" | "canceled" | "invalid" | "failed";
+    status: "saved" | "requested" | "canceled" | "invalid" | "failed";
     filePath: string;
     message: string;
 }
@@ -288,10 +288,12 @@ export const createPlotCopyResult = function(
 };
 
 
-export const createInvalidPlotCopyResult = function(): PlotCopyResult {
+export const createInvalidPlotCopyResult = function(
+    message = "No plot URL was provided."
+): PlotCopyResult {
     return createPlotCopyResult({
         status: "invalid",
-        message: "No plot URL was provided."
+        message
     });
 };
 

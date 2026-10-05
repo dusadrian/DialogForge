@@ -1,5 +1,6 @@
 import type {
     DeclaredMissingUpdateResult,
+    RuntimeSessionSnapshot,
     TabularPreviewSnapshot,
     ValueLabelUpdateResult,
     VariableMetadataSnapshot,
@@ -14,6 +15,7 @@ import type {
 import type {
     PastePayload
 } from "../clipboard/pastePayload";
+import { captureDatasetConsumerScope } from "./datasetConsumerScope";
 import type {
     DatasetEditorSelection
 } from "../state/datasetEditorState";
@@ -39,6 +41,7 @@ interface PasteApplyResult {
 export interface DatasetClipboardControllerBindings {
     pasteInput: HTMLInputElement | HTMLTextAreaElement;
     getPreview(): TabularPreviewSnapshot | null;
+    getRuntimeSnapshot(): RuntimeSessionSnapshot | null;
     getMetadata(): VariableMetadataSnapshot | null;
     getSelection(): DatasetEditorSelection;
     getCopyPayload(): CopyPayload | null;
@@ -72,6 +75,13 @@ export interface DatasetClipboardController {
 export const createDatasetClipboardController = function(
     bindings: DatasetClipboardControllerBindings
 ): DatasetClipboardController {
+    const captureClipboardScope = function(): () => boolean {
+        return captureDatasetConsumerScope({
+            getRuntimeSnapshot: bindings.getRuntimeSnapshot,
+            getObjectName: () => bindings.getPreview()?.objectName || ""
+        });
+    };
+
     const buildCopyPayload = function(
         options?: { includeValueLabels?: boolean }
     ): void {
@@ -100,16 +110,25 @@ export const createDatasetClipboardController = function(
         useSnapshot?: boolean;
         includeValueLabels?: boolean;
     }): Promise<void> {
+        const isCurrent = captureClipboardScope();
         const snapshot = bindings.getCopyPayload();
         const payload = options?.useSnapshot && snapshot
             ? snapshot
             : createCurrentCopyPayload({
                 includeValueLabels: options?.includeValueLabels
             });
+        if (!isCurrent()) {
+            return;
+        }
         const result = await window.dialogForge.copyPayloadToClipboard(payload);
 
+        if (!isCurrent()) {
+            return;
+        }
         bindings.renderCopyPayload(payload);
-        bindings.renderClipboardResult(result);
+        if (isCurrent()) {
+            bindings.renderClipboardResult(result);
+        }
     };
 
     const parsePasteInput = function(): void {
@@ -118,26 +137,54 @@ export const createDatasetClipboardController = function(
         );
     };
 
-    const readClipboard = async function(): Promise<void> {
+    const readClipboardForOwner = async function(isCurrent: () => boolean): Promise<boolean> {
+        if (!isCurrent()) {
+            return false;
+        }
         const result = await window.dialogForge.readClipboardText();
 
+        if (!isCurrent()) {
+            return false;
+        }
         bindings.renderClipboardReadResult(result);
+        if (!isCurrent()) {
+            return false;
+        }
 
         if (result.status === "ready") {
             bindings.pasteInput.value = result.text;
         }
 
         parsePasteInput();
+        return isCurrent() && result.status === "ready";
     };
 
-    const refreshStructuredMetadata = function(objectName: string): void {
+    const readClipboard = async function(): Promise<void> {
+        await readClipboardForOwner(captureClipboardScope());
+    };
+
+    const refreshStructuredMetadata = function(objectName: string, isCurrent: () => boolean): void {
+        if (!isCurrent()) {
+            return;
+        }
         bindings.refreshVariableMetadata(objectName);
+        if (!isCurrent()) {
+            return;
+        }
         bindings.refreshValueLabels(objectName);
+        if (!isCurrent()) {
+            return;
+        }
         bindings.refreshDeclaredMissing(objectName);
-        bindings.refreshRuntimeEvents();
+        if (isCurrent()) {
+            bindings.refreshRuntimeEvents();
+        }
     };
 
-    const applyPaste = async function(): Promise<void> {
+    const applyPasteForOwner = async function(isCurrent: () => boolean): Promise<void> {
+        if (!isCurrent()) {
+            return;
+        }
         const copyPayload = bindings.getCopyPayload();
         const payload = bindings.getPastePayload()
             || parseClipboardText(bindings.pasteInput.value);
@@ -155,7 +202,13 @@ export const createDatasetClipboardController = function(
         if (plan.cellUpdates.length > 0) {
             const result = await window.dialogForge.writeCells(plan.cellUpdates);
 
+            if (!isCurrent()) {
+                return;
+            }
             bindings.renderPastePayload(payload);
+            if (!isCurrent()) {
+                return;
+            }
             bindings.renderPasteApplyResult({
                 status: result.status,
                 updates: result.updated,
@@ -164,11 +217,11 @@ export const createDatasetClipboardController = function(
                 message: plan.message
             });
 
-            if (result.updated > 0) {
+            if (isCurrent() && result.updated > 0) {
                 const objectName = plan.cellUpdates[0].objectName;
 
                 bindings.refreshDataset(objectName);
-                refreshStructuredMetadata(objectName);
+                refreshStructuredMetadata(objectName, isCurrent);
             }
             return;
         }
@@ -181,15 +234,27 @@ export const createDatasetClipboardController = function(
             const declaredMissingResults: DeclaredMissingUpdateResult[] = [];
 
             for (const update of plan.valueLabelUpdates) {
+                if (!isCurrent()) {
+                    return;
+                }
                 valueLabelResults.push(
                     await window.dialogForge.writeValueLabels(update)
                 );
+                if (!isCurrent()) {
+                    return;
+                }
             }
 
             for (const update of plan.declaredMissingUpdates) {
+                if (!isCurrent()) {
+                    return;
+                }
                 declaredMissingResults.push(
                     await window.dialogForge.writeDeclaredMissing(update)
                 );
+                if (!isCurrent()) {
+                    return;
+                }
             }
 
             const results: Array<
@@ -204,6 +269,9 @@ export const createDatasetClipboardController = function(
             const failed = results.length - updated;
 
             bindings.renderPastePayload(payload);
+            if (!isCurrent()) {
+                return;
+            }
             bindings.renderPasteApplyResult({
                 status: failed > 0 ? (updated > 0 ? "partial" : "failed") : "updated",
                 updates: updated,
@@ -212,8 +280,8 @@ export const createDatasetClipboardController = function(
                 message: "Paste updates were routed through the runtime value-label and declared-missing contracts."
             });
 
-            if (updated > 0) {
-                refreshStructuredMetadata(results[0].objectName);
+            if (isCurrent() && updated > 0) {
+                refreshStructuredMetadata(results[0].objectName, isCurrent);
             }
             return;
         }
@@ -230,12 +298,18 @@ export const createDatasetClipboardController = function(
         const results: VariableMetadataUpdateResult[] = [];
 
         for (const update of plan.metadataUpdates) {
+            if (!isCurrent()) {
+                return;
+            }
             results.push(await window.dialogForge.writeVariableMetadata({
                 ...update,
                 label: update.metadataKey === "label" ? update.value : "",
                 uiCommandVisibility: "hidden",
                 visibleCommandText: ""
             }));
+            if (!isCurrent()) {
+                return;
+            }
         }
 
         const updated = results.filter((result) => {
@@ -244,6 +318,9 @@ export const createDatasetClipboardController = function(
         const failed = results.length - updated;
 
         bindings.renderPastePayload(payload);
+        if (!isCurrent()) {
+            return;
+        }
         bindings.renderPasteApplyResult({
             status: failed > 0 ? (updated > 0 ? "partial" : "failed") : "updated",
             updates: updated,
@@ -252,15 +329,23 @@ export const createDatasetClipboardController = function(
             message: "Paste updates were routed through the runtime variable-metadata contract."
         });
 
-        if (updated > 0) {
+        if (isCurrent() && updated > 0) {
             bindings.refreshVariableMetadata(results[0].objectName);
-            bindings.refreshRuntimeEvents();
+            if (isCurrent()) {
+                bindings.refreshRuntimeEvents();
+            }
         }
     };
 
+    const applyPaste = async function(): Promise<void> {
+        await applyPasteForOwner(captureClipboardScope());
+    };
+
     const pasteFromClipboard = async function(): Promise<void> {
-        await readClipboard();
-        await applyPaste();
+        const isCurrent = captureClipboardScope();
+        if (await readClipboardForOwner(isCurrent) && isCurrent()) {
+            await applyPasteForOwner(isCurrent);
+        }
     };
 
     return {

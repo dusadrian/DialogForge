@@ -1,11 +1,14 @@
 import {
     createVisibleCommandRequest
 } from "../../commands/commandProtocol";
+import {
+    createRuntimeCommandReceipt,
+    type RuntimeCommandReceipt
+} from "../../commands/runtimeCommandReceipt";
 import type {
     RuntimeProvider,
     RuntimeSessionManager,
     TranscriptEvent,
-    VisibleCommandRequest,
     WorkspaceSnapshot,
     WorkspaceUpdate
 } from "../../provider-contract/runtimeProvider";
@@ -13,13 +16,10 @@ import {
     createRuntimeSessionManager,
     type RuntimeSessionManagerOptions
 } from "../../session/runtimeSessionManager";
+import { createRuntimeVisibleCommandDelivery } from "../../commands/runtimeVisibleCommandDelivery";
 import {
-    workspaceUpdateHasChanges
-} from "../../workspace/workspaceUpdate";
-import {
-    createBrowserWebRRuntimeExtensionController,
-    type WebRRuntimeMethodRouterBindings
-} from "./webRRuntimeMethodRouter";
+    signalBrowserWebRInterrupt
+} from "./webRBrowserRuntime";
 import {
     createBrowserWebRSessionSnapshot
 } from "./webRBrowserStartup";
@@ -33,6 +33,9 @@ import {
     createRVisibleCommandExecutor
 } from "../r/controllers/rVisibleCommandExecutor";
 import {
+    createRRuntimeEventController
+} from "../r/controllers/rRuntimeEventController";
+import {
     webRRuntimeManifest
 } from "./webRRuntimeManifest";
 
@@ -42,8 +45,7 @@ const manifest = webRRuntimeManifest;
 
 export interface WebRVisibleCommandOptions {
     activityId?: string;
-    preRecorded?: boolean;
-    manageRuntimeBusy?: boolean;
+    source?: string;
     outputWidth?: number;
 }
 
@@ -54,14 +56,16 @@ export interface BrowserWebRVisibleCommandBindings {
 }
 
 export interface BrowserWebRSessionBindings {
+    runtime?: unknown;
+    isCurrentSession?(): boolean;
     runtimeControlClient: WebRSharedRuntimeControlClient;
     visibleCommands: BrowserWebRVisibleCommandBindings;
-    runtimeMethods: WebRRuntimeMethodRouterBindings;
-    runRuntimeOperation<T>(action: () => Promise<T>): Promise<T>;
     workspaceChanged(
         update: WorkspaceUpdate,
         snapshot: WorkspaceSnapshot
-    ): Promise<void>;
+    ): Promise<boolean | void>;
+    refreshRuntimeEvents?(runtime: RuntimeSessionManager): Promise<void>;
+    reportRuntimeEventError?(error: unknown): void;
     sessionManagerOptions?: RuntimeSessionManagerOptions;
 }
 
@@ -71,18 +75,15 @@ export interface BrowserWebRSession {
     executeVisibleCommand(
         text: string,
         options?: WebRVisibleCommandOptions
-    ): Promise<{ ok: boolean }>;
+    ): Promise<RuntimeCommandReceipt>;
 }
 
 
 export const createBrowserWebRSession = function(
     bindings: BrowserWebRSessionBindings
 ): BrowserWebRSession {
-    const commandOptions = new WeakMap<
-        VisibleCommandRequest,
-        WebRVisibleCommandOptions
-    >();
     const client = bindings.runtimeControlClient;
+    const runtimeEvents = createRRuntimeEventController();
     let requestSequence = 0;
     const createRequestId = function(prefix: string): string {
         requestSequence += 1;
@@ -90,26 +91,17 @@ export const createBrowserWebRSession = function(
         return `${prefix}-webr-${Date.now()}-${requestSequence}`;
     };
     const getClient = function() {
-        return client;
+        return bindings.isCurrentSession?.() === false ? null : client;
     };
     const commandController = createRVisibleCommandExecutor({
+        onTranscriptEvents: bindings.visibleCommands.recordTranscriptEvents,
+        onRuntimeControlEvents: runtimeEvents.recordRuntimeControlEvents,
         getClient,
         createRequestId,
         resolveParentId: function(request) {
-            return String(commandOptions.get(request)?.activityId || "");
+            return String(request.activityId || "");
         }
     });
-    const transcriptHasFailure = function(events: Array<{
-        type?: string;
-        state?: string;
-    }>): boolean {
-        return events.some((event) => {
-            return event.type === "failed"
-                || event.type === "rejected"
-                || event.type === "error"
-                || event.state === "error";
-        });
-    };
     const executeControllerVisibleCommand = async function(
         commandText: string,
         source: string,
@@ -120,8 +112,6 @@ export const createBrowserWebRSession = function(
             source,
             outputWidth: bindings.visibleCommands.readConsoleOutputWidth()
         });
-
-        commandOptions.set(request, {});
 
         const result = await commandController.executeVisibleCommand(
             request,
@@ -134,15 +124,18 @@ export const createBrowserWebRSession = function(
         getClient,
         createRequestId,
         executeVisibleCommand: executeControllerVisibleCommand,
-        transcriptHasFailure,
         interrupt: function() {
-            return false;
+            if (bindings.isCurrentSession?.() === false) {
+                return null;
+            }
+            return signalBrowserWebRInterrupt(bindings.runtime);
         },
+        interruptUnavailableMessage: "WebR interrupt is not available in this browser runtime.",
+        interruptAcceptedMessage: "WebR worker accepted the interrupt request.",
+        interruptFailedMessage: "WebR worker did not accept the interrupt request.",
         onVisibleWorkspaceRefresh:
             bindings.visibleCommands.setWorkspaceMetadataStatus
     });
-    const browserExtensionController =
-        createBrowserWebRRuntimeExtensionController(bindings.runtimeMethods);
     let runtimeSessionManager: RuntimeSessionManager;
     const provider: RuntimeProvider = {
         manifest,
@@ -154,69 +147,37 @@ export const createBrowserWebRSession = function(
             );
         },
         commandController,
+        eventController: runtimeEvents,
         ...runtimeControllers,
-        extensionController: {
-            executeRuntimeMethod: function(request, snapshot) {
-                if (
-                    request.method === "runtime.interrupt"
-                    || request.method === "reply_prompt"
-                ) {
-                    return browserExtensionController.executeRuntimeMethod!(
-                        request,
-                        snapshot
-                    );
-                }
-
-                return runtimeControllers.extensionController.executeRuntimeMethod!(
-                    request,
-                    snapshot
-                );
-            }
-        },
     };
     runtimeSessionManager = createRuntimeSessionManager(
         provider,
         bindings.sessionManagerOptions
     );
+    const deliverVisibleCommand = createRuntimeVisibleCommandDelivery({
+        runtime: runtimeSessionManager,
+        isCurrentRuntime: bindings.isCurrentSession,
+        publishTranscript: bindings.visibleCommands.recordTranscriptEvents,
+        publishWorkspace: bindings.workspaceChanged,
+        refreshRuntimeEvents: bindings.refreshRuntimeEvents
+            ? () => bindings.refreshRuntimeEvents!(runtimeSessionManager)
+            : undefined,
+        reportRuntimeEventError: bindings.reportRuntimeEventError
+    });
 
     return {
         runtimeSessionManager,
         executeVisibleCommand: async function(text, options = {}) {
             const request = createVisibleCommandRequest({
                 text,
-                source: "browser.webr.visible-command",
+                activityId: options.activityId,
+                source: options.source || "browser.webr.visible-command",
                 outputWidth: options.outputWidth
                     || bindings.visibleCommands.readConsoleOutputWidth()
             });
 
-            commandOptions.set(request, options);
-
-            const result = await runtimeSessionManager
-                .executeVisibleCommandWithEffects(request);
-
-            bindings.visibleCommands.recordTranscriptEvents(
-                options.preRecorded
-                    ? result.transcriptEvents.filter((event) => {
-                        return event.type !== "submitted";
-                    })
-                    : result.transcriptEvents
-            );
-
-            if (workspaceUpdateHasChanges(result.workspaceUpdate)) {
-                await bindings.workspaceChanged(
-                    result.workspaceUpdate,
-                    runtimeSessionManager.getWorkspaceSnapshot()
-                );
-            }
-
-            return {
-                ok: !result.transcriptEvents.some((event) => {
-                    return event.type === "failed"
-                        || event.type === "rejected"
-                        || event.type === "error"
-                        || event.state === "error";
-                })
-            };
+            const { accepted, result } = await deliverVisibleCommand(request);
+            return createRuntimeCommandReceipt(result, accepted);
         }
     };
 };

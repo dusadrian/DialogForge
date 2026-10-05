@@ -37,7 +37,7 @@ workspace_index_set <- function(key, value) {
 
 
 workspace_revision_session <- paste0(
-    Sys.getpid(), "-", format(Sys.time(), "%Y%m%d%H%M%OS6", tz = "UTC")
+    Sys.getpid(), "-", sprintf("%.6f", unclass(Sys.time())[[1]])
 )
 workspace_revision_sequence <- 0
 workspace_reconciliation_failed <- FALSE
@@ -79,7 +79,12 @@ port <- as.integer(opts$port %||% 0L)
 orig_profile <- as.character(opts$orig_profile %||% "")
 
 plot_backend <- "none"
+runtime_graphics_transport <- NULL
+runtime_worker_canvas_devices <- list()
+runtime_graphics_devices <- list()
+runtime_graphics_device_generation <- 0L
 plot_device <- NA_integer_
+plot_last_device_generation <- 0L
 plot_last_upid <- ""
 plot_last_url <- ""
 plot_last_count <- 0L
@@ -110,10 +115,33 @@ json_escape <- function(value) {
 
     if (!length(codes)) return("")
 
-    paste(
-        vapply(codes, json_escape_code, character(1)),
-        collapse = ""
-    )
+    escaped <- which(is.na(codes) | codes < 32L | codes == 34L | codes == 92L)
+
+    if (!length(escaped)) {
+        return(intToUtf8(codes))
+    }
+
+    # Convert ordinary text in runs rather than calling an R function for
+    # every character. Large help resources also pass through this encoder.
+    parts <- character(2L * length(escaped) + 1L)
+    first <- 1L
+
+    for (index in seq_along(escaped)) {
+        position <- escaped[[index]]
+
+        if (position > first) {
+            parts[[2L * index - 1L]] <- intToUtf8(codes[first:(position - 1L)])
+        }
+
+        parts[[2L * index]] <- json_escape_code(codes[[position]])
+        first <- position + 1L
+    }
+
+    if (first <= length(codes)) {
+        parts[[length(parts)]] <- intToUtf8(codes[first:length(codes)])
+    }
+
+    paste(parts, collapse = "")
 }
 
 
@@ -221,7 +249,9 @@ json_num <- function(value) {
         return(sprintf("%.0f", number))
     }
 
-    text <- format(
+    # Protocol numbers are already plain numeric values, not workspace objects.
+    # Do not dispatch user format.numeric/default methods while encoding them.
+    text <- base::format.default(
         number,
         scientific = FALSE,
         trim = TRUE,

@@ -1,4 +1,7 @@
 import type { MenuItemConstructorOptions } from "electron";
+import {
+    readMainZoomMenuAction
+} from "../../base-app/features/main-window/mainZoomPolicy";
 import type {
     ApplicationComposition,
     EvaluatedMenuItem
@@ -53,7 +56,7 @@ const createMenuItemTemplate = function(
         enabled: item.enabled !== false
     };
 
-    if (item.role) {
+    if (item.role && !readMainZoomMenuAction(item.role)) {
         template.role = item.role as MenuItemConstructorOptions["role"];
         return template;
     }

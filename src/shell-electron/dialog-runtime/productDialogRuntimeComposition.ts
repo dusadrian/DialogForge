@@ -14,6 +14,18 @@ import {
     createVisibleCommandRequest
 } from "../../runtime/commands/commandProtocol";
 import {
+    createRuntimeCommandReceipt,
+    type RuntimeCommandReceipt
+} from "../../runtime/commands/runtimeCommandReceipt";
+import { createRuntimeVisibleCommandDelivery } from "../../runtime/commands/runtimeVisibleCommandDelivery";
+import {
+    loadRequiredRPackages,
+    requireSuccessfulRPackageAttachment
+} from "../../runtime/providers/r/dependencies/rPackageAttachment";
+import {
+    createRDialogCommandPackageRequirements
+} from "../../runtime/providers/r/dependencies/runtimePackageRequirements";
+import {
     createInvisibleQueryRequest
 } from "../../runtime/queries/invisibleQueryProtocol";
 import type {
@@ -23,14 +35,17 @@ import {
     createProductDialogRuntimeIpcController
 } from "./productDialogRuntimeIpcController";
 import {
-    applyRPackageRequirementConstraints,
-    createRPackageCompatibilityMessage,
-    createRPackageRequirementsFromNames,
-    createRPackageVersionsCommand,
-    mergeRPackageRequirements,
-    parseRPackageVersions,
-    resolveRPackageCompatibility
+    applyRPackageRequirementConstraints
 } from "../../runtime/providers/r/dependencies/rPackageCompatibility";
+import {
+    createRPackagePreparationController,
+    createRPackageRuntimeStartupReceipt,
+    prepareRequiredRPackages
+} from "../../runtime/providers/r/dependencies/rPackageRequirementReadiness";
+import {
+    captureRPackageRuntime,
+    requireCurrentRPackageRuntime
+} from "../../runtime/providers/r/dependencies/rPackageRuntimeGuard";
 
 
 export interface ProductDialogRuntimeCompositionOptions {
@@ -43,9 +58,9 @@ export interface ProductDialogRuntimeCompositionOptions {
         input: Partial<ImportPreviewRequest>
     ): Promise<unknown>;
     getUiCommandVisibility(): "hidden" | "visible";
-    executeVisibleCommandAndBroadcast(
+    executeVisibleCommandReceiptAndBroadcast(
         request: VisibleCommandRequest
-    ): Promise<TranscriptEvent[]>;
+    ): Promise<RuntimeCommandReceipt>;
     sendTranscriptEvents(events: TranscriptEvent[]): void;
     invalidateDatasetPreview(): void;
     refreshWorkspaceAndBroadcast(): Promise<unknown>;
@@ -65,51 +80,46 @@ export interface ProductDialogRuntimeComposition {
 export const registerProductDialogRuntimeComposition = function(
     options: ProductDialogRuntimeCompositionOptions
 ): ProductDialogRuntimeComposition {
-    const dependencyReadiness = new Map<
-        string,
-        Promise<{ ok: boolean; error: string; status?: string }>
-    >();
+    const packagePreparation = createRPackagePreparationController<{
+        ok: boolean;
+        error: string;
+        status?: string;
+    }>({
+        getRuntime: () => options.runtimeSessionManager,
+        ensureRuntime: async function() {
+            const session = await options.runtimeSessionManager.start();
+            if (session.status !== "ready") {
+                throw new Error(session.message || "R runtime is not ready.");
+            }
+            return createRPackageRuntimeStartupReceipt(options.runtimeSessionManager);
+        }
+    });
+    // Hidden dialog commands keep their existing full refresh without publishing
+    // a transcript. The same delivery owner still guards that refresh/lifetime.
+    const deliverHiddenCommand = createRuntimeVisibleCommandDelivery({
+        runtime: options.runtimeSessionManager,
+        publishTranscript: function() {},
+        publishWorkspace: async function() {},
+        refreshWorkspaceAfterCommand: async function() {
+            options.invalidateDatasetPreview();
+            await options.refreshWorkspaceAndBroadcast();
+        },
+        refreshRuntimeEvents: async function() {
+            void options.broadcastRuntimeEvents().catch(options.reportError);
+        },
+        reportRuntimeEventError: options.reportError
+    });
     const executeUiActionCommand = async function(
         request: VisibleCommandRequest,
         visibility: "hidden" | "visible" =
             options.getUiCommandVisibility()
-    ): Promise<TranscriptEvent[]> {
+    ): Promise<RuntimeCommandReceipt> {
         if (visibility === "visible") {
-            return options.executeVisibleCommandAndBroadcast(request);
+            return options.executeVisibleCommandReceiptAndBroadcast(request);
         }
 
-        const events = await options.runtimeSessionManager
-            .executeVisibleCommand(request);
-
-        options.invalidateDatasetPreview();
-        await options.refreshWorkspaceAndBroadcast();
-        void options.broadcastRuntimeEvents().catch(options.reportError);
-
-        return events;
-    };
-
-    const normalizeDependencies = function(value: unknown): string[] {
-        const source = Array.isArray(value)
-            ? value
-            : String(value || "").split(/[;,\n]/);
-
-        return Array.from(new Set(source.map((item) => {
-            return String(item || "").trim();
-        }).filter(Boolean)));
-    };
-
-    const isRuntimeTrue = function(value: unknown): boolean {
-        if (value === true) {
-            return true;
-        }
-
-        if (Array.isArray(value) && value.length === 1) {
-            return isRuntimeTrue(value[0]);
-        }
-
-        return /^(?:\[1\]\s*)?true$/i.test(
-            String(value || "").trim()
-        );
+        const { accepted, result } = await deliverHiddenCommand(request);
+        return createRuntimeCommandReceipt(result, accepted);
     };
 
     const ensureDependencies = async function(
@@ -117,12 +127,8 @@ export const registerProductDialogRuntimeComposition = function(
         packageRequirementsInput: unknown,
         source: string
     ): Promise<{ ok: boolean; error: string; status?: string }> {
-        const dependencies = normalizeDependencies(value);
         const requirements = applyRPackageRequirementConstraints(
-            mergeRPackageRequirements(
-                createRPackageRequirementsFromNames(dependencies),
-                packageRequirementsInput
-            ),
+            createRDialogCommandPackageRequirements(value, packageRequirementsInput),
             options.packageRequirements || []
         );
 
@@ -133,130 +139,82 @@ export const registerProductDialogRuntimeComposition = function(
             };
         }
 
-        const dependencyKey = requirements.map((requirement) => {
-            return [
-                requirement.name,
-                requirement.minimumVersion || "",
-                requirement.minimumVersionExclusive ? ">" : ">="
-            ].join("@");
-        }).sort().join("\n");
-        const existing = dependencyReadiness.get(dependencyKey);
-
-        if (existing) {
-            return existing;
-        }
-
-        const readiness = (async function(): Promise<{
+        return packagePreparation.prepare(requirements, async function(): Promise<{
             ok: boolean;
             error: string;
             status?: string;
         }> {
-            const session = await options.runtimeSessionManager.start();
+            const isCurrent = captureRPackageRuntime(() => options.runtimeSessionManager);
+            return prepareRequiredRPackages(requirements, {
+                isCurrent,
+                readVersions: async function(query) {
+                    const result = await options.runtimeSessionManager
+                        .executeInvisibleQuery(createInvisibleQueryRequest({
+                            query,
+                            source: `${source}.package-versions`
+                        }));
 
-            if (session.status !== "ready") {
-                return {
-                    ok: false,
-                    error: session.message || "R runtime is not ready."
-                };
-            }
-
-            const versionResult = await options.runtimeSessionManager
-                .executeInvisibleQuery(createInvisibleQueryRequest({
-                    query: createRPackageVersionsCommand(requirements),
-                    source: `${source}.package-versions`
-                }));
-
-            if (versionResult.status !== "ready") {
-                return {
-                    ok: false,
-                    error: versionResult.message
-                        || "Failed to inspect required R package versions."
-                };
-            }
-
-            const compatibility = resolveRPackageCompatibility(
-                requirements,
-                parseRPackageVersions(versionResult.value)
-            );
-
-            if (!compatibility.compatible) {
-                return {
-                    ok: false,
-                    error: createRPackageCompatibilityMessage(compatibility),
-                    status: "r-package-update-required"
-                };
-            }
-
-            let loadedPackage = false;
-
-            for (const packageName of requirements.map((entry) => entry.name)) {
-                const attached = await options.runtimeSessionManager
-                    .executeInvisibleQuery(createInvisibleQueryRequest({
-                        query: `is.element(${JSON.stringify(`package:${packageName}`)}, search())`,
-                        source: `${source}.dependencies`
-                    }));
-
-                if (attached.status !== "ready") {
                     return {
-                        ok: false,
-                        error: attached.message
-                            || `Failed to inspect required package ${packageName}.`
+                        ok: result.status === "ready",
+                        value: result.value,
+                        error: result.message
+                    };
+                },
+                loadPackages: async function(packageNames) {
+                    try {
+                        await loadRequiredRPackages(packageNames, {
+                            isCurrent,
+                            readStatus: async function(query) {
+                                const result = await options.runtimeSessionManager
+                                    .executeInvisibleQuery(createInvisibleQueryRequest({
+                                        query,
+                                        source: `${source}.dependencies`
+                                    }));
+
+                                if (result.status !== "ready") {
+                                    throw new Error(result.message
+                                        || "Failed to inspect required R package attachment.");
+                                }
+
+                                return result.value;
+                            },
+                            packagesLoaded: async function() {
+                                options.invalidateDatasetPreview();
+                                await options.refreshWorkspaceAndBroadcast();
+                                void options.broadcastRuntimeEvents().catch(options.reportError);
+                            },
+                            attach: async function(packageName, command) {
+                                const result = await options.runtimeSessionManager
+                                    .executeVisibleCommandWithEffects(createVisibleCommandRequest({
+                                        text: command,
+                                        source: `${source}.dependencies`
+                                    }));
+                                requireCurrentRPackageRuntime(isCurrent);
+                                options.sendTranscriptEvents(result.transcriptEvents);
+                                requireSuccessfulRPackageAttachment(
+                                    packageName, createRuntimeCommandReceipt(result), isCurrent
+                                );
+                            }
+                        });
+                        requireCurrentRPackageRuntime(isCurrent);
+                    }
+                    catch (error) {
+                        return {
+                            ok: false,
+                            error: error instanceof Error ? error.message : String(error)
+                        };
+                    }
+
+                    return {
+                        ok: true,
+                        error: ""
                     };
                 }
-
-                if (isRuntimeTrue(attached.value)) {
-                    continue;
-                }
-
-                const events = await options.runtimeSessionManager
-                    .executeVisibleCommand(createVisibleCommandRequest({
-                        text: `library(${packageName})`,
-                        source: `${source}.dependencies`
-                    }));
-                const failure = events.find((event) => {
-                    return event.type === "failed"
-                        || event.type === "rejected";
-                });
-
-                options.sendTranscriptEvents(events);
-
-                if (failure) {
-                    return {
-                        ok: false,
-                        error: String(
-                            failure.message
-                            || `Failed to load required package ${packageName}.`
-                        )
-                    };
-                }
-
-                loadedPackage = true;
-            }
-
-            if (loadedPackage) {
-                options.invalidateDatasetPreview();
-                await options.refreshWorkspaceAndBroadcast();
-                void options.broadcastRuntimeEvents().catch(
-                    options.reportError
-                );
-            }
-
-            return {
-                ok: true,
-                error: ""
-            };
-        })();
-
-        dependencyReadiness.set(dependencyKey, readiness);
-
-        try {
-            return await readiness;
-        }
-        finally {
-            if (dependencyReadiness.get(dependencyKey) === readiness) {
-                dependencyReadiness.delete(dependencyKey);
-            }
-        }
+            });
+        }).catch((error) => ({
+            ok: false,
+            error: error instanceof Error ? error.message : String(error)
+        }));
     };
 
     createProductDialogRuntimeIpcController({

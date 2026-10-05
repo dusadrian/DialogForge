@@ -24,6 +24,7 @@ export interface DatasetEditorGlobalShortcutInput {
     dataTabActive: boolean;
     dataColumnSelected: boolean;
     inputTextSelected: boolean;
+    editableTarget?: boolean;
     variableRangeSelected: boolean;
 }
 
@@ -74,6 +75,10 @@ export const resolveDatasetEditorGlobalShortcut = function(
         (shortcutKey === "c" || shortcutKey === "v");
 
     if (clipboardShortcut) {
+        if (input.editableTarget) {
+            return "none";
+        }
+
         const isCopy = shortcutKey === "c";
 
         if (

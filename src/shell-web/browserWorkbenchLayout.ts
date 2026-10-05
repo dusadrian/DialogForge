@@ -3,17 +3,20 @@ import {
     type BrowserSurfaceDragOptions,
     type BrowserSurfaceResizeOptions
 } from "./browserSurfaceGeometry";
+import { renderWorkspacePaneToggle } from "../base-app/features/workspace-pane/workspacePaneToggle";
 
 
 export interface BrowserWorkbenchLayout {
     install(): void;
     resizeForWorkspace(openWorkspace: boolean): void;
     toggleWorkspacePane(): void;
+    refreshLabels(): void;
 }
 
 
 export interface BrowserWorkbenchLayoutOptions {
     document: Document;
+    translate?(key: string): string;
     installDraggableSurface(
         surface: HTMLElement | null,
         handle: HTMLElement | null,
@@ -48,19 +51,7 @@ export const createBrowserWorkbenchLayout = function(
     let consolePaneWidth = 0;
 
     const updateWorkspacePaneToggle = function(collapsed: boolean): void {
-        const button = documentRef.getElementById("workspacePaneToggle");
-        const icon = button?.querySelector(".codicon");
-        const label = collapsed ? "Show Workspace" : "Hide Workspace";
-
-        if (button) {
-            button.dataset.tooltip = label;
-            button.setAttribute("aria-label", label);
-        }
-
-        if (icon) {
-            icon.classList.toggle("codicon-chevron-left", !collapsed);
-            icon.classList.toggle("codicon-chevron-right", collapsed);
-        }
+        renderWorkspacePaneToggle(documentRef, !collapsed, options.translate);
     };
 
     const installDrag = function(): void {
@@ -146,6 +137,11 @@ export const createBrowserWorkbenchLayout = function(
             installResize();
         },
         resizeForWorkspace,
-        toggleWorkspacePane
+        toggleWorkspacePane,
+        refreshLabels: function(): void {
+            updateWorkspacePaneToggle(
+                documentRef.body.classList.contains("web-workspace-collapsed")
+            );
+        }
     };
 };

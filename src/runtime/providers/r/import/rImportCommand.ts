@@ -117,7 +117,7 @@ const createDDIwRImportCommand = function(
         `    .target <- ${rString(targetName)}`,
         `    .source <- ${rString(request.source)}`,
         `    if (exists(.target, envir = .GlobalEnv, inherits = FALSE) && !${request.overwrite ? "TRUE" : "FALSE"}) stop("import-target-exists")`,
-        "    if (!requireNamespace(\"DDIwR\", quietly = TRUE)) stop(\"missing-package: DDIwR\")",
+        "    if (!base::requireNamespace(\"DDIwR\", quietly = TRUE)) stop(\"missing-package: DDIwR\")",
         "    .data <- DDIwR::convert(from = .source, to = NULL, declared = FALSE)",
         "    assign(.target, as.data.frame(.data, stringsAsFactors = FALSE, check.names = FALSE), envir = .GlobalEnv)",
         "    invisible(get(.target, envir = .GlobalEnv, inherits = FALSE))",

@@ -12,6 +12,7 @@ import {
 } from "./importPreviewResult";
 import {
     createImportPreviewRequest,
+    isRuntimeImportPreviewRequest,
     type ImportPreviewRequest
 } from "./importPreviewRequest";
 
@@ -48,7 +49,10 @@ export const previewImportFileThroughRuntime = async function(
     input: Partial<ImportPreviewRequest>,
     executeRuntimeMethod: (
         request: RuntimeExtensionMethodRequest
-    ) => Promise<RuntimeExtensionMethodResult>
+    ) => Promise<RuntimeExtensionMethodResult>,
+    readDelimitedFallbackPreview?: (
+        request: ImportPreviewRequest
+    ) => ImportPreviewResult
 ): Promise<ImportPreviewResult> {
     const request = createImportPreviewRequest(input || {});
 
@@ -68,6 +72,16 @@ export const previewImportFileThroughRuntime = async function(
             result.value,
             "Runtime returned an empty import preview."
         );
+    }
+
+    if (
+        readDelimitedFallbackPreview
+        && !isRuntimeImportPreviewRequest(request)
+        && !request.binary
+        && request.command !== "convert"
+        && (result.status === "unavailable" || result.status === "unsupported")
+    ) {
+        return readDelimitedFallbackPreview(request);
     }
 
     return createImportPreviewResult({

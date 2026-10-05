@@ -8,6 +8,9 @@ import type {
     RuntimeProviderManifest,
     RuntimeSessionSnapshot
 } from "../../../runtime/provider-contract/runtimeProvider";
+import {
+    readSelectedWorkspaceDatasetName
+} from "../../../runtime/workspace/workspaceActiveDatasetDelivery";
 
 
 interface WorkspacePaneRestoreOptions {
@@ -35,6 +38,8 @@ export interface MainStartupControllerBindings {
     refreshConsoleWorkingDirectory(): Promise<void>;
     initializeConsoleFlow(): void;
     bindMainUi(): void;
+    bindRuntimeSessionEvents(): void;
+    readRuntimeSession(): Promise<RuntimeSessionSnapshot>;
     refreshWorkspace(): Promise<void>;
     initializeVisibleCommandEditor(): Promise<void>;
     focusVisibleCommandInput(): void;
@@ -57,7 +62,7 @@ export interface MainStartupControllerBindings {
     renderProductCapabilities(composition: ApplicationComposition): void;
     renderStartupTasks(composition: ApplicationComposition): void;
     applyMainTranslations(): void;
-    renderActiveDataset(snapshot: ActiveDatasetSnapshot): void;
+    renderActiveDataset(snapshot: ActiveDatasetSnapshot): void | boolean;
     refreshProductConsoleStateChips(dataset: string): Promise<void>;
     renderDatasetEditorSelection(): void;
 }
@@ -90,13 +95,16 @@ const createUnavailablePrompts = function(
 
 
 const shouldAutostartRuntime = function(
-    composition: ApplicationComposition
+    composition: ApplicationComposition,
+    session: RuntimeSessionSnapshot
 ): boolean {
     const startup = composition.productSettings.runtimeStartup;
+    const status = String(session.status || "not-started");
 
     return startup?.autoStart === true
         && startup.providerId === composition.runtime.id
-        && composition.runtimeSession.status !== "ready";
+        && status !== "starting"
+        && status !== "ready";
 };
 
 const shouldStartRuntimeQuietly = function(
@@ -152,6 +160,11 @@ export const createMainStartupController = function(
             bindings.renderCapabilities(composition.runtime || { capabilities: [] });
             bindings.renderRuntimeSession(composition.runtimeSession || {});
             bindings.renderConsoleStatus(composition.runtimeSession || {});
+            bindings.bindRuntimeSessionEvents();
+            const runtimeSession = await bindings.readRuntimeSession();
+
+            bindings.renderRuntimeSession(runtimeSession);
+            bindings.renderConsoleStatus(runtimeSession);
             bindings.renderRuntimeEvents(createUnavailableRuntimeEvents(composition));
             bindings.renderPrompts(createUnavailablePrompts(composition));
             bindings.renderFeatures(composition);
@@ -161,10 +174,11 @@ export const createMainStartupController = function(
             bindings.setBootStage("active-dataset:request");
             const activeDataset = await activeDatasetPromise;
 
-            bindings.renderActiveDataset(activeDataset);
-            await bindings.refreshProductConsoleStateChips(
-                activeDataset.objectName
-            );
+            if (bindings.renderActiveDataset(activeDataset) !== false) {
+                await bindings.refreshProductConsoleStateChips(
+                    readSelectedWorkspaceDatasetName(activeDataset)
+                );
+            }
             bindings.setBootStage("active-dataset:rendered");
             bindings.renderDatasetEditorSelection();
             bindings.setBootStage("selection:rendered");
@@ -198,7 +212,7 @@ export const createMainStartupController = function(
                 catch {}
             }, 1000);
 
-            if (shouldAutostartRuntime(composition)) {
+            if (shouldAutostartRuntime(composition, runtimeSession)) {
                 void bindings.startRuntimeSession({
                     showStartupMessages: !shouldStartRuntimeQuietly(
                         applicationSettings

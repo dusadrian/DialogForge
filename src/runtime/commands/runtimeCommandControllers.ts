@@ -43,7 +43,7 @@ export interface RuntimeCommandControllersOptions {
             RuntimeCommandExecutionController["executeVisibleCommand"]
         >[0]
     ): Promise<WorkspaceUpdate | null>;
-    applyWorkspaceUpdate(update: WorkspaceUpdate): void;
+    applyWorkspaceUpdate(update: WorkspaceUpdate): boolean;
     invalidateWorkspace?(): void;
     getWorkspaceGeneration?(): number;
 }

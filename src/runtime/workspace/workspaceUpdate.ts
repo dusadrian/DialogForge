@@ -74,13 +74,13 @@ const optionalNumber = function(value: unknown): number | undefined {
 };
 
 
-const workspaceObjectName = function(value: Record<string, unknown>): string {
-    return String(
-        value.name
+export const readWorkspaceObjectNameValue = function(
+    value: Record<string, unknown>
+): unknown {
+    return value.name
         || value.access_key
         || value.display_name
-        || ""
-    ).trim();
+        || "";
 };
 
 
@@ -161,7 +161,7 @@ export const normalizeWorkspaceUpdateObject = function(
     value: unknown
 ): WorkspaceObjectSnapshot | null {
     const record = recordFromValue(value);
-    const name = workspaceObjectName(record);
+    const name = String(readWorkspaceObjectNameValue(record)).trim();
 
     if (!name) {
         return null;

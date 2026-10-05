@@ -33,7 +33,12 @@ const normalizeNames = function(variableNames: string[]): string[] {
 export const createDatasetVariableRowRefreshController = function<Item>(
     options: DatasetVariableRowRefreshControllerOptions<Item>
 ) {
+    let refreshGeneration = 0;
+    let requestSequence = 0;
+    const rowRequests = new Map<number, number>();
+
     const refresh = async function(variableNames: string[]): Promise<void> {
+        const generation = refreshGeneration;
         const datasetName = options.getDatasetName();
         const variables = options.getVariables();
 
@@ -67,6 +72,25 @@ export const createDatasetVariableRowRefreshController = function<Item>(
         const lastIndex = Math.max(...indexes);
         const start = firstIndex + 1;
         const count = (lastIndex - firstIndex) + 1;
+        const columnCount = schemaColumns.length;
+        const columnNames = schemaColumns.slice(firstIndex, lastIndex + 1)
+            .map((column) => String(column?.name || ""));
+        const request = ++requestSequence;
+        const isCurrent = function(): boolean {
+            const columns = options.getSchemaColumns();
+
+            return generation === refreshGeneration
+                && datasetName === options.getDatasetName()
+                && columns.length === columnCount
+                && columnNames.every((name, offset) => {
+                    return String(columns[firstIndex + offset]?.name || "") === name;
+                });
+        };
+
+        for (let index = firstIndex; index <= lastIndex; index += 1) {
+            rowRequests.set(index, request);
+        }
+
         const out = await options.fetchBatch(datasetName, start, count);
 
         if (
@@ -77,7 +101,7 @@ export const createDatasetVariableRowRefreshController = function<Item>(
             return;
         }
 
-        if (datasetName !== options.getDatasetName()) {
+        if (!isCurrent()) {
             return;
         }
 
@@ -90,17 +114,36 @@ export const createDatasetVariableRowRefreshController = function<Item>(
         }
 
         const next = current.slice();
+        let changed = false;
         out.items.forEach((entry, offset) => {
-            next[start - 1 + offset] = entry;
+            const index = firstIndex + offset;
+
+            if (
+                index <= lastIndex
+                && index < next.length
+                && rowRequests.get(index) === request
+            ) {
+                next[index] = entry;
+                changed = true;
+            }
         });
+
+        if (!changed || !isCurrent()) {
+            return;
+        }
+
         options.setVariables(next);
 
-        if (options.isVariablesActive()) {
+        if (isCurrent() && options.isVariablesActive()) {
             options.renderVariables();
         }
     };
 
     return {
+        invalidate: function(): void {
+            refreshGeneration += 1;
+            rowRequests.clear();
+        },
         refresh
     };
 };

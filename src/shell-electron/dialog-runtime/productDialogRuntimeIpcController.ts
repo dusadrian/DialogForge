@@ -4,16 +4,15 @@ import type {
     IpcMainInvokeEvent
 } from "electron";
 
-import { createVisibleCommandRequest } from "../../runtime/commands/commandProtocol";
 import { createDialogExecutionRequest } from "../../runtime/dialogs/dialogExecutionProtocol";
 import { createRuntimeExtensionMethodRequest } from "../../runtime/extensions/runtimeExtensionProtocol";
 import { createInvisibleQueryRequest } from "../../runtime/queries/invisibleQueryProtocol";
 import type {
     DialogExecutionRequest,
     RuntimeSessionManager,
-    TranscriptEvent,
     VisibleCommandRequest
 } from "../../runtime/provider-contract/runtimeProvider";
+import type { RuntimeCommandResult } from "../../runtime/commands/runtimeCommandReceipt";
 import type {
     ImportPreviewRequest
 } from "../../runtime/tabular-data/importPreview";
@@ -27,17 +26,13 @@ import {
     type ProductDialogCommandPayload
 } from "../../dialog-runtime/dialogRuntimeIpc";
 import {
-    createEmptyProductDialogCommandResult,
-    createProductDialogCommandResultFromEvents,
-    readProductDialogCommandText
-} from "../../dialog-runtime/dialogCommandResult";
+    createProductDialogCommandSource,
+    executeProductDialogCommand,
+    type ProductDialogCommandDependencyResult
+} from "../../dialog-runtime/dialogCommandExecution";
 
 
-export interface ProductDialogRuntimeDependencyResult {
-    ok: boolean;
-    error: string;
-    status?: string;
-}
+export type ProductDialogRuntimeDependencyResult = ProductDialogCommandDependencyResult;
 
 
 export interface ProductDialogRuntimeIpcControllerOptions {
@@ -56,7 +51,7 @@ export interface ProductDialogRuntimeIpcControllerOptions {
         rPackageRequirements: unknown,
         source: string
     ): Promise<ProductDialogRuntimeDependencyResult>;
-    executeVisibleCommand(request: VisibleCommandRequest): Promise<TranscriptEvent[]>;
+    executeVisibleCommand(request: VisibleCommandRequest): Promise<RuntimeCommandResult>;
     broadcastRuntimeEvents(): Promise<void>;
     reportError(error: unknown): void;
 }
@@ -76,17 +71,23 @@ interface ProductDialogCreatedPayload {
 }
 
 
-const createDialogSource = function(
-    productId: string,
-    dialogId: unknown
-): string {
-    return `${productId}.dialog.${String(dialogId || "unknown")}`;
-};
-
-
 export const createProductDialogRuntimeIpcController = function(
     options: ProductDialogRuntimeIpcControllerOptions
 ): void {
+    const executeCommand = function(
+        payload: ProductDialogCommandPayload,
+        reportDependencyFailure?: (error: string) => void
+    ) {
+        return executeProductDialogCommand(payload, {
+            getProductId: () => options.getProductId(),
+            prepareDependencies: (input, source) => options.ensureDependencies(
+                input.dependencies, input.rPackageRequirements, source
+            ),
+            executeVisibleCommand: (request) => options.executeVisibleCommand(request),
+            reportDependencyFailure
+        });
+    };
+
     options.ipcMain.on(dialogRuntimeEventChannels.created, (
         _event: IpcMainEvent,
         payload: ProductDialogCreatedPayload
@@ -94,7 +95,7 @@ export const createProductDialogRuntimeIpcController = function(
         const dialogId = String(
             payload?.dialogID || payload?.name || "unknown"
         );
-        const source = createDialogSource(
+        const source = createProductDialogCommandSource(
             options.getProductId(),
             dialogId
         );
@@ -141,34 +142,8 @@ export const createProductDialogRuntimeIpcController = function(
         _event: IpcMainEvent,
         payload: ProductDialogCommandPayload
     ) => {
-        const command = String(payload?.command || "").trim();
-
-        if (!command) {
-            return;
-        }
-
-        const source = createDialogSource(
-            options.getProductId(),
-            payload?.dialogID
-        );
-
-        void (async () => {
-            const dependencyResult = await options.ensureDependencies(
-                payload?.dependencies,
-                payload?.rPackageRequirements,
-                source
-            );
-
-            if (!dependencyResult.ok) {
-                options.reportError(dependencyResult.error);
-                return;
-            }
-
-            await options.executeVisibleCommand(createVisibleCommandRequest({
-                text: command,
-                source
-            }));
-        })().catch(options.reportError);
+        void executeCommand(payload, (error) => options.reportError(error))
+            .catch((error) => options.reportError(error));
     });
 
     options.ipcMain.handle(dialogRuntimeIpcChannels.getWorkingDirectory, async () => {
@@ -187,40 +162,7 @@ export const createProductDialogRuntimeIpcController = function(
         _event: IpcMainInvokeEvent,
         payload: ProductDialogCommandPayload
     ) => {
-        const command = readProductDialogCommandText(payload);
-
-        if (!command) {
-            return createEmptyProductDialogCommandResult(command);
-        }
-
-        const source = createDialogSource(
-            options.getProductId(),
-            payload?.dialogID
-        );
-        const dependencyResult = await options.ensureDependencies(
-            payload?.dependencies,
-            payload?.rPackageRequirements,
-            source
-        );
-
-        if (!dependencyResult.ok) {
-            return {
-                ok: false,
-                status: dependencyResult.status || "error",
-                printed: "",
-                error: dependencyResult.error,
-                command
-            };
-        }
-
-        const events = await options.executeVisibleCommand(
-            createVisibleCommandRequest({
-                text: command,
-                source
-            })
-        );
-
-        return createProductDialogCommandResultFromEvents(command, events);
+        return executeCommand(payload);
     });
 
     options.ipcMain.handle(dialogRuntimeIpcChannels.getVariableValues, async (

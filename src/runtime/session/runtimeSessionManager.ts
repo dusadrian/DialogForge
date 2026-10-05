@@ -6,6 +6,7 @@ import type { DialogExternalCallHost } from "../../core/contracts/dialogExternal
 import {
     createRuntimeCommandControllers
 } from "../commands/runtimeCommandControllers";
+import { createRuntimeVisibleCommandQueue } from "../commands/runtimeVisibleCommandQueue";
 import {
     createRuntimeTabularControllers
 } from "../tabular-data/runtimeTabularControllers";
@@ -51,6 +52,7 @@ import {
 import {
     createRuntimeWorkspaceControllers
 } from "../workspace/runtimeWorkspaceControllers";
+import type { WorkspaceMutationOwnership } from "../workspace/runtimeWorkspaceOperationController";
 import {
     workspaceUpdateHasChanges,
     createWorkspaceRecoveryUpdate
@@ -64,9 +66,11 @@ import type {
     RuntimeExtensionMethodRequest,
     RuntimeExtensionMethodResult,
     RuntimeProvider,
+    RuntimeCommandExecutionResult,
     RuntimeSessionManager,
     RuntimeSessionSnapshot,
     WorkspaceReconciliation,
+    WorkspaceSnapshot,
     WorkspaceUpdate
 } from "../provider-contract/runtimeProvider";
 
@@ -76,6 +80,18 @@ export interface RuntimeSessionManagerOptions {
     dialogs?: DialogDefinition[];
     startupTasks?: EvaluatedStartupTask[];
     dialogExternalCallHost?: Pick<DialogExternalCallHost, "supports">;
+    retireRuntimeResources?(): void;
+}
+
+
+interface ReconciledMutationResult {
+    status: string;
+    workspaceUpdate?: WorkspaceUpdate | null;
+    workspaceReconciliation?: WorkspaceReconciliation;
+    results?: Array<{
+        workspaceUpdate?: WorkspaceUpdate | null;
+        workspaceReconciliation?: WorkspaceReconciliation;
+    }>;
 }
 
 
@@ -96,9 +112,18 @@ export const createRuntimeSessionManager = function(
     const lifecycleState = createRuntimeSessionLifecycleState(initialSnapshot);
     const snapshot = lifecycleState.snapshot;
     const runtimeWorkspaceState = createRuntimeWorkspaceState(snapshot.providerId);
+    const isWorkspaceReadAvailable = function(): boolean {
+        const freshness = runtimeWorkspaceState.createSnapshot(
+            lifecycleState.getSnapshot()
+        ).freshness;
+
+        return freshness === "fresh" || freshness === "unread";
+    };
     const fallbackTabularState = createRuntimeFallbackTabularState();
     const invisibleMutationState = createRuntimeInvisibleMutationState();
-    const runtimeEventState = createRuntimeEventState();
+    const runtimeEventState = createRuntimeEventState(
+        40, () => lifecycleState.getSnapshot().lifecycleGeneration
+    );
     const runtimePromptState = createRuntimePromptState();
     const runtimeExtensionExecutionController =
         createRuntimeExtensionExecutionController(provider.extensionController);
@@ -149,8 +174,11 @@ export const createRuntimeSessionManager = function(
         },
         getWorkspaceGeneration: runtimeWorkspaceState.getGeneration,
         applyWorkspaceUpdate: function(update) {
-            if (!update.workspaceRevision && !workspaceUpdateHasChanges(update)) {
-                return;
+            if (
+                (!update.workspaceRevision && !workspaceUpdateHasChanges(update))
+                || !runtimeWorkspaceState.canApplyUpdate(update)
+            ) {
+                return false;
             }
 
             const objects = runtimeWorkspaceState.applyUpdate(update);
@@ -159,6 +187,7 @@ export const createRuntimeSessionManager = function(
                 objects,
                 "workspace-update"
             );
+            return true;
         }
     });
     const commandOperationController = commandControllers.operationController;
@@ -205,6 +234,9 @@ export const createRuntimeSessionManager = function(
         providerImportController: provider.importController,
         readOnlyAdapter: provider.readOnlyAdapter,
         fallbackState: fallbackTabularState,
+        getWorkspaceGeneration: runtimeWorkspaceState.getGeneration,
+        getWorkspaceReadEpoch: runtimeWorkspaceState.getReadEpoch,
+        isWorkspaceReadAvailable,
         getSnapshot: function() {
             return lifecycleState.getSnapshot();
         },
@@ -249,6 +281,8 @@ export const createRuntimeSessionManager = function(
     const capabilityControllers = createRuntimeCapabilityControllers({
         providerToolController: provider.toolController,
         providerQueryController: provider.queryController,
+        getWorkspaceReadEpoch: runtimeWorkspaceState.getReadEpoch,
+        isWorkspaceReadAvailable,
         mutationState: invisibleMutationState,
         getWorkspaceObjectCount: function(): number {
             return listProviderWorkspaceObjects().concat(
@@ -283,9 +317,12 @@ export const createRuntimeSessionManager = function(
     const lifecycleExecutionController =
         createRuntimeLifecycleExecutionController({
             initialMessage: initialSnapshot.message,
+            retireRuntimeResources: options.retireRuntimeResources,
             lifecycleController: provider.lifecycleController,
             lifecycleState,
             invalidateWorkspace: function() {
+                visibleCommandQueue.retire();
+                runtimePromptState.invalidate();
                 runtimeWorkspaceState.invalidate();
             },
             getSnapshot
@@ -308,11 +345,46 @@ export const createRuntimeSessionManager = function(
         return lifecycleExecutionController.stop();
     };
 
-    const executeVisibleCommandWithEffects:
+    const performVisibleCommandWithEffects:
         RuntimeSessionManager["executeVisibleCommandWithEffects"] =
         async function(request) {
             const generation = runtimeWorkspaceState.getGeneration();
-            const result = await commandOperationController.executeVisibleCommand(request);
+            const reconciliationToken = getSnapshot().status === "ready"
+                ? runtimeWorkspaceState.beginCommandReconciliation()
+                : null;
+            let result: RuntimeCommandExecutionResult;
+
+            try {
+                result = await commandOperationController.executeVisibleCommand(request);
+            }
+            catch (error) {
+                if (generation === runtimeWorkspaceState.getGeneration()) {
+                    runtimeWorkspaceState.markStale();
+                }
+
+                throw error;
+            }
+            finally {
+                if (reconciliationToken !== null) {
+                    runtimeWorkspaceState.endCommandReconciliation(reconciliationToken);
+                }
+            }
+
+            if (generation !== runtimeWorkspaceState.getGeneration()) {
+                return {
+                    ...result,
+                    executionDisposition: "session_lost",
+                    workspaceUpdate: null,
+                    workspaceReconciliation: "not_checked"
+                };
+            }
+
+            if (
+                result.executionDisposition === "session_lost"
+                || result.executionDisposition === "not_started"
+            ) {
+                return { ...result, workspaceUpdate: null };
+            }
 
             if (
                 generation === runtimeWorkspaceState.getGeneration()
@@ -329,6 +401,7 @@ export const createRuntimeSessionManager = function(
                     ) {
                         return {
                             ...result,
+                            executionDisposition: "completed",
                             workspaceUpdate: createWorkspaceRecoveryUpdate(previous, recovered)
                         };
                     }
@@ -339,7 +412,32 @@ export const createRuntimeSessionManager = function(
                 }
             }
 
-            return result;
+            if (generation !== runtimeWorkspaceState.getGeneration()) {
+                return {
+                    ...result,
+                    executionDisposition: "session_lost",
+                    workspaceUpdate: null,
+                    workspaceReconciliation: "not_checked"
+                };
+            }
+
+            return {
+                ...result,
+                executionDisposition: result.executionDisposition || "completed"
+            };
+        };
+
+    const visibleCommandQueue = createRuntimeVisibleCommandQueue(
+        performVisibleCommandWithEffects
+    );
+    const executeVisibleCommandWithEffects:
+        RuntimeSessionManager["executeVisibleCommandWithEffects"] =
+        function(request) {
+            if (getSnapshot().status !== "ready") {
+                return performVisibleCommandWithEffects(request);
+            }
+
+            return visibleCommandQueue.enqueue({ ...request });
         };
 
     const executeVisibleCommand:
@@ -358,32 +456,37 @@ export const createRuntimeSessionManager = function(
         return workspaceOperationController.listWorkspaceObjects(options);
     };
 
-    const refreshWorkspaceAfterMutation = async function<T extends {
-        status: string;
-        workspaceUpdate?: WorkspaceUpdate | null;
-        workspaceReconciliation?: WorkspaceReconciliation;
-        results?: Array<{
-            workspaceUpdate?: WorkspaceUpdate | null;
-            workspaceReconciliation?: WorkspaceReconciliation;
-        }>;
-    }>(
-        pendingResult: Promise<T>
+    const reconcileMutationResult = async function<T extends ReconciledMutationResult>(
+        result: T,
+        generation: number
     ): Promise<T> {
-        const generation = runtimeWorkspaceState.getGeneration();
-        const result = await pendingResult;
+        const discardRetiredMutationUpdates = function(): T {
+            return {
+                ...result,
+                workspaceUpdate: null,
+                workspaceReconciliation: "not_checked",
+                ...(result.results ? {
+                    results: result.results.map((entry) => ({
+                        ...entry,
+                        workspaceUpdate: null,
+                        workspaceReconciliation: "not_checked"
+                    }))
+                } : {})
+            };
+        };
 
         if (generation !== runtimeWorkspaceState.getGeneration()) {
-            return { ...result, workspaceUpdate: null, workspaceReconciliation: "not_checked" };
+            return discardRetiredMutationUpdates();
         }
         let appliedUpdate = false;
-        const updates = [
-            result.workspaceUpdate,
-            ...(result.results || []).map((entry) => entry.workspaceUpdate)
-        ];
-
-        updates.forEach(function(update) {
+        const applyMutationUpdate = function(
+            update: WorkspaceUpdate | null | undefined
+        ): WorkspaceUpdate | null | undefined {
             if (!update || (!update.workspaceRevision && !workspaceUpdateHasChanges(update))) {
-                return;
+                return update;
+            }
+            if (!runtimeWorkspaceState.canApplyUpdate(update)) {
+                return null;
             }
 
             const objects = runtimeWorkspaceState.applyUpdate(update);
@@ -392,18 +495,30 @@ export const createRuntimeSessionManager = function(
                 "tabular-mutation-workspace-update"
             );
             appliedUpdate = true;
-        });
+            return update;
+        };
+        const acceptedResult = {
+            ...result,
+            workspaceUpdate: applyMutationUpdate(result.workspaceUpdate),
+            ...(result.results ? {
+                results: result.results.map((entry) => ({
+                    ...entry,
+                    workspaceUpdate: applyMutationUpdate(entry.workspaceUpdate)
+                }))
+            } : {})
+        };
 
         // Each returned mutation needs its own commit receipt. A receipt for
         // one member must not suppress reconciliation of an uncommitted member.
+        // Use original receipts here: rejection is not permission to recommit.
         const mutations = result.results?.length ? result.results : [result];
         const failedReconciliation = mutations.some((entry) => {
             return entry.workspaceReconciliation === "failed";
         });
 
         if (failedReconciliation) {
-            runtimeWorkspaceState.markStale();
-            return { ...result, workspaceReconciliation: "failed" };
+            runtimeWorkspaceState.markStale(true);
+            return { ...acceptedResult, workspaceReconciliation: "failed" };
         }
 
         const alreadyCommitted = mutations.every((entry) => {
@@ -424,43 +539,128 @@ export const createRuntimeSessionManager = function(
             }
 
             if (generation !== runtimeWorkspaceState.getGeneration()) {
-                return { ...result, workspaceUpdate: null, workspaceReconciliation: "not_checked" };
+                return discardRetiredMutationUpdates();
             }
 
             if (update && (update.workspaceRevision || workspaceUpdateHasChanges(update))) {
-                const objects = runtimeWorkspaceState.applyUpdate(update);
-                activeDatasetController.reconcileAfterWorkspaceRefresh(
-                    objects,
-                    "tabular-mutation-workspace-commit"
-                );
-                appliedUpdate = true;
+                applyMutationUpdate(update);
             }
             else {
-                runtimeWorkspaceState.markStale();
-                return { ...result, workspaceReconciliation: "failed" };
+                // A later delta may be empty if the written value returns to
+                // the old baseline. Recovery must also invalidate warm views.
+                runtimeWorkspaceState.markStale(true);
+                return { ...acceptedResult, workspaceReconciliation: "failed" };
             }
         }
         else if (!alreadyCommitted && !appliedUpdate) {
             await listWorkspaceObjects();
         }
 
-        return result;
+        if (generation !== runtimeWorkspaceState.getGeneration()) {
+            return discardRetiredMutationUpdates();
+        }
+
+        return acceptedResult;
+    };
+
+    const refreshWorkspaceAfterMutation = async function<T extends ReconciledMutationResult>(
+        execute: (beginMutation: () => void) => Promise<T>,
+        validateBeforeMutation = false
+    ): Promise<T> {
+        const generation = runtimeWorkspaceState.getGeneration();
+        let token: number | null = null;
+        const beginMutation = function(): void {
+            if (
+                token === null && generation === runtimeWorkspaceState.getGeneration()
+                && getSnapshot().status === "ready"
+            ) {
+                token = runtimeWorkspaceState.beginCommandReconciliation();
+            }
+        };
+
+        try {
+            if (!validateBeforeMutation) {
+                beginMutation();
+            }
+
+            const result = await execute(beginMutation);
+
+            if (token === null && generation === runtimeWorkspaceState.getGeneration()) {
+                // Validation rejected the request before any write boundary.
+                return result;
+            }
+
+            return await reconcileMutationResult(result, generation);
+        }
+        catch (error) {
+            if (token !== null && generation === runtimeWorkspaceState.getGeneration()) {
+                runtimeWorkspaceState.markStale(true);
+            }
+
+            throw error;
+        }
+        finally {
+            if (token !== null) {
+                runtimeWorkspaceState.endCommandReconciliation(token);
+            }
+        }
     };
 
     const getWorkspaceSnapshot: RuntimeSessionManager["getWorkspaceSnapshot"] = function() {
         return runtimeWorkspaceState.createSnapshot(getSnapshot());
     };
 
+    const executeOwnedWorkspaceMutation = async function(
+        execute: (ownership: WorkspaceMutationOwnership) => Promise<WorkspaceSnapshot>
+    ): Promise<WorkspaceSnapshot> {
+        const generation = runtimeWorkspaceState.getGeneration();
+        let token: number | undefined;
+
+        try {
+            return await execute({
+                begin: function() {
+                    if (
+                        token === undefined && generation === runtimeWorkspaceState.getGeneration()
+                        && getSnapshot().status === "ready"
+                    ) {
+                        token = runtimeWorkspaceState.beginCommandReconciliation();
+                    }
+                },
+                readWorkspace: function() {
+                    return runtimeWorkspaceState.createSnapshot(getSnapshot(), token);
+                }
+            });
+        }
+        catch (error) {
+            if (token !== undefined && generation === runtimeWorkspaceState.getGeneration()) {
+                runtimeWorkspaceState.markStale(true);
+            }
+
+            throw error;
+        }
+        finally {
+            if (token !== undefined) {
+                runtimeWorkspaceState.endCommandReconciliation(token);
+            }
+        }
+    };
+
     const removeWorkspaceObjects: RuntimeSessionManager["removeWorkspaceObjects"] = async function(objectNames) {
-        return workspaceOperationController.removeWorkspaceObjects(objectNames);
+        return executeOwnedWorkspaceMutation((ownership) => {
+            return workspaceOperationController.removeWorkspaceObjects(objectNames, ownership);
+        });
     };
 
     const renameWorkspaceObject: RuntimeSessionManager["renameWorkspaceObject"] = async function(request) {
-        return workspaceOperationController.renameWorkspaceObject(request);
+        return executeOwnedWorkspaceMutation((ownership) => {
+            return workspaceOperationController.renameWorkspaceObject(request, ownership);
+        });
     };
 
     const clearWorkspace: RuntimeSessionManager["clearWorkspace"] = async function() {
-        return workspaceOperationController.clearWorkspace();
+        return executeOwnedWorkspaceMutation((ownership) => {
+            return workspaceOperationController.clearWorkspace(ownership);
+        });
     };
 
     const listRuntimeEvents: RuntimeSessionManager["listRuntimeEvents"] = async function() {
@@ -487,9 +687,35 @@ export const createRuntimeSessionManager = function(
         return activeDatasetController.getActiveDataset();
     };
 
+    let activeDatasetRequestSequence = 0;
+
     const setActiveDataset: RuntimeSessionManager["setActiveDataset"] = async function(objectName) {
+        const requestSequence = ++activeDatasetRequestSequence;
+        const generation = runtimeWorkspaceState.getGeneration();
+
         if (runtimeWorkspaceState.getObjects() === null) {
-            await listWorkspaceObjects();
+            try {
+                await listWorkspaceObjects();
+            }
+            catch (error) {
+                if (
+                    requestSequence !== activeDatasetRequestSequence
+                    || generation !== runtimeWorkspaceState.getGeneration()
+                ) {
+                    return activeDatasetController.getActiveDataset();
+                }
+
+                throw error;
+            }
+        }
+
+        if (
+            requestSequence !== activeDatasetRequestSequence
+            || generation !== runtimeWorkspaceState.getGeneration()
+            || (snapshot.status === "ready"
+                && runtimeWorkspaceState.getObjects() === null)
+        ) {
+            return activeDatasetController.getActiveDataset();
         }
 
         return activeDatasetController.setActiveDataset(objectName);
@@ -505,55 +731,55 @@ export const createRuntimeSessionManager = function(
 
     const writeCell: RuntimeSessionManager["writeCell"] = async function(request) {
         return refreshWorkspaceAfterMutation(
-            cellMutationExecutionController.writeCell(request)
+            () => cellMutationExecutionController.writeCell(request)
         );
     };
 
     const writeCells: RuntimeSessionManager["writeCells"] = async function(requests) {
         return refreshWorkspaceAfterMutation(
-            cellMutationExecutionController.writeCells(requests)
+            () => cellMutationExecutionController.writeCells(requests)
         );
     };
 
     const renameColumn: RuntimeSessionManager["renameColumn"] = async function(request) {
         return refreshWorkspaceAfterMutation(
-            columnMutationOperationController.renameColumn(request)
+            () => columnMutationOperationController.renameColumn(request)
         );
     };
 
     const insertColumn: RuntimeSessionManager["insertColumn"] = async function(request) {
         return refreshWorkspaceAfterMutation(
-            columnMutationOperationController.insertColumn(request)
+            () => columnMutationOperationController.insertColumn(request)
         );
     };
 
     const removeColumn: RuntimeSessionManager["removeColumn"] = async function(request) {
         return refreshWorkspaceAfterMutation(
-            columnMutationOperationController.removeColumn(request)
+            () => columnMutationOperationController.removeColumn(request)
         );
     };
 
     const insertRow: RuntimeSessionManager["insertRow"] = async function(request) {
         return refreshWorkspaceAfterMutation(
-            rowMutationOperationController.insertRow(request)
+            () => rowMutationOperationController.insertRow(request)
         );
     };
 
     const removeRow: RuntimeSessionManager["removeRow"] = async function(request) {
         return refreshWorkspaceAfterMutation(
-            rowMutationOperationController.removeRow(request)
+            () => rowMutationOperationController.removeRow(request)
         );
     };
 
     const sortRows: RuntimeSessionManager["sortRows"] = async function(request: RowSortRequest) {
         return refreshWorkspaceAfterMutation(
-            rowMutationOperationController.sortRows(request)
+            () => rowMutationOperationController.sortRows(request)
         );
     };
 
     const updateRowName: RuntimeSessionManager["updateRowName"] = async function(request) {
         return refreshWorkspaceAfterMutation(
-            rowMutationOperationController.updateRowName(request)
+            () => rowMutationOperationController.updateRowName(request)
         );
     };
 
@@ -563,7 +789,10 @@ export const createRuntimeSessionManager = function(
 
     const writeVariableMetadata: RuntimeSessionManager["writeVariableMetadata"] = async function(request) {
         return refreshWorkspaceAfterMutation(
-            variableMetadataOperationController.writeVariableMetadata(request)
+            (beginMutation) => variableMetadataOperationController.writeVariableMetadata(
+                request, beginMutation
+            ),
+            true
         );
     };
 
@@ -573,7 +802,8 @@ export const createRuntimeSessionManager = function(
 
     const writeValueLabels: RuntimeSessionManager["writeValueLabels"] = async function(request) {
         return refreshWorkspaceAfterMutation(
-            labelStateOperationController.writeValueLabels(request)
+            (beginMutation) => labelStateOperationController.writeValueLabels(request, beginMutation),
+            true
         );
     };
 
@@ -583,13 +813,14 @@ export const createRuntimeSessionManager = function(
 
     const writeDeclaredMissing: RuntimeSessionManager["writeDeclaredMissing"] = async function(request) {
         return refreshWorkspaceAfterMutation(
-            labelStateOperationController.writeDeclaredMissing(request)
+            (beginMutation) => labelStateOperationController.writeDeclaredMissing(request, beginMutation),
+            true
         );
     };
 
     const importData: RuntimeSessionManager["importData"] = async function(request) {
         return refreshWorkspaceAfterMutation(
-            importOperationController.importData(request)
+            () => importOperationController.importData(request)
         );
     };
 
@@ -611,7 +842,7 @@ export const createRuntimeSessionManager = function(
 
     const executeInvisibleMutation: RuntimeSessionManager["executeInvisibleMutation"] = async function(request) {
         return refreshWorkspaceAfterMutation(
-            capabilityRequestController.executeInvisibleMutation(request)
+            () => capabilityRequestController.executeInvisibleMutation(request)
         );
     };
 
@@ -622,12 +853,48 @@ export const createRuntimeSessionManager = function(
     const executeRuntimeMethod = async function(
         request: RuntimeExtensionMethodRequest
     ): Promise<RuntimeExtensionMethodResult> {
+        if (request.workspaceEffect === "mutation") {
+            const result = await refreshWorkspaceAfterMutation(() => {
+                return runtimeExtensionExecutionController.execute(
+                    request,
+                    getSnapshot()
+                );
+            });
+
+            return {
+                ...result,
+                workspaceUpdate: result.workspaceUpdate || undefined
+            };
+        }
+
+        const generation = runtimeWorkspaceState.getGeneration();
         const result = await runtimeExtensionExecutionController.execute(
             request,
             getSnapshot()
         );
 
-        if (workspaceUpdateHasChanges(result.workspaceUpdate)) {
+        if (generation !== runtimeWorkspaceState.getGeneration()) {
+            return {
+                ...result,
+                workspaceUpdate: undefined,
+                ...(result.workspaceReconciliation
+                    ? { workspaceReconciliation: "not_checked" as const }
+                    : {})
+            };
+        }
+
+        if (result.workspaceReconciliation === "failed") {
+            runtimeWorkspaceState.markStale(true);
+            return { ...result, workspaceUpdate: undefined };
+        }
+
+        if (result.workspaceUpdate && (
+            result.workspaceUpdate.workspaceRevision
+            || workspaceUpdateHasChanges(result.workspaceUpdate)
+        )) {
+            if (!runtimeWorkspaceState.canApplyUpdate(result.workspaceUpdate)) {
+                return { ...result, workspaceUpdate: undefined };
+            }
             const objects = runtimeWorkspaceState.applyUpdate(
                 result.workspaceUpdate
             );

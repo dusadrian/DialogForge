@@ -15,6 +15,21 @@ export interface DatasetEditorLanguageMessage {
 }
 
 
+export const readDatasetEditorLanguageMessage = function(
+    payload: unknown
+): DatasetEditorLanguageMessage {
+    const record = payload && typeof payload === "object"
+        ? payload as Record<string, unknown>
+        : {};
+
+    return {
+        languageNS: String(record.languageNS || "en_US"),
+        appPath: String(record.appPath || ""),
+        i18n: record.i18n
+    };
+};
+
+
 export interface DatasetEditorIpcBindings {
     initialize: (payload: DatasetEditorInitMessage) => void;
     changeLanguage: (payload: DatasetEditorLanguageMessage) => void;

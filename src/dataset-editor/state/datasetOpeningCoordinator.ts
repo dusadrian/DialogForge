@@ -58,6 +58,14 @@ export const createDatasetOpeningCoordinator = function<Schema, Page>(
             options.applyInitialPage(datasetName, initialPage);
         }
 
+        if (request !== sequence) {
+            return {
+                schema: null,
+                initialPageReceived: !!initialPage,
+                initialPageApplied,
+                stale: true
+            };
+        }
         const schema = await options.fetchSchema(datasetName);
 
         if (request !== sequence) {

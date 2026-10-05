@@ -1,21 +1,18 @@
 import type {
     ResourceClient
 } from "../../../../core/contracts/hostAdapter";
+import {
+    createRHelpPageReader
+} from "../../../help/rHelpPageReader";
+import { rHelpResourceMaxBytes } from "../../../help/rHelpResourceProtocol";
+export type { RHelpPageResult } from "../../../help/rHelpPageReader";
 
 
 export interface RHelpPageProxyOptions {
     rewriteUrl(value: unknown): Promise<string>;
     resourceClient: ResourceClient;
-}
-
-
-export interface RHelpPageResult {
-    ok: boolean;
-    status?: number;
-    url?: string;
-    text?: string;
-    contentType?: string;
-    error?: string;
+    isCurrent?(): boolean;
+    captureOwner?(): () => boolean;
 }
 
 
@@ -33,46 +30,22 @@ const isLocalHelpUrl = function(value: string): boolean {
 export const createRHelpPageProxy = function(
     options: RHelpPageProxyOptions
 ) {
-    return {
-        fetchPage: async function(value: unknown): Promise<RHelpPageResult> {
-            const raw = String(value || "").trim();
-
-            if (!raw) {
-                return {
-                    ok: false,
-                    error: "invalid-help-url"
-                };
-            }
-
-            try {
-                const rewritten = await options.rewriteUrl(raw);
-
-                if (!isLocalHelpUrl(rewritten)) {
-                    return {
-                        ok: false,
-                        error: "invalid-help-url"
-                    };
-                }
-
-                const response = await options.resourceClient.loadText(rewritten, {
-                    redirect: "follow"
-                });
-
-                return {
-                    ok: response.ok,
-                    status: response.status,
-                    url: response.url || rewritten,
-                    text: response.text,
-                    contentType: response.contentType
-                };
-            } catch (error) {
-                return {
-                    ok: false,
-                    error: error instanceof Error
-                        ? error.message
-                        : String(error)
-                };
-            }
+    return createRHelpPageReader({
+        isCurrent: options.isCurrent,
+        captureOwner: options.captureOwner,
+        resolveUrl: async function(raw): Promise<string> {
+            const rewritten = await options.rewriteUrl(raw);
+            return isLocalHelpUrl(rewritten) ? rewritten : "";
+        },
+        loadText: function(url) {
+            return options.resourceClient.loadText(url, {
+                redirect: "manual", maxBodyBytes: rHelpResourceMaxBytes
+            });
+        },
+        loadBuffer: function(url) {
+            return options.resourceClient.loadBuffer(url, {
+                redirect: "manual", maxBodyBytes: rHelpResourceMaxBytes
+            });
         }
-    };
+    });
 };

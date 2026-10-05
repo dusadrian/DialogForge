@@ -22,8 +22,9 @@ import {
     datasetEditorEventChannels,
     datasetEditorIpcChannels
 } from "../dataset-editor/datasetEditorIpc";
-import type {
-    DatasetEditorIpcBridge
+import {
+    readDatasetEditorLanguageMessage,
+    type DatasetEditorIpcBridge
 } from "../dataset-editor/renderer/datasetEditorIpcBindings";
 import type {
     DatasetEditorTransportBridge
@@ -441,6 +442,7 @@ const dialogRuntime = {
 
 const settings = {
     onLoaded: function(callback: Listener): void {
+        addListener(applicationSettingsEventChannels.settingsLoaded, callback);
         void invokeHost(applicationSettingsIpcChannels.readWindowPayload)
             .then(callback)
             .catch((error) => {
@@ -496,12 +498,7 @@ const settings = {
 const datasetEditor = {
     onInit: (callback: Parameters<DatasetEditorIpcBridge["onInit"]>[0]): void => addListener(datasetEditorEventChannels.init, callback as Listener),
     onLanguageChanged: (callback: Parameters<DatasetEditorIpcBridge["onLanguageChanged"]>[0]): void => addListener(applicationEventChannels.languageChanged, (payload: unknown) => {
-        const record = asRecord(payload);
-
-        callback({
-            languageNS: String(record.languageNS || "en_US"),
-            appPath: String(record.appPath || "")
-        });
+        callback(readDatasetEditorLanguageMessage(payload));
     }),
     onSetDatasetList: (callback: Parameters<DatasetEditorIpcBridge["onSetDatasetList"]>[0]): void => addListener(datasetEditorEventChannels.setDatasetList, (payload: unknown) => {
         const values = asRecord(payload).datasetNames;
@@ -615,6 +612,11 @@ const createDialogForgeApi = function(): BrowserDialogForgeApi {
         onWorkspace: function(callback: Listener): void {
             addListener(applicationEventChannels.workspace, callback);
         },
+        onTabularPreview: (callback: Listener): void => addListener(applicationEventChannels.tabularPreview, callback),
+        onCellUpdate: (callback: Listener): void => addListener(applicationEventChannels.cellUpdate, callback),
+        onVariableMetadata: (callback: Listener): void => addListener(applicationEventChannels.variableMetadata, callback),
+        onValueLabels: (callback: Listener): void => addListener(applicationEventChannels.valueLabels, callback),
+        onDeclaredMissing: (callback: Listener): void => addListener(applicationEventChannels.declaredMissing, callback),
         onMainZoomFactor: (callback: Listener): void => addListener(applicationEventChannels.mainZoomFactor, callback),
         readDroppedFilePath: function(file: File): string {
             return rememberDroppedBrowserFile(file);
@@ -622,6 +624,16 @@ const createDialogForgeApi = function(): BrowserDialogForgeApi {
         copyPayloadToClipboard: (payload: unknown): Promise<unknown> => invokeHost(shellClipboardIpcChannels.copyPayload, payload),
         readClipboardText: (): Promise<unknown> => invokeHost(shellClipboardIpcChannels.readText),
         writeCells: (input: unknown): Promise<unknown> => invokeHost(tabularIpcChannels.writeCells, input),
+        writeCell: (input: unknown): Promise<unknown> => invokeHost(tabularIpcChannels.writeCell, input),
+        renameColumn: (input: unknown): Promise<unknown> => invokeHost(tabularIpcChannels.renameColumn, input),
+        updateRowName: (input: unknown): Promise<unknown> => invokeHost(tabularIpcChannels.updateRowName, input),
+        insertRow: (input: unknown): Promise<unknown> => invokeHost(tabularIpcChannels.insertRow, input),
+        removeRow: (input: unknown): Promise<unknown> => invokeHost(tabularIpcChannels.removeRow, input),
+        sortRows: (input: unknown): Promise<unknown> => invokeHost(tabularIpcChannels.sortRows, input),
+        insertColumn: (input: unknown): Promise<unknown> => invokeHost(tabularIpcChannels.insertColumn, input),
+        removeColumn: (input: unknown): Promise<unknown> => invokeHost(tabularIpcChannels.removeColumn, input),
+        readTabularSchema: (input: unknown): Promise<unknown> => invokeHost(tabularIpcChannels.readSchema, input),
+        readTabularPreview: (input: unknown): Promise<unknown> => invokeHost(tabularIpcChannels.readPreview, input),
         readVariableMetadata: (objectName: string): Promise<unknown> => invokeHost(
             tabularIpcChannels.readVariableMetadata,
             objectName

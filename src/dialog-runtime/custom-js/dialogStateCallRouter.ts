@@ -11,12 +11,46 @@ import {
     setWeightByState,
     type DialogBindingState
 } from "./dialogBindings";
+import {
+    readProductDialogWorkspaceDeliveryWarning,
+    type ProductDialogWorkspaceDeliveryResult
+} from "../dialog-builder/productDialogWorkspaceDelivery";
+
+
+export const createDialogFilterStateDelivery = function(options: {
+    readFilterState(dataset: string): unknown;
+    getSessionScope?(): unknown;
+    refreshDialogs(dataset: string): Promise<ProductDialogWorkspaceDeliveryResult | void>;
+    publishFilterState(payload: { dataset: string; filter: unknown }): void | Promise<void>;
+    reportWarning?(message: string): void;
+}) {
+    let requestSequence = 0;
+
+    return async function(dataset: string): Promise<void> {
+        const scope = options.getSessionScope?.();
+        const sequence = ++requestSequence;
+        const result = await options.refreshDialogs(dataset);
+
+        if (sequence !== requestSequence || scope !== options.getSessionScope?.()) {
+            return;
+        }
+
+        const warning = readProductDialogWorkspaceDeliveryWarning(result);
+        if (warning) {
+            options.reportWarning?.(warning);
+        }
+        await options.publishFilterState({
+            dataset,
+            filter: dataset ? options.readFilterState(dataset) : null
+        });
+    };
+};
 
 
 export interface DialogStateCallRouterOptions {
     state: DialogBindingState;
-    onFilterStateChanged?(dataset: string): void;
-    onConsoleStateChanged?(dataset: string): void;
+    onFilterStateChanged?(dataset: string): void | Promise<void>;
+    onConsoleStateChanged?(dataset: string): void | Promise<void>;
 }
 
 
@@ -34,98 +68,82 @@ const readParameters = function(value: unknown): Record<string, unknown> {
 };
 
 
-export const routeDialogStateCall = function(
+export const routeDialogStateCall = async function(
     callName: string,
     parameters: unknown,
     options: DialogStateCallRouterOptions
-): unknown {
+): Promise<unknown> {
     const input = readParameters(parameters);
     const dataset = String(input.dataset || "").trim();
-    const notifyFilter = function(target = dataset): void {
-        options.onFilterStateChanged?.(target);
+    const notifyFilter = async function(target = dataset): Promise<void> {
+        await options.onFilterStateChanged?.(target);
     };
-    const notifyConsole = function(target = dataset): void {
-        options.onConsoleStateChanged?.(target);
-        options.onFilterStateChanged?.(target);
+    const notifyConsole = async function(target = dataset): Promise<void> {
+        await options.onConsoleStateChanged?.(target);
+        await options.onFilterStateChanged?.(target);
     };
 
     if (callName === "getFilterState") {
-        return getFilterState(options.state, dataset) || {};
+        return getFilterState(options.state, dataset);
     }
 
     if (callName === "setFilterState") {
         const command = String(input.command || "").trim();
 
-        if (!command) {
-            clearFilterState(options.state, dataset);
-            notifyFilter();
-            return {};
-        }
-
         const value = setFilterState(options.state, { dataset, command });
 
-        notifyFilter();
+        await notifyFilter();
         return value;
     }
 
     if (callName === "clearFilterState") {
         clearFilterState(options.state, dataset);
-        notifyFilter();
-        return {};
+        await notifyFilter();
+        return null;
     }
 
     if (callName === "getSplitByState") {
-        return getSplitByState(options.state, dataset) || {};
+        return getSplitByState(options.state, dataset);
     }
 
     if (callName === "setSplitByState") {
         const grouping = readNameList(input.grouping);
 
-        if (!grouping.length) {
-            clearSplitByState(options.state, dataset);
-            notifyConsole();
-            return {};
-        }
-
         const value = setSplitByState(options.state, {
             dataset,
             grouping,
-            sortdataset: input.sortdataset === true
+            ...(Object.prototype.hasOwnProperty.call(input, "sortdataset")
+                ? { sortdataset: input.sortdataset === true }
+                : {})
         });
 
-        notifyConsole();
+        await notifyConsole();
         return value;
     }
 
     if (callName === "clearSplitByState") {
         clearSplitByState(options.state, dataset);
-        notifyConsole();
-        return {};
+        await notifyConsole();
+        return null;
     }
 
     if (callName === "getWeightByState") {
-        return getWeightByState(options.state, dataset) || {};
+        return getWeightByState(options.state, dataset);
     }
 
     if (callName === "setWeightByState") {
         const weighting = String(input.weighting || "").trim();
 
-        if (!weighting) {
-            clearWeightByState(options.state, dataset);
-            notifyConsole();
-            return {};
-        }
-
         const value = setWeightByState(options.state, { dataset, weighting });
 
-        notifyConsole();
+        await notifyConsole();
         return value;
     }
 
     if (callName === "clearWeightByState") {
         clearWeightByState(options.state, dataset);
-        notifyConsole();
-        return {};
+        await notifyConsole();
+        return null;
     }
 
     if (callName === "inheritSubsetDatasetState") {
@@ -136,7 +154,7 @@ export const routeDialogStateCall = function(
             variables: readNameList(input.variables)
         });
 
-        notifyConsole(target);
+        await notifyConsole(target);
         return value;
     }
 

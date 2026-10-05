@@ -7,7 +7,6 @@ import type {
     RuntimeEventSnapshot,
     RuntimeSessionManager,
     RuntimeSessionSnapshot,
-    TranscriptEvent,
     VisibleCommandRequest,
     WorkspaceSnapshot
 } from "../../runtime/provider-contract/runtimeProvider";
@@ -36,12 +35,19 @@ import {
     createRuntimeBroadcastBridge
 } from "./runtimeBroadcastBridge";
 import {
-    createWorkspaceDatasetCacheEffects,
+    prepareWorkspaceDatasetCacheEffects,
+    warmWorkspaceDatasetCacheEffects,
     workspaceUpdateChangesDialogVariables
 } from "../../runtime/workspace/workspaceUpdateEffects";
+import { createRuntimeVisibleCommandDelivery } from "../../runtime/commands/runtimeVisibleCommandDelivery";
+import { createRuntimeCommandReceipt } from "../../runtime/commands/runtimeCommandReceipt";
 import {
-    workspaceUpdateHasChanges
-} from "../../runtime/workspace/workspaceUpdate";
+    applyDatasetMutationCacheEffects,
+    type DatasetMutationCacheEffect
+} from "../../dataset-editor/datasetMutationCacheEffects";
+import type {
+    ProductDialogWorkspaceDeliveryResult
+} from "../../dialog-runtime/dialog-builder/productDialogWorkspaceDelivery";
 
 
 export interface RuntimeIpcCompositionOptions {
@@ -55,7 +61,7 @@ export interface RuntimeIpcCompositionOptions {
     scriptEditorSessionState(channel: string, payload: unknown): void;
     refreshProductDialogWorkspaceData(
         snapshot: WorkspaceSnapshot
-    ): Promise<void>;
+    ): Promise<ProductDialogWorkspaceDeliveryResult | void>;
     hasDatasetEditorWindow(): boolean;
     sendDatasetEditor(channel: string, payload: unknown): void;
     presentRuntimeEvents(snapshot: RuntimeEventSnapshot): void;
@@ -67,8 +73,16 @@ export const createRuntimeIpcComposition = function(
     options: RuntimeIpcCompositionOptions
 ) {
     const warmCache = options.datasetWarmCache;
+    warmCache.updateRuntimeSession(options.runtimeSessionManager.getSnapshot());
+    const invalidateMutationCache = function(
+        objectName: string,
+        effect: DatasetMutationCacheEffect
+    ): void {
+        applyDatasetMutationCacheEffects(warmCache, objectName, effect);
+    };
     const bridge = createRuntimeBroadcastBridge({
         runtimeSessionManager: options.runtimeSessionManager,
+        updateDatasetRuntimeSession: warmCache.updateRuntimeSession,
         scriptEditorSessionState: options.scriptEditorSessionState,
         refreshProductDialogWorkspaceData:
             options.refreshProductDialogWorkspaceData,
@@ -91,16 +105,17 @@ export const createRuntimeIpcComposition = function(
         ipcMain: options.ipcMain,
         runtimeSessionManager: options.runtimeSessionManager,
         uiCommandVisibility: options.datasetEditorUiCommandVisibility,
-        invalidateInitialDatasetPreview: warmCache.invalidate,
+        invalidateInitialDatasetPreview: invalidateMutationCache,
         patchVariableMetadata: warmCache.patchVariableMetadata,
         sendDatasetEditorChanges: bridge.sendDatasetEditorChanges,
+        sendWorkspaceSnapshot: bridge.sendWorkspaceSnapshot,
         broadcastRuntimeEvents: bridge.broadcastRuntimeEvents
     });
     createTabularIpcController({
         ipcMain: options.ipcMain,
         runtimeSessionManager: options.runtimeSessionManager,
         readInitialDatasetPreview: warmCache.readPreview,
-        invalidateInitialDatasetPreview: warmCache.invalidate,
+        invalidateInitialDatasetPreview: invalidateMutationCache,
         warmInitialDatasetPreview: warmCache.warmPreview,
         warmInitialVariableMetadata: warmCache.warmVariableMetadata,
         refreshWorkspaceAndBroadcast: bridge.refreshWorkspaceAndBroadcast,
@@ -115,80 +130,46 @@ export const createRuntimeIpcComposition = function(
         sendTranscriptEvents: bridge.sendTranscriptEvents
     });
 
-    const executeVisibleCommandAndBroadcast = async function(
-        request: VisibleCommandRequest
-    ): Promise<TranscriptEvent[]> {
-        const result = await options.runtimeSessionManager
-            .executeVisibleCommandWithEffects(request);
-
-        bridge.sendTranscriptEvents(result.transcriptEvents);
-
-        if (workspaceUpdateHasChanges(result.workspaceUpdate)) {
-            const effects = createWorkspaceDatasetCacheEffects(
-                result.workspaceUpdate
+    const deliverVisibleCommand = createRuntimeVisibleCommandDelivery({
+        runtime: options.runtimeSessionManager,
+        publishTranscript: bridge.sendTranscriptEvents,
+        refreshRuntimeEvents: bridge.broadcastRuntimeEvents,
+        reportRuntimeEventError: options.reportError,
+        async publishWorkspace(update, snapshot) {
+            const prepared = prepareWorkspaceDatasetCacheEffects(
+                update,
+                warmCache
             );
-            const activeDataset = options.runtimeSessionManager
-                .getActiveDataset()
-                .objectName;
 
-            effects.forEach(function(effect) {
-                if (effect.copiedFrom) {
-                    warmCache.copy(effect.copiedFrom, effect.name);
-                    return;
-                }
-
-                if (effect.preview) {
-                    warmCache.invalidatePreview(effect.name);
-                }
-
-                if (effect.variableMetadata) {
-                    if (
-                        !effect.variableMetadataStructure
-                        && effect.variableNames.length > 0
-                    ) {
-                        void warmCache.refreshVariableMetadata(
-                            effect.name,
-                            effect.variableNames
-                        ).catch(options.reportError);
-                    }
-                    else {
-                        warmCache.invalidateVariableMetadata(effect.name);
-                    }
-                }
-            });
-
-            bridge.sendWorkspaceSnapshot(
-                options.runtimeSessionManager.getWorkspaceSnapshot(),
+            const delivered = await bridge.sendWorkspaceSnapshot(
+                snapshot,
                 {
                     warmActiveDataset: false,
+                    metadataRefreshes: prepared.metadataRefreshes,
+                    reportMetadataError: options.reportError,
                     refreshProductDialogs:
-                        workspaceUpdateChangesDialogVariables(effects)
+                        workspaceUpdateChangesDialogVariables(prepared.effects)
                 }
             );
+            if (!delivered) {
+                return false;
+            }
             bridge.sendActiveDataset(options.runtimeSessionManager.getActiveDataset());
 
-            const activeEffect = effects.find(function(effect) {
-                return effect.name === activeDataset && !effect.removed;
-            });
-
-            if (activeEffect?.preview) {
-                warmCache.warmPreview(activeDataset);
-            }
-
-            if (
-                activeEffect?.variableMetadata
-                && (
-                    activeEffect.variableMetadataStructure
-                    || activeEffect.variableNames.length === 0
-                )
-            ) {
-                warmCache.warmVariableMetadata(activeDataset);
-            }
+            warmWorkspaceDatasetCacheEffects(
+                prepared.effects,
+                options.runtimeSessionManager.getActiveDataset().objectName,
+                warmCache
+            );
+            return true;
         }
+    });
 
-        void bridge.broadcastRuntimeEvents().catch(options.reportError);
-
-        return result.transcriptEvents;
+    const executeVisibleCommandReceiptAndBroadcast = async function(
+        request: VisibleCommandRequest
+    ) {
+        const { accepted, result } = await deliverVisibleCommand(request);
+        return createRuntimeCommandReceipt(result, accepted);
     };
 
     createRuntimeSessionIpcController({
@@ -196,7 +177,7 @@ export const createRuntimeIpcComposition = function(
         runtimeSessionManager: options.runtimeSessionManager,
         setRuntimeSessionSnapshot: options.setRuntimeSessionSnapshot,
         sendRuntimeSession: bridge.sendRuntimeSession,
-        executeVisibleCommand: executeVisibleCommandAndBroadcast,
+        executeVisibleCommand: executeVisibleCommandReceiptAndBroadcast,
         captureWorkspaceBaseline: options.captureWorkspaceBaseline,
         refreshWorkspaceAndBroadcast: bridge.refreshWorkspaceAndBroadcast,
         broadcastRuntimeEvents: bridge.broadcastRuntimeEvents,
@@ -216,6 +197,6 @@ export const createRuntimeIpcComposition = function(
 
     return {
         ...bridge,
-        executeVisibleCommandAndBroadcast
+        executeVisibleCommandReceiptAndBroadcast
     };
 };

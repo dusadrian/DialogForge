@@ -2,6 +2,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const { spawnSync } = require("node:child_process");
 const {
     packagedRuntimeDependencies
 } = require("./packagedRuntimeDependencies");
@@ -161,6 +162,10 @@ const copyPackageJson = function () {
             ...sourcePackage.build,
             files: [
                 "scripts/**/*",
+                "r-inspection/native/**/*",
+                "r-transport-prototype/native/**/*",
+                "r-output-prototype/native/**/*",
+                ...(includeWebRuntime ? ["r-inspection/webr/**/*", "r-transport-prototype/webr/**/*", "r-output-prototype/webr/**/*"] : []),
                 "src/**/*",
                 ...(includeWebRuntime ? ["browser-esm/**/*"] : [
                     "!src/shell-web/**/*",
@@ -178,6 +183,9 @@ const copyPackageJson = function () {
                 "package.json"
             ],
             asarUnpack: [
+                "r-inspection/native/**/*",
+                "r-transport-prototype/native/**/*",
+                "r-output-prototype/native/**/*",
                 "src/runtime/providers/r/r-sources/**/*",
                 "product/runtime/runtimeControlProfile.R",
                 "node_modules/@number0/**/*.node"
@@ -215,7 +223,32 @@ cleanGeneratedAssetDirectories();
 ["src", "scripts", "schemas"].forEach((dirName) => {
     walk(path.join(sourceRoot, dirName));
 });
+const cacheBuild = spawnSync(process.env.DIALOGFORGE_BUILD_R || "R", [
+    "--vanilla", "--slave",
+    `--file=${path.join(sourceRoot, "scripts/build-r-control-cache.R")}`,
+    "--args", path.join(sourceRoot, "src/runtime/providers/r/r-sources"),
+    path.join(rootDir, "src/runtime/providers/r/r-sources/runtime-control-cache.rds")
+], { stdio: "inherit" });
+if (cacheBuild.error?.code === "ENOENT") {
+    console.warn("R is unavailable for generated control bytecode; startup will compile from canonical sources.");
+}
+else if (cacheBuild.error || cacheBuild.status !== 0) {
+    throw cacheBuild.error || new Error("Canonical runtime compilation cache build failed.");
+}
 copyPackageJson();
+for (const helper of [
+    { directory: "r-inspection", hosts: includeWebRuntime ? ["native", "webr"] : ["native"] },
+    { directory: "r-transport-prototype", hosts: includeWebRuntime ? ["native", "webr"] : ["native"] },
+    { directory: "r-output-prototype", hosts: includeWebRuntime ? ["native", "webr"] : ["native"] }
+]) {
+    for (const host of helper.hosts) {
+        const helperSource = path.join(sourceRoot, "dist", helper.directory, host);
+        const helperTarget = path.join(rootDir, helper.directory, host);
+        if (helperSource !== helperTarget && fs.existsSync(helperSource)) {
+            copyDirectory(helperSource, helperTarget);
+        }
+    }
+}
 // Intel macOS carries a self-built iroh binding inside @number0/iroh, so it has
 // to be in place before that package is staged.
 ensureNativeIrohBinding(sourceRoot);

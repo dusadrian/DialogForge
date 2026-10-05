@@ -19,6 +19,8 @@ import {
     createConsoleVisibleCommandController
 } from "./consoleVisibleCommandController";
 import { normalizeConsoleCommandText } from "../commandText";
+import { readConsoleOutputWidth } from "./consoleOutputWidth";
+import { createConsoleInterruptController } from "./consoleInterruptController";
 import type {
     ConsoleEditorSettings
 } from "../consoleTypography";
@@ -39,7 +41,7 @@ export interface MainConsoleCoordinatorBindings {
         method: string;
         params: Record<string, unknown>;
         source: string;
-    }): Promise<{ value?: unknown }>;
+    }): Promise<{ status?: string; message?: string; value?: unknown }>;
     executeVisibleCommand(input: {
         text: string;
         source: string;
@@ -63,25 +65,55 @@ export const createMainConsoleCoordinator = function(
     bindings: MainConsoleCoordinatorBindings
 ) {
     let surface: ReturnType<typeof createConsoleSurface> | null = null;
-    let interruptPending = false;
+    let historyPersistenceFailurePending = false;
 
-    const interrupt = async function(): Promise<void> {
-        if (interruptPending) {
+    const reportHistoryPersistenceFailure = function(): void {
+        const transcript = surface?.getTranscript();
+
+        if (!transcript) {
+            historyPersistenceFailurePending = true;
             return;
         }
 
-        interruptPending = true;
+        historyPersistenceFailurePending = false;
+        const message = "Warning: Console history could not be saved. "
+            + "Commands remain available in this window; saved history may be incomplete.\n";
+
         try {
-            await bindings.executeRuntimeMethod({
+            transcript.recordRuntimeMessageStream({
+                name: "warning",
+                origin: "console",
+                text: message
+            });
+        }
+        catch {
+            // History notices are advisory even when the transcript is unavailable.
+            console.warn(message.trim());
+        }
+    };
+
+    const interruptController = createConsoleInterruptController({
+        getRuntimeSession: bindings.getRuntimeSession,
+        getActiveActivityId: function(): string {
+            return surface?.getTranscript()?.getActiveRequest()?.activityId || "";
+        },
+        executeInterrupt: function() {
+            return bindings.executeRuntimeMethod({
                 method: "runtime.interrupt",
                 params: {},
                 source: "base-app.console-input"
             });
+        },
+        reportFailure: function(message, activityId): void {
+            surface?.getTranscript()?.recordRuntimeMessageStream({
+                parent_id: activityId || undefined,
+                name: "stderr",
+                origin: "console",
+                text: message + "\n"
+            });
         }
-        finally {
-            interruptPending = false;
-        }
-    };
+    });
+    const interrupt = interruptController.interrupt;
 
     const checkCodeFragmentComplete = async function(
         code: string
@@ -109,50 +141,6 @@ export const createMainConsoleCoordinator = function(
         return "unknown";
     };
 
-    const readOutputWidth = function(): number | null {
-        const terminal = bindings.document.getElementById("consoleTerminal");
-        const root = terminal?.firstElementChild instanceof HTMLElement
-            ? terminal.firstElementChild
-            : terminal;
-        const viewport = root?.firstElementChild instanceof HTMLElement
-            ? root.firstElementChild
-            : terminal;
-        const rect = viewport?.getBoundingClientRect?.();
-        const style = viewport ? window.getComputedStyle(viewport) : null;
-        const horizontalPadding = style
-            ? Number.parseFloat(style.paddingLeft || "0") + Number.parseFloat(style.paddingRight || "0")
-            : 0;
-        const width = Number(rect?.width || 0) - Math.max(0, horizontalPadding || 0);
-
-        if (!Number.isFinite(width) || width <= 0) {
-            return null;
-        }
-
-        const probe = bindings.document.createElement("span");
-        probe.textContent = "0000000000";
-        probe.style.position = "absolute";
-        probe.style.left = "-10000px";
-        probe.style.top = "-10000px";
-        probe.style.visibility = "hidden";
-        probe.style.whiteSpace = "pre";
-
-        if (style) {
-            probe.style.fontFamily = style.fontFamily;
-            probe.style.fontSize = style.fontSize;
-            probe.style.fontWeight = style.fontWeight;
-            probe.style.letterSpacing = style.letterSpacing;
-        }
-
-        (terminal || bindings.document.body).appendChild(probe);
-        const characterWidth = Math.max(
-            1,
-            Number(probe.getBoundingClientRect?.().width || 0) / 10
-        );
-        probe.remove();
-
-        return Math.max(80, Math.min(360, Math.floor(width / characterWidth)));
-    };
-
     const visibleCommand = createConsoleVisibleCommandController({
         getSession: bindings.getRuntimeSession,
         startSession: bindings.startRuntimeSession,
@@ -160,7 +148,7 @@ export const createMainConsoleCoordinator = function(
         recordHistory: bindings.recordHistory,
         registerCompletionInput: bindings.registerCompletionInput,
         setRuntimeBusy: bindings.session.setRuntimeBusy,
-        readOutputWidth,
+        readOutputWidth: () => readConsoleOutputWidth(bindings.document, window),
         executeCommand: bindings.executeVisibleCommand
     });
 
@@ -185,7 +173,7 @@ export const createMainConsoleCoordinator = function(
                 reply: string,
                 request: { activityId: string; promptId?: string }
             ): Promise<void> {
-                await bindings.executeRuntimeMethod({
+                const result = await bindings.executeRuntimeMethod({
                     method: "reply_prompt",
                     params: {
                         parentId: String(request.activityId || ""),
@@ -194,6 +182,16 @@ export const createMainConsoleCoordinator = function(
                     },
                     source: "base-app.console-prompt"
                 });
+
+                const value = result.value;
+                const accepted = value === true || (
+                    value !== null && typeof value === "object"
+                    && (value as { ok?: unknown }).ok === true
+                );
+
+                if (result.status !== "ready" || !accepted) {
+                    throw new Error("Prompt reply was not accepted. You can retry or interrupt the command.");
+                }
             },
             isCodeFragmentComplete: checkCodeFragmentComplete,
             executeCode: async function(code: string) {
@@ -220,6 +218,14 @@ export const createMainConsoleCoordinator = function(
         });
 
         return surface;
+    };
+
+    const initializeFlow = function(): void {
+        getSurface().initializeFlow();
+
+        if (historyPersistenceFailurePending) {
+            reportHistoryPersistenceFailure();
+        }
     };
 
     const commandHost = function(): HTMLElement {
@@ -332,10 +338,10 @@ export const createMainConsoleCoordinator = function(
         onDidRuntimeBusy: bindings.session.onDidRuntimeBusy,
         setRuntimeBusy: bindings.session.setRuntimeBusy,
         interrupt,
-        initializeFlow: function(): void {
-            getSurface().initializeFlow();
-        },
+        reportHistoryPersistenceFailure,
+        initializeFlow,
         initializeInput: function(): Promise<void> {
+            initializeFlow();
             return getSurface().initializeInput();
         },
         getTranscript: function() {
@@ -349,10 +355,17 @@ export const createMainConsoleCoordinator = function(
         focus,
         focusAfterPromptLayout,
         executeText,
+        executeWithReceipt: visibleCommand.executeWithReceipt,
         executeCurrent,
         handleFallbackKeydown,
         clear: function(): void {
             surface?.clear();
+        },
+        retireRuntimeExecution: function(): void {
+            interruptController.retire();
+            visibleCommand.retire();
+            bindings.session.setRuntimeBusy(false);
+            surface?.retireRuntimeExecution();
         },
         resize: function(): void {
             surface?.resize();

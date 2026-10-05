@@ -1,9 +1,27 @@
 export interface BrowserWebRModule {
     WebR: new (options?: Record<string, unknown>) => unknown;
     ChannelType?: {
+        SharedArrayBuffer?: number;
         PostMessage?: number;
     };
 }
+
+const interruptibleRuntimes = new WeakSet<object>();
+
+// WebR 0.6 Automatic selects shared memory when SharedArrayBuffer is available.
+// Its PostMessage interrupt only logs unsupported and returns void, so calling
+// interrupt() alone cannot establish acceptance. Remember the factory's channel.
+export const signalBrowserWebRInterrupt = function(runtime: unknown): boolean | null {
+    if (!runtime || typeof runtime !== "object" || !interruptibleRuntimes.has(runtime)) {
+        return null;
+    }
+    const worker = runtime as { interrupt?: () => void };
+    if (typeof worker.interrupt !== "function") {
+        return null;
+    }
+    worker.interrupt();
+    return true;
+};
 
 export interface BrowserWebRRuntimeOptions {
     importWebRModule(): Promise<BrowserWebRModule>;
@@ -29,9 +47,13 @@ export const createBrowserWebRRuntime = async function(
         runtimeOptions.RArgs = options.rArgs.slice();
     }
 
-    if (typeof module.ChannelType?.PostMessage === "number") {
-        runtimeOptions.channelType = module.ChannelType.PostMessage;
+    const runtime = new module.WebR(runtimeOptions);
+    if (
+        runtime && typeof runtime === "object"
+        && module.ChannelType?.SharedArrayBuffer !== undefined
+        && typeof SharedArrayBuffer === "function"
+    ) {
+        interruptibleRuntimes.add(runtime);
     }
-
-    return new module.WebR(runtimeOptions);
+    return runtime;
 };
