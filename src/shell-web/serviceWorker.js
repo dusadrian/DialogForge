@@ -11,7 +11,7 @@ import { validateRHelpResource, validateRHelpResponseMetadata } from "../runtime
 // offline once it has loaded.
 //
 // Both placeholders are replaced at build time. DIALOGFORGE_BUILD_ID changes
-// with the shell or dialog bundles and names their disposable cache.
+// with the shell, dialog or script-editor bundles and names their disposable cache.
 // DIALOGFORGE_RUNTIME_STAMP changes only with the WebR or Monaco trees, so
 // unchanged runtime assets remain available across application rebuilds.
 // Either change also alters this script so the browser installs the update.
@@ -215,7 +215,7 @@ const serveRuntimeHelp = async function(event, url) {
 // can never go stale: a changed asset is a different URL.
 const immutableAssetPattern = new RegExp([
     "^/(?:webr|monaco)-[0-9a-f]{16}/",
-    "^/browser-esm/(?:dialogBuilder|shell)-[0-9a-f]{16}\\.js$",
+    "^/browser-esm/(?:dialogBuilder|scriptEditor|shell)-[0-9a-f]{16}\\.js$",
     "^/browser-product/dialogs/customJSRuntime-[0-9a-f]{16}\\.js$",
     "^/vendor/dialogforge-iroh/"
 ].join("|"));

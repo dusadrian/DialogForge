@@ -10,14 +10,9 @@
   <script>
     (function loadScriptEditorInterface() {
       if (typeof require !== 'function') {
-        const bridge = document.createElement('script');
-        bridge.type = 'module';
-        bridge.src = '/browser-esm/src/shell-web/browserPreloadBridge.js';
-        document.head.appendChild(bridge);
-
         const script = document.createElement('script');
         script.type = 'module';
-        script.src = '/browser-esm/src/base-app/modules/scriptEditorInterface.js';
+        script.src = '/browser-esm/scriptEditor.js';
         document.head.appendChild(script);
         return;
       }

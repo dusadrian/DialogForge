@@ -1637,7 +1637,7 @@ const createWebProductDevServer = function(options) {
 
             if (pathname.startsWith("/browser-esm/")) {
                 const hasVersionedName = (
-                    /^\/browser-esm\/(?:dialogBuilder|shell)-[a-f0-9]{16}\.js$/
+                    /^\/browser-esm\/(?:dialogBuilder|scriptEditor|shell)-[a-f0-9]{16}\.js$/
                         .test(pathname)
                 );
                 const headers = hasVersionedName

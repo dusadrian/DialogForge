@@ -84,9 +84,8 @@ const stampAssetUrls = function(source) {
     return source.replaceAll(unstampedAssetUrl, `$1/$2-${assetStamp}/`);
 };
 
-// consoleSyntax.js holds every Monaco URL and is loaded unbundled by the
-// script editor frame as well as bundled into the shell, so the whole emitted
-// tree is stamped rather than just the bundles.
+// consoleSyntax.js holds every Monaco URL. Stamp the emitted shared source
+// before bundling it for the shell and auxiliary frames.
 listFilesRecursively(browserModuleOutput)
     .filter(function(filePath) {
         return filePath.endsWith(".js");
@@ -211,6 +210,41 @@ esbuild.buildSync({
     alias: nodeStubPaths
 });
 
+// The script editor executes the same renderer as Electron. Deliver its
+// emitted source in one request rather than discovering its dependency graph
+// over HTTP on every opening. Install the browser bridge before the renderer
+// reads it; neither module executes in the parent during modulepreload.
+esbuild.buildSync({
+    stdin: {
+        contents: [
+            "await import('./src/shell-web/browserPreloadBridge.js');",
+            "await import('./src/base-app/modules/scriptEditorInterface.js');"
+        ].join("\n"),
+        resolveDir: browserModuleOutput,
+        sourcefile: "scriptEditorBrowser.js"
+    },
+    outfile: path.join(browserModuleOutput, "scriptEditor.js"),
+    bundle: true,
+    format: "esm",
+    platform: "browser",
+    target: "es2022",
+    alias: nodeStubPaths
+});
+
+const scriptEditorBundle = fs.readFileSync(
+    path.join(browserModuleOutput, "scriptEditor.js")
+);
+const scriptEditorBundleHash = createHash("sha256")
+    .update(scriptEditorBundle)
+    .digest("hex")
+    .slice(0, 16);
+const scriptEditorBundleName = `scriptEditor-${scriptEditorBundleHash}.js`;
+
+fs.writeFileSync(
+    path.join(browserModuleOutput, scriptEditorBundleName),
+    scriptEditorBundle
+);
+
 fs.rmSync(shellEntryPath, { force: true });
 Object.values(nodeStubPaths).forEach(function(stubPath) {
     fs.rmSync(stubPath, { force: true });
@@ -254,7 +288,10 @@ const serviceWorkerSource = esbuild.buildSync({
     target: "es2022"
 }).outputFiles[0].text;
 const serviceWorkerBuildId = createHash("sha256")
-    .update([assetStamp, shellBundleName, dialogBundleName, dialogStylesheetHash, serviceWorkerSource].join("\u0000"))
+    .update([
+        assetStamp, shellBundleName, dialogBundleName, scriptEditorBundleName,
+        dialogStylesheetHash, serviceWorkerSource
+    ].join("\u0000"))
     .digest("hex")
     .slice(0, 16);
 
@@ -281,6 +318,7 @@ fs.writeFileSync(
 // reuse it from the HTTP cache. Both hosts load the canonical source CSS.
 for (const relativePath of [
     "src/base-app/pages/dialogBuilder.html",
+    "src/base-app/pages/scriptEditor.html",
     "src/shell-web/pages/shell.html"
 ]) {
     const source = fs.readFileSync(path.join(sourceRoot, relativePath), "utf8");
@@ -293,6 +331,10 @@ for (const relativePath of [
             .replaceAll(
                 "/browser-esm/dialogBuilder.js",
                 `/browser-esm/${dialogBundleName}`
+            )
+            .replaceAll(
+                "/browser-esm/scriptEditor.js",
+                `/browser-esm/${scriptEditorBundleName}`
             )
             .replaceAll(
                 "/src/shell-web/pages/shell.js",
