@@ -1,4 +1,8 @@
-# Runtime I/O helper
+# Historical transport-component design notes
+
+The implementation is now part of the single `dialogforgeruntime` 0.1.0 package.
+Older component versions and prototype acceptance notes below are historical;
+the parent README owns current build instructions.
 
 Version0.0.3 supplies a scoped frontend reader used by BOTH hosts for visible
 evaluation. Raw R console calls, scan() and readLines(stdin()) enter the existing
@@ -29,7 +33,7 @@ messages, implement prompt identity/replies or install parallel evaluation polic
 Native process/socket and WebR channel adapters use SAME shared R prompt/evaluation
 sources; only the physical host read differs.
 
-Both builds consume one source archive via build-r-transport-prototype.js
+Both builds consume one source archive via build-r-runtime.js
 [native|webr|both]. The WebR worker stages the versioned helper archive with the
 inspection helper before installing its console adapter. Missing/stale helpers
 fail startup explicitly. This does not enable the native bounded-socket prototype

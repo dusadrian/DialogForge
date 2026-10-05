@@ -5,8 +5,8 @@ const path = require("node:path");
 const { execFileSync } = require("node:child_process");
 
 const root = path.resolve(__dirname, "..");
-const source = path.join(root, "src/runtime/providers/r/native/dialogforgeinspect");
-const output = path.join(root, "dist/r-inspection");
+const source = path.join(root, "src/runtime/providers/r/native/dialogforgeruntime");
+const output = path.join(root, "dist/r-runtime");
 const target = process.argv[2] || "native";
 if (!["native", "webr", "both"].includes(target)) {
     throw new Error("Choose native, webr, or both.");
@@ -20,7 +20,7 @@ execFileSync(r, ["CMD", "build", "--no-manual", "--no-build-vignettes", source],
     cwd: staging,
     stdio: "inherit"
 });
-const archive = path.join(staging, `dialogforgeinspect_${version}.tar.gz`);
+const archive = path.join(staging, `dialogforgeruntime_${version}.tar.gz`);
 
 if (target === "native" || target === "both") {
     const runtime = execFileSync(r, ["--vanilla", "--slave", "-e",
@@ -44,6 +44,6 @@ if (target === "webr" || target === "both") {
         "--mount", `type=bind,src=${root},dst=/source,readonly`,
         "--mount", `type=bind,src=${output},dst=/output`,
         image, "Rscript", "/source/scripts/build-r-helper-webr.R",
-        `/output/${path.basename(staging)}/${path.basename(archive)}`, "dialogforgeinspect"
+        `/output/${path.basename(staging)}/${path.basename(archive)}`, "dialogforgeruntime"
     ], { stdio: "inherit" });
 }

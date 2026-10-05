@@ -8,7 +8,7 @@ local({
     runtime <- runtime_initialize_environment()
     runtime$runtime_inspection_library <- Sys.getenv(
         "DIALOGFORGE_TEST_INSPECTION_LIBRARY", unset = file.path(
-            "dist/r-inspection/native", paste(R.version$platform, getRversion(), sep = "-")
+            "dist/r-runtime/native", paste(R.version$platform, getRversion(), sep = "-")
         )
     )
     for (name in runtime_control_source_names()) {

@@ -7,7 +7,7 @@
 
 /* Internal class/method names are ordinary strings. Match them through R's
  * public native API without package replacements of base::match/is.element. */
-static SEXP df_match_stored_names(SEXP values, SEXP choices)
+SEXP df_match_stored_names(SEXP values, SEXP choices)
 {
     if (TYPEOF(values) != STRSXP || TYPEOF(choices) != STRSXP ||
         ALTREP(values) || ALTREP(choices) || Rf_isObject(values) || Rf_isObject(choices)) {
@@ -17,7 +17,7 @@ static SEXP df_match_stored_names(SEXP values, SEXP choices)
 }
 
 /* Read only the named frame. Never look through a parent or evaluate a binding. */
-static SEXP df_binding_info(SEXP environment, SEXP name)
+SEXP df_binding_info(SEXP environment, SEXP name)
 {
     if (TYPEOF(environment) != ENVSXP) {
         Rf_error("Binding inspection requires an environment.");
@@ -102,7 +102,7 @@ extern SEXP df_observe_graphics_device(SEXP);
 extern SEXP df_graphics_device_is_current(SEXP, SEXP);
 extern SEXP df_graphics_device_is_open(SEXP, SEXP);
 
-static SEXP df_closure_is_compiled(SEXP value)
+SEXP df_closure_is_compiled(SEXP value)
 {
     if (TYPEOF(value) != CLOSXP) {
         return Rf_ScalarLogical(FALSE);
@@ -114,7 +114,7 @@ static SEXP df_closure_is_compiled(SEXP value)
 #endif
 }
 
-static SEXP df_rebind_compiled_closure(SEXP value, SEXP environment, SEXP original)
+SEXP df_rebind_compiled_closure(SEXP value, SEXP environment, SEXP original)
 {
     if (TYPEOF(value) != CLOSXP || TYPEOF(environment) != ENVSXP || TYPEOF(original) != CLOSXP) {
         Rf_error("Compiled closure rebinding requires a closure and an environment.");
@@ -136,24 +136,4 @@ static SEXP df_rebind_compiled_closure(SEXP value, SEXP environment, SEXP origin
     DUPLICATE_ATTRIB(result, original);
     UNPROTECT(1);
     return result;
-}
-
-static const R_CallMethodDef call_methods[] = {
-    {"df_binding_info", (DL_FUNC) &df_binding_info, 2},
-    {"df_stored_graph_is_inspectable", (DL_FUNC) &df_stored_graph_is_inspectable, 5},
-    {"df_closure_is_compiled", (DL_FUNC) &df_closure_is_compiled, 1},
-    {"df_rebind_compiled_closure", (DL_FUNC) &df_rebind_compiled_closure, 3},
-    {"df_stored_list_fields", (DL_FUNC) &df_stored_list_fields, 2},
-    {"df_observe_graphics_device", (DL_FUNC) &df_observe_graphics_device, 1},
-    {"df_graphics_device_is_current", (DL_FUNC) &df_graphics_device_is_current, 2},
-    {"df_graphics_device_is_open", (DL_FUNC) &df_graphics_device_is_open, 2},
-    {"df_match_stored_names", (DL_FUNC) &df_match_stored_names, 2},
-    {NULL, NULL, 0}
-};
-
-void attribute_visible R_init_dialogforgeinspect(DllInfo *dll)
-{
-    R_registerRoutines(dll, NULL, call_methods, NULL, NULL);
-    R_useDynamicSymbols(dll, FALSE);
-    R_forceSymbols(dll, TRUE);
 }

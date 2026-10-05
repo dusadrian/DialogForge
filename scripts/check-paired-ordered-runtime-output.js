@@ -295,7 +295,7 @@ const checkCases = async function(host, execute) {
 
 const checkRawConsoleInput = async function(host, execute) {
     const scenarios = [
-        { name: "raw-helper", read: 'loadNamespace("dialogforgetransport")$read_runtime_console_line("raw C input: ")',
+        { name: "raw-helper", read: 'loadNamespace("dialogforgeruntime")$read_runtime_console_line("raw C input: ")',
             answer: "Ω😀é", expected: "before-raw\nraw=Ω😀é\n" },
         { name: "scan", read: 'base::scan(file="", what=character(), nmax=1L, quiet=TRUE)',
             answer: "Ω😀é", expected: "before-raw\nraw=Ω😀é\n" },
@@ -303,7 +303,7 @@ const checkRawConsoleInput = async function(host, execute) {
             answer: "Ω😀é", expected: "before-raw\nraw=Ω😀é\n" },
         { name: "blank-read-lines", read: 'base::readLines(stdin(), n=1L)',
             answer: "", expected: "before-raw\nraw=\n" },
-        { name: "oversized-raw-reply", read: 'loadNamespace("dialogforgetransport")$read_runtime_console_line("bounded raw input: ", 512L)',
+        { name: "oversized-raw-reply", read: 'loadNamespace("dialogforgeruntime")$read_runtime_console_line("bounded raw input: ", 512L)',
             answer: "x".repeat(513), error: "this R reader's byte limit" },
         { name: "raw-after-error", read: 'base::readLines(stdin(), n=1L)',
             answer: "recovered", expected: "before-raw\nraw=recovered\n" },
@@ -623,10 +623,10 @@ const runNative = async function() {
         DIALOGFORGE_BOUNDED_INPUT_PROTOTYPE: groupedInput ? "0" : "1",
         DIALOGFORGE_OUTPUT_LIBRARY: groupedInput ? ""
             : process.env.DIALOGFORGE_TEST_NATIVE_OUTPUT_LIBRARY
-                || path.join(root, "dist/r-output-prototype/native/aarch64-apple-darwin23-4.6.1"),
+                || path.join(root, "dist/r-runtime/native/aarch64-apple-darwin23-4.6.1"),
         DIALOGFORGE_TRANSPORT_LIBRARY: groupedInput ? ""
             : process.env.DIALOGFORGE_TEST_NATIVE_TRANSPORT_LIBRARY
-                || path.join(root, "dist/r-transport-prototype/native/aarch64-apple-darwin23-4.6.1")
+                || path.join(root, "dist/r-runtime/native/aarch64-apple-darwin23-4.6.1")
     };
     const previous = Object.fromEntries(Object.keys(overrides).map(name => [name, process.env[name]]));
     Object.assign(process.env, overrides);
@@ -761,7 +761,7 @@ const runNative = async function() {
                         const result = await manager.executeRuntimeMethod({ method: "runtime.interrupt", params: {} });
                         assert.equal(result.status, "ready", result.message);
                     }, execute
-                }, 'local({ loadNamespace("dialogforgetransport")$read_runtime_console_line("interrupt raw input: "); cat("input-unreachable\\n") })');
+                }, 'local({ loadNamespace("dialogforgeruntime")$read_runtime_console_line("interrupt raw input: "); cat("input-unreachable\\n") })');
                 const scope = await manager.executeInvisibleQuery({
                     query: fs.readFileSync(path.join(root, "scripts/check-runtime-console-scope.R"), "utf8"),
                     source: "paired-console-scope-regression"
@@ -1030,7 +1030,7 @@ const runNative = async function() {
                 host: "native", execute,
                 checkLowLevelClose: process.env.DIALOGFORGE_TEST_GRAPHICS_LOW_LEVEL === "1",
                 foreignDriverPath: process.env.DIALOGFORGE_TEST_GRAPHICS_CALLBACKS === "1"
-                    ? path.join(root, "dist/r-inspection/probe/native/graphicsdeviceprobe.so") : undefined,
+                    ? path.join(root, "dist/r-runtime/probe/native/graphicsdeviceprobe.so") : undefined,
                 openForeignDeviceCode: 'httpgd::hgd(silent=TRUE)',
                 readFailureDetails: async () => {
                     const result = await manager.executeInvisibleQuery({
@@ -1282,12 +1282,9 @@ const runWebR = async function() {
                         throw Error("Worker binary repository addressing did not preserve custom repos/SDK CRAN mirror");
                     }
                 }
-                const version = await runtime.evalRString("as.character(getRversion())");
-                const archive = await fetch("/r-output-prototype/webr/" + version + "/dialogforgeoutput_0.0.1.tgz");
-                if (!archive.ok) throw new Error("Build the SAME output helper for WebR first.");
+                // Production shared-control startup installs the single helper.
+                // The fixture only creates its private journal/library locations.
                 await runtime.evalRVoid('dir.create("/tmp/ordered-helper", recursive=TRUE); dir.create("/tmp/ordered-journals")');
-                await runtime.FS.writeFile("/tmp/ordered-helper.tgz", new Uint8Array(await archive.arrayBuffer()));
-                await runtime.evalRVoid('utils::untar("/tmp/ordered-helper.tgz", exdir="/tmp/ordered-helper", tar="internal")');
                 const helperStagedAt = performance.now();
                 const controlEvaluations = [];
                 const profileCompilation = ${process.env.DIALOGFORGE_TEST_STARTUP_PROFILE === "1"};
@@ -1798,7 +1795,7 @@ const runWebR = async function() {
             if (serveRegressionPackageLibrary(pathname, response, library)) return;
             if (pathname === "/graphics-device-probe.so") {
                 response.writeHead(200, { "Content-Type": "application/octet-stream" }).end(fs.readFileSync(
-                    path.join(root, "dist/r-inspection/probe/webr/graphicsdeviceprobe.so")
+                    path.join(root, "dist/r-runtime/probe/webr/graphicsdeviceprobe.so")
                 ));
                 return;
             }
@@ -1825,7 +1822,7 @@ const runWebR = async function() {
             else if (/^\/r-(inspection|output-prototype)\/webr\/4\.6\.0\/dialogforge(inspect_0\.4\.3|output_0\.0\.1)\.tgz$/.test(pathname)) {
                 file = path.join(root, "dist", pathname.slice(1));
             }
-            else if (pathname === "/r-transport-prototype/webr/4.6.0/dialogforgetransport_0.0.4.tgz") {
+            else if (pathname === "/r-runtime/webr/4.6.0/dialogforgeruntime_0.1.0.tgz") {
                 file = path.join(root, "dist", pathname.slice(1));
             }
             else if (pathname === "/control-cache.rds") {
@@ -1887,7 +1884,7 @@ const runWebR = async function() {
                 waitForPrompt: () => page.waitForFunction(() => window.orderedPromptCount > 0),
                 interrupt: () => page.evaluate(() => window.interruptOrderedAcceptance()),
                 execute: (code, answer) => page.evaluate(input => window.executeOrderedAcceptance(input.code, input.answer), { code, answer })
-            }, 'local({ loadNamespace("dialogforgetransport")$read_runtime_console_line("interrupt raw input: "); cat("input-unreachable\\n") })');
+            }, 'local({ loadNamespace("dialogforgeruntime")$read_runtime_console_line("interrupt raw input: "); cat("input-unreachable\\n") })');
             const scope = await page.evaluate(text => window.orderedRuntime.evalRString(text),
                 fs.readFileSync(path.join(root, "scripts/check-runtime-console-scope.R"), "utf8"));
             assert.equal(scope, "console-scope-passed");

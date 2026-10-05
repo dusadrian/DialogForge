@@ -5,8 +5,8 @@ library_path <- Sys.getenv("DIALOGFORGE_TRANSPORT_LIBRARY")
 if (!nzchar(library_path)) {
     stop("Set DIALOGFORGE_TRANSPORT_LIBRARY to the isolated prototype library.")
 }
-loadNamespace("dialogforgetransport", lib.loc = library_path)
-read_request <- getExportedValue("dialogforgetransport", "read_bounded_runtime_request")
+loadNamespace("dialogforgeruntime", lib.loc = library_path)
+read_request <- getExportedValue("dialogforgeruntime", "read_bounded_runtime_request")
 
 with_binary_input <- function(bytes, check) {
     path <- tempfile("dialogforge-bounded-input-")
@@ -49,7 +49,7 @@ with_binary_input(charToRaw("\n"), function(connection) {
         stopifnot(inherits(try(read_request(connection, limit), silent = TRUE), "try-error"))
     }
 })
-write_frame <- getExportedValue("dialogforgetransport", "write_checked_runtime_frame")
+write_frame <- getExportedValue("dialogforgeruntime", "write_checked_runtime_frame")
 output_path <- tempfile("dialogforge-checked-output-")
 output <- file(output_path, open = "wb", blocking = TRUE)
 tryCatch({

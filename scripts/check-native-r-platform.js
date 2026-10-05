@@ -93,10 +93,8 @@ try {
         'if (requireNamespace("declared", quietly=TRUE)) cat("declared=", as.character(packageVersion("declared")), "\\n")']);
     report.declaredIdentity = declared.stdout.trim();
     const hasDeclared = declared.entry.status === "passed" && /declared= /.test(declared.stdout);
-    for (const name of ["dialogforgeinspect", "dialogforgeoutput", "dialogforgetransport"]) {
-        build(name);
-    }
-    const probe = "src/runtime/providers/r/native/dialogforgeinspect/tests/altrepprobe.c";
+    build("dialogforgeruntime");
+    const probe = "src/runtime/providers/r/native/dialogforgeruntime/tests/altrepprobe.c";
     fingerprint(probe);
     fs.copyFileSync(path.join(root, probe), path.join(directory, "altrepprobe.c"));
     const probeBuild = run("build-altrep-probe", ["CMD", "SHLIB", "altrepprobe.c"], { cwd: directory });

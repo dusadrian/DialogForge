@@ -63,6 +63,7 @@ const main = function() {
         DIALOGFORGE_DIST_DIR: outputDir
     });
 
+    run(process.execPath, ["scripts/web-r-helper-artifacts.js", "--prepare"], env);
     run("tsc", [
         "-p",
         "tsconfig.json",

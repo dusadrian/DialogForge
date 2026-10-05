@@ -19,7 +19,7 @@ local({
     runtime$runtime_inspection_library <- Sys.getenv(
         "DIALOGFORGE_TEST_INSPECTION_LIBRARY",
         unset = file.path(
-            "dist/r-inspection/native", paste(R.version$platform, getRversion(), sep = "-")
+            "dist/r-runtime/native", paste(R.version$platform, getRversion(), sep = "-")
         )
     )
     for (file in c(
@@ -104,10 +104,10 @@ local({
     # It must not visit an ALTREP child or an unrelated callback-backed attribute.
     members <- structure(list(alpha = value), unrelated = value)
     before <- .Call(count)
-    fields <- dialogforgeinspect::stored_list_fields(members, "alpha")
+    fields <- dialogforgeruntime::stored_list_fields(members, "alpha")
     stopifnot(
         fields$inspectable, identical(fields$names, "alpha"),
-        !dialogforgeinspect::stored_list_fields(fields$value)$inspectable,
+        !dialogforgeruntime::stored_list_fields(fields$value)$inspectable,
         .Call(count) == before
     )
     cat("Stock wrappers remain visible after editor writes; foreign ALTREP callbacks stayed unchanged during automatic inspection.\n")

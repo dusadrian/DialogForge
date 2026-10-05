@@ -26,13 +26,9 @@ const version = prior.identity.match(/R version (\d+\.\d+\.\d+)/)[1];
 if (!/^[a-zA-Z0-9_.-]+$/.test(platform)) {
     throw Error("Unexpected native platform identity.");
 }
-const inspectionRoot = path.join(stage, "r-inspection/native");
+const inspectionRoot = path.join(stage, "r-runtime/native");
 fs.mkdirSync(inspectionRoot, { recursive: true });
 execFileSync("cp", ["-R", path.join(directory, "library"), path.join(inspectionRoot, platform + "-" + version)]);
-const transportLibrary = path.join(stage, "r-transport-prototype/native", platform + "-" + version);
-fs.mkdirSync(transportLibrary, { recursive: true });
-execFileSync("cp", ["-R", path.join(directory, "library/dialogforgetransport"),
-    path.join(transportLibrary, "dialogforgetransport")]);
 const cache = path.join(stage, "dist", sources, "runtime-control-cache.rds");
 fs.mkdirSync(path.dirname(cache), { recursive: true });
 fs.copyFileSync(path.join(directory, "runtime-control-cache.rds"), cache);

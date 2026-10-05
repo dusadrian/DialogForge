@@ -264,8 +264,7 @@ const checkEventThroughHostTransport = async function(host, delivery, fixture) {
             client = await installWebRSharedRuntimeControl({
                 ...fixture.limits,
                 runtime, fetchSource: async () => "",
-                fetchInspectionArchive: async () => new Uint8Array(),
-                fetchTransportArchive: async () => new Uint8Array(),
+                fetchHelperArchive: async () => new Uint8Array(),
                 runRuntimeOperation: (action, waitBeforeNext) => workerQueue.run(action, waitBeforeNext),
                 runtimeEventReceived: event => { forwarded.push(event); },
                 promptReceived: event => { forwarded.push(event); }

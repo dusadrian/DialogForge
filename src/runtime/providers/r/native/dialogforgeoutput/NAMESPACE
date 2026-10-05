@@ -1,4 +1,0 @@
-useDynLib(dialogforgeoutput, .registration = TRUE)
-export(open_output_capture)
-export(seal_output_capture)
-export(abort_output_capture)

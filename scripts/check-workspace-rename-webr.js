@@ -109,8 +109,7 @@ const main = async function() {
                 return;
             }
             if (
-                /^\/r-inspection\/webr\/\d+\.\d+\.\d+\/dialogforgeinspect_0\.4\.3\.tgz$/.test(pathname)
-                || /^\/r-transport-prototype\/webr\/\d+\.\d+\.\d+\/dialogforgetransport_0\.0\.4\.tgz$/.test(pathname)
+                /^\/r-runtime\/webr\/\d+\.\d+\.\d+\/dialogforgeruntime_0\.1\.0\.tgz$/.test(pathname)
             ) {
                 response.setHeader("Content-Type", "application/octet-stream");
                 response.end(await fs.readFile(path.join(rootDir, "dist", pathname.slice(1))));
@@ -252,8 +251,9 @@ const main = async function() {
             "runtimeDatasetCore.R", "runtimeDatasetStateCore.R", "runtimeOutputJournalPrototype.R"
         ].map(async (name) => ({ name, text: await fs.readFile(path.join(sourceDir, name), "utf8") })));
         const inspectionTests = await Promise.all([
-            "src/runtime/providers/r/native/dialogforgeinspect/tests/binding-info.R",
-            "src/runtime/providers/r/native/dialogforgeinspect/tests/stored-graph.R",
+            "scripts/check-r-runtime-helper.R",
+            "src/runtime/providers/r/native/dialogforgeruntime/tests/binding-info.R",
+            "src/runtime/providers/r/native/dialogforgeruntime/tests/stored-graph.R",
             "scripts/check-workspace-standard-method-safety.R",
             "scripts/check-workspace-inspection-safety.R",
             "scripts/check-workspace-copy-safety.R",
@@ -261,7 +261,7 @@ const main = async function() {
             "scripts/check-output-journal-prototype.R",
             "scripts/check-dataset-mixed-change.R"
         ].map(async (name) => ({ name, text: await fs.readFile(path.join(rootDir, name), "utf8") })));
-        const probe = await fs.readFile(path.join(rootDir, "dist/r-inspection/probe/webr/altrepprobe.so"));
+        const probe = await fs.readFile(path.join(rootDir, "dist/r-runtime/probe/webr/altrepprobe.so"));
         const declaredInstalled = await page.evaluate(async ({ sources, tests, probe }) => {
             const runtime = window.renameRuntime;
             await runtime.FS.writeFile("/tmp/altrepprobe.so", new Uint8Array(probe));
@@ -304,11 +304,11 @@ const main = async function() {
             await window.renameRuntime.close();
         });
         console.log("Real browser WebR Rename: shared snapshots, active dataset, receipts, rejection cases, uncertain outcome and single-attempt recovery passed.");
-        await page.route("**/r-inspection/webr/**", (route) => route.fulfill({ status: 404, body: "missing helper" }));
+        await page.route("**/r-runtime/webr/**", (route) => route.fulfill({ status: 404, body: "missing helper" }));
         try {
             await assert.rejects(
                 page.evaluate(() => window.startRenameAcceptance()),
-                /Build and serve the WebR binding-inspection helper/
+                /Build and serve the WebR runtime helper package/
             );
         }
         finally {

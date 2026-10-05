@@ -9,6 +9,8 @@ const checkRequiredHelperCleanup = async function(helper, mode) {
     const cleanupFailure = new Error("required helper cleanup failed");
     const calls = [];
     const released = [];
+    const writes = [];
+    let fetches = 0;
     const writeFails = mode === "write-failed" || mode === "write-and-cleanup-failed";
     const extractionFails = mode === "extraction-failed" || mode === "extraction-and-cleanup-failed";
     const cleanupFails = mode === "cleanup-failed"
@@ -29,6 +31,7 @@ const checkRequiredHelperCleanup = async function(helper, mode) {
         },
         FS: {
             writeFile: async function(path) {
+                writes.push(path);
                 if (writeFails && path === archivePath) {
                     throw stagingFailure;
                 }
@@ -45,13 +48,20 @@ const checkRequiredHelperCleanup = async function(helper, mode) {
         runtime,
         runRuntimeOperation: action => action(),
         fetchSource: async () => "",
-        fetchInspectionArchive: async () => new Uint8Array(),
-        fetchTransportArchive: async () => new Uint8Array()
+        fetchHelperArchive: async () => {
+            fetches += 1;
+            return new Uint8Array();
+        }
     });
     if (mode === "ready") {
         const client = await startup;
         client.detach();
         assert.ok(calls.at(-1).includes("runtime_prepare_control_functions"));
+        const extraction = calls.filter(command => command.includes("utils::untar("));
+        assert.equal(extraction.length, 1, "One package extraction serves all three capabilities.");
+        for (const name of ["runtime_inspection_library", "runtime_transport_library", "runtime_output_library"]) {
+            assert.ok(extraction[0].includes(`assign("${name}", "/helper-fixture/library"`));
+        }
     }
     else {
         await assert.rejects(startup, function(error) {
@@ -64,6 +74,8 @@ const checkRequiredHelperCleanup = async function(helper, mode) {
     }
     assert.equal(released.filter(path => path === archivePath).length, 1,
         "The captured archive receives one cleanup attempt, including a failed write.");
+    assert.equal(fetches, 1, "Startup fetches only the single runtime package.");
+    assert.deepEqual(writes, [archivePath], "Startup stages only one helper archive.");
     if (writeFails) {
         assert.equal(calls.some(command => command.includes(`utils::untar(${JSON.stringify(archivePath)}`)), false,
             "A failed archive write must not proceed to extraction.");
@@ -96,8 +108,7 @@ const checkCacheStaging = async function(mode) {
         runtime,
         runRuntimeOperation: action => action(),
         fetchSource: async () => "",
-        fetchInspectionArchive: async () => new Uint8Array(),
-        fetchTransportArchive: async () => new Uint8Array(),
+        fetchHelperArchive: async () => new Uint8Array(),
         fetchControlCompilationCache: async () => {
             if (mode === "fetch-failed") throw Error("physical fetch failed");
             return mode === "missing" ? null : new Uint8Array([1, 2, 3]);
@@ -116,7 +127,7 @@ const checkCacheStaging = async function(mode) {
 };
 
 (async function() {
-    for (const helper of ["dialogforgeinspect_0.4.3", "dialogforgetransport_0.0.4"]) {
+    for (const helper of ["dialogforgeruntime_0.1.0"]) {
         for (const mode of [
             "ready", "write-failed", "extraction-failed", "cleanup-failed",
             "write-and-cleanup-failed", "extraction-and-cleanup-failed"

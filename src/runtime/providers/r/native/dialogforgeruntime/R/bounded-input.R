@@ -6,7 +6,7 @@ read_bounded_runtime_request <- function(connection, max_bytes = 262144L) {
         max_bytes < 512 || max_bytes > 16777216) {
         stop("Runtime input limit must be an integer from 512 to 16777216 bytes.")
     }
-    .Call(df_read_bounded_request, connection, as.integer(max_bytes))
+    .Call(C_df_read_bounded_request, connection, as.integer(max_bytes))
 }
 
 
@@ -18,7 +18,7 @@ write_checked_runtime_frame <- function(connection, payload) {
     if (nchar(payload, type = "bytes") > 16777216 || grepl("\n", payload, fixed = TRUE)) {
         stop("Runtime frame is oversized or contains a framing newline.")
     }
-    .Call(df_write_runtime_frame, connection, charToRaw(paste0(payload, "\n")))
+    .Call(C_df_write_runtime_frame, connection, charToRaw(paste0(payload, "\n")))
 }
 
 
@@ -32,7 +32,7 @@ read_runtime_console_line <- function(prompt, max_bytes = 262144L, host_transpor
     ) {
         stop("Host console input requires one prompt and a bounded byte limit.")
     }
-    .Call(df_read_runtime_console_line, prompt, as.integer(max_bytes), host_transport)
+    .Call(C_df_read_runtime_console_line, prompt, as.integer(max_bytes), host_transport)
 }
 
 
@@ -40,5 +40,5 @@ with_runtime_console_input <- function(evaluate, read_reply) {
     if (typeof(evaluate) != "closure" || typeof(read_reply) != "closure") {
         stop("Console input requires evaluation and reply functions.")
     }
-    .Call(df_with_runtime_console_input, evaluate, read_reply)
+    .Call(C_df_with_runtime_console_input, evaluate, read_reply)
 }

@@ -336,6 +336,11 @@ export const createRRuntimeLaunchPlan = function(options: RRuntimeLaunchPlanOpti
         command,
         platform
     );
+    const helperRoot = toUnpackedAsarPath([
+        path.join(rootDir, "r-runtime", "native"),
+        path.join(rootDir, "dist", "r-runtime", "native")
+    ].find((candidate) => fs.existsSync(toUnpackedAsarPath(candidate)))
+        || path.join(rootDir, "dist", "r-runtime", "native"));
 
     return {
         command,
@@ -359,21 +364,9 @@ export const createRRuntimeLaunchPlan = function(options: RRuntimeLaunchPlanOpti
             DM_ORDERED_OUTPUT_ENABLED: orderedOutput ? "1" : "0",
             DM_ORDERED_OUTPUT_DIR: orderedOutputDirectory,
             DM_ORDERED_OUTPUT_SESSION: orderedOutput ? createToken() : "",
-            DM_RUNTIME_INSPECTION_ROOT: toUnpackedAsarPath([
-                path.join(rootDir, "r-inspection", "native"),
-                path.join(rootDir, "dist", "r-inspection", "native")
-            ].find((candidate) => fs.existsSync(toUnpackedAsarPath(candidate)))
-                || path.join(rootDir, "dist", "r-inspection", "native")),
-            DM_RUNTIME_TRANSPORT_ROOT: toUnpackedAsarPath([
-                path.join(rootDir, "r-transport-prototype", "native"),
-                path.join(rootDir, "dist", "r-transport-prototype", "native")
-            ].find((candidate) => fs.existsSync(toUnpackedAsarPath(candidate)))
-                || path.join(rootDir, "dist", "r-transport-prototype", "native")),
-            DM_RUNTIME_OUTPUT_ROOT: toUnpackedAsarPath([
-                path.join(rootDir, "r-output-prototype", "native"),
-                path.join(rootDir, "dist", "r-output-prototype", "native")
-            ].find((candidate) => fs.existsSync(toUnpackedAsarPath(candidate)))
-                || path.join(rootDir, "dist", "r-output-prototype", "native")),
+            DM_RUNTIME_INSPECTION_ROOT: helperRoot,
+            DM_RUNTIME_TRANSPORT_ROOT: helperRoot,
+            DM_RUNTIME_OUTPUT_ROOT: helperRoot,
             DM_PROFILE_RUNTIME_CONTROL_PATH: options.profileRuntimeControlPath || ""
         }),
         runtimeSourceDir,

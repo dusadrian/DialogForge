@@ -138,7 +138,7 @@ const main = async function() {
                 path.join(root, "src/runtime/providers/r/r-sources", name), "utf8"
             )),
             inspectionArchive: Array.from(fs.readFileSync(path.join(root,
-                "dist/r-inspection/webr/4.6.0/dialogforgeinspect_0.4.3.tgz")))
+                "dist/r-runtime/webr/4.6.0/dialogforgeruntime_0.1.0.tgz")))
         });
         const first = await page.evaluate(() => window.drawCommand(
             'par(mar=c(0,0,0,0)); plot.new(); plot.window(c(0,1),c(0,1),xaxs="i",yaxs="i"); rect(.1,.1,.3,.3,col="red",border=NA)', "first"

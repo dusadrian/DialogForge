@@ -2,7 +2,7 @@ library_path <- Sys.getenv("DIALOGFORGE_OUTPUT_LIBRARY")
 if (!nzchar(library_path)) {
     stop("Set DIALOGFORGE_OUTPUT_LIBRARY to the isolated prototype library.")
 }
-namespace <- loadNamespace("dialogforgeoutput", lib.loc = library_path)
+namespace <- loadNamespace("dialogforgeruntime", lib.loc = library_path)
 open_capture <- get("open_output_capture", envir = namespace)
 seal_capture <- get("seal_output_capture", envir = namespace)
 abort_capture <- get("abort_output_capture", envir = namespace)

@@ -1,12 +1,12 @@
 local({
     library <- Sys.getenv("DIALOGFORGE_TRANSPORT_LIBRARY", unset = "")
-    if (is.element("dialogforgetransport", loadedNamespaces())) {
-        helper <- asNamespace("dialogforgetransport")
+    if (is.element("dialogforgeruntime", loadedNamespaces())) {
+        helper <- asNamespace("dialogforgeruntime")
     }
     else {
-        helper <- loadNamespace("dialogforgetransport", lib.loc = library)
+        helper <- loadNamespace("dialogforgeruntime", lib.loc = library)
     }
-    stopifnot(identical(as.character(getNamespaceVersion(helper)), "0.0.4"))
+    stopifnot(identical(as.character(getNamespaceVersion(helper)), "0.1.0"))
     scoped <- helper$with_runtime_console_input
     prompts <- character(0)
     reply <- function(prompt) {

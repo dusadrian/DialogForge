@@ -18,8 +18,8 @@ runtime_create_ordered_output_config <- function(library, directory, session_id)
         stop("Ordered output library or capture directory is unavailable.")
     }
 
-    namespace <- loadNamespace("dialogforgeoutput", lib.loc = library)
-    if (!identical(as.character(getNamespaceVersion(namespace)), "0.0.1")) {
+    namespace <- loadNamespace("dialogforgeruntime", lib.loc = library)
+    if (!identical(as.character(getNamespaceVersion(namespace)), "0.1.0")) {
         stop("Unsupported DialogForge output prototype version.")
     }
 

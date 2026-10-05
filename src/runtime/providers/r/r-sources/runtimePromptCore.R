@@ -15,8 +15,8 @@ runtime_console_transport_namespace <- function() {
     if (!nzchar(library) || !dir.exists(library)) {
         stop("DialogForge host-console transport helper is not configured; build it for this runtime.")
     }
-    namespace <- loadNamespace("dialogforgetransport", lib.loc = library)
-    if (!identical(as.character(getNamespaceVersion(namespace)), "0.0.4")) {
+    namespace <- loadNamespace("dialogforgeruntime", lib.loc = library)
+    if (!identical(as.character(getNamespaceVersion(namespace)), "0.1.0")) {
         stop("DialogForge host-console transport helper version mismatch; rebuild it.")
     }
     namespace

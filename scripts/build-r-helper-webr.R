@@ -6,7 +6,7 @@ if (!is.element(length(arguments), c(2L, 3L)) || !file.exists(arguments[[1]])) {
 
 package_name <- arguments[[2]]
 if (!is.element(package_name, c(
-    "dialogforgeinspect", "dialogforgeoutput", "dialogforgetransport",
+    "dialogforgeruntime",
     "DialogForgeInstallFixture", "DialogForgeDependencyFixture",
     "DialogForgeCacheFixture"
 ))) {

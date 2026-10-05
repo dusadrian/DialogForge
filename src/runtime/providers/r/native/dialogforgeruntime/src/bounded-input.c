@@ -60,7 +60,7 @@ static SEXP df_input_result(const char *status, const unsigned char *buffer, siz
     return result;
 }
 
-static SEXP df_read_bounded_request(SEXP connection, SEXP maximum)
+SEXP df_read_bounded_request(SEXP connection, SEXP maximum)
 {
     if (TYPEOF(maximum) != INTSXP || XLENGTH(maximum) != 1 ||
         INTEGER(maximum)[0] < 512 || INTEGER(maximum)[0] > 16777216) {
@@ -111,7 +111,7 @@ static SEXP df_read_bounded_request(SEXP connection, SEXP maximum)
     }
 }
 
-static SEXP df_write_runtime_frame(SEXP connection, SEXP bytes)
+SEXP df_write_runtime_frame(SEXP connection, SEXP bytes)
 {
     if (TYPEOF(bytes) != RAWSXP || XLENGTH(bytes) < 1 || XLENGTH(bytes) > 16777217) {
         Rf_error("Invalid DialogForge outbound frame.");
@@ -215,7 +215,7 @@ static void df_release_console_owner(void *data, Rboolean jump)
     active_console_scope = NULL;
 }
 
-static SEXP df_with_runtime_console_input(SEXP evaluate, SEXP read_reply)
+SEXP df_with_runtime_console_input(SEXP evaluate, SEXP read_reply)
 {
     if (TYPEOF(evaluate) != CLOSXP || TYPEOF(read_reply) != CLOSXP || active_console_scope) {
         Rf_error("DialogForge console input requires one exclusive evaluation owner.");
@@ -256,7 +256,7 @@ static void df_restore_console_interactivity(void *data, Rboolean jump)
     ptr_R_ReadConsole = request->console_reader;
 }
 
-static SEXP df_read_runtime_console_line(SEXP prompt, SEXP maximum, SEXP host_transport)
+SEXP df_read_runtime_console_line(SEXP prompt, SEXP maximum, SEXP host_transport)
 {
     if (TYPEOF(prompt) != STRSXP || ALTREP(prompt) || XLENGTH(prompt) != 1 ||
         STRING_ELT(prompt, 0) == NA_STRING || TYPEOF(maximum) != INTSXP ||
@@ -294,19 +294,4 @@ static SEXP df_read_runtime_console_line(SEXP prompt, SEXP maximum, SEXP host_tr
         Rf_error("DialogForge host console reply exceeded its limit.");
     }
     return Rf_ScalarString(Rf_mkCharLenCE((const char *)buffer, (int)used, CE_UTF8));
-}
-
-static const R_CallMethodDef call_methods[] = {
-    {"df_read_bounded_request", (DL_FUNC) &df_read_bounded_request, 2},
-    {"df_write_runtime_frame", (DL_FUNC) &df_write_runtime_frame, 2},
-    {"df_read_runtime_console_line", (DL_FUNC) &df_read_runtime_console_line, 3},
-    {"df_with_runtime_console_input", (DL_FUNC) &df_with_runtime_console_input, 2},
-    {NULL, NULL, 0}
-};
-
-void attribute_visible R_init_dialogforgetransport(DllInfo *dll)
-{
-    R_registerRoutines(dll, NULL, call_methods, NULL, NULL);
-    R_useDynamicSymbols(dll, FALSE);
-    R_forceSymbols(dll, TRUE);
 }

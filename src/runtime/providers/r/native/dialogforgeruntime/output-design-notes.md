@@ -1,4 +1,8 @@
-# Shared output capture prototype
+# Historical output-component design notes
+
+The implementation is now part of the single `dialogforgeruntime` 0.1.0 package.
+Older component versions and prototype acceptance notes below are historical;
+the parent README owns current build instructions.
 
 Ordinary native and browser app compositions now request ordered capture and
 stage the generated helper resources. Programmatic worker hosts can omit the
@@ -25,9 +29,9 @@ unverified boundaries. Dated acceptance evidence and remaining gates are tracked
 in the private architecture/status records; do not read older unverified claims
 as overriding the qualified acceptance above.
 
-This package
-is separate from `dialogforgeinspect` because inspection and output capture have
-different contracts. Its two custom R connections share a single native writer;
+Output capture retains a separate source module because inspection and output
+have different contracts, but both now belong to the SAME package. Its two
+custom R connections share a single native writer;
 there are no R publisher callbacks inside the writer and no patched cat/print.
 
 The file starts with eight ASCII bytes `DFOUT001`. Each frame has one channel
@@ -155,15 +159,15 @@ Unicode boundaries, standard event identity/metadata, guarded callback acceptanc
 and the growing-file reader-to-transcript path. It does not establish native R
 encoding negotiation, launcher integration, console rendering or paint/drain.
 
-Explicit helper build entry: `node scripts/build-r-output-prototype.js [native|webr|both]`.
+Explicit helper build entry: `node scripts/build-r-runtime.js [native|webr|both]`.
 The default remains native. It uses DIALOGFORGE_BUILD_R (default R) to create one
 retained source archive from this package directory. With `both`, native and
 WebR compilation consume that exact archive. Native installs into
-`dist/r-output-prototype/native/<platform-version>`, not the shared R library.
+`dist/r-runtime/native/<platform-version>`, not the shared R library.
 WebR uses the same `scripts/build-r-helper-webr.R` entry as the inspection helper,
 with the pre-existing Docker toolchain route (default image
 `ghcr.io/r-wasm/webr:v0.6.0`, overridable via DIALOGFORGE_WEBR_BUILD_IMAGE).
-It writes under `dist/r-output-prototype/webr/<webr-version>`; no browser mounting,
+It writes under `dist/r-runtime/webr/<webr-version>`; no browser mounting,
 startup loading or publication adapter is added. The build container has no
 network access. The image must already be available for an offline build.
 Neither target has been built for this output prototype; WebR connection ABI,

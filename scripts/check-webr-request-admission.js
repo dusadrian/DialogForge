@@ -74,8 +74,7 @@ const createFixture = async function(options = {}) {
     };
     const client = await installWebRSharedRuntimeControl({
         runtime, maxOutstandingRequests: 2,
-        fetchSource: async () => "", fetchInspectionArchive: async () => new Uint8Array(),
-        fetchTransportArchive: async () => new Uint8Array(),
+        fetchSource: async () => "", fetchHelperArchive: async () => new Uint8Array(),
         runRuntimeOperation: (action, waitBeforeNext) => queue.run(action, waitBeforeNext),
         orderedOutput: { library: "/fixture", directory: "/tmp", sessionId: "fixture" },
         outputJournalForRequest: function() {

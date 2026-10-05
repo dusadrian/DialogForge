@@ -75,7 +75,7 @@ static int df_output_publish(df_output_journal *journal,
 static df_output_journal *df_output_owner(SEXP owner)
 {
     if (TYPEOF(owner) != EXTPTRSXP ||
-        R_ExternalPtrTag(owner) != Rf_install("dialogforgeoutput.journal")) {
+        R_ExternalPtrTag(owner) != Rf_install("dialogforgeruntime.journal")) {
         Rf_error("Invalid DialogForge output journal.");
     }
     df_output_journal *journal = R_ExternalPtrAddr(owner);
@@ -204,14 +204,14 @@ static SEXP df_output_make_connection(SEXP owner, unsigned char channel)
     return result;
 }
 
-static SEXP df_output_open(SEXP path)
+SEXP df_output_open(SEXP path)
 {
     if (TYPEOF(path) != STRSXP || ALTREP(path) || XLENGTH(path) != 1 ||
         STRING_ELT(path, 0) == NA_STRING || !LENGTH(STRING_ELT(path, 0))) {
         Rf_error("Output capture requires one ordinary private file path.");
     }
     SEXP owner = PROTECT(R_MakeExternalPtr(
-        NULL, Rf_install("dialogforgeoutput.journal"), R_NilValue
+        NULL, Rf_install("dialogforgeruntime.journal"), R_NilValue
     ));
     R_RegisterCFinalizerEx(owner, df_output_finalize, TRUE);
     df_output_journal *journal = calloc(1, sizeof(*journal));
@@ -261,7 +261,7 @@ static SEXP df_output_open(SEXP path)
     return result;
 }
 
-static SEXP df_output_seal(SEXP owner)
+SEXP df_output_seal(SEXP owner)
 {
     df_output_journal *journal = df_output_owner(owner);
     if (!journal->sealed) {
@@ -280,7 +280,7 @@ static SEXP df_output_seal(SEXP owner)
     return Rf_ScalarReal((double)journal->sequence);
 }
 
-static SEXP df_output_abort(SEXP owner)
+SEXP df_output_abort(SEXP owner)
 {
     df_output_journal *journal = df_output_owner(owner);
     journal->failed = 1;
@@ -289,18 +289,4 @@ static SEXP df_output_abort(SEXP owner)
         journal->file = NULL;
     }
     return R_NilValue;
-}
-
-static const R_CallMethodDef call_methods[] = {
-    {"df_output_open", (DL_FUNC) &df_output_open, 1},
-    {"df_output_seal", (DL_FUNC) &df_output_seal, 1},
-    {"df_output_abort", (DL_FUNC) &df_output_abort, 1},
-    {NULL, NULL, 0}
-};
-
-void attribute_visible R_init_dialogforgeoutput(DllInfo *dll)
-{
-    R_registerRoutines(dll, NULL, call_methods, NULL, NULL);
-    R_useDynamicSymbols(dll, FALSE);
-    R_forceSymbols(dll, TRUE);
 }

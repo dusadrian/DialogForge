@@ -78,7 +78,7 @@ const main = async function() {
     assert.ok(source.includes("runtime_install_console_input_scope()"));
     assert.ok(source.includes("read_console_line <- runtime_console_input_reader"));
     const core = fs.readFileSync("src/runtime/providers/r/r-sources/runtimePromptCore.R", "utf8");
-    assert.ok(core.includes('getNamespaceVersion(namespace)), "0.0.4"'));
+    assert.ok(core.includes('getNamespaceVersion(namespace)), "0.1.0"'));
     console.log("Browser runtime preserves SDK channel negotiation and host paths/arguments.");
 };
 
