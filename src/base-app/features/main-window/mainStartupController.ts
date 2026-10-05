@@ -53,6 +53,7 @@ export interface MainStartupControllerBindings {
     renderProductSettings(composition: ApplicationComposition): void;
     renderApplicationSettings(settings: Record<string, unknown>): void;
     applyApplicationSettings(settings: Record<string, unknown>): void;
+    configureStartupMessages?(enabled: boolean): void;
     renderCapabilities(runtime: RuntimeProviderManifest): void;
     renderRuntimeSession(session: RuntimeSessionSnapshot): void;
     renderConsoleStatus(session: RuntimeSessionSnapshot): void;
@@ -156,6 +157,9 @@ export const createMainStartupController = function(
 
             bindings.renderApplicationSettings(applicationSettings);
             bindings.applyApplicationSettings(applicationSettings);
+            bindings.configureStartupMessages?.(
+                !shouldStartRuntimeQuietly(applicationSettings)
+            );
             bindings.setBootStage("settings:rendered");
             bindings.renderCapabilities(composition.runtime || { capabilities: [] });
             bindings.renderRuntimeSession(composition.runtimeSession || {});

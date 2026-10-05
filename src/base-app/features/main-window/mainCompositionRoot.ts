@@ -1,4 +1,5 @@
 import { readAcceptedRuntimeCommandResult } from "../../../runtime/commands/runtimeCommandReceipt";
+import { createConsoleStartupOutputController } from "../../../console/renderer/consoleStartupOutputController";
 import type {
     ApplicationComposition,
     DialogDefinition,
@@ -350,7 +351,14 @@ const applicationPanelController = createMainApplicationPanelController({
 
 const renderMenu = applicationPanelController.renderMenu;
 const renderCapabilities = applicationPanelController.renderCapabilities;
-const renderRuntimeSession = applicationPanelController.renderRuntimeSession;
+const startupOutputController = createConsoleStartupOutputController({
+    getSession: function() { return runtimeSessionSnapshot; },
+    appendOutput: function(text) { appendConsoleStartupOutput(text); }
+});
+const renderRuntimeSession = function(snapshot: RuntimeSessionSnapshot): void {
+    applicationPanelController.renderRuntimeSession(snapshot);
+    startupOutputController.observe(snapshot);
+};
 const renderRuntimeEvents = applicationPanelController.renderRuntimeEvents;
 const renderPrompts = applicationPanelController.renderPrompts;
 const renderFeatures = applicationPanelController.renderFeatures;
@@ -937,7 +945,7 @@ const runtimeSessionServices = createMainRuntimeSessionServices({
     renderConsoleStatus,
     beforeStartupTasks: function(snapshot): void {
         if (showStartupMessagesBeforeStartupTasks) {
-            appendConsoleStartupOutput(snapshot.startupOutput || "");
+            startupOutputController.observe(snapshot);
         }
     },
     refreshWorkspace: function(): Promise<void> {
@@ -1495,6 +1503,7 @@ const mainStartupController = createMainStartupController({
         return dialogForge.readSettings();
     },
     applyApplicationSettings,
+    configureStartupMessages: startupOutputController.configure,
     readActiveDataset: function(): Promise<ActiveDatasetSnapshot> {
         return dialogForge.getActiveDataset();
     },
@@ -1522,6 +1531,7 @@ const mainStartupController = createMainStartupController({
     focusVisibleCommandInput,
     markReady: function(): void {
         document.body.dataset.dialogForgeReady = "1";
+        startupOutputController.outputReady();
     },
     startRuntimeSession: function(
         options?: RuntimeStartupOptions
