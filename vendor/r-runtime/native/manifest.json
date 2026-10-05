@@ -1,0 +1,14 @@
+{
+    "format": 1,
+    "packageName": "dialogforgeruntime",
+    "packageVersion": "0.1.0",
+    "targets": [
+        {
+            "platform": "darwin",
+            "arch": "arm64",
+            "runtimePlatform": "aarch64-apple-darwin23",
+            "runtimeVersion": "4.6.1",
+            "receiptSha256": "e0c5ec4c3174b1e7cf3eb8a32ed11f1cfbfae7cecbb7d242963ecac71dbc4a16"
+        }
+    ]
+}

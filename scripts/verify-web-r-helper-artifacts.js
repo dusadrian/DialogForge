@@ -6,9 +6,11 @@ const os = require("node:os");
 const path = require("node:path");
 const zlib = require("node:zlib");
 const http = require("node:http");
+const crypto = require("node:crypto");
 const {
     readWebRHelperArtifacts,
     prepareWebRHelperArtifacts,
+    bundleWebRHelperArtifacts,
     assertWebRHelperArtifacts,
     checkServedWebRHelperArtifacts
 } = require("./web-r-helper-artifacts");
@@ -40,21 +42,31 @@ const buildFixture = function(helper) {
 };
 const expectBuilds = function(expected) {
     calls.length = 0;
-    prepareWebRHelperArtifacts(root, buildFixture);
+    if (expected.length > 0) {
+        bundleWebRHelperArtifacts(root, buildFixture);
+    }
+    prepareWebRHelperArtifacts(root);
     assert.deepEqual(calls, expected);
     assertWebRHelperArtifacts(root, path.join(root, "dist"));
 };
 
+// A fresh deployment never invokes the builder, even when no prebuilt exists.
+assert.throws(() => prepareWebRHelperArtifacts(root), /Prebuilt WebR helper is missing, stale or invalid/);
+assert.deepEqual(calls, []);
 expectBuilds(names);
 expectBuilds([]);
 writeFixture("src/runtime/providers/r/native/dialogforgeruntime/src/helper.c", "/* Changed canonical fixture */\n");
+assert.throws(() => prepareWebRHelperArtifacts(root), /Prebuilt WebR helper is missing, stale or invalid/);
 expectBuilds([names[0]]);
 writeFixture("scripts/build-r-helper-webr.R", "# Changed shared builder\n");
+assert.throws(() => prepareWebRHelperArtifacts(root), /Prebuilt WebR helper is missing, stale or invalid/);
 expectBuilds(names);
 writeFixture("scripts/build-r-runtime-helper.js", "// Changed helper builder\n");
+assert.throws(() => prepareWebRHelperArtifacts(root), /Prebuilt WebR helper is missing, stale or invalid/);
 expectBuilds(names);
 const previousImage = process.env.DIALOGFORGE_WEBR_BUILD_IMAGE;
 process.env.DIALOGFORGE_WEBR_BUILD_IMAGE = "fixture-toolchain:changed";
+assert.throws(() => prepareWebRHelperArtifacts(root), /Prebuilt WebR helper is missing, stale or invalid/);
 expectBuilds(names);
 if (previousImage === undefined) {
     delete process.env.DIALOGFORGE_WEBR_BUILD_IMAGE;
@@ -66,33 +78,71 @@ expectBuilds(names);
 let artifacts = readWebRHelperArtifacts(root);
 const firstArchive = path.join(root, "dist", artifacts[0].relativePath);
 fs.writeFileSync(firstArchive, "corrupt gzip");
-expectBuilds([names[0]]);
+expectBuilds([]);
 fs.writeFileSync(firstArchive + ".build.json", "null");
-expectBuilds([names[0]]);
+expectBuilds([]);
 fs.writeFileSync(firstArchive + ".build.json", "{invalid json");
-expectBuilds([names[0]]);
+expectBuilds([]);
 fs.writeFileSync(firstArchive, zlib.gzipSync("different valid gzip bytes"));
-expectBuilds([names[0]]);
+expectBuilds([]);
+// A self-consistent generated receipt still cannot replace the supplied pin.
+const alternateArchive = zlib.gzipSync("self-consistent but unpinned payload");
+const alternateReceipt = JSON.parse(fs.readFileSync(firstArchive + ".build.json", "utf8"));
+alternateReceipt.archiveSha256 = crypto.createHash("sha256").update(alternateArchive).digest("hex");
+fs.writeFileSync(firstArchive, alternateArchive);
+fs.writeFileSync(firstArchive + ".build.json", JSON.stringify(alternateReceipt));
+assert.throws(() => assertWebRHelperArtifacts(root, path.join(root, "dist")), /missing, stale or invalid/);
+expectBuilds([]);
 fs.unlinkSync(firstArchive + ".build.json");
-expectBuilds([names[0]]);
+expectBuilds([]);
+
+// A valid dist cache must not hide a broken supplied bundle. Missing or changed
+// bundle bytes fail closed without using a compiler or changing the cache.
+const suppliedArchive = path.join(root, "vendor", artifacts[0].relativePath);
+const suppliedBytes = fs.readFileSync(suppliedArchive);
+const suppliedReceipt = fs.readFileSync(suppliedArchive + ".build.json");
+for (const invalid of ["corrupt gzip", zlib.gzipSync("wrong prebuilt bytes")]) {
+    fs.writeFileSync(suppliedArchive, invalid);
+    assert.throws(() => prepareWebRHelperArtifacts(root), /Prebuilt WebR helper is missing, stale or invalid/);
+    assert.deepEqual(fs.readFileSync(firstArchive), suppliedBytes);
+}
+fs.unlinkSync(suppliedArchive);
+assert.throws(() => prepareWebRHelperArtifacts(root), /Prebuilt WebR helper is missing, stale or invalid/);
+fs.writeFileSync(suppliedArchive, suppliedBytes);
+for (const invalid of ["null", "{invalid json", "{}"]) {
+    fs.writeFileSync(suppliedArchive + ".build.json", invalid);
+    assert.throws(() => prepareWebRHelperArtifacts(root), /Prebuilt WebR helper is missing, stale or invalid/);
+}
+fs.unlinkSync(suppliedArchive + ".build.json");
+assert.throws(() => prepareWebRHelperArtifacts(root), /Prebuilt WebR helper is missing, stale or invalid/);
+fs.writeFileSync(suppliedArchive + ".build.json", suppliedReceipt);
+expectBuilds([]);
+fs.unlinkSync(firstArchive);
+expectBuilds([]);
+writeFixture("node_modules/webr/package.json", '{"version":"0.6.1"}');
+assert.throws(() => prepareWebRHelperArtifacts(root), /Prebuilt WebR helper is missing, stale or invalid/);
+expectBuilds(names);
 
 writeFixture("src/runtime/providers/r/native/dialogforgeruntime/src/helper.c", "/* Another source revision */\n");
-assert.throws(() => prepareWebRHelperArtifacts(root, () => ({ status: 1 })), /Cannot prepare dialogforgeruntime/);
+assert.throws(() => bundleWebRHelperArtifacts(root, () => ({ status: 1 })), /Cannot build dialogforgeruntime/);
 assert.throws(() => assertWebRHelperArtifacts(root, path.join(root, "dist")), /missing, stale or invalid/);
+assert.throws(() => prepareWebRHelperArtifacts(root), /Prebuilt WebR helper is missing, stale or invalid/);
 expectBuilds([names[0]]);
 
 // A stale expected archive cannot satisfy a successful build that emits no
 // replacement, including a builder using the wrong R-version output directory.
 writeFixture("src/runtime/providers/r/native/dialogforgeruntime/src/helper.c", "/* Wrong target fixture */\n");
-assert.throws(() => prepareWebRHelperArtifacts(root, helper => {
+assert.throws(() => bundleWebRHelperArtifacts(root, helper => {
     writeFixture(path.join("dist", helper.directory, "webr/4.5.0", helper.name + "_1.2.3.tgz"), zlib.gzipSync("wrong target"));
     return { status: 0 };
 }), /did not produce a valid helper/);
 expectBuilds([names[0]]);
 
 writeFixture("node_modules/webr/dist/webR/config.d.ts", 'export declare const R_VERSION = "4.7.0";');
+assert.throws(() => prepareWebRHelperArtifacts(root), /Prebuilt WebR helper is missing, stale or invalid/);
 expectBuilds(names);
 writeFixture("src/runtime/providers/r/native/dialogforgeruntime/DESCRIPTION", "Version: 1.3.0\n");
+assert.throws(() => prepareWebRHelperArtifacts(root), /Prebuilt WebR helper is missing, stale or invalid/);
 expectBuilds([names[0]]);
 artifacts = readWebRHelperArtifacts(root);
 assert.ok(artifacts.every(helper => helper.runtimeVersion === "4.7.0"));

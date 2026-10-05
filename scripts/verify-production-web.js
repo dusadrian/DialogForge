@@ -163,16 +163,20 @@ const waitForServer = async function(url, child, timeoutMs) {
 
 
 const findMenuDialog = function(items, dialogId) {
-    const pending = Array.isArray(items) ? items.slice() : [];
+    const pending = (Array.isArray(items) ? items : []).map((item) => {
+        return { item, ancestors: [] };
+    });
 
     while (pending.length > 0) {
-        const item = pending.shift();
+        const { item, ancestors } = pending.shift();
 
         if (String(item?.dialog || "") === dialogId) {
-            return item;
+            return { item, ancestors };
         }
 
-        pending.push(...(Array.isArray(item?.items) ? item.items : []));
+        pending.push(...(Array.isArray(item?.items) ? item.items : []).map((child) => {
+            return { item: child, ancestors: [...ancestors, item] };
+        }));
     }
 
     return null;
@@ -203,19 +207,25 @@ const verifyDialogPackageReadiness = async function(
         );
     }
 
-    await page.evaluate((label) => {
-        const button = Array.from(document.querySelectorAll(
-            ".web-menu-item"
-        )).find((candidate) => {
-            return String(candidate.textContent || "").trim() === label;
-        });
+    const [rootMenu, ...submenus] = menuItem.ancestors;
 
-        if (!(button instanceof HTMLButtonElement)) {
-            throw new Error(`Web menu item was not rendered: ${label}`);
-        }
+    if (!rootMenu) {
+        throw new Error(`Production web dialog has no menu root: ${dialog.id}`);
+    }
 
-        button.click();
-    }, String(menuItem.label || dialog.label || dialog.id));
+    await page.locator(".web-menu-button").filter({
+        hasText: String(rootMenu.label || rootMenu.id)
+    }).click();
+
+    for (const submenu of submenus) {
+        await page.locator(".web-menu-item:visible").filter({
+            hasText: String(submenu.label || submenu.id)
+        }).hover();
+    }
+
+    await page.locator(".web-menu-item:visible").filter({
+        hasText: String(menuItem.item.label || dialog.label || dialog.id)
+    }).click();
 
     const layerSelector =
         `.dialogforge-web-dialog-layer[data-dialog-id="${dialog.id}"]`;
@@ -233,13 +243,17 @@ const verifyDialogPackageReadiness = async function(
         timeout: timeoutMs
     });
 
+    // Inspecting package attachment must not bypass the real blocking dialog.
+    await layer.locator(".dialogforge-web-dialog__close").click();
+    await layer.waitFor({ state: "hidden", timeout: timeoutMs });
+
     const marker = `DIALOGFORGE_PACKAGE_ATTACHED_${packageName}`;
 
     await page.evaluate(async ({ name, outputMarker }) => {
         const input = document.getElementById("visibleCommandInput");
         const command = [
             `cat(${JSON.stringify(outputMarker)}, ":", `,
-            `is.element(${JSON.stringify(`package:${name}`)}, search()))`
+            `is.element(${JSON.stringify(`package:${name}`)}, search()), sep = "")`
         ].join("");
 
         input.dialogForgeConsoleInputView.setText(command);
@@ -249,15 +263,23 @@ const verifyDialogPackageReadiness = async function(
         outputMarker: marker
     });
 
-    await page.waitForFunction((outputMarker) => {
-        const transcript = String(
-            document.getElementById("consoleTerminal")?.innerText || ""
-        );
+    try {
+        await page.waitForFunction((outputMarker) => {
+            const transcript = String(
+                document.getElementById("consoleTerminal")?.innerText || ""
+            );
 
-        return transcript.includes(`${outputMarker} : TRUE`);
-    }, marker, {
-        timeout: timeoutMs
-    });
+            return transcript.includes(`${outputMarker}:TRUE`);
+        }, marker, {
+            timeout: timeoutMs
+        });
+    }
+    catch (error) {
+        const transcript = await page.locator("#consoleTerminal").innerText();
+        throw new Error(`Dialog package attachment check failed: ${transcript}`, {
+            cause: error
+        });
+    }
 
     console.log(
         `OK production web dialog package readiness (${dialog.id}: ${packageName})`
@@ -297,12 +319,13 @@ const startServer = function(options, port) {
 
 const verifyRenderedHelp = async function(options, product, port) {
     const { chromium } = require("playwright");
-    const host = `${product.productId.toLowerCase()}.production.test`;
+    // .localhost is a potentially trustworthy origin without disabling browser
+    // security. Public HTTPS deployment acceptance is checked separately.
+    const host = `${product.productId.toLowerCase()}.localhost`;
     const baseUrl = `http://${host}:${port}`;
     const browser = await chromium.launch({
         args: [
-            `--host-resolver-rules=MAP ${host} 127.0.0.1`,
-            `--unsafely-treat-insecure-origin-as-secure=${baseUrl}`
+            `--host-resolver-rules=MAP ${host} 127.0.0.1`
         ]
     });
     const page = await browser.newPage();
@@ -434,6 +457,21 @@ const verifyRenderedHelp = async function(options, product, port) {
         if (/Unable to load help page|HTTP 404/i.test(helpText)) {
             throw new Error(`Production web help reported a load failure: ${helpText.slice(0, 500)}`);
         }
+
+        // Closing a still-loading frame legitimately cancels its requests. Wait
+        // for the actual help document's resources so failures remain meaningful.
+        await page.waitForFunction(() => {
+            const outerFrame = document.querySelector(".dialogforge-web-help-frame");
+            const documentFrame = outerFrame?.contentDocument?.getElementById("helpFrame");
+            return documentFrame?.contentDocument?.readyState === "complete";
+        }, null, { timeout: options.timeoutMs });
+
+        await page.locator(
+            ".dialogforge-web-help-window .dialogforge-web-dialog__close"
+        ).click();
+        await page.locator(".dialogforge-web-help-layer").waitFor({
+            state: "hidden", timeout: options.timeoutMs
+        });
 
         await verifyDialogPackageReadiness(
             page,

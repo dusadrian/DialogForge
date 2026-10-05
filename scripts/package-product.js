@@ -3,6 +3,7 @@
 const path = require("path");
 const { spawnSync } = require("child_process");
 const fs = require("fs");
+const { assertNativeRHelperArtifacts } = require("./native-r-helper-artifacts");
 const {
     assertRuntimeProviderIsRegistered
 } = require("../src/runtime/providers/runtimeProviderRegistry");
@@ -157,8 +158,9 @@ const createBuildConfigPath = function (productBuildConfig, stagedProductPath, p
     mergedBuild.afterPack = path.join(
         sourceRoot,
         "scripts",
-        "prepare-linux-electron-sandbox.js"
+        "prepare-product-runtime.js"
     );
+    mergedBuild.afterSign = path.join(sourceRoot, "scripts/finalize-product-runtime.js");
     mergedBuild.extraResources = [
         ...baseExtraResources,
         ...productExtraResources
@@ -351,11 +353,13 @@ const artifactNameConfig = function (platform, productName) {
     }
     return [];
 };
-const renameMacArtifacts = function (outputRoot, productName, version, arch) {
+const renameMacArtifacts = function (outputDir, productName, version, arch) {
     const result = spawnSync(process.execPath, [
         path.join(distDir, "scripts/rename-binaries-mac.js"),
         "--root",
-        outputRoot,
+        sourceRoot,
+        "--output-dir",
+        outputDir,
         "--version",
         version,
         "--product-name",
@@ -380,13 +384,6 @@ const selectedOutputDir = function (selection) {
     return outputDir
         ? path.resolve(outputDir)
         : path.join(projectRoot, "build/output");
-};
-const outputRootForDirectory = function (outputDir) {
-    const normalizedOutput = path.resolve(outputDir);
-    return path.basename(normalizedOutput) === "output"
-        && path.basename(path.dirname(normalizedOutput)) === "build"
-        ? path.dirname(path.dirname(normalizedOutput))
-        : path.dirname(normalizedOutput);
 };
 const cleanPlatformOutput = function (outputDir, platform) {
     if (platform !== "macos" || !fs.existsSync(outputDir)) {
@@ -588,7 +585,6 @@ const main = function () {
         || readProductAutoUpdatePolicy(productManifest);
     writeStagedAutoUpdatePolicy(stagedPackagePath, environmentAutoUpdatePolicy);
     const outputDir = selectedOutputDir(selection);
-    const outputRoot = outputRootForDirectory(outputDir);
     const sign = Boolean(selection.sign);
     const mainFile = generatedMainFile(location.id);
     const electronVersion = electronRuntimeVersion();
@@ -627,6 +623,7 @@ const main = function () {
     if (selection.stageOnly) {
         return;
     }
+    assertNativeRHelperArtifacts(sourceRoot, distDir, selection.platform, selection.arch);
     assertPackagedRuntimeDependencies();
     cleanPlatformOutput(outputDir, selection.platform);
     try {
@@ -670,7 +667,7 @@ const main = function () {
             throw new Error(`electron-builder failed with exit code ${String(result.status)}.`);
         }
         if (selection.platform === "macos") {
-            renameMacArtifacts(outputRoot, productName, productVersion, selection.arch);
+            renameMacArtifacts(outputDir, productName, productVersion, selection.arch);
         }
     }
     finally {
