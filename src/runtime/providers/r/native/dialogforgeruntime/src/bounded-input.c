@@ -5,12 +5,17 @@
 #define R_INTERFACE_PTRS
 #include <R.h>
 #include <Rinternals.h>
+#ifndef _WIN32
 #include <Rinterface.h>
+#else
+__declspec(dllimport) extern Rboolean R_Interactive;
+#endif
 #include <R_ext/Connections.h>
 #include <R_ext/Rdynload.h>
 #include <R_ext/Visibility.h>
 #include <R_ext/Utils.h>
 #include <string.h>
+#include "console-host.h"
 
 /* R exports the frontend entry point, but older Unix headers declare only
    ptr_R_ReadConsole. Keep its signature explicit for strict C compilers. */
@@ -140,7 +145,41 @@ SEXP df_write_runtime_frame(SEXP connection, SEXP bytes)
     return Rf_ScalarLogical(TRUE);
 }
 
-typedef int (*df_console_reader)(const char *, unsigned char *, int, int);
+/* Thin platform access to the callback slot. Scope ownership and unwind
+   recovery below are the same implementation on every host. */
+#ifdef _WIN32
+static const df_console_host_bridge *df_windows_console_bridge(void)
+{
+    typedef const df_console_host_bridge *(*df_bridge_accessor)(void);
+    df_bridge_accessor accessor = (df_bridge_accessor)GetProcAddress(
+        GetModuleHandleW(NULL), "dialogforge_console_bridge"
+    );
+    const df_console_host_bridge *bridge = accessor ? accessor() : NULL;
+    if (!bridge || bridge->version != 1 || !bridge->get_reader || !bridge->set_reader) {
+        Rf_error("DialogForge console input requires its version-pinned Windows R host.");
+    }
+    return bridge;
+}
+#endif
+
+static df_console_reader df_current_console_reader(void)
+{
+#ifdef _WIN32
+    return df_windows_console_bridge()->get_reader();
+#else
+    return ptr_R_ReadConsole;
+#endif
+}
+
+static void df_set_console_reader(df_console_reader reader)
+{
+#ifdef _WIN32
+    df_windows_console_bridge()->set_reader(reader);
+#else
+    ptr_R_ReadConsole = reader;
+#endif
+}
+
 typedef struct {
     SEXP evaluate;
     SEXP read_reply;
@@ -201,7 +240,7 @@ static SEXP df_evaluate_with_console_owner(void *data)
 {
     df_console_scope *scope = data;
     active_console_scope = scope;
-    ptr_R_ReadConsole = df_read_scoped_console;
+    df_set_console_reader(df_read_scoped_console);
     SEXP call = PROTECT(Rf_lang1(scope->evaluate));
     SEXP result = Rf_eval(call, R_GlobalEnv);
     UNPROTECT(1);
@@ -211,7 +250,7 @@ static SEXP df_evaluate_with_console_owner(void *data)
 static void df_release_console_owner(void *data, Rboolean jump)
 {
     df_console_scope *scope = data;
-    ptr_R_ReadConsole = scope->previous;
+    df_set_console_reader(scope->previous);
     active_console_scope = NULL;
 }
 
@@ -220,7 +259,7 @@ SEXP df_with_runtime_console_input(SEXP evaluate, SEXP read_reply)
     if (TYPEOF(evaluate) != CLOSXP || TYPEOF(read_reply) != CLOSXP || active_console_scope) {
         Rf_error("DialogForge console input requires one exclusive evaluation owner.");
     }
-    df_console_scope scope = { evaluate, read_reply, ptr_R_ReadConsole, FALSE };
+    df_console_scope scope = { evaluate, read_reply, df_current_console_reader(), FALSE };
     return R_UnwindProtect(
         df_evaluate_with_console_owner, &scope, df_release_console_owner, &scope, NULL
     );
@@ -244,7 +283,7 @@ static SEXP df_read_host_console(void *data)
        still exists; select its interactive branch only for this bounded read. */
     R_Interactive = TRUE;
     if (active_console_scope && (active_console_scope->reading || request->host_transport)) {
-        ptr_R_ReadConsole = active_console_scope->previous;
+        df_set_console_reader(active_console_scope->previous);
     }
     return Rf_ScalarInteger(R_ReadConsole(request->prompt, request->buffer, request->capacity, 0));
 }
@@ -253,7 +292,7 @@ static void df_restore_console_interactivity(void *data, Rboolean jump)
 {
     df_console_read *request = data;
     R_Interactive = request->interactive;
-    ptr_R_ReadConsole = request->console_reader;
+    df_set_console_reader(request->console_reader);
 }
 
 SEXP df_read_runtime_console_line(SEXP prompt, SEXP maximum, SEXP host_transport)
@@ -271,7 +310,7 @@ SEXP df_read_runtime_console_line(SEXP prompt, SEXP maximum, SEXP host_transport
     memset(buffer, 0, capacity);
     df_console_read request = {
         Rf_translateCharUTF8(STRING_ELT(prompt, 0)), buffer, (int)capacity,
-        R_Interactive, ptr_R_ReadConsole, LOGICAL(host_transport)[0]
+        R_Interactive, df_current_console_reader(), LOGICAL(host_transport)[0]
     };
     SEXP read_result = R_UnwindProtect(
         df_read_host_console, &request, df_restore_console_interactivity, &request, NULL

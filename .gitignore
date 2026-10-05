@@ -9,4 +9,6 @@ artifacts/
 scripts/local/
 AGENTS.md
 tests/
+!src/runtime/providers/r/native/dialogforgeruntime/tests/
+!src/runtime/providers/r/native/dialogforgeruntime/tests/**
 internal/

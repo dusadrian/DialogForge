@@ -6,7 +6,7 @@ local({
     else {
         helper <- loadNamespace("dialogforgeruntime", lib.loc = library)
     }
-    stopifnot(identical(as.character(getNamespaceVersion(helper)), "0.1.0"))
+    stopifnot(identical(as.character(getNamespaceVersion(helper)), "0.1.1"))
     scoped <- helper$with_runtime_console_input
     prompts <- character(0)
     reply <- function(prompt) {

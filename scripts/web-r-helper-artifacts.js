@@ -5,6 +5,7 @@ const path = require("node:path");
 const crypto = require("node:crypto");
 const zlib = require("node:zlib");
 const { spawnSync } = require("node:child_process");
+const { listArtifactFiles, readHelperPackageVersion, hashHelperSourceFiles } = require("./r-helper-artifact-files");
 
 const helpers = [
     { name: "dialogforgeruntime", directory: "r-runtime", builder: "build-r-runtime-helper.js" }
@@ -19,52 +20,28 @@ const readWebRHelperArtifacts = function(sourceRoot) {
     }
     return helpers.map(function(helper) {
         const sourceDirectory = path.join(sourceRoot, "src/runtime/providers/r/native", helper.name);
-        const description = fs.readFileSync(path.join(sourceDirectory, "DESCRIPTION"), "utf8");
-        const version = description.match(/^Version:\s*(\d+(?:\.\d+)+)\s*$/m);
-        if (!version) {
-            throw new Error("Cannot determine the canonical helper version: " + helper.name);
-        }
+        const packageVersion = readHelperPackageVersion(sourceRoot, helper.name);
         return {
-            ...helper, sourceDirectory, packageVersion: version[1], runtimeVersion: runtimeVersion[1],
-            relativePath: path.join(helper.directory, "webr", runtimeVersion[1], `${helper.name}_${version[1]}.tgz`)
+            ...helper, sourceDirectory, packageVersion, runtimeVersion: runtimeVersion[1],
+            relativePath: path.join(helper.directory, "webr", runtimeVersion[1], `${helper.name}_${packageVersion}.tgz`)
         };
     });
 };
 
-const listHelperSourceFiles = function(directory) {
-    return fs.readdirSync(directory, { withFileTypes: true }).flatMap(function(entry) {
-        const filePath = path.join(directory, entry.name);
-        if (entry.isDirectory()) {
-            return listHelperSourceFiles(filePath);
-        }
-        if (!entry.isFile()) {
-            throw new Error("Unsupported helper source entry: " + filePath);
-        }
-        return [filePath];
-    });
-};
-
 const createHelperBuildIdentity = function(sourceRoot, helper) {
-    const files = listHelperSourceFiles(helper.sourceDirectory).concat([
+    const files = listArtifactFiles(helper.sourceDirectory).concat([
         path.join(sourceRoot, "scripts", helper.builder),
         path.join(sourceRoot, "scripts/build-r-helper-webr.R"),
         path.join(sourceRoot, "node_modules/webr/package.json"),
         path.join(sourceRoot, "node_modules/webr/dist/webR/config.d.ts")
     ]).sort();
-    const hash = crypto.createHash("sha256");
-    for (const filePath of files) {
-        hash.update(path.relative(sourceRoot, filePath).split(path.sep).join("/"));
-        hash.update("\0");
-        hash.update(fs.readFileSync(filePath));
-        hash.update("\0");
-    }
     return {
         format: 1,
         packageName: helper.name,
         packageVersion: helper.packageVersion,
         runtimeVersion: helper.runtimeVersion,
         toolchainImage: process.env.DIALOGFORGE_WEBR_BUILD_IMAGE || "ghcr.io/r-wasm/webr:v0.6.0",
-        sourceSha256: hash.digest("hex")
+        sourceSha256: hashHelperSourceFiles(sourceRoot, files)
     };
 };
 
@@ -102,15 +79,38 @@ const readCurrentHelperBuild = function(archivePath, identity) {
     return receipt;
 };
 
-const prepareWebRHelperArtifacts = function(sourceRoot, buildHelper) {
+const copyHelperArtifact = function(sourceRoot, outputRoot, helper, identity) {
+    const archivePath = path.join(sourceRoot, helper.relativePath);
+    const receipt = readCurrentHelperBuild(archivePath, identity);
+    if (!receipt) {
+        throw new Error("Prebuilt WebR helper is missing, stale or invalid: " + archivePath
+            + ". A maintainer must run npm run build:r-helper:webr and include the regenerated"
+            + " vendor/r-runtime artifacts with the source change. Deployment will not download a compiler.");
+    }
+    const outputPath = path.join(outputRoot, helper.relativePath);
+    const currentReceipt = readCurrentHelperBuild(outputPath, identity);
+    if (!currentReceipt || currentReceipt.archiveSha256 !== receipt.archiveSha256) {
+        fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+        fs.copyFileSync(archivePath, outputPath);
+        fs.copyFileSync(archivePath + ".build.json", outputPath + ".build.json");
+    }
+};
+
+const prepareWebRHelperArtifacts = function(sourceRoot) {
+    const artifacts = readWebRHelperArtifacts(sourceRoot);
+    for (const helper of artifacts) {
+        const identity = createHelperBuildIdentity(sourceRoot, helper);
+        copyHelperArtifact(path.join(sourceRoot, "vendor"), path.join(sourceRoot, "dist"), helper, identity);
+        console.log("Using verified prebuilt WebR helper: " + helper.relativePath);
+    }
+    return artifacts;
+};
+
+const buildWebRHelperArtifacts = function(sourceRoot, buildHelper) {
     const artifacts = readWebRHelperArtifacts(sourceRoot);
     for (const helper of artifacts) {
         const identity = createHelperBuildIdentity(sourceRoot, helper);
         const archivePath = path.join(sourceRoot, "dist", helper.relativePath);
-        if (readCurrentHelperBuild(archivePath, identity)) {
-            console.log("Using current WebR helper: " + helper.relativePath);
-            continue;
-        }
         console.log("Building required WebR helper from canonical source: " + helper.name);
         // A successful builder must create the requested archive, not re-certify
         // an older binary left behind for a different source or toolchain.
@@ -124,9 +124,9 @@ const prepareWebRHelperArtifacts = function(sourceRoot, buildHelper) {
             cwd: sourceRoot, env: process.env, stdio: "inherit"
         });
         if (result.error || result.status !== 0) {
-            throw new Error("Cannot prepare " + helper.name + " for WebR R " + helper.runtimeVersion
-                + ". The web build requires R and Docker with " + identity.toolchainImage
-                + "; the deployment has not been staged. " + (result.error?.message || "Builder exited " + result.status));
+            throw new Error("Cannot build " + helper.name + " for WebR R " + helper.runtimeVersion
+                + ". This explicit maintainer build requires R and Docker with " + identity.toolchainImage
+                + "; the prebuilt bundle has not been updated. " + (result.error?.message || "Builder exited " + result.status));
         }
         let archiveSha256;
         try {
@@ -140,11 +140,24 @@ const prepareWebRHelperArtifacts = function(sourceRoot, buildHelper) {
     return artifacts;
 };
 
+const bundleWebRHelperArtifacts = function(sourceRoot, buildHelper) {
+    const artifacts = buildWebRHelperArtifacts(sourceRoot, buildHelper);
+    for (const helper of artifacts) {
+        copyHelperArtifact(path.join(sourceRoot, "dist"), path.join(sourceRoot, "vendor"),
+            helper, createHelperBuildIdentity(sourceRoot, helper));
+        console.log("Updated versioned prebuilt WebR helper: vendor/" + helper.relativePath);
+    }
+    return artifacts;
+};
+
 const assertWebRHelperArtifacts = function(sourceRoot, outputRoot) {
     const artifacts = readWebRHelperArtifacts(sourceRoot);
     for (const helper of artifacts) {
         const archivePath = path.join(outputRoot, helper.relativePath);
-        if (!readCurrentHelperBuild(archivePath, createHelperBuildIdentity(sourceRoot, helper))) {
+        const identity = createHelperBuildIdentity(sourceRoot, helper);
+        const receipt = readCurrentHelperBuild(archivePath, identity);
+        const supplied = readCurrentHelperBuild(path.join(sourceRoot, "vendor", helper.relativePath), identity);
+        if (!receipt || !supplied || receipt.archiveSha256 !== supplied.archiveSha256) {
             throw new Error("Required WebR helper is missing, stale or invalid: " + archivePath
                 + ". Run npm run build:web to prepare and stage all required helpers.");
         }
@@ -154,6 +167,8 @@ const assertWebRHelperArtifacts = function(sourceRoot, outputRoot) {
 
 exports.readWebRHelperArtifacts = readWebRHelperArtifacts;
 exports.prepareWebRHelperArtifacts = prepareWebRHelperArtifacts;
+exports.buildWebRHelperArtifacts = buildWebRHelperArtifacts;
+exports.bundleWebRHelperArtifacts = bundleWebRHelperArtifacts;
 exports.assertWebRHelperArtifacts = assertWebRHelperArtifacts;
 
 const checkServedWebRHelperArtifacts = async function(sourceRoot, outputRoot, baseUrl) {
@@ -182,6 +197,8 @@ if (require.main === module) {
     if (mode === "--prepare") {
         prepareWebRHelperArtifacts(sourceRoot);
         assertWebRHelperArtifacts(sourceRoot, path.join(sourceRoot, "dist"));
+    } else if (mode === "--bundle") {
+        bundleWebRHelperArtifacts(sourceRoot);
     } else if (mode === "--check-output" && process.argv[3]) {
         assertWebRHelperArtifacts(sourceRoot, path.resolve(process.argv[3]));
         console.log("Required WebR helper artifact and build receipt are current.");
@@ -191,6 +208,6 @@ if (require.main === module) {
             process.exitCode = 1;
         });
     } else {
-        throw new Error("Use --prepare, --check-output <directory>, or --check-url <url> --output-root <directory>.");
+        throw new Error("Use --prepare, --bundle, --check-output <directory>, or --check-url <url> --output-root <directory>.");
     }
 }

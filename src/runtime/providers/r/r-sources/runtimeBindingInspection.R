@@ -25,7 +25,7 @@ runtime_binding_info <- local({
             ), call. = FALSE)
         }
     )
-    if (!identical(as.character(getNamespaceVersion(namespace)), "0.1.0")) {
+    if (!identical(as.character(getNamespaceVersion(namespace)), "0.1.1")) {
         stop("DialogForge binding-inspection helper version mismatch; rebuild the helper.")
     }
     get("binding_info", envir = namespace, inherits = FALSE)

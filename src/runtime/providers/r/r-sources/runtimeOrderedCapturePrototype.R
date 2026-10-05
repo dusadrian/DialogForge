@@ -19,7 +19,7 @@ runtime_create_ordered_output_config <- function(library, directory, session_id)
     }
 
     namespace <- loadNamespace("dialogforgeruntime", lib.loc = library)
-    if (!identical(as.character(getNamespaceVersion(namespace)), "0.1.0")) {
+    if (!identical(as.character(getNamespaceVersion(namespace)), "0.1.1")) {
         stop("Unsupported DialogForge output prototype version.")
     }
 

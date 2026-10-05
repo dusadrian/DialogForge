@@ -52,6 +52,7 @@ const main = function() {
     });
     const tscPath = require.resolve("typescript/bin/tsc");
 
+    run(process.execPath, ["scripts/native-r-helper-artifacts.js", "--prepare"], env);
     run(process.execPath, [
         tscPath,
         "-p",

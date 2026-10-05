@@ -81,6 +81,59 @@ npm run build:web
 Product repositories use their product-local `npm run build:web` wrapper, which
 writes the web runtime into the product repository's own `dist/web` directory.
 
+Web builds use the precompiled `dialogforgeruntime` WebR package supplied under
+`vendor/r-runtime`. They validate its source/build identity and archive checksum
+before staging it. Deployment does not need R, Docker, or the WebR compiler.
+Native R and WebR still build from the same canonical helper source files.
+
+Desktop builds also stage supplied, version-pinned native packages from
+`vendor/r-runtime/native`. The release manifest pins the package version,
+exact R platform/version, qualified acceptance report and every installed file's
+SHA256. Missing or corrupt artifacts fail the build; product packaging rejects
+an OS/architecture with no qualified helper. Normal builds never compile a
+helper or install its latest version from a package repository. Generated local
+caches cannot override these pins. Only the R versions explicitly supplied in
+the manifest are supported; another installed R version is not assumed compatible.
+The actual packaged files are checked before signing. Mac signing legitimately
+changes library bytes: a post-signing gate verifies the library's signature and
+compares its code/data with the qualified original after removing signatures
+from temporary copies. Other file changes remain errors. Final signed file
+checksums are recorded beside the build output without modifying the sealed app.
+
+Maintainers build and qualify each native target on that actual OS/architecture:
+
+```sh
+npm run build:r-helper:native -- 4.6.1 /absolute/private/evidence /absolute/helper-bundle
+```
+
+That explicit operation requires R, its compiler and `declared` available to the
+canonical native acceptance runner. It does not launch a product UI. The manual
+`Build and qualify pinned native R helpers` workflow performs this operation
+for ARM/Intel Mac, Windows x64 and Ubuntu x64/ARM64, with exact selected R
+versions and pinned `declared` source. Only successful qualification produces a
+binary artifact; it does not publish a release. After reviewing an artifact,
+import its extracted native directory:
+
+```sh
+npm run import:r-helper:native -- /absolute/extracted/native
+```
+
+Import validates and merges target pins without overwriting an existing one.
+Include the manifest, receipts and binary files together. Native ABI acceptance
+does not replace installed-app, signing or Linux-distribution release checks.
+
+Maintainers changing the helper sources, compiler scripts, or WebR SDK must
+regenerate the prebuilt package on a development/build machine:
+
+```sh
+npm run build:r-helper:webr
+```
+
+That explicit command requires R and Docker, compiles the canonical sources,
+and updates the versioned archive and build receipt in `vendor/r-runtime`.
+Include both generated files with the source change. A stale or missing package
+stops the web build; it never triggers an automatic compiler download.
+
 The web runtime currently uses the `webr` provider. Product-specific dialogs,
 menus, locales, package policy, web launch policy, and product styling still
 come from the selected product repository.

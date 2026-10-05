@@ -25,7 +25,11 @@ const name = cliProductName
     || (pkg.build && pkg.build.productName)
     || String(pkg.name || "");
 const nameFile = name.replace(/\s+/g, "_");
-const out = path.join(root, "build", "output");
+const outputIndex = process.argv.indexOf("--output-dir");
+const cliOutput = outputIndex >= 0
+    ? String(process.argv[outputIndex + 1] || "").trim()
+    : "";
+const out = cliOutput ? path.resolve(cliOutput) : path.join(root, "build", "output");
 const versionVariants = Array.from(new Set([
     cliVersion,
     cliVersion
@@ -72,7 +76,7 @@ const selectArtifact = function (artifacts, requestedArch) {
 const renameArtifact = function (artifact, targetName, kind) {
     if (!artifact) {
         const known = listDmgArtifacts().map((entry) => entry.name).join(", ");
-        throw new Error(`${kind} artifact not found in build/output. Found: ${known || "(none)"}`);
+        throw new Error(`${kind} artifact not found in ${out}. Found: ${known || "(none)"}`);
     }
     const targetPath = path.join(out, targetName);
     if (artifact.path !== targetPath) {

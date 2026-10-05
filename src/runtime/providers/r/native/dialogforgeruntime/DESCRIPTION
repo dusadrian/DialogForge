@@ -1,7 +1,7 @@
 Package: dialogforgeruntime
 Type: Package
 Title: Shared R Runtime Support for DialogForge
-Version: 0.1.0
+Version: 0.1.1
 Authors@R: person("Adrian", "Dusa", role = c("aut", "cre", "cph"),
     email = "dusa.adrian@unibuc.ro")
 Description: Non-evaluating object and binding inspection, physical graphics
