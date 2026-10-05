@@ -30,8 +30,8 @@ assert.match(file.stdout, /HOST_FILE_OK/);
 
 const child = spawn(host, ["--vanilla", "--slave", "-e",
     `helper <- loadNamespace("dialogforgeruntime", lib.loc=${JSON.stringify(library)}); `
-    + 'cat("HOST_READY\\n"); flush.console(); '
-    + 'result <- tryCatch(helper$with_runtime_console_input(function() { repeat { } }, '
+    + 'result <- tryCatch(helper$with_runtime_console_input(function() { '
+    + 'cat("HOST_READY\\n"); flush.console(); repeat { } }, '
     + 'function(prompt) "unused"), interrupt=function(error) "interrupted"); '
     + 'stopifnot(identical(result, "interrupted")); '
     + 'stopifnot(identical(helper$with_runtime_console_input(function() '
@@ -44,7 +44,7 @@ let requested = false;
 const timeout = setTimeout(() => child.kill(), 10000);
 child.stdout.on("data", function(bytes) {
     output += String(bytes);
-    if (!requested && output.includes("HOST_READY\n")) {
+    if (!requested && /HOST_READY\r*\n/.test(output)) {
         requested = true;
         const interrupt = spawnSync(host, ["--interrupt-pid", String(child.pid)], {
             windowsHide: true, encoding: "utf8", timeout: 2000
