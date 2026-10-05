@@ -1,0 +1,6 @@
+# Helper archives and installed packages are checksum-pinned release payloads.
+# Git must not rewrite their text files when checking out on Windows.
+vendor/r-runtime/** -text
+src/runtime/providers/r/native/** text eol=lf
+src/runtime/providers/r/r-sources/** text eol=lf
+scripts/** text eol=lf
