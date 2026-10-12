@@ -107,15 +107,16 @@ export const routeConsoleRuntimeEvent = function(
 
     if (event.type === "output") {
         const message = String(event.message || "");
-        const trimmedMessage = message.trim();
 
         if (
-            !trimmedMessage
-            || trimmedMessage === "R command completed without output."
+            !message.length
+            || message.trim() === "R command completed without output."
         ) {
             return;
         }
 
+        // A streamed write may contain only spacing, a newline or a carriage
+        // return. Those bytes still belong to the surrounding console output.
         options.transcript.recordRuntimeMessageStream({
             id: event.id || "stream_" + activityId + "_" + Date.now(),
             parent_id: activityId,

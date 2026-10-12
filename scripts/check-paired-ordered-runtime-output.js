@@ -16,6 +16,9 @@ const { readRegressionPackageLibrary, regressionPackageLibrarySource,
 const { createRuntimeProvider } = require("../dist/src/runtime/providers/r/runtimeProvider");
 const { createRuntimeSessionManager } = require("../dist/src/runtime/session/runtimeSessionManager");
 const { createVisibleCommandRequest } = require("../dist/src/runtime/commands/commandProtocol");
+const { routeConsoleRuntimeEvent } = require("../dist/src/console/services/consoleRuntimeEventRouter");
+const { createConsoleTranscriptService } = require("../dist/src/console/services/consoleTranscriptService");
+const { ActivityItemStream } = require("../dist/src/console/services/consoleRuntimeItems");
 const { readAcceptedTranscriptRecords } = require("./runtime-transcript-acceptance");
 const { createConsoleCommandHistory } = require("../dist/src/console/services/consoleCommandHistory");
 const { createConsoleHistorySettingsStore } = require("../dist/src/console/services/consoleHistorySettingsStore");
@@ -245,6 +248,24 @@ const checkCases = async function(host, execute) {
         const output = readAcceptedTranscriptRecords(result.records)
             .filter(record => record.event.type === "output");
         const text = output.map(record => record.event.message || "").join("");
+        const transcript = createConsoleTranscriptService();
+        for (const { event } of output) {
+            routeConsoleRuntimeEvent(event, {
+                transcript,
+                session: {
+                    getActivityId: () => result.activityId,
+                    getPromptState: () => ({ inputPrompt: "> ", continuationPrompt: "+ " })
+                },
+                setPromptState: () => {},
+                setRuntimeBusy: () => {}
+            });
+        }
+        const consoleText = transcript.getRuntimeItems()
+            .flatMap(activity => activity.activityItems)
+            .filter(item => item instanceof ActivityItemStream)
+            .map(item => item.text).join("");
+        assert.equal(consoleText, text,
+            `${host}: ${one.name} accepted output must reach the console without losing whitespace`);
         if (one.exact !== undefined) assert.equal(text, one.exact, `${host}: ${one.name}`);
         if (one.prefix) assert.ok(text.startsWith(one.prefix), `${host}: ${one.name} prefix: ${text}`);
         if (one.suffix) assert.ok(text.endsWith(one.suffix), `${host}: ${one.name} suffix: ${text}`);

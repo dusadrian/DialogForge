@@ -3,6 +3,9 @@
 const assert = require("node:assert/strict");
 const { createVisibleCommandRequest } = require("../dist/src/runtime/commands/commandProtocol");
 const { createRuntimeOutputTranscriptBridge } = require("../dist/src/runtime/output/runtimeOutputTranscriptBridge");
+const { routeConsoleRuntimeEvent } = require("../dist/src/console/services/consoleRuntimeEventRouter");
+const { createConsoleTranscriptService } = require("../dist/src/console/services/consoleTranscriptService");
+const { ActivityItemStream } = require("../dist/src/console/services/consoleRuntimeItems");
 
 const fixture = function(createBridge, publish) {
     const events = [];
@@ -26,6 +29,7 @@ const fixture = function(createBridge, publish) {
 };
 
 const checkRuntimeOutputTranscript = function(createBridge = createRuntimeOutputTranscriptBridge) {
+    checkConsoleOutputFormatting(createBridge);
     const ordinary = fixture(createBridge);
     ordinary.request.text = "changed()";
     assert.equal(ordinary.bridge.append(ordinary.chunk(1, "first\n")), true);
@@ -126,6 +130,62 @@ const checkRuntimeOutputTranscript = function(createBridge = createRuntimeOutput
             "Retirement must not be rewritten as a callback failure.");
         assert.equal(retiredPublication.bridge.append(retiredPublication.chunk(2, "no replay")), false);
         assert.equal(publications, 1);
+    }
+};
+
+const checkConsoleOutputFormatting = function(createBridge) {
+    const cases = [
+        {
+            writes: ["\n", "From C1P1:", "\n", "\n", "M1: A*B -> Y", "\n", "\n",
+                "  ", "inclS", "   ", "covS", "\n", "----------------", "\n",
+                "1 ", "A*B", "  ", "0.901", "  ", "0.468", "\n", "\n"],
+            lines: ["", "From C1P1:", "", "M1: A*B -> Y", "", "  inclS   covS",
+                "----------------", "1 A*B  0.901  0.468", ""]
+        },
+        {
+            writes: ["  leading", " ", "\n", "\n", "  indented", "\n", "\n", "\n"],
+            lines: ["  leading ", "", "  indented", "", ""]
+        },
+        {
+            writes: ["long", "\r", "ok", "\r", "\n", "next", "\n"],
+            lines: ["okng", "next"]
+        },
+        {
+            writes: ["café λ 漢字", "\n", "\t", "column", " ", "\n"],
+            lines: ["café λ 漢字", "\tcolumn "]
+        }
+    ];
+
+    for (const { writes, lines } of cases) {
+        const text = writes.join("");
+        for (const chunks of [[text], writes, Array.from(text)]) {
+            const transcript = createConsoleTranscriptService();
+            const options = {
+                transcript,
+                session: {
+                    getActivityId: () => "activity",
+                    getPromptState: () => ({ inputPrompt: "> ", continuationPrompt: "+ " })
+                },
+                setPromptState: () => {},
+                setRuntimeBusy: () => {}
+            };
+            const output = fixture(createBridge, event => {
+                routeConsoleRuntimeEvent(event, options);
+                return true;
+            });
+            chunks.forEach((chunk, index) => {
+                assert.equal(output.bridge.append(output.chunk(index + 1, chunk)), true);
+            });
+            assert.equal(output.bridge.finish(chunks.length + 1), true);
+
+            const streams = transcript.getRuntimeItems()[0].activityItems;
+            assert.equal(streams.length, 1);
+            assert.ok(streams[0] instanceof ActivityItemStream);
+            assert.equal(streams[0].text, text,
+                "The real console router must preserve whitespace-only runtime writes.");
+            assert.deepEqual(Array.from(streams[0].outputLines), lines,
+                "Console lines and spacing must not depend on runtime chunk boundaries.");
+        }
     }
 };
 
