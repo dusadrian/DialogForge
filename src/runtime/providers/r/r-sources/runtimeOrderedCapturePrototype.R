@@ -132,6 +132,11 @@ runtime_capture_ordered_input <- function(code, path, backend) {
                 runtime_print_visible_value(value$value)
             }
             list(ok = TRUE, interrupted = FALSE, error = "")
+        }, message = function(message) {
+            # R sends message conditions (including package startup notices) to
+            # stderr by default. Present them as ordinary output in both hosts.
+            cat(conditionMessage(message), file = stdout())
+            tryInvokeRestart("muffleMessage")
         }, warning = function(warning) {
             text <- conditionMessage(warning)
             if (!runtime_accept_input_warning(warning, code)) {
