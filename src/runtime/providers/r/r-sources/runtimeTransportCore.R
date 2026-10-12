@@ -124,6 +124,30 @@ runtime_transport_missing_range <- function(raw, supplied = FALSE) {
 }
 
 
+runtime_transport_attribute_changes <- function(raw) {
+    if (!runtime_transport_flag(raw, "hasAttributeChanges")) {
+        return(NULL)
+    }
+    encoded <- runtime_transport_value(raw, "attributeChanges")
+    if (!nzchar(encoded)) {
+        return(list())
+    }
+
+    lapply(strsplit(encoded, "\036")[[1L]], function(record) {
+        fields <- strsplit(record, "\037")[[1L]]
+        if (length(fields) != 7L || any(!startsWith(fields, "v"))) {
+            stop("Invalid attribute changes")
+        }
+        fields <- vapply(substring(fields, 2L), runtime_transport_decode, character(1))
+        list(
+            source = fields[[1L]], name = fields[[2L]], type = fields[[3L]],
+            value = fields[[4L]], remove = identical(fields[[5L]], "1"),
+            previousType = fields[[6L]], previousValue = fields[[7L]]
+        )
+    })
+}
+
+
 runtime_transport_dedicated_params <- function(raw) {
     has_type <- runtime_transport_flag(raw, "hasType")
     has_measure <- runtime_transport_flag(raw, "hasMeasure")
@@ -206,6 +230,7 @@ runtime_transport_dedicated_params <- function(raw) {
             has_measure
         ),
         label = runtime_transport_optional_value(raw, "label", has_label),
+        attributeChanges = runtime_transport_attribute_changes(raw),
         categories = runtime_transport_categories(raw, has_categories),
         missingRange = runtime_transport_missing_range(raw, has_missing_range),
         width = runtime_transport_optional_number(raw, "width", has_width),

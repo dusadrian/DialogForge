@@ -152,6 +152,26 @@ export const createRTabularMetadataController = function(
                 width: optionalRuntimeNumber(variable.width),
                 decimals: optionalRuntimeNumber(variable.decimals),
                 values: String(variable.values || ""),
+                attributes: String(variable.attributes || ""),
+                attributeEntries: asRuntimeControlArray(variable.attributeEntries).map((value) => {
+                    const entry = asRuntimeControlObject(value);
+                    return {
+                        source: String(entry.source || ""),
+                        name: String(entry.name || ""),
+                        type: String(entry.type || ""),
+                        value: String(entry.value ?? ""),
+                        editable: entry.editable === true,
+                        reason: String(entry.reason || "")
+                    };
+                }),
+                attributeSources: asRuntimeControlArray(variable.attributeSources).map((value) => {
+                    const source = asRuntimeControlObject(value);
+                    return {
+                        id: String(source.id || ""),
+                        label: String(source.label || ""),
+                        types: asRuntimeControlArray(source.types).map(String)
+                    };
+                }),
                 categories: variableCategories(variable).map((category) => ({
                     value: category.value,
                     label: String(category.label || ""),

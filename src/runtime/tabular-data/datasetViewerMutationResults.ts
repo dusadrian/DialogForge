@@ -331,7 +331,8 @@ export const collectDatasetViewerVariablePatchParams = function(
         "decimals",
         "align",
         "categories",
-        "missingRange"
+        "missingRange",
+        "attributeChanges"
     ].forEach((key) => {
         const value = payload[key];
 

@@ -1,3 +1,4 @@
+import type { DatasetAttributeSource, DatasetVariableAttribute } from "./variableAttributes";
 import type {
     RuntimeTransportAuthPolicy,
     RuntimeTransportConnectProbe,
@@ -494,6 +495,9 @@ export interface VariableMetadataSnapshot {
         width?: number;
         decimals?: number;
         values?: string;
+        attributes?: string;
+        attributeEntries?: DatasetVariableAttribute[];
+        attributeSources?: DatasetAttributeSource[];
         categories?: Array<{
             value: unknown;
             label: string;

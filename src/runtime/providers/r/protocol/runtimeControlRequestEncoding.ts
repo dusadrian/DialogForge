@@ -128,6 +128,21 @@ const encodeMissingRange = function(value: unknown): {
 };
 
 
+const encodeAttributeChanges = function(value: unknown): string {
+    if (!Array.isArray(value)) {
+        throw new Error("Invalid attribute changes");
+    }
+
+    return value.map((change) => {
+        return [
+            change.source, change.name, change.type, change.value,
+            change.remove === true ? "1" : "0",
+            change.previousType ?? "", change.previousValue ?? ""
+        ].map((field) => "v" + encodeURIComponent(String(field))).join("\u001f");
+    }).join("\u001e");
+};
+
+
 export const encodeRuntimeControlRequest = function(
     request: RuntimeControlRequestInput,
     token = ""
@@ -244,6 +259,10 @@ export const encodeRuntimeControlRequest = function(
         categoryValues: safeEncode(categories.values),
         categoryLabels: safeEncode(categories.labels),
         categoryMissing: safeEncode(categories.missing),
+        hasAttributeChanges: safeEncode(params.attributeChanges !== undefined ? "1" : ""),
+        attributeChanges: params.attributeChanges !== undefined
+            ? safeEncode(encodeAttributeChanges(params.attributeChanges))
+            : "",
         hasMissingRange: safeEncode(hasMissingRange ? "1" : ""),
         missingRangeMin: safeEncode(missingRange.minimum),
         missingRangeMax: safeEncode(missingRange.maximum),

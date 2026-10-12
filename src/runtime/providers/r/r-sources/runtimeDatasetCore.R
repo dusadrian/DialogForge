@@ -1118,6 +1118,11 @@ workspace_dataset_update_cell <- function(name, row, column, value = "") {
         updated_column <- rebuilt$value
     }
 
+    updated_column <- workspace_dataset_preserve_variable_attributes(
+        updated_column,
+        column_state$value,
+        preserve_display = TRUE
+    )
     dataset$value[[column_state$name]] <- updated_column
     workspace_dataset_assign(dataset, dataset$value)
 
@@ -2129,6 +2134,285 @@ workspace_dataset_is_declared <- function(column, declared_namespace) {
 }
 
 
+# Attribute editing is deliberately limited to plain scalar metadata. The
+# original objects remain in R; unsupported values are never serialized back.
+workspace_dataset_owned_attribute_names <- function() {
+    c(
+        "class", "names", "dim", "dimnames", "levels", "tzone", "contrasts",
+        "units", "tsp", ".S3Class", "row.names", "label", "labels", "na_values", "na_range",
+        "na_index", "measurement", "width", "decimals", "align", "date",
+        "format.spss", "format.stata", "format.sas", "spss.attributes",
+        "stata.characteristics"
+    )
+}
+
+
+workspace_dataset_attribute_scalar <- function(value) {
+    type <- typeof(value)
+    editable <- is.element(
+        type, c("character", "integer", "double", "logical")
+    ) && is.null(attributes(value)) && length(value) == 1L
+
+    if (editable) {
+        editable <- !is.na(value)
+        if (editable && is.element(type, c("integer", "double"))) {
+            editable <- is.finite(value)
+        }
+    }
+
+    text <- ""
+    if (editable) {
+        text <- if (identical(type, "double")) {
+            sprintf("%.17g", value)
+        }
+        else {
+            as.character(value)
+        }
+        editable <- nchar(enc2utf8(text), type = "bytes") <= 4096L
+    }
+
+    list(
+        type = switch(type, character = "text", double = "numeric", type),
+        value = if (editable) {
+            text
+        }
+        else if (is.object(value)) {
+            paste0(type, " (classed object)")
+        }
+        else {
+            paste0(type, " (", length(value), " elements)")
+        },
+        editable = editable
+    )
+}
+
+
+workspace_dataset_attribute_container_editable <- function(container) {
+    if (is.null(container)) {
+        return(TRUE)
+    }
+    if (!is.list(container) || is.object(container)) {
+        return(FALSE)
+    }
+    if (!length(container)) {
+        return(is.null(attributes(container)))
+    }
+
+    identical(names(attributes(container)), "names") &&
+        !is.null(names(container)) && !anyNA(names(container)) &&
+        all(nzchar(names(container))) && !anyDuplicated(names(container))
+}
+
+
+workspace_dataset_parse_attribute_value <- function(type, text) {
+    if (identical(type, "text")) {
+        return(text)
+    }
+    if (identical(type, "integer") && grepl("^[+-]?[0-9]+$", text)) {
+        return(suppressWarnings(as.integer(text)))
+    }
+    if (identical(type, "numeric") && grepl(
+        "^[+-]?([0-9]+(\\.[0-9]*)?|\\.[0-9]+)([eE][+-]?[0-9]+)?$",
+        text
+    )) {
+        return(suppressWarnings(as.numeric(text)))
+    }
+    if (identical(type, "logical") && is.element(text, c("TRUE", "FALSE"))) {
+        return(identical(text, "TRUE"))
+    }
+
+    NULL
+}
+
+
+workspace_dataset_attribute_entries <- function(column) {
+    entries <- list()
+    previous <- attributes(column)
+    owned <- workspace_dataset_owned_attribute_names()
+
+    append_entry <- function(source, name, value, protected = FALSE) {
+        scalar <- workspace_dataset_attribute_scalar(value)
+        scalar$source <- source
+        scalar$name <- name
+        scalar$editable <- scalar$editable && !protected
+        scalar$reason <- if (protected) {
+            "Managed metadata"
+        }
+        else if (!scalar$editable) {
+            "Read-only attribute"
+        }
+        else {
+            ""
+        }
+        entries[[length(entries) + 1L]] <<- scalar
+    }
+
+    for (name in names(previous)) {
+        if (is.element(name, c("spss.attributes", "stata.characteristics"))) {
+            container <- previous[[name]]
+            valid_container <- workspace_dataset_attribute_container_editable(container)
+
+            if (valid_container) {
+                source <- if (identical(name, "spss.attributes")) "spss" else "stata"
+                for (key in names(container)) {
+                    protected <- !is.character(container[[key]])
+                    if (identical(source, "spss")) {
+                        protected <- protected || sum(
+                            toupper(names(container)) == toupper(key)
+                        ) > 1L
+                    }
+                    append_entry(source, key, container[[key]], protected)
+                }
+                next
+            }
+        }
+
+        # Dedicated columns already display these; structural metadata remains
+        # visible for inspection, with no second editing path.
+        if (is.element(name, c(
+            "label", "labels", "na_values", "na_range", "na_index",
+            "measurement", "width", "decimals", "align"
+        ))) {
+            next
+        }
+        append_entry("r", name, previous[[name]], is.element(name, owned))
+    }
+
+    entries
+}
+
+
+workspace_dataset_attribute_entries_json <- function(entries) {
+    rows <- vapply(entries, function(entry) {
+        paste0(
+            "{\"source\":", json_str(entry$source),
+            ",\"name\":", json_str(entry$name),
+            ",\"type\":", json_str(entry$type),
+            ",\"value\":", json_str(entry$value),
+            ",\"editable\":", json_bool(entry$editable),
+            ",\"reason\":", json_str(entry$reason), "}"
+        )
+    }, character(1))
+
+    paste0("[", paste(rows, collapse = ","), "]")
+}
+
+
+workspace_dataset_apply_attribute_changes <- function(column, changes) {
+    if (is.null(changes)) {
+        return(list(ok = TRUE, value = column))
+    }
+    if (!is.list(changes) || length(changes) > 128L) {
+        return(list(ok = FALSE, error = "Invalid attribute changes"))
+    }
+
+    entries <- workspace_dataset_attribute_entries(column)
+    changed <- character(0)
+    for (change in changes) {
+        source <- change$source
+        name <- change$name
+        type <- change$type
+        text <- change$value
+        if (
+            !is.element(source, c("r", "spss", "stata")) ||
+            length(name) != 1L || !nzchar(name) ||
+            nchar(enc2utf8(name), type = "bytes") > 256L ||
+            grepl("[[:cntrl:]]", name) ||
+            length(text) != 1L || is.na(text) ||
+            nchar(enc2utf8(text), type = "bytes") > 4096L
+        ) {
+            return(list(ok = FALSE, error = "Invalid attribute name or value"))
+        }
+        identity <- paste(source, name, sep = "/")
+        if (is.element(identity, changed)) {
+            return(list(ok = FALSE, error = "Duplicate attribute change"))
+        }
+        changed <- c(changed, identity)
+        if (
+            identical(source, "r") &&
+            is.element(name, workspace_dataset_owned_attribute_names())
+        ) {
+            return(list(ok = FALSE, error = "This attribute is managed by the data editor"))
+        }
+
+        container_name <- switch(
+            source, spss = "spss.attributes", stata = "stata.characteristics", ""
+        )
+        container <- if (nzchar(container_name)) {
+            attr(column, container_name, exact = TRUE)
+        }
+        else {
+            NULL
+        }
+        if (!workspace_dataset_attribute_container_editable(container)) {
+            return(list(ok = FALSE, error = "Read-only attribute container"))
+        }
+        existing <- Filter(function(entry) {
+            identical(entry$source, source) && identical(entry$name, name)
+        }, entries)
+        if (length(existing)) {
+            entry <- existing[[1L]]
+            if (
+                !isTRUE(entry$editable) ||
+                !identical(change$previousType, entry$type) ||
+                !identical(change$previousValue, entry$value)
+            ) {
+                return(list(ok = FALSE, error = "Attribute changed or is read-only; reopen Attributes"))
+            }
+        }
+        else if (nzchar(change$previousType %||% "")) {
+            return(list(ok = FALSE, error = "Attribute changed; reopen Attributes"))
+        }
+
+        if (identical(source, "spss")) {
+            if (
+                nchar(enc2utf8(name), type = "bytes") > 64L ||
+                !grepl("^[$]?[[:alpha:]@][[:alnum:]@#$_.]*$", name) ||
+                any(toupper(setdiff(names(container), name)) == toupper(name)) ||
+                grepl("\n", text, fixed = TRUE)
+            ) {
+                return(list(ok = FALSE, error = "Invalid SPSS attribute name or value"))
+            }
+        }
+        if (
+            identical(source, "stata") && (
+                nchar(name, type = "chars") > 32L ||
+                nchar(enc2utf8(name), type = "bytes") > 128L ||
+                !grepl("^[[:alpha:]_][[:alnum:]_]*$", name)
+            )
+        ) {
+            return(list(ok = FALSE, error = "Invalid Stata characteristic name"))
+        }
+        if (!identical(source, "r") && !identical(type, "text")) {
+            return(list(ok = FALSE, error = "SPSS and Stata attributes require text"))
+        }
+
+        value <- workspace_dataset_parse_attribute_value(type, text)
+        if (
+            is.null(value) || is.na(value) ||
+            (is.numeric(value) && !is.finite(value))
+        ) {
+            return(list(ok = FALSE, error = "Invalid scalar attribute value"))
+        }
+        if (isTRUE(change$remove)) {
+            value <- NULL
+        }
+        if (identical(source, "r")) {
+            attr(column, name) <- value
+        }
+        else {
+            if (is.null(container)) {
+                container <- list()
+            }
+            container[[name]] <- value
+            attr(column, container_name) <- if (length(container)) container else NULL
+        }
+    }
+
+    list(ok = TRUE, value = column)
+}
+
+
 workspace_dataset_variable_json <- function(name, column) {
     attributes <- workspace_dataset_declared_attributes(column)
     declared_namespace <- workspace_declared_namespace()
@@ -2146,6 +2430,7 @@ workspace_dataset_variable_json <- function(name, column) {
         attributes$labels
     )
     flags <- workspace_dataset_item_flags(column)
+    attribute_entries <- workspace_dataset_attribute_entries(column)
     result_json <- paste0(
         "{",
         "\"name\":", json_str(as.character(name %||% "")), ",",
@@ -2182,6 +2467,16 @@ workspace_dataset_variable_json <- function(name, column) {
             attributes$na_values,
             attributes$na_range
         ), ",",
+        "\"attributes\":", json_str(paste(
+            vapply(Filter(function(entry) !identical(entry$reason, "Managed metadata"), attribute_entries),
+                function(entry) entry$name, character(1)), collapse = ", "
+        )), ",",
+        "\"attributeEntries\":", workspace_dataset_attribute_entries_json(attribute_entries), ",",
+        "\"attributeSources\":[",
+        "{\"id\":\"r\",\"label\":\"R\",",
+        "\"types\":[\"text\",\"integer\",\"numeric\",\"logical\"]},",
+        "{\"id\":\"spss\",\"label\":\"SPSS\",\"types\":[\"text\"]},",
+        "{\"id\":\"stata\",\"label\":\"Stata\",\"types\":[\"text\"]}],",
         "\"missingRange\":", workspace_dataset_missing_range_json(
             attributes$na_range
         ),
@@ -3110,6 +3405,36 @@ workspace_dataset_display_attributes <- function(
 }
 
 
+workspace_dataset_preserve_variable_attributes <- function(
+    value,
+    column,
+    type_changed = FALSE,
+    preserve_display = FALSE
+) {
+    previous <- attributes(column)
+    managed <- c(
+        "class", "label", "labels", "na_values", "na_range", "na_index",
+        "measurement", "width", "decimals", "align"
+    )
+
+    if (isTRUE(type_changed)) {
+        managed <- c(
+            managed, "names", "dim", "dimnames", "levels", "tzone", "date",
+            "format.spss", "format.stata", "format.sas"
+        )
+    }
+    if (isTRUE(preserve_display)) {
+        managed <- setdiff(managed, c("width", "decimals", "align"))
+    }
+
+    for (name in setdiff(names(previous), managed)) {
+        attr(value, name) <- previous[[name]]
+    }
+
+    value
+}
+
+
 workspace_dataset_update_variable <- function(
     name,
     variable_name,
@@ -3120,7 +3445,8 @@ workspace_dataset_update_variable <- function(
     decimals = NULL,
     align = NULL,
     categories = NULL,
-    missing_range = NULL
+    missing_range = NULL,
+    attribute_changes = NULL
 ) {
     dataset <- workspace_editable_dataset(name)
 
@@ -3158,12 +3484,39 @@ workspace_dataset_update_variable <- function(
     }
 
     column <- dataset$value[[variable_name]]
+    changed_attributes <- workspace_dataset_apply_attribute_changes(
+        column, attribute_changes
+    )
+    if (!isTRUE(changed_attributes$ok)) {
+        return(changed_attributes)
+    }
+    column <- changed_attributes$value
+    if (!is.null(attribute_changes) && !any(c(
+        request$has_type, request$has_measure, request$has_label,
+        request$has_width, request$has_decimals, request$has_align,
+        request$has_categories, request$has_missing_range
+    ))) {
+        dataset$value[[variable_name]] <- column
+        workspace_dataset_assign(dataset, dataset$value)
+        return(list(
+            ok = TRUE,
+            result = list(name = variable_name),
+            result_json = workspace_dataset_variable_json(variable_name, column)
+        ))
+    }
     declared_namespace <- workspace_declared_namespace()
     attributes <- workspace_dataset_declared_attributes(column)
     source <- workspace_dataset_undeclare_column(
         column,
         declared_namespace
     )
+    # undeclare(drop = TRUE) removes every attribute, including Date/factor
+    # structure. Restore the source structure before rebuilding metadata.
+    source <- workspace_dataset_preserve_variable_attributes(source, column)
+    source_class <- setdiff(attr(column, "class", exact = TRUE), "declared")
+    if (length(source_class)) {
+        attr(source, "class") <- source_class
+    }
     updated <- source
 
     if (isTRUE(request$has_type) && nzchar(request$type)) {
@@ -3204,11 +3557,25 @@ workspace_dataset_update_variable <- function(
         return(rebuilt)
     }
 
+    if (
+        !isTRUE(request$has_type) && !isTRUE(request$has_categories) &&
+        !isTRUE(request$has_missing_range) && !isTRUE(request$has_measure) &&
+        !workspace_dataset_is_declared(column, declared_namespace)
+    ) {
+        # Label/display/custom metadata edits must not turn factors, dates or
+        # other classed vectors into a newly declared storage representation.
+        rebuilt$value <- column
+    }
     rebuilt$value <- workspace_dataset_display_attributes(
         rebuilt$value,
         column,
         request,
         attributes
+    )
+    rebuilt$value <- workspace_dataset_preserve_variable_attributes(
+        rebuilt$value,
+        column,
+        isTRUE(request$has_type) && nzchar(request$type)
     )
     dataset$value[[variable_name]] <- rebuilt$value
     workspace_dataset_assign(dataset, dataset$value)

@@ -1014,7 +1014,8 @@ runtime_dispatch_dataset_write <- function(method, params) {
             params$decimals,
             params$align,
             params$categories,
-            params$missingRange
+            params$missingRange,
+            params$attributeChanges
         ),
         "workspace.dataset_update_cell" = workspace_dataset_update_cell(
             params$name %||% "",

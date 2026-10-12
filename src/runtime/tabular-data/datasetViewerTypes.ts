@@ -1,3 +1,15 @@
+import type {
+    DatasetAttributeSource,
+    DatasetVariableAttribute,
+    DatasetAttributeChange
+} from "../provider-contract/variableAttributes";
+export type {
+    DatasetAttributeSource,
+    DatasetVariableAttribute,
+    DatasetAttributeChange
+} from "../provider-contract/variableAttributes";
+
+
 export type DatasetViewerColumn = {
   name: string;
   type: string;
@@ -24,6 +36,9 @@ export type DatasetVariableMetadata = {
   declared?: boolean;
   categories?: DatasetVariableCategory[];
   missingRange?: DatasetVariableMissingRange | null;
+  attributes?: string;
+  attributeEntries?: DatasetVariableAttribute[];
+  attributeSources?: DatasetAttributeSource[];
 };
 
 export type DatasetVariableMetadataBatch = {
@@ -43,6 +58,7 @@ export type DatasetVariableUpdatePatch = {
   align?: string;
   categories?: DatasetVariableCategory[];
   missingRange?: DatasetVariableMissingRange | null;
+  attributeChanges?: DatasetAttributeChange[];
 };
 
 export type DatasetVariableCategory = {

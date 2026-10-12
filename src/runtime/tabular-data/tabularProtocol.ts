@@ -183,6 +183,18 @@ export const createVariableMetadata = function(input: Partial<VariableMetadata>)
         metadata.values = input.values;
     }
 
+    if (input.attributes !== undefined) {
+        metadata.attributes = input.attributes;
+    }
+    if (input.attributeEntries !== undefined) {
+        metadata.attributeEntries = input.attributeEntries.map((entry) => ({ ...entry }));
+    }
+    if (input.attributeSources !== undefined) {
+        metadata.attributeSources = input.attributeSources.map((source) => ({
+            ...source, types: source.types.slice()
+        }));
+    }
+
     if (input.categories !== undefined) {
         metadata.categories = input.categories.map((category) => {
             return {
