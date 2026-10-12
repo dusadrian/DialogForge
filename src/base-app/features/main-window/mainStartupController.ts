@@ -96,16 +96,14 @@ const createUnavailablePrompts = function(
 
 
 const shouldAutostartRuntime = function(
-    composition: ApplicationComposition,
-    session: RuntimeSessionSnapshot
+    composition: ApplicationComposition
 ): boolean {
     const startup = composition.productSettings.runtimeStartup;
-    const status = String(session.status || "not-started");
 
+    // The host may already have started the runtime. The renderer must still
+    // finish product startup tasks through the session controller.
     return startup?.autoStart === true
-        && startup.providerId === composition.runtime.id
-        && status !== "starting"
-        && status !== "ready";
+        && startup.providerId === composition.runtime.id;
 };
 
 const shouldStartRuntimeQuietly = function(
@@ -216,7 +214,7 @@ export const createMainStartupController = function(
                 catch {}
             }, 1000);
 
-            if (shouldAutostartRuntime(composition, runtimeSession)) {
+            if (shouldAutostartRuntime(composition)) {
                 void bindings.startRuntimeSession({
                     showStartupMessages: !shouldStartRuntimeQuietly(
                         applicationSettings

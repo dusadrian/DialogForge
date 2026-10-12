@@ -27,6 +27,7 @@ export const createRuntimeLifecycleExecutionController = function(
     options: RuntimeLifecycleExecutionControllerOptions
 ): RuntimeLifecycleExecutionController {
     let pendingGeneration: number | null = null;
+    let pendingStart: Promise<RuntimeSessionSnapshot> | null = null;
 
     const recordLifecycleFailure = function(generation: number, error: unknown): void {
         options.lifecycleState.commit(generation, {
@@ -36,64 +37,81 @@ export const createRuntimeLifecycleExecutionController = function(
         });
     };
 
-    return {
-        start: async function() {
-            if (pendingGeneration === null && options.getSnapshot().status === "ready") {
+    const performStart = async function(): Promise<RuntimeSessionSnapshot> {
+        if (pendingGeneration === null && options.getSnapshot().status === "ready") {
+            return options.getSnapshot();
+        }
+
+        const generation = options.lifecycleState.beginTransition();
+        pendingGeneration = generation;
+        try {
+            options.invalidateWorkspace();
+
+            if (options.lifecycleState.snapshot.connection === "missing") {
+                options.lifecycleState.reset(
+                    "failed",
+                    "Runtime provider is not registered."
+                );
+
                 return options.getSnapshot();
             }
 
-            const generation = options.lifecycleState.beginTransition();
-            pendingGeneration = generation;
-            try {
-                options.invalidateWorkspace();
-
-                if (options.lifecycleState.snapshot.connection === "missing") {
-                    options.lifecycleState.reset(
-                        "failed",
-                        "Runtime provider is not registered."
-                    );
-
-                    return options.getSnapshot();
-                }
-
-                if (options.lifecycleController) {
-                    options.lifecycleState.transition(
-                        "starting",
-                        "Runtime session is starting."
-                    );
-                    try {
-                        const nextSnapshot =
-                            await options.lifecycleController.start(options.getSnapshot());
-
-                        if (!options.lifecycleState.commit(generation, nextSnapshot)) {
-                            throw new Error("Runtime start was superseded by a newer lifecycle transition.");
-                        }
-                    } catch (error) {
-                        recordLifecycleFailure(generation, error);
-                        throw error;
-                    }
-
-                    return options.getSnapshot();
-                }
-
-                options.lifecycleState.reset(
+            if (options.lifecycleController) {
+                options.lifecycleState.transition(
                     "starting",
                     "Runtime session is starting."
                 );
+                try {
+                    const nextSnapshot =
+                        await options.lifecycleController.start(options.getSnapshot());
 
-                options.lifecycleState.reset(
-                    "ready",
-                    options.initialMessage
-                );
+                    if (!options.lifecycleState.commit(generation, nextSnapshot)) {
+                        throw new Error("Runtime start was superseded by a newer lifecycle transition.");
+                    }
+                } catch (error) {
+                    recordLifecycleFailure(generation, error);
+                    throw error;
+                }
 
                 return options.getSnapshot();
-            } finally {
-                if (pendingGeneration === generation) {
-                    pendingGeneration = null;
-                }
             }
+
+            options.lifecycleState.reset(
+                "starting",
+                "Runtime session is starting."
+            );
+
+            options.lifecycleState.reset(
+                "ready",
+                options.initialMessage
+            );
+
+            return options.getSnapshot();
+        } finally {
+            if (pendingGeneration === generation) {
+                pendingGeneration = null;
+            }
+        }
+    };
+
+    return {
+        start: function() {
+            if (pendingStart) {
+                return pendingStart;
+            }
+
+            const started = performStart();
+            const pending = started.finally(function() {
+                if (pendingStart === pending) {
+                    pendingStart = null;
+                }
+            });
+            pendingStart = pending;
+
+            return pending;
         },
         stop: async function() {
+            pendingStart = null;
             const generation = options.lifecycleState.beginTransition();
             pendingGeneration = generation;
             try {
