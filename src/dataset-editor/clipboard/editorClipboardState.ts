@@ -13,7 +13,8 @@ export type DatasetVariableColumnKey =
     | "label"
     | "values"
     | "align"
-    | "measure";
+    | "measure"
+    | "attributes";
 
 
 export interface DatasetClipboardVariableMetadata extends DatasetVariableCommandMetadata {
@@ -103,7 +104,7 @@ const readVariableField = function(
     entry: DatasetClipboardVariableMetadata,
     key: DatasetVariableColumnKey
 ): string | number {
-    return entry[key];
+    return entry[key] ?? "";
 };
 
 

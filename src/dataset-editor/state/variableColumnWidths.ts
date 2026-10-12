@@ -14,7 +14,8 @@ export const DEFAULT_VARIABLE_COLUMN_WIDTHS: VariableColumnWidths = {
     label: 220,
     values: 108,
     align: 86,
-    measure: 96
+    measure: 96,
+    attributes: 160
 };
 
 

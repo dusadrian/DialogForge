@@ -344,13 +344,21 @@ export const createDatasetViewerClient = () => {
         payload.missingRange = null;
       }
 
+      if (Array.isArray(patch?.attributeChanges)) {
+        payload.attributeChanges = patch.attributeChanges;
+      }
+
       const out = await api.updateVariable(
         datasetName,
         normalizedVariableName,
         payload
       );
       return normalizeVariableMetadata(out);
-    } catch {
+    } catch (error) {
+      if (patch.attributeChanges !== undefined) {
+        const message = error instanceof Error ? error.message : String(error);
+        throw new Error(message.replace(/^Error invoking remote method '[^']+': (?:Error: )?/, ""));
+      }
       return null;
     }
   };

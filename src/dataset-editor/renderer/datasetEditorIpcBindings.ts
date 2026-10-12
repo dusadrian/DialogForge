@@ -5,6 +5,7 @@ export interface DatasetEditorInitMessage {
     i18n?: unknown;
     languageNS?: unknown;
     variableColumnWidths?: unknown;
+    showAttributesColumn?: unknown;
 }
 
 

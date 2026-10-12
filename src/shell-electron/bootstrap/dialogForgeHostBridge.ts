@@ -135,6 +135,11 @@ export const createDialogForgeHostBridge = function(
             options.clipboard.writeText(String(text || ""));
         },
         settings: {
+            onUpdated: function(callback) {
+                ipcRenderer.on(applicationSettingsEventChannels.settingsUpdated, (_event, settings) => {
+                    callback(asRecord(settings));
+                });
+            },
             onLoaded: function(callback: (payload: unknown) => void) {
                 ipcRenderer.on(applicationSettingsEventChannels.settingsLoaded, (_event, payload) => {
                     callback(payload);

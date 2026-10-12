@@ -2,6 +2,7 @@ export interface VariableGridAffordanceBindings {
     host: HTMLElement;
     columnWidths: Record<string, number>;
     openValueLabels: (rowIndex: number) => void;
+    openAttributes: (rowIndex: number) => void;
     selectRow: (rowIndex: number) => void;
     openDataColumn: (rowIndex: number) => void;
     persistColumnWidths: () => void;
@@ -111,6 +112,14 @@ export const bindVariableGridAffordances = function(
     bindings: VariableGridAffordanceBindings
 ): void {
     bindValueLabelButtons(bindings);
+    bindings.host.querySelectorAll<HTMLButtonElement>("[data-variable-attributes-editor]")
+        .forEach((button) => {
+            button.addEventListener("click", (event) => {
+                if (!event.shiftKey) {
+                    bindings.openAttributes(Number(button.dataset.variableAttributesEditor));
+                }
+            });
+        });
     bindRowIndices(bindings);
     bindColumnResizers(bindings);
 };

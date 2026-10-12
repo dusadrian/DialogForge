@@ -8,7 +8,8 @@ const variableColumnWidthKeys = new Set([
     "label",
     "values",
     "align",
-    "measure"
+    "measure",
+    "attributes"
 ]);
 
 

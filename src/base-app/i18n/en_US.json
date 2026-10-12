@@ -183,5 +183,21 @@
     "Session ended · editable": "Session ended · editable",
     "Connection lost · editable": "Connection lost · editable",
     "The presenter ended this shared script. This tab now belongs to you and is editable.": "The presenter ended this shared script. This tab now belongs to you and is editable.",
-    "The connection to this shared script was lost. This tab now belongs to you and is editable.": "The connection to this shared script was lost. This tab now belongs to you and is editable."
+    "The connection to this shared script was lost. This tab now belongs to you and is editable.": "The connection to this shared script was lost. This tab now belongs to you and is editable.",
+    "Attributes": "Attributes",
+    "Edit attributes": "Edit attributes",
+    "Add attribute": "Add attribute",
+    "Source": "Source",
+    "Edit scalar attributes. Other attributes are preserved.": "Edit scalar attributes. Other attributes are preserved.",
+    "Managed metadata": "Managed metadata",
+    "Read-only attribute": "Read-only attribute",
+    "Attributes updated": "Attributes updated",
+    "Attributes update failed": "Attributes update failed",
+    "Attribute names must be unique within their source": "Attribute names must be unique within their source",
+    "text": "Text",
+    "integer": "Integer",
+    "numeric": "Numeric",
+    "logical": "Logical",
+    "Show Attributes column in Data editor": "Show Attributes column in Data editor",
+    "Disabled attributes are managed elsewhere or cannot be edited here.": "Disabled attributes are managed elsewhere or cannot be edited here."
 }

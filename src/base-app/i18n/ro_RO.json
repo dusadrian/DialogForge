@@ -15,5 +15,21 @@
     "Pick color": "Alege culoarea",
     "Reset": "Resetează",
     "Save": "Salvează",
-    "Cancel": "Anulează"
+    "Cancel": "Anulează",
+    "Attributes": "Atribute",
+    "Edit attributes": "Editează atributele",
+    "Add attribute": "Adaugă atribut",
+    "Source": "Sursă",
+    "Edit scalar attributes. Other attributes are preserved.": "Editați atribute scalare. Celelalte atribute sunt păstrate.",
+    "Managed metadata": "Metadate gestionate",
+    "Read-only attribute": "Atribut doar pentru citire",
+    "Attributes updated": "Atribute actualizate",
+    "Attributes update failed": "Actualizarea atributelor a eșuat",
+    "Attribute names must be unique within their source": "Numele atributelor trebuie să fie unice în cadrul sursei",
+    "text": "Text",
+    "integer": "Întreg",
+    "numeric": "Numeric",
+    "logical": "Logic",
+    "Show Attributes column in Data editor": "Afișează coloana Atribute în editorul de date",
+    "Disabled attributes are managed elsewhere or cannot be edited here.": "Atributele dezactivate sunt gestionate în altă parte sau nu pot fi editate aici."
 }

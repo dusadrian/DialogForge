@@ -24,6 +24,7 @@ export interface RuntimeLocationResult {
 export interface ApplicationSettingsRendererBridge {
     onLoaded(callback: (payload: unknown) => void): void;
     onSaved(callback: () => void): void;
+    onUpdated?(callback: (settings: ApplicationSettings) => void): void;
     chooseRuntimeLocation(input: {
         providerId?: string;
         currentPath?: string;

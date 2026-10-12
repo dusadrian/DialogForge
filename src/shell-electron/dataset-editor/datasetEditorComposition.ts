@@ -43,6 +43,7 @@ export interface DatasetEditorCompositionOptions {
     getLocale(): string;
     getI18n(): Record<string, string>;
     readVariableColumnWidths(): Record<string, number>;
+    readShowAttributesColumn?(): boolean;
     readTerminalSettings(): unknown;
     listDatasetNames(): Promise<string[]>;
     runtimeSessionManager: Pick<
@@ -117,6 +118,7 @@ export const createDatasetEditorComposition = function(
                 datasetName: "",
                 datasetNames: [],
                 variableColumnWidths: options.readVariableColumnWidths(),
+                showAttributesColumn: options.readShowAttributesColumn?.() === true,
                 terminalSettings: options.readTerminalSettings() || {}
             };
         },

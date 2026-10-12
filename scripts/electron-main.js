@@ -762,6 +762,10 @@ datasetEditorComposition = datasetEditorCompositionModule.createDatasetEditorCom
         return composition.i18n;
     },
     readVariableColumnWidths: readDatasetEditorVariableColumnWidths,
+    readShowAttributesColumn: function () {
+        return settingsStorage.readEffectiveSettings(settingsStoragePaths())
+            .showAttributesColumn === true;
+    },
     readTerminalSettings: function () {
         return settingsStorage.readEffectiveSettings(settingsStoragePaths())
             .terminalSettings || {};

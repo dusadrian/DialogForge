@@ -40,6 +40,7 @@ export interface DatasetTableRendererOptions {
     getActiveRowNameEdit(): number | null;
     getVariables(): DatasetVariableMetadata[] | null;
     getVariableColumnWidths(): Record<DatasetVariableColumnKey, number>;
+    showAttributesColumn?(): boolean;
     getSelectedVariableRow(): number;
     getActiveVariableRow(): number;
     isVariableMetadataLoaded(): boolean;
@@ -186,6 +187,7 @@ export const createDatasetTableRenderer = function(
         host.innerHTML = renderVariableMetadataTable({
             variables: items,
             columnWidths: options.getVariableColumnWidths(),
+            showAttributesColumn: options.showAttributesColumn?.() === true,
             selectedRowIndex: options.getSelectedVariableRow(),
             activeRowIndex: options.getActiveVariableRow(),
             translate: options.translate,

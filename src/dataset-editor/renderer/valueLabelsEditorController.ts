@@ -1,3 +1,4 @@
+import { collectAttributeChanges } from "../../runtime/tabular-data/datasetAttributeChanges";
 import type {
     DatasetVariableMetadata,
     DatasetVariableUpdatePatch
@@ -12,9 +13,14 @@ import {
     renderValueLabelsEditorView,
     syncValueLabelsDraftFromView
 } from "./valueLabelsEditorView";
+import {
+    renderAttributesEditorView,
+    syncAttributesDraftFromView
+} from "./attributesEditorView";
 
 
 export interface ValueLabelsEditorControllerOptions {
+    editor?: "values" | "attributes";
     document: Document;
     getVariables(): DatasetVariableMetadata[] | null;
     replaceVariable(
@@ -73,6 +79,9 @@ const elementById = function<T extends HTMLElement>(
 export const createValueLabelsEditorController = function(
     options: ValueLabelsEditorControllerOptions
 ): ValueLabelsEditorController {
+    const attributesEditor = options.editor === "attributes";
+    const modalPrefix = attributesEditor ? "datasetAttributes" : "datasetValueLabels";
+    let saving = false;
     let rowIndex = -1;
     let draft: DatasetVariableMetadata | null = null;
     let openSequence = 0;
@@ -113,14 +122,19 @@ export const createValueLabelsEditorController = function(
     const syncDraftFromView = function(): void {
         const host = elementById<HTMLElement>(
             options.document,
-            "datasetValueLabelsBody"
+            modalPrefix + "Body"
         );
 
         if (!draft || !host) {
             return;
         }
 
-        syncValueLabelsDraftFromView(draft, host);
+        if (attributesEditor) {
+            syncAttributesDraftFromView(draft, host);
+        }
+        else {
+            syncValueLabelsDraftFromView(draft, host);
+        }
     };
 
     const close = function(): void {
@@ -132,7 +146,7 @@ export const createValueLabelsEditorController = function(
 
         const modal = elementById<HTMLElement>(
             options.document,
-            "datasetValueLabelsModal"
+            modalPrefix + "Modal"
         );
 
         if (modal) {
@@ -143,15 +157,15 @@ export const createValueLabelsEditorController = function(
     const render = function(): void {
         const modal = elementById<HTMLElement>(
             options.document,
-            "datasetValueLabelsModal"
+            modalPrefix + "Modal"
         );
         const title = elementById<HTMLElement>(
             options.document,
-            "datasetValueLabelsTitle"
+            modalPrefix + "Title"
         );
         const host = elementById<HTMLElement>(
             options.document,
-            "datasetValueLabelsBody"
+            modalPrefix + "Body"
         );
         const entry = getEntry();
 
@@ -167,7 +181,8 @@ export const createValueLabelsEditorController = function(
 
         options.showCover();
         modal.hidden = false;
-        renderValueLabelsEditorView({
+        const renderView = attributesEditor ? renderAttributesEditorView : renderValueLabelsEditorView;
+        renderView({
             host,
             title,
             entry,
@@ -192,6 +207,9 @@ export const createValueLabelsEditorController = function(
             : null;
 
         draft = cloneVariableMetadata(entry);
+        if (draft && attributesEditor) {
+            draft.attributeEntries = entry?.attributeEntries?.map((attribute) => ({ ...attribute })) || [];
+        }
         rowIndex = nextRowIndex;
         editorIsCurrent = entry
             ? captureVariableOwner(nextRowIndex, entry)
@@ -212,7 +230,7 @@ export const createValueLabelsEditorController = function(
         const hasCategories = Array.isArray(entry.categories)
             && entry.categories.length > 0;
 
-        if (!hasCategories) {
+        if (attributesEditor || !hasCategories) {
             const replacement = await options.hydrateVariable(datasetName, nextRowIndex);
 
             if (
@@ -246,25 +264,75 @@ export const createValueLabelsEditorController = function(
         const variableName = String(entry?.name || "").trim();
         const isCurrent = editorIsCurrent;
 
-        if (!datasetName || !entry || !draft || !variableName || !isCurrent) {
+        if (saving || !datasetName || !entry || !draft || !variableName || !isCurrent) {
             return;
         }
 
         syncDraftFromView();
 
-        if (!valueLabelDraftChanged(entry, draft)) {
+        const changes = attributesEditor ? collectAttributeChanges(entry, draft) : [];
+        const host = elementById<HTMLElement>(options.document, modalPrefix + "Body");
+        const showError = function(message: string): void {
+            const error = host?.querySelector<HTMLElement>("#datasetAttributesError");
+            if (error) {
+                error.textContent = options.translate(message);
+                error.hidden = false;
+            }
+            else {
+                options.showNotice(options.translate(message));
+            }
+        };
+        if (attributesEditor) {
+            const fields = host?.querySelectorAll<HTMLInputElement>("input[required]") || [];
+            for (const field of fields) {
+                if (!field.reportValidity()) {
+                    return;
+                }
+            }
+            const identities = new Set<string>();
+            for (const attribute of draft.attributeEntries || []) {
+                const identity = JSON.stringify([attribute.source, attribute.name]);
+                if (identities.has(identity)) {
+                    showError("Attribute names must be unique within their source");
+                    return;
+                }
+                identities.add(identity);
+            }
+        }
+
+        if (attributesEditor ? changes.length === 0 : !valueLabelDraftChanged(entry, draft)) {
             close();
             return;
         }
 
-        const updated = await options.updateVariable(
-            datasetName,
-            variableName,
-            {
-                categories: getValueLabelCategories(draft),
-                missingRange: cloneMissingRange(draft.missingRange)
+        let updated: DatasetVariableMetadata | null;
+        saving = true;
+        const saveButton = elementById<HTMLButtonElement>(options.document, modalPrefix + "Save");
+        if (saveButton) {
+            saveButton.disabled = true;
+        }
+        try {
+            updated = await options.updateVariable(
+                datasetName,
+                variableName,
+                attributesEditor ? { attributeChanges: changes } : {
+                    categories: getValueLabelCategories(draft),
+                    missingRange: cloneMissingRange(draft.missingRange)
+                }
+            );
+        }
+        catch (error) {
+            if (isCurrent()) {
+                showError(error instanceof Error ? error.message : String(error));
             }
-        );
+            return;
+        }
+        finally {
+            saving = false;
+            if (saveButton) {
+                saveButton.disabled = false;
+            }
+        }
 
         if (!isCurrent()) {
             return;
@@ -272,7 +340,7 @@ export const createValueLabelsEditorController = function(
 
         if (!updated || updated.name !== variableName) {
             options.showNotice(
-                options.translate("Value labels update failed")
+                options.translate(attributesEditor ? "Attributes update failed" : "Value labels update failed")
             );
             return;
         }
@@ -295,7 +363,7 @@ export const createValueLabelsEditorController = function(
 
         if (isCurrent()) {
             close();
-            options.showNotice(options.translate("Value labels updated"));
+            options.showNotice(options.translate(attributesEditor ? "Attributes updated" : "Value labels updated"));
         }
     };
 

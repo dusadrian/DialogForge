@@ -15,5 +15,21 @@
     "Pick color": "Επιλογή χρώματος",
     "Reset": "Επαναφορά",
     "Save": "Αποθήκευση",
-    "Cancel": "Ακύρωση"
+    "Cancel": "Ακύρωση",
+    "Attributes": "Ιδιότητες",
+    "Edit attributes": "Επεξεργασία ιδιοτήτων",
+    "Add attribute": "Προσθήκη ιδιότητας",
+    "Source": "Πηγή",
+    "Edit scalar attributes. Other attributes are preserved.": "Επεξεργαστείτε βαθμωτές ιδιότητες. Οι υπόλοιπες διατηρούνται.",
+    "Managed metadata": "Διαχειριζόμενα μεταδεδομένα",
+    "Read-only attribute": "Ιδιότητα μόνο για ανάγνωση",
+    "Attributes updated": "Οι ιδιότητες ενημερώθηκαν",
+    "Attributes update failed": "Η ενημέρωση ιδιοτήτων απέτυχε",
+    "Attribute names must be unique within their source": "Τα ονόματα ιδιοτήτων πρέπει να είναι μοναδικά ανά πηγή",
+    "text": "Κείμενο",
+    "integer": "Ακέραιος",
+    "numeric": "Αριθμητικό",
+    "logical": "Λογικό",
+    "Show Attributes column in Data editor": "Εμφάνιση στήλης Ιδιότητες στον επεξεργαστή δεδομένων",
+    "Disabled attributes are managed elsewhere or cannot be edited here.": "Οι απενεργοποιημένες ιδιότητες διαχειρίζονται αλλού ή δεν μπορούν να τροποποιηθούν εδώ."
 }

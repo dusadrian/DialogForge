@@ -736,6 +736,10 @@ const browserSettingsLifecycle = createApplicationSettingsLifecycle({
     applyLive: async function (settings) {
         applyWebTerminalSettings(settings);
         broadcastBrowserPreloadEvent(
+            applicationSettingsEventChannels.settingsUpdated,
+            settings
+        );
+        broadcastBrowserPreloadEvent(
             applicationEventChannels.terminalSettingsUpdated,
             readTerminalSettings(settings)
         );
@@ -1818,7 +1822,10 @@ const createSharedDataEditorInitPayload = function (datasetName) {
         datasetNames,
         i18n: state.composition?.i18n || {},
         languageNS: readSelectedLocale(),
-        variableColumnWidths: state.dataEditor.variableColumnWidths
+        variableColumnWidths: state.dataEditor.variableColumnWidths,
+        showAttributesColumn: (
+            state.settingsPreview || browserApplicationStorageAdapter.readSettings()
+        ).showAttributesColumn === true
     };
 };
 

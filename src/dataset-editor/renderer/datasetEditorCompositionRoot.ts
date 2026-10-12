@@ -1,3 +1,4 @@
+import { buildAttributeCommand } from "../../runtime/providers/r/commands/attributeCommandText";
 import {
   datasetViewerClient
 } from './datasetViewerClient';
@@ -190,9 +191,6 @@ import {
   createVariableSelectionController
 } from '../../dataset-editor/selection/variableSelectionController';
 import {
-  VARIABLE_TABLE_COLUMNS
-} from '../../dataset-editor/renderer/variableTableView';
-import {
   createDatasetEditorClipboardState,
   type DatasetVariableColumnKey as VariableColumnKey,
 } from '../../dataset-editor/clipboard/editorClipboardState';
@@ -361,7 +359,23 @@ const renderVariablesStatus =
 const applyStoredVariableColumnWidths = variableColumnWidths.applyStored;
 const persistVariableColumnWidths = variableColumnWidths.persist;
 
-const VARIABLE_COLUMNS = VARIABLE_TABLE_COLUMNS;
+let showAttributesColumn = false;
+
+const setShowAttributesColumn = function(visible: boolean): void {
+    if (showAttributesColumn === visible) {
+        return;
+    }
+    showAttributesColumn = visible;
+    if (!visible) {
+        attributesEditor.close();
+        if (variableSelection.activeCell()?.key === "attributes") {
+            variableSelection.clear();
+        }
+    }
+    if (datasetTabs.isVariablesActive()) {
+        renderVariablesTable();
+    }
+};
 
 const datasetEditorDom = createDatasetEditorDomController(document);
 const variableGridDom = createVariableGridDomController(
@@ -713,13 +727,52 @@ const valueLabelsEditor = createValueLabelsEditorController({
   refreshDataset: (datasetName) => refreshCurrentDataset(datasetName),
   showNotice: showFooterNotice
 });
-const closeValueLabelsEditor = valueLabelsEditor.close;
-const cancelValueLabelsEditor = valueLabelsEditor.cancel;
+const attributesEditor = createValueLabelsEditorController({
+    editor: "attributes",
+    document,
+    getVariables: () => variableMetadataState.items,
+    replaceVariable: (rowIndex, variable) => {
+        variableMetadataState.replaceItem(rowIndex, variable);
+    },
+    getDatasetName: () => datasetIdentity.currentName,
+    getLoadSequence: () => variableMetadata.snapshot.sequence,
+    hydrateVariable: async (datasetName, rowIndex) => {
+        const batch = await datasetViewerClient.getVariablesBatch(
+            datasetName, rowIndex + 1, 1
+        );
+        return batch?.items?.[0] || null;
+    },
+    translate: (key) => t(key),
+    escapeHtml,
+    plusIconPath: PLUS_ICON_PATH,
+    deleteIconPath: DELETE_ICON_PATH,
+    showCover: addCover,
+    hideCover: removeCover,
+    updateVariable: (datasetName, variableName, patch) => {
+        return datasetViewerClient.updateVariable(
+            datasetName,
+            variableName,
+            patch
+        );
+    },
+    buildCommand: buildAttributeCommand,
+    rememberCommand: rememberDatasetEditorCommand,
+    variablesTabActive: datasetTabs.isVariablesActive,
+    renderVariables: () => renderVariablesTable(),
+    refreshDataset: (datasetName) => refreshCurrentDataset(datasetName),
+    showNotice: showFooterNotice
+});
+const closeValueLabelsEditor = function(): void {
+    valueLabelsEditor.close();
+    attributesEditor.close();
+};
+const cancelValueLabelsEditor = closeValueLabelsEditor;
 const saveValueLabelsEditor = valueLabelsEditor.save;
 const renderValueLabelsEditor = valueLabelsEditor.render;
 
 const openHydratedValueLabelsEditor = function(rowIndex: number): void {
     void runDatasetEditorEventAction("open-value-labels", () => {
+        closeValueLabelsEditor();
         return valueLabelsEditor.openHydrated(rowIndex);
     });
 };
@@ -854,6 +907,10 @@ const variableGridInteractions =
     },
     columnWidths: variableColumnWidths.get(),
     openValueLabels: openHydratedValueLabelsEditor,
+    openAttributes: (rowIndex) => {
+        closeValueLabelsEditor();
+        void runDatasetEditorEventAction("open-attributes", () => attributesEditor.openHydrated(rowIndex));
+    },
     openDataColumn: jumpToDataColumnForVariableRow,
     persistColumnWidths: () => {
       void persistVariableColumnWidths();
@@ -887,6 +944,7 @@ const datasetTableRenderer = createDatasetTableRenderer({
   ),
   getVariables: () => variableMetadataState.items,
   getVariableColumnWidths: () => variableColumnWidths.get(),
+  showAttributesColumn: () => showAttributesColumn,
   getSelectedVariableRow: () => (
     variableSelection.snapshot.selectedRowIndex
   ),
@@ -1317,7 +1375,7 @@ const windowInteractions =
         getVariableCellSelectionBounds(activeVariableCell.key)
       );
     },
-    isValueLabelsEditorOpen: valueLabelsEditor.isOpen,
+    isValueLabelsEditorOpen: () => valueLabelsEditor.isOpen() || attributesEditor.isOpen(),
     isHeaderMenuOpen: () => (
       Boolean(datasetEditorContextMenus.headerColumn)
     ),
@@ -1385,7 +1443,7 @@ const controlBindings =
     loadVariablesThroughRow: (rowIndex) => {
       return loadVariablesThroughRow(rowIndex, false);
     },
-    isValueLabelsEditorOpen: valueLabelsEditor.isOpen,
+    isValueLabelsEditorOpen: () => valueLabelsEditor.isOpen() || attributesEditor.isOpen(),
     cancelValueLabelsEditor,
     saveValueLabelsEditor
   });
@@ -1397,11 +1455,17 @@ bindDatasetEditorUi({
   globalEvents: windowInteractions.globalEvents,
   dismissal: windowInteractions.dismissal
 });
+document.getElementById("datasetAttributesCancel")?.addEventListener("click", attributesEditor.cancel);
+document.getElementById("datasetAttributesSave")?.addEventListener("click", () => {
+    void runDatasetEditorEventAction("save-attributes", attributesEditor.save);
+});
+
 renderDataStatus(' ');
 renderVariablesStatus(' ');
 
 const datasetEditorInitialization = createDatasetEditorInitializationController({
   applyStoredVariableColumnWidths,
+  setShowAttributesColumn,
   initializeLocalization: (locale, appPath, directTranslations) => {
     localization.initialize(locale, appPath, directTranslations);
   },
@@ -1420,8 +1484,15 @@ const datasetEditorInitialization = createDatasetEditorInitializationController(
   renderTitle: setTitle,
   isVariablesTabActive: datasetTabs.isVariablesActive,
   renderVariablesTable,
-  isValueLabelsEditorOpen: () => valueLabelsEditor.isOpen(),
-  renderValueLabelsEditor
+  isValueLabelsEditorOpen: () => valueLabelsEditor.isOpen() || attributesEditor.isOpen(),
+  renderValueLabelsEditor: () => {
+    if (attributesEditor.isOpen()) {
+        attributesEditor.render();
+    }
+    else {
+        renderValueLabelsEditor();
+    }
+  }
 });
 const datasetFilterState = createDatasetFilterStateController({
   getDatasetName: () => datasetIdentity.currentName,
@@ -1479,3 +1550,7 @@ if (window.dialogForge) {
 }
 
 datasetExternalActions.bindIpc(datasetEditorBridge);
+
+window.dialogForge?.settings.onUpdated?.((settings) => {
+    setShowAttributesColumn(settings.showAttributesColumn === true);
+});

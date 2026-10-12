@@ -6,10 +6,11 @@ export type VariableMetadataFieldKey =
     | "label"
     | "values"
     | "align"
-    | "measure";
+    | "measure"
+    | "attributes";
 
 
-export type VariableMetadataFieldValue = Record<VariableMetadataFieldKey, string | number>;
+export type VariableMetadataFieldValue = Record<Exclude<VariableMetadataFieldKey, "attributes">, string | number> & { attributes?: string };
 
 
 export type PersistedVariableMetadataField =

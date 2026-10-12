@@ -6,6 +6,7 @@ import type {
 export const createDatasetEditorInitializationController = function(
     options: {
         applyStoredVariableColumnWidths(value: unknown): void;
+        setShowAttributesColumn?(value: boolean): void;
         initializeLocalization(locale: unknown, appPath: unknown, i18n: unknown): void;
         setLanguage(locale: unknown, appPath: unknown, i18n: unknown): void;
         translateMenus(): void;
@@ -30,6 +31,7 @@ export const createDatasetEditorInitializationController = function(
 
     const initialize = function(args: DatasetEditorInitMessage): void {
         options.applyStoredVariableColumnWidths(args.variableColumnWidths);
+        options.setShowAttributesColumn?.(args.showAttributesColumn === true);
         options.initializeLocalization(args?.languageNS, args?.appPath, args?.i18n);
         options.translateMenus();
         options.translateChrome();

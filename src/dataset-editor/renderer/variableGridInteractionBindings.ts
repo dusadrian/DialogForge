@@ -66,6 +66,7 @@ export interface VariableGridInteractionBindingsOptions {
     ): void;
     columnWidths: Record<VariableKey, number>;
     openValueLabels(rowIndex: number): void;
+    openAttributes(rowIndex: number): void;
     openDataColumn(rowIndex: number): void;
     persistColumnWidths(): void;
 }
@@ -215,6 +216,7 @@ export const createVariableGridInteractionBindings = function(
             host,
             columnWidths: options.columnWidths,
             openValueLabels: options.openValueLabels,
+            openAttributes: options.openAttributes,
             selectRow: selection.selectRow,
             openDataColumn: options.openDataColumn,
             persistColumnWidths: options.persistColumnWidths

@@ -15,5 +15,21 @@
     "Pick color": "Wybierz kolor",
     "Reset": "Resetuj",
     "Save": "Zapisz",
-    "Cancel": "Anuluj"
+    "Cancel": "Anuluj",
+    "Attributes": "Atrybuty",
+    "Edit attributes": "Edytuj atrybuty",
+    "Add attribute": "Dodaj atrybut",
+    "Source": "Źródło",
+    "Edit scalar attributes. Other attributes are preserved.": "Edytuj atrybuty skalarne. Pozostałe atrybuty są zachowywane.",
+    "Managed metadata": "Zarządzane metadane",
+    "Read-only attribute": "Atrybut tylko do odczytu",
+    "Attributes updated": "Atrybuty zaktualizowane",
+    "Attributes update failed": "Aktualizacja atrybutów nie powiodła się",
+    "Attribute names must be unique within their source": "Nazwy atrybutów muszą być unikalne w obrębie źródła",
+    "text": "Tekst",
+    "integer": "Całkowity",
+    "numeric": "Liczbowy",
+    "logical": "Logiczny",
+    "Show Attributes column in Data editor": "Pokaż kolumnę Atrybuty w edytorze danych",
+    "Disabled attributes are managed elsewhere or cannot be edited here.": "Wyłączone atrybuty są zarządzane w innym miejscu lub nie można ich tutaj edytować."
 }

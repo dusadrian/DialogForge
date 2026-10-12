@@ -447,7 +447,8 @@
         padding: 4px 6px;
         vertical-align: top;
       }
-      .dataset-grid--variables td[data-column="values"] {
+      .dataset-grid--variables td[data-column="values"],
+      .dataset-grid--variables td[data-column="attributes"] {
         position: relative;
         max-width: 108px;
         width: 108px;
@@ -514,7 +515,9 @@
           0 1px 0 rgba(255, 255, 255, 0.95) inset;
       }
       .dataset-grid--variables td[data-column="values"]:hover .dataset-grid__values-button,
-      .dataset-grid--variables td[data-column="values"]:focus-within .dataset-grid__values-button {
+      .dataset-grid--variables td[data-column="values"]:focus-within .dataset-grid__values-button,
+      .dataset-grid--variables td[data-column="attributes"]:hover .dataset-grid__values-button,
+      .dataset-grid--variables td[data-column="attributes"]:focus-within .dataset-grid__values-button {
         opacity: 1;
         pointer-events: auto;
       }
@@ -819,7 +822,8 @@
         color: #1f2b3c;
         font-size: 0.9rem;
       }
-      .ds-labels-range-inputs--disabled {
+      .ds-labels-range-inputs--disabled,
+      #datasetAttributesBody .ds-labels-table__input:disabled {
         opacity: 0.4;
       }
       .ds-labels-table__input {
@@ -832,6 +836,11 @@
         background: #fff;
         color: #1f2b3c;
         font: inherit;
+      }
+      textarea.ds-labels-table__input {
+        min-height: 26px;
+        resize: vertical;
+        vertical-align: middle;
       }
       .ds-labels-table__input:focus {
         outline: none;
@@ -960,6 +969,18 @@
         <div class="dataset-modal__footer">
           <button type="button" class="dataset-modal__action" id="datasetValueLabelsCancel">Cancel</button>
           <button type="button" class="dataset-modal__action dataset-modal__action--primary" id="datasetValueLabelsSave">Save</button>
+        </div>
+      </div>
+    </div>
+    <div class="dataset-modal" id="datasetAttributesModal" hidden>
+      <div class="dataset-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="datasetAttributesTitle">
+        <div class="dataset-modal__header">
+          <div class="dataset-modal__title" id="datasetAttributesTitle">Attributes</div>
+        </div>
+        <div class="dataset-modal__body" id="datasetAttributesBody"></div>
+        <div class="dataset-modal__footer">
+          <button type="button" class="dataset-modal__action" id="datasetAttributesCancel">Cancel</button>
+          <button type="button" class="dataset-modal__action dataset-modal__action--primary" id="datasetAttributesSave">Save</button>
         </div>
       </div>
     </div>

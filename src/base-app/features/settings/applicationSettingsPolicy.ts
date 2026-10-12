@@ -31,7 +31,8 @@ export const createFactoryApplicationSettings = function(
             providerId: String(defaultRuntimeProvider || "").trim()
         },
         enableAuthoringFeatures: false,
-        notifyUpdates: true
+        notifyUpdates: true,
+        showAttributesColumn: false
     };
 };
 

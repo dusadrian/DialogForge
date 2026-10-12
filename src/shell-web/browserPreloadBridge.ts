@@ -10,6 +10,7 @@ import {
 } from "../base-app/features/settings/applicationSettingsIpc";
 import type {
     ApplicationSettingsRendererBridge,
+    ApplicationSettings,
     RuntimeLocationResult
 } from "../base-app/features/settings/applicationSettingsIpc";
 import {
@@ -441,6 +442,11 @@ const dialogRuntime = {
 };
 
 const settings = {
+    onUpdated: function(callback: (settings: ApplicationSettings) => void): void {
+        addListener(applicationSettingsEventChannels.settingsUpdated, (settings) => {
+            callback(asRecord(settings));
+        });
+    },
     onLoaded: function(callback: Listener): void {
         addListener(applicationSettingsEventChannels.settingsLoaded, callback);
         void invokeHost(applicationSettingsIpcChannels.readWindowPayload)

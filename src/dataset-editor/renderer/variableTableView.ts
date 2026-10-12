@@ -38,13 +38,15 @@ export const VARIABLE_TABLE_COLUMNS: VariableTableColumn[] = [
         label: "Measure",
         input: "select",
         options: ["nominal", "ordinal", "interval", "ratio"]
-    }
+    },
+    { key: "attributes", label: "Attributes", input: "text" }
 ];
 
 
 export interface VariableTableViewOptions {
     variables: DatasetVariableMetadata[];
     columnWidths: Record<DatasetVariableColumnKey, number>;
+    showAttributesColumn?: boolean;
     selectedRowIndex: number;
     activeRowIndex: number;
     translate(key: string): string;
@@ -60,7 +62,7 @@ const readField = function(
     entry: DatasetVariableMetadata,
     key: DatasetVariableColumnKey
 ): string | number {
-    return entry[key];
+    return entry[key] ?? "";
 };
 
 
@@ -86,9 +88,10 @@ const selectOptions = function(
 
 
 const columnGroup = function(
-    widths: Record<DatasetVariableColumnKey, number>
+    widths: Record<DatasetVariableColumnKey, number>,
+    visibleColumns: VariableTableColumn[]
 ): string {
-    const columns = VARIABLE_TABLE_COLUMNS.map((column) => {
+    const columns = visibleColumns.map((column) => {
         const width = Math.max(
             40,
             Math.round(widths[column.key] || 100)
@@ -119,13 +122,16 @@ const renderCell = function(
         + `data-variable-row="${rowIndex}"`
     );
 
-    if (column.key === "values") {
+    if (column.key === "values" || column.key === "attributes") {
         const text = options.escapeHtml(String(value ?? ""));
+        const editor = column.key === "attributes" ? "attributes" : "values";
+        const label = column.key === "attributes" ? "Edit attributes" : "Edit values";
+        const unavailable = column.key === "attributes" && !entry.attributeSources?.length;
 
         return `<td ${cellAttributes}>
               <div class="dataset-grid__values-cell">
                 <div class="dataset-grid__values-text" title="${text}">${text}</div>
-                <button type="button" class="dataset-grid__values-button" data-variable-values-editor="${rowIndex}" aria-label="${options.escapeHtml(options.translate("Edit values"))}">...</button>
+                <button type="button" class="dataset-grid__values-button" data-variable-${editor}-editor="${rowIndex}"${unavailable ? " disabled" : ""} aria-label="${options.escapeHtml(options.translate(label))}">...</button>
               </div>
             </td>`;
     }
@@ -161,7 +167,10 @@ const renderCell = function(
 export const renderVariableMetadataTable = function(
     options: VariableTableViewOptions
 ): string {
-    const headers = VARIABLE_TABLE_COLUMNS.map((column) => {
+    const visibleColumns = VARIABLE_TABLE_COLUMNS.filter((column) => {
+        return column.key !== "attributes" || options.showAttributesColumn === true;
+    });
+    const headers = visibleColumns.map((column) => {
         return `<th data-variable-header="${column.key}">
           <span class="dataset-grid__header-label">${options.escapeHtml(options.translate(column.label))}</span>
           <span class="dataset-grid__col-resizer" data-variable-resizer="${column.key}" aria-hidden="true"></span>
@@ -177,7 +186,7 @@ export const renderVariableMetadataTable = function(
         )
             ? " is-active-row-index"
             : "";
-        const cells = VARIABLE_TABLE_COLUMNS.map((column) => {
+        const cells = visibleColumns.map((column) => {
             return renderCell(entry, rowIndex, column, options);
         }).join("");
 
@@ -188,7 +197,7 @@ export const renderVariableMetadataTable = function(
     }).join("");
 
     return `<table class="dataset-grid dataset-grid--variables">
-    ${columnGroup(options.columnWidths)}
+    ${columnGroup(options.columnWidths, visibleColumns)}
     <thead>
       <tr>
         <th class="row-index">#</th>

@@ -391,6 +391,9 @@ const applyText = function(strings: Record<string, string>): void {
     byId<HTMLLabelElement>("labelTerminalInputMode").textContent = translate(strings, "Input mode");
     byId<HTMLLabelElement>("labelAuthoringFeatures").textContent = translate(strings, "Enable authoring features");
     byId<HTMLLabelElement>("labelNotifyUpdates").textContent = translate(strings, "Notify me when updates are available");
+    byId<HTMLLabelElement>("labelShowAttributesColumn").textContent = translate(
+        strings, "Show Attributes column in Data editor"
+    );
     const colorPickerLabel = translate(strings, "Pick color");
     const colorPickerButton = byId<HTMLButtonElement>("terminalSelectionColorSwatch");
 
@@ -483,6 +486,7 @@ const renderSettings = function(payload: SettingsPayload): void {
     const inputMode = byId<HTMLElement>("terminalInputMode");
     const authoring = byId<HTMLElement>("enableAuthoringFeatures");
     const notifyUpdates = byId<HTMLElement>("notifyUpdates");
+    const showAttributesColumn = byId<HTMLElement>("showAttributesColumn");
     const resetButton = byId<HTMLButtonElement>("resetBtn");
     const saveButton = byId<HTMLButtonElement>("saveBtn");
     const cancelButton = byId<HTMLButtonElement>("cancelBtn");
@@ -570,7 +574,8 @@ const renderSettings = function(payload: SettingsPayload): void {
                 draftRuntimeDetection
             ),
             enableAuthoringFeatures: readChecked(authoring),
-            notifyUpdates: readChecked(notifyUpdates)
+            notifyUpdates: readChecked(notifyUpdates),
+            showAttributesColumn: readChecked(showAttributesColumn)
         };
     };
     const writeDraft = function(source: Record<string, unknown>): void {
@@ -613,7 +618,8 @@ const renderSettings = function(payload: SettingsPayload): void {
             errorContext,
             inputMode,
             authoring,
-            notifyUpdates
+            notifyUpdates,
+            showAttributesColumn
         ].forEach((control) => {
             control.onchange = null;
         });
@@ -645,6 +651,7 @@ const renderSettings = function(payload: SettingsPayload): void {
         );
         writeChecked(authoring, Boolean(source.enableAuthoringFeatures));
         writeChecked(notifyUpdates, source.notifyUpdates !== false);
+        writeChecked(showAttributesColumn, source.showAttributesColumn === true);
     };
     const previewDraft = function(): void {
         window.dialogForge.settings.preview(readDraft());
@@ -799,6 +806,7 @@ const renderSettings = function(payload: SettingsPayload): void {
     connectCheckboxLabel("labelTerminalErrorContext", errorContext);
     connectCheckboxLabel("labelAuthoringFeatures", authoring);
     connectCheckboxLabel("labelNotifyUpdates", notifyUpdates);
+    connectCheckboxLabel("labelShowAttributesColumn", showAttributesColumn);
     [
         language,
         terminalFont,
@@ -808,7 +816,8 @@ const renderSettings = function(payload: SettingsPayload): void {
         errorContext,
         inputMode,
         authoring,
-        notifyUpdates
+        notifyUpdates,
+        showAttributesColumn
     ].forEach(connectPreview);
     createColorPicker(
         selectionColor,
@@ -832,7 +841,8 @@ const renderSettings = function(payload: SettingsPayload): void {
             errorContext,
             inputMode,
             authoring,
-            notifyUpdates
+            notifyUpdates,
+            showAttributesColumn
         ].forEach(connectPreview);
         previewDraft();
     };

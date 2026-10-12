@@ -19,6 +19,7 @@ export interface DatasetVariableCommandMetadata {
     decimals: number;
     align: string;
     measure: string;
+    attributes?: string;
     declared?: boolean;
     categories?: DatasetVariableCategoryValue[];
     missingRange?: DatasetVariableMissingRangeValue | null;
