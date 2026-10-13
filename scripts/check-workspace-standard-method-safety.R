@@ -622,6 +622,36 @@ local({
         identical(lazy_update$state$variables[[fixture_name]]$display_type, "delayed binding"),
         hits == 0L
     )
+
+    # data() deliberately installs package datasets as lazy-load bindings.
+    # The workspace must materialize that standard binding while leaving the
+    # arbitrary delayed binding above untouched.
+    utils::data(list = "iris", package = "datasets", envir = .GlobalEnv)
+    stopifnot(identical(
+        runtime$runtime_binding_info(.GlobalEnv, "iris")$state,
+        "delayed"
+    ))
+    previous_global_names <- runtime$runtime_global_names
+    runtime$runtime_global_names <- function() "iris"
+    tryCatch({
+        dataset_snapshot <- runtime$workspace_snapshot()
+        stopifnot(
+            identical(dataset_snapshot$dataframe[[1L]]$colnames, names(iris)),
+            identical(dataset_snapshot$dataframe[[1L]]$rowCount, 150L),
+            identical(dataset_snapshot$variables[[1L]]$display_type, "data.frame"),
+            identical(dataset_snapshot$variables[[1L]]$display_value, "150 x 5"),
+            dataset_snapshot$variables[[1L]]$has_viewer,
+            identical(
+                runtime$runtime_binding_info(.GlobalEnv, "iris")$state,
+                "forced"
+            ),
+            hits == 0L
+        )
+    }, finally = {
+        runtime$runtime_global_names <- previous_global_names
+        rm(iris, envir = .GlobalEnv)
+    })
+
     assign(fixture_name, 42, .GlobalEnv)
     recovered <- runtime$collect_workspace_update(lazy_update$state)
     stopifnot(identical(recovered$state$variables[[fixture_name]]$display_value, "42"))

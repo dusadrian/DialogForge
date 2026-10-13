@@ -13,6 +13,103 @@ runtime_global_object <- function(name) {
 }
 
 
+workspace_package_dataset_binding_is_materializable <- function(binding) {
+    if (
+        !identical(binding$state, "delayed") ||
+        !is.environment(binding$environment)
+    ) {
+        return(FALSE)
+    }
+
+    expression <- binding$expression
+    if (
+        !is.call(expression) ||
+        length(expression) != 5L ||
+        !identical(expression[[1L]], quote(lazyLoadDBfetch)) ||
+        !identical(expression[[3L]], quote(datafile)) ||
+        !identical(expression[[4L]], quote(compressed)) ||
+        !identical(expression[[5L]], quote(envhook))
+    ) {
+        return(FALSE)
+    }
+
+    key <- expression[[2L]]
+    stored_key <- typeof(key) == "integer" &&
+        length(key) > 0L &&
+        is.null(attributes(key)) &&
+        all(!is.na(key))
+    call_key <- is.call(key) &&
+        length(key) >= 2L &&
+        identical(key[[1L]], quote(c)) &&
+        all(vapply(as.list(key)[-1L], function(value) {
+            typeof(value) == "integer" && length(value) == 1L && !is.na(value)
+        }, logical(1)))
+
+    if (!stored_key && !call_key) {
+        return(FALSE)
+    }
+
+    environment <- binding$environment
+    if (!identical(parent.env(environment), asNamespace("base"))) {
+        return(FALSE)
+    }
+
+    local_resolver <- runtime_binding_info(environment, "lazyLoadDBfetch")
+    stock_resolver <- runtime_binding_info(asNamespace("base"), "lazyLoadDBfetch")
+    datafile <- runtime_binding_info(environment, "datafile")
+    compressed <- runtime_binding_info(environment, "compressed")
+    envhook <- runtime_binding_info(environment, "envhook")
+    stored <- c("value", "forced")
+
+    if (
+        !identical(local_resolver$state, "unbound") ||
+        !is.element(stock_resolver$state, stored) ||
+        !identical(stock_resolver$value, base::lazyLoadDBfetch) ||
+        !is.element(datafile$state, stored) ||
+        typeof(datafile$value) != "character" ||
+        length(datafile$value) != 1L ||
+        is.na(datafile$value) ||
+        !nzchar(datafile$value) ||
+        !identical(basename(dirname(datafile$value)), "data") ||
+        !endsWith(datafile$value, ".rdb") ||
+        !file.exists(datafile$value) ||
+        !is.element(compressed$state, stored) ||
+        !is.element(typeof(compressed$value), c("logical", "integer", "double")) ||
+        length(compressed$value) != 1L ||
+        is.na(compressed$value) ||
+        !is.element(envhook$state, stored) ||
+        typeof(envhook$value) != "closure" ||
+        !identical(environment(envhook$value), environment)
+    ) {
+        return(FALSE)
+    }
+
+    TRUE
+}
+
+
+workspace_materialize_package_dataset_binding <- function(name, binding) {
+    if (!workspace_package_dataset_binding_is_materializable(binding)) {
+        return(binding)
+    }
+
+    materialized <- tryCatch({
+        runtime_global_object(name)
+        runtime_binding_info(.GlobalEnv, name)
+    }, error = function(error) NULL)
+
+    if (
+        !is.null(materialized) &&
+        is.element(materialized$state, c("value", "forced"))
+    ) {
+        runtime_diagnostic_count("package_dataset_bindings_materialized")
+        return(materialized)
+    }
+
+    binding
+}
+
+
 workspace_active_binding_entry <- function(
     name,
     updated_at,
@@ -1077,6 +1174,7 @@ collect_workspace_update <- function(previous_state = NULL) {
 
     for (name in object_names) {
         binding <- runtime_binding_info(.GlobalEnv, name)
+        binding <- workspace_materialize_package_dataset_binding(name, binding)
         binding_entry <- workspace_active_binding_entry(name, updated_at, binding)
 
         if (!is.null(binding_entry)) {
@@ -1310,6 +1408,7 @@ workspace_snapshot <- function() {
 
     for (name in object_names) {
         binding <- runtime_binding_info(.GlobalEnv, name)
+        binding <- workspace_materialize_package_dataset_binding(name, binding)
         binding_entry <- workspace_active_binding_entry(name, updated_at, binding)
 
         if (!is.null(binding_entry)) {
