@@ -1,0 +1,147 @@
+"use strict";
+
+const fs = require("node:fs");
+const path = require("node:path");
+const { spawnSync } = require("node:child_process");
+
+
+let stagedProductPath = "";
+
+
+const readRequiredProductPath = function() {
+    const productPath = String(
+        process.env.DIALOGFORGE_ELECTRON_PRODUCT_PATH || ""
+    ).trim();
+
+    if (!productPath) {
+        throw new Error(
+            "DIALOGFORGE_ELECTRON_PRODUCT_PATH must point at an external product directory."
+        );
+    }
+
+    return productPath;
+};
+
+
+const readProductId = function(productPath) {
+    const manifestPath = path.join(productPath, "package.json");
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+    const productId = String(manifest.product?.id || "").trim();
+
+    if (!productId) {
+        throw new Error(`Product package at ${manifestPath} must define product.id.`);
+    }
+
+    return productId;
+};
+
+
+const stageProduct = function(productPath) {
+    const resolvedProductPath = path.resolve(productPath);
+
+    if (stagedProductPath === resolvedProductPath) {
+        return;
+    }
+
+    const projectRoot = process.cwd();
+    const result = spawnSync(
+        process.execPath,
+        [
+            path.join(projectRoot, "dist/scripts/package-product.js"),
+            "--product-path",
+            resolvedProductPath,
+            "--stage-only"
+        ],
+        {
+            cwd: projectRoot,
+            env: process.env,
+            stdio: "inherit"
+        }
+    );
+
+    if (result.error) {
+        throw result.error;
+    }
+
+    if (result.status !== 0) {
+        throw new Error(`Product staging exited with status ${result.status}.`);
+    }
+
+    stagedProductPath = resolvedProductPath;
+};
+
+
+const productLaunchArgs = function(mainEntry) {
+    const productPath = readRequiredProductPath();
+    stageProduct(productPath);
+
+    return [
+        mainEntry,
+        "--product-path",
+        productPath
+    ];
+};
+
+
+const pageHasMainWindowMarker = async function(page) {
+    try {
+        return await page.evaluate(() => {
+            return Boolean(document.getElementById("visibleCommandInput"));
+        });
+    }
+    catch {
+        return false;
+    }
+};
+
+
+const findMainWindowPage = async function(app, timeout = 30000) {
+    const deadline = Date.now() + timeout;
+
+    while (Date.now() < deadline) {
+        const pages = app.windows();
+        const mainPage = pages.find((page) => {
+            return page.url().endsWith("/src/base-app/pages/main.html");
+        });
+
+        if (mainPage) {
+            return mainPage;
+        }
+
+        for (const page of pages) {
+            const hasMarker = await Promise.race([
+                pageHasMainWindowMarker(page),
+                new Promise((resolve) => setTimeout(() => resolve(false), 500))
+            ]);
+
+            if (hasMarker) {
+                return page;
+            }
+        }
+
+        const remaining = Math.max(1, deadline - Date.now());
+        const waitMs = Math.min(250, remaining);
+        await Promise.race([
+            app.waitForEvent("window", {
+                timeout: waitMs
+            }).catch(() => null),
+            new Promise((resolve) => {
+                setTimeout(resolve, waitMs);
+            })
+        ]);
+    }
+
+    throw new Error("Timed out waiting for the DialogForge main window.");
+};
+
+
+const requiredProductId = function() {
+    return readProductId(readRequiredProductPath());
+};
+
+
+module.exports = {
+    findMainWindowPage,
+    productLaunchArgs,
+    requiredProductId
+};
