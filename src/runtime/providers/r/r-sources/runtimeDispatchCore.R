@@ -1292,6 +1292,14 @@ runtime_qca_truth_table_json <- function(name, value) {
     else {
         character(0)
     }
+    # The top-level cases list contains observed configurations only. Venn
+    # regions follow every truth-table row, including empty configurations.
+    cases <- if (is.data.frame(table) && is.element("cases", names(table))) {
+        as.character(table[["cases"]])
+    }
+    else {
+        character(length(id))
+    }
 
     paste0(
         "{\"name\":", json_str(name), ",",
@@ -1301,7 +1309,7 @@ runtime_qca_truth_table_json <- function(name, value) {
         "},",
         "\"id\":", json_strv(as.character(id)), ",",
         "\"out\":", json_strv(as.character(out)), ",",
-        "\"cases\":", json_strv(as.character(value$cases %||% character(0))),
+        "\"cases\":", json_strv(cases),
         "}"
     )
 }
