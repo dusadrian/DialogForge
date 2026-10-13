@@ -45,7 +45,8 @@ const assertCanonicalDialogStylesheet = function () {
 
     [
         "@import url('./shared/dmSelect.css');",
-        "@import url('./shared/appCodicon.css');"
+        "@import url('./shared/appCodicon.css');",
+        "@import url('./shared/plotToolbar.css');"
     ].forEach((expectedImport) => {
         if (!dialogCss.includes(expectedImport)) {
             throw new Error(

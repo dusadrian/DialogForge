@@ -111,6 +111,7 @@ esbuild.buildSync({
     stdin: {
         contents: [
             "import './src/base-app/pages/shared/plotViewportInteractions.js';",
+            "import './src/base-app/pages/shared/svgPlotToolbar.js';",
             "await import('./src/shell-web/browserPreloadBridge');",
             "await import('/api/product-dialog-runtime.js');",
             "await import('./src/dialog-runtime/renderer/modules/dialogBuilderInterface');"
@@ -262,7 +263,8 @@ fs.writeFileSync(path.join(browserModuleOutput, shellBundleName), shellBundle);
 const dialogStylesheetFiles = [
     "src/base-app/pages/dialogBuilder.css",
     "src/base-app/pages/shared/dmSelect.css",
-    "src/base-app/pages/shared/appCodicon.css"
+    "src/base-app/pages/shared/appCodicon.css",
+    "src/base-app/pages/shared/plotToolbar.css"
 ];
 const dialogStylesheetDigest = createHash("sha256");
 

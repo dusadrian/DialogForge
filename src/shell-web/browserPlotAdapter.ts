@@ -32,9 +32,26 @@ const readBrowserPlotBlob = async function(url: string): Promise<Blob> {
 
 interface BrowserPlotSaveRequest {
     url?: unknown;
+    data?: unknown;
+    fileName?: unknown;
     format?: unknown;
     index?: unknown;
 }
+
+
+const readSuppliedPlotData = function(value: unknown): Uint8Array {
+    if (ArrayBuffer.isView(value)) {
+        return new Uint8Array(
+            value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength)
+        );
+    }
+
+    if (value instanceof ArrayBuffer) {
+        return new Uint8Array(value.slice(0));
+    }
+
+    return new Uint8Array(0);
+};
 
 interface BrowserWritableFile {
     write(data: Blob): Promise<void> | void;
@@ -95,12 +112,13 @@ const downloadPlotAsFile = function(
     documentRef: Document,
     url: string,
     format: string,
-    index: unknown
+    index: unknown,
+    fileName?: string
 ): void {
     const link = documentRef.createElement("a");
 
     link.href = url;
-    link.download = createIndexedPlotSaveFileName(index, format);
+    link.download = fileName || createIndexedPlotSaveFileName(index, format);
     documentRef.body.appendChild(link);
     link.click();
     link.remove();
@@ -118,17 +136,22 @@ export const saveBrowserPlot = async function(
         format: rawRequest.format
     });
     const url = request.url;
+    const suppliedData = readSuppliedPlotData(rawRequest.data);
     const formatInfo = getPlotSaveFormatInfo(request.format);
     const format = formatInfo.format;
 
-    if (!url) {
+    if (!url && suppliedData.length === 0) {
         return createInvalidPlotSaveResult();
     }
 
     return savePlotThroughHost(async () => {
+        const blob = suppliedData.length
+            ? new Blob([suppliedData.slice().buffer], { type: formatInfo.mimeType })
+            : await readBrowserPlotBlob(url);
         if (windowRef.showSaveFilePicker) {
             const fileHandle = await windowRef.showSaveFilePicker({
-                suggestedName: createPlotSaveFileName(format),
+                suggestedName: String(rawRequest.fileName || "").trim()
+                    || createPlotSaveFileName(format),
                 types: [
                     {
                         description: formatInfo.label,
@@ -138,7 +161,6 @@ export const saveBrowserPlot = async function(
                     }
                 ]
             });
-            const blob = await readBrowserPlotBlob(url);
             const writable = await fileHandle.createWritable();
 
             try {
@@ -151,7 +173,21 @@ export const saveBrowserPlot = async function(
             return fileHandle.name || "";
         }
 
-        downloadPlotAsFile(documentRef, url, format, rawRequest.index);
+        const objectUrl = suppliedData.length
+            ? URL.createObjectURL(blob)
+            : url;
+
+        downloadPlotAsFile(
+            documentRef,
+            objectUrl,
+            format,
+            rawRequest.index,
+            String(rawRequest.fileName || "").trim() || undefined
+        );
+
+        if (suppliedData.length) {
+            setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+        }
 
         return { status: "requested" };
     }, error => error instanceof DOMException && error.name === "AbortError");

@@ -206,6 +206,11 @@ runtime_transport_dedicated_params <- function(raw) {
         ambiguity = runtime_transport_value(raw, "ambiguity"),
         title = runtime_transport_value(raw, "title"),
         legend = runtime_transport_flag(raw, "legend", default = TRUE),
+        useLabels = if (nzchar(runtime_transport_value(raw, "useLabels"))) {
+            runtime_transport_flag(raw, "useLabels")
+        } else {
+            NULL
+        },
         coreSelections = stats::setNames(
             runtime_transport_vector(raw, "coreSelectionValues"),
             runtime_transport_vector(raw, "coreSelectionNames")

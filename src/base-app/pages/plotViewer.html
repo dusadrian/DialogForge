@@ -6,6 +6,7 @@
     <title>Plots</title>
     <link rel="stylesheet" href="./shared/appCodicon.css">
     <link rel="stylesheet" href="./shared/dmSelect.css">
+    <link rel="stylesheet" href="./shared/plotToolbar.css">
     <style>
       @font-face {
         font-family: 'Inter';
@@ -39,7 +40,7 @@
         min-height: 0;
       }
       .toolbar {
-        flex: 0 0 28px;
+        flex: 0 0 var(--plot-toolbar-height);
         display: flex;
         align-items: center;
         justify-content: space-between;
@@ -174,160 +175,11 @@
       .plot-save-actions .plot-toolbar-btn {
         min-width: 56px;
       }
-      .plot-zoom-menu {
-        position: relative;
-        display: inline-flex;
-      }
-      .plot-zoom-button {
-        min-width: 0;
-        height: 24px;
-        padding: 0 4px 0 0;
-        border: 1px solid #d0d0d0;
-        border-radius: 6px;
-        background: #ffffff;
-        color: #383838;
-        display: inline-flex;
-        align-items: center;
-        gap: 0;
-        cursor: pointer;
-        box-sizing: border-box;
-      }
-      .plot-zoom-button:hover {
-        background: #f0f0f0;
-      }
-      .plot-toolbar-icon {
-        display: block;
-        width: 16px;
-        height: 16px;
-        pointer-events: none;
-      }
-      .plot-zoom-button-face {
-        display: inline-flex;
-        align-items: center;
-      }
-      .plot-zoom-button-icon {
-        padding: 0 4px;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        height: 24px;
-      }
-      .plot-zoom-button-icon .plot-toolbar-icon {
-        width: 18px;
-        height: 18px;
-      }
-      .plot-zoom-button-label {
-        display: inline-flex;
-        align-items: center;
-        font-size: 12px;
-        font-weight: 400;
-        margin-right: 2px;
-        white-space: nowrap;
-      }
-      .plot-zoom-button-arrow {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        width: 12px;
-        height: 24px;
-        position: relative;
-      }
-      .plot-zoom-button-arrow::before,
-      .plot-zoom-button-arrow::after {
-        content: "";
-        position: absolute;
-        top: 10px;
-        width: 4px;
-        height: 4px;
-      }
-      .plot-zoom-button-arrow::before {
-        left: 2px;
-        background: linear-gradient(45deg, transparent 50%, #5a5a5a 50%);
-      }
-      .plot-zoom-button-arrow::after {
-        left: 6px;
-        background: linear-gradient(135deg, #5a5a5a 50%, transparent 50%);
-      }
-      .plot-zoom-menu-popup {
-        position: absolute;
-        top: calc(100% + 6px);
-        left: 0;
-        min-width: 112px;
-        padding: 8px 0;
-        border: 1px solid rgba(0, 0, 0, 0.14);
-        border-radius: 22px;
-        background: rgba(255, 255, 255, 0.98);
-        box-shadow: 0 12px 28px rgba(0, 0, 0, 0.18);
-        backdrop-filter: blur(8px);
-        display: none;
-        z-index: 40;
-      }
-      .plot-zoom-menu-popup.is-open {
-        display: block;
-      }
-      .plot-zoom-menu-item {
-        width: 100%;
-        height: 40px;
-        padding: 0 18px;
-        border: 0;
-        background: transparent;
-        color: #2f2f2f;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
-        font-size: 11px;
-        cursor: pointer;
-        box-sizing: border-box;
-      }
-      .plot-zoom-menu-item:hover {
-        background: rgba(0, 0, 0, 0.04);
-      }
-      .plot-zoom-menu-item-check {
-        width: 16px;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 14px;
-        color: #2f2f2f;
-        visibility: hidden;
-      }
-      .plot-zoom-menu-item.is-selected .plot-zoom-menu-item-check {
-        visibility: visible;
-      }
-      .plot-zoom-menu-item-label {
-        flex: 1 1 auto;
-        text-align: left;
-        padding-left: 6px;
-      }
       .status {
         font-size: 11px;
         font-weight: 500;
         color: #6f6f6f;
         margin-right: 6px;
-      }
-      .plot-toolbar-btn {
-        min-width: 30px;
-        height: 24px;
-        padding: 0 8px;
-        border: 1px solid #d0d0d0;
-        border-radius: 6px;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        background: #ffffff;
-        color: #383838;
-        font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
-        font-size: 11px;
-        font-weight: 700;
-        line-height: 1;
-        cursor: pointer;
-        box-sizing: border-box;
-      }
-      .plot-toolbar-btn--icon {
-        min-width: 24px;
-        width: 24px;
-        padding: 0;
       }
       .plot-toolbar-edge-toggle {
         display: inline-flex;
@@ -450,17 +302,6 @@
       .copy-icon::after {
         top: 4.5px;
         left: 1.5px;
-      }
-      .plot-toolbar-btn:hover {
-        background: #f0f0f0;
-      }
-      .plot-toolbar-btn:active {
-        background: #e4e4e4;
-      }
-      .plot-toolbar-btn.is-active {
-        background: #e8f0ff;
-        border-color: #8aa7e8;
-        color: #1f4fb8;
       }
       .body {
         flex: 1 1 auto;

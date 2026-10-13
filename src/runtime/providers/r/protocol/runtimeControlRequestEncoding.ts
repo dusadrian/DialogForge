@@ -234,6 +234,9 @@ export const encodeRuntimeControlRequest = function(
                     ? "1"
                     : ""
         ),
+        useLabels: safeEncode(
+            params.useLabels === false ? "0" : params.useLabels === true ? "1" : ""
+        ),
         coreSelectionNames: safeEncode(coreSelections.names),
         coreSelectionValues: safeEncode(coreSelections.values),
         thresholds: safeEncode(encodeArray(params.thresholds)),
