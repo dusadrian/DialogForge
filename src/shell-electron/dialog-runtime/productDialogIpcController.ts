@@ -1,3 +1,4 @@
+import { BrowserWindow, screen } from "electron";
 import type {
     IpcMain,
     IpcMainEvent,
@@ -77,6 +78,52 @@ const readMessageType = function(
 export const createProductDialogIpcController = function(
     options: ProductDialogIpcControllerOptions
 ): void {
+    const toolbarHeights = new WeakMap<BrowserWindow, {
+        height: number;
+        appliedHeight: number;
+        minimumHeight: number;
+    }>();
+    options.ipcMain.on(dialogRuntimeEventChannels.toolbarHeight, (event, input) => {
+        const window = BrowserWindow.fromWebContents(event.sender);
+        const height = Number(input?.height);
+        if (!window || !Number.isFinite(height) || height < 0 || height > 300) {
+            return;
+        }
+
+        const [width, contentHeight] = window.getContentSize();
+        const [minimumWidth, minimumHeight] = window.getMinimumSize();
+        const previous = toolbarHeights.get(window) || {
+            height: 0, appliedHeight: 0, minimumHeight
+        };
+        if (Math.round(height) === previous.height) {
+            return;
+        }
+
+        const delta = Math.round(height) - previous.appliedHeight;
+        const bounds = window.getBounds();
+        const available = screen.getDisplayMatching(bounds).workArea;
+        const frameHeight = bounds.height - contentHeight;
+        const nextHeight = window.isMaximized() || window.isFullScreen()
+            ? contentHeight
+            : Math.min(contentHeight + delta, available.height - frameHeight);
+        window.setMinimumSize(
+            minimumWidth,
+            Math.min(previous.minimumHeight + Math.round(height), available.height)
+        );
+        window.setContentSize(width, nextHeight);
+        if (bounds.y + nextHeight + frameHeight > available.y + available.height) {
+            window.setPosition(
+                bounds.x,
+                Math.max(available.y, available.y + available.height - nextHeight - frameHeight)
+            );
+        }
+        toolbarHeights.set(window, {
+            height: Math.round(height),
+            appliedHeight: previous.appliedHeight + nextHeight - contentHeight,
+            minimumHeight: previous.minimumHeight
+        });
+    });
+
     options.ipcMain.handle(dialogRuntimeIpcChannels.openProductDialog, async (
         _event: IpcMainInvokeEvent,
         input: { dialogId?: string }

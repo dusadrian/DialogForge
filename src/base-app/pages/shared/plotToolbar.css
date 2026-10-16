@@ -345,3 +345,12 @@
     font-size: 11px;
     font-weight: 500;
 }
+
+/* Extra toolbar rows occupy space above the authored dialog controls. */
+.dialog-root[data-toolbar-expanded="true"] > .dm-el {
+    translate: 0 var(--dialog-toolbar-extra-height, 0px);
+}
+
+body:has(> .dialog-root[data-toolbar-expanded="true"]) {
+    overflow: auto;
+}

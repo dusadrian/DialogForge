@@ -45,7 +45,10 @@ export function createDialogCanvasResizeController(
 
   const resizeTargets = function(): void {
     const extraWidth = Math.max(0, root.clientWidth - authoredWidth);
-    const extraHeight = Math.max(0, root.clientHeight - authoredHeight);
+    const toolbarHeight = parseFloat(
+      root.style.getPropertyValue('--dialog-toolbar-extra-height')
+    ) || 0;
+    const extraHeight = Math.max(0, root.clientHeight - authoredHeight - toolbarHeight);
     const targets = root.querySelectorAll(RESIZE_TARGET_SELECTOR);
 
     targets.forEach((node) => {
@@ -72,12 +75,14 @@ export function createDialogCanvasResizeController(
     ? new ResizeObserver(resizeTargets)
     : null;
 
+  root.addEventListener("dialog-toolbar-resize", resizeTargets);
   observer?.observe(root);
   resizeTargets();
 
   return {
     refresh: resizeTargets,
     dispose(): void {
+      root.removeEventListener("dialog-toolbar-resize", resizeTargets);
       observer?.disconnect();
     }
   };

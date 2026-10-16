@@ -311,5 +311,23 @@
         return toolbar;
     };
 
-    globalScope.DialogForgeSvgPlotToolbar = { createToolbar };
+    const toolbarLayouts = new WeakMap();
+    const setExtraHeight = function(root, height) {
+        let layout = toolbarLayouts.get(root);
+        if (!layout) {
+            layout = { height: 0, minimumHeight: parseFloat(root.style.minHeight) || root.clientHeight };
+            toolbarLayouts.set(root, layout);
+        }
+        const next = Math.max(0, Math.round(Number(height) || 0));
+        root.style.setProperty("--dialog-toolbar-extra-height", `${next}px`);
+        root.style.minHeight = `${layout.minimumHeight + next}px`;
+        root.dataset.toolbarExpanded = String(next > 0);
+        root.dispatchEvent(new Event("dialog-toolbar-resize"));
+        if (next !== layout.height) {
+            layout.height = next;
+            globalScope.dialogForge?.dialogRuntime?.sendTo("main", "dialogToolbarHeight", { height: next });
+        }
+    };
+
+    globalScope.DialogForgeSvgPlotToolbar = { createToolbar, setExtraHeight };
 })(typeof window !== "undefined" ? window : globalThis);

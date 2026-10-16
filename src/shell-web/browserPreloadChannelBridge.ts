@@ -147,6 +147,7 @@ export interface BrowserPreloadChannelBridgeOptions {
         sourceWindow: Window | null
     ): Promise<void>;
     closeDialogLayer(input: Record<string, unknown>): void;
+    setDialogToolbarHeight?(input: Record<string, unknown>, sourceWindow: Window | null): void;
     handleFrameKeyDown(input: Record<string, unknown>): void;
     openScriptEditorWithCode(code: string): Promise<void>;
     appendMessage(text: string, className?: string): void;
@@ -513,6 +514,11 @@ export const createBrowserPreloadChannelBridge = function(
                     options.openScriptEditorWithCode(String(input.code || args?.[0] || "")),
                     options
                 );
+                return;
+            }
+
+            if (channel === dialogRuntimeEventChannels.toolbarHeight) {
+                options.setDialogToolbarHeight?.(input, sourceWindow);
                 return;
             }
 

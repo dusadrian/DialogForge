@@ -89,6 +89,7 @@ export const dialogRuntimeEventChannels = {
     commandUpdate: "dialogCommandUpdate",
     stateUpdate: "dialogCurrentStateUpdate",
     closeWindow: "dialogCloseWindow",
+    toolbarHeight: "dialogToolbarHeight",
     log: "consolog",
     // Wire names stay compatible with existing dialog scripts.
     showMessage: "showMessageBox",

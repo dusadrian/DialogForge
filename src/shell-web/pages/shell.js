@@ -945,6 +945,21 @@ const browserPreloadChannelBridge = createBrowserPreloadChannelBridge({
 
         browserDialogSessions().updateCommand(dialogId, text);
     },
+    setDialogToolbarHeight(input, sourceWindow) {
+        const frame = [...document.querySelectorAll(".dialogforge-web-dialog__frame")]
+            .find((node) => node.contentWindow === sourceWindow);
+        const shell = frame?.closest(".dialogforge-web-dialog");
+        const height = Number(input?.height);
+        if (!shell || !Number.isFinite(height) || height < 0 || height > 300) {
+            return;
+        }
+        const previous = Number(shell.dataset.toolbarExtraHeight) || 0;
+        const delta = Math.round(height) - previous;
+        // Use the requested size, including any part clipped by the viewport.
+        const currentHeight = parseFloat(shell.style.height) || shell.offsetHeight;
+        shell.style.height = `${currentHeight + delta}px`;
+        shell.dataset.toolbarExtraHeight = String(Math.round(height));
+    },
     closeDialogLayer(input) {
         closeDialogLayerForMessage(input || {}, null);
     },
