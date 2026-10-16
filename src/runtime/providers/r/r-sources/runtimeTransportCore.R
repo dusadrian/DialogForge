@@ -456,6 +456,7 @@ runtime_transport_result_json <- function(method, output) {
             "{\"sessionId\":", json_str(receipt$sessionId),
             ",\"parentId\":", json_str(receipt$parentId),
             ",\"captureStatus\":", json_str(receipt$captureStatus),
+            ",\"captureError\":", json_str(receipt$captureError %||% ""),
             ",\"outputSequence\":", if (is.null(receipt$outputSequence)) "null" else
                 as.character(receipt$outputSequence), "}"
         ))

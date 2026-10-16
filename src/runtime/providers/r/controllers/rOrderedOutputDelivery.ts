@@ -92,10 +92,18 @@ export const createROrderedOutputDelivery = function(options: {
         else if (!hasValidCompletion) {
             deliveryFailure = "Ordered output response has an invalid completion marker.";
         }
+        let captureFailure = result.transcript.detail || result.capture.detail || deliveryFailure;
+        if (
+            receipt.sessionId === sessionId && receipt.parentId === parentId
+            && receipt.captureStatus === "failed"
+            && typeof receipt.captureError === "string" && receipt.captureError
+        ) {
+            captureFailure = receipt.captureError;
+        }
         const failure = {
             type: "stream", id: `runtime-output-failure:${JSON.stringify([sessionId, parentId])}`,
             parent_id: parentId, name: "stderr",
-            text: result.transcript.detail || result.capture.detail || deliveryFailure
+            text: captureFailure
         };
         if (!hasMatchingCompletion) {
             // Report delivery failure without inventing an R completion or

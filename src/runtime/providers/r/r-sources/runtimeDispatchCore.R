@@ -339,13 +339,17 @@ runtime_execute_input <- function(params) {
         }
         result <- tryCatch(runtime_evaluate_input_with_console_owner(evaluate_ordered_input), error = function(error) {
             list(ok = FALSE, interrupted = FALSE, error = conditionMessage(error),
-                capture_status = "failed", output_sequence = NULL)
+                capture_status = "failed", output_sequence = NULL,
+                capture_errors = conditionMessage(error))
         }, interrupt = function(interrupt) {
             list(ok = TRUE, interrupted = TRUE, error = "",
-                capture_status = "failed", output_sequence = NULL)
+                capture_status = "failed", output_sequence = NULL,
+                capture_errors = "Output capture was interrupted.")
         })
         if (!isTRUE(l10n_info()$`UTF-8`)) {
             result$capture_status <- "failed"
+            result$capture_errors <- c(result$capture_errors,
+                "Output encoding changed during evaluation.")
         }
         runtime_emit_package_warning_diagnostic(result$package_warnings, code, parent_id)
     } else {
@@ -358,7 +362,8 @@ runtime_execute_input <- function(params) {
         if (ordered_capture) {
             response$output_capture <- list(
                 sessionId = ordered_config$session_id, parentId = parent_id,
-                captureStatus = result$capture_status, outputSequence = result$output_sequence
+                captureStatus = result$capture_status, outputSequence = result$output_sequence,
+                captureError = paste(result$capture_errors, collapse = "\n")
             )
         }
         response

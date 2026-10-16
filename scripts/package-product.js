@@ -3,6 +3,7 @@
 const path = require("path");
 const { spawnSync } = require("child_process");
 const fs = require("fs");
+const { applyProductDialogAvailability } = require("./product-dialog-availability");
 const { assertNativeRHelperArtifacts } = require("./native-r-helper-artifacts");
 const {
     assertRuntimeProviderIsRegistered
@@ -40,6 +41,7 @@ const projectRoot = path.resolve(distDir, "..");
  * @property {string=} outputDir
  * @property {boolean=} sign
  * @property {boolean=} stageOnly
+ * @property {string=} profile
  */
 
 
@@ -76,12 +78,22 @@ const parseArgs = function () {
         else if (current === "--stage-only") {
             selection.stageOnly = true;
         }
+        else if (current === "--profile" && next) {
+            selection.profile = next;
+            index += 1;
+        }
         else {
             throw new Error(`Unknown product packaging argument: ${current}`);
         }
     }
     if (!selection.productPath) {
         throw new Error("Missing required --product-path argument.");
+    }
+    if (selection.profile && !["development", "release"].includes(selection.profile)) {
+        throw new Error(`Unknown desktop build profile: ${selection.profile}`);
+    }
+    if (!selection.stageOnly && selection.profile === "development") {
+        throw new Error("Desktop packages must use the release profile.");
     }
     if (!selection.platform) {
         const platform = process.platform;
@@ -536,9 +548,10 @@ const compileProductContribution = function (location, targetPath) {
  * area. The returned path is the product root used by packaging and dev mode.
  *
  * @param {import("../src/core/contracts/productLocation").ResolvedProductLocation} location
+ * @param {string} profile
  * @returns {string}
  */
-const stageProductForPackaging = function (location) {
+const stageProductForPackaging = function (location, profile) {
     const targetPath = path.join(distDir, "product");
     fs.rmSync(targetPath, {
         recursive: true,
@@ -548,6 +561,7 @@ const stageProductForPackaging = function (location) {
         recursive: true
     });
     copyProductSourceFiles(location.rootPath, targetPath);
+    applyProductDialogAvailability(targetPath, profile);
     validateI18nDirectory(path.join(targetPath, "i18n"));
 
     const dialogRegistryPath = path.join(targetPath, "dialogs/dialogs.json");
@@ -572,7 +586,8 @@ const stageProductForPackaging = function (location) {
 const main = function () {
     const selection = parseArgs();
     const location = resolveProductLocation(projectRoot, "base", selection.productPath);
-    const stagedProductPath = stageProductForPackaging(location);
+    const profile = selection.profile || (selection.stageOnly ? "development" : "release");
+    const stagedProductPath = stageProductForPackaging(location, profile);
     const stagedPackagePath = path.join(stagedProductPath, "package.json");
     const productManifest = readProductManifest(stagedPackagePath);
     const productBuildConfig = readProductBuildConfig(stagedPackagePath);
