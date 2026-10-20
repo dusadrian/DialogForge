@@ -200,7 +200,7 @@ let scriptEditorComposition;
 const runtimeBootLogPath = "/tmp/dialogforge-runtime-boot.log";
 const appendRuntimeBootLog = function (message) {
     try {
-        fs.appendFileSync(runtimeBootLogPath, `${new Date().toISOString()} ${message}\n`);
+        fs.appendFileSync(runtimeBootLogPath, `${new Date().toISOString()} pid=${process.pid} ${message}\n`);
     }
     catch { }
 };
@@ -479,6 +479,7 @@ const mainWindowComposition = mainWindowCompositionModule.createMainWindowCompos
     minimumWidth: mainWindowMinWidth,
     minimumHeight: mainWindowMinHeight,
     openDeveloperTools: developerToolsEnabled,
+    appendBootLog: appendRuntimeBootLog,
     showOnReady: function () {
         return !electronSmokeMode || electronSmokeTarget === "workspace-pane";
     },

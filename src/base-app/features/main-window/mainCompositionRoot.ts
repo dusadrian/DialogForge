@@ -690,7 +690,18 @@ const refreshConsoleWorkingDirectory =
     consoleToolbar.refreshWorkingDirectory;
 const clearConsoleTranscript = consoleToolbar.clearTranscript;
 const resetConsoleInput = consoleToolbar.resetInput;
-const restartRuntimeClean = consoleToolbar.restartClean;
+const restartRuntimeClean = async function(): Promise<void> {
+    await consoleToolbar.restartClean();
+
+    if (
+        document.body.dataset.dialogForgeReady !== "1"
+        && runtimeSessionSnapshot?.status === "ready"
+    ) {
+        // A failed boot may never have initialized the editor or workspace.
+        // Recreate this renderer after the old runtime has been retired.
+        window.location.reload();
+    }
+};
 const restartRuntimeRestoreWorkspace =
     consoleToolbar.restartRestoreWorkspace;
 
@@ -1573,4 +1584,14 @@ const start = async function(): Promise<void> {
 start().catch((error) => {
     const output = byId("compositionOutput");
     output.textContent = String(error && error.stack ? error.stack : error);
+    const message = error instanceof Error ? error.message : String(error);
+    const recoveryMessage = message.includes("Use Restart Clean")
+        ? message
+        : `${message}\nUse Restart Clean to try again.`;
+
+    console.error("DialogForge startup failed:", message);
+    consoleCover.renderStatus(
+        `Application startup failed: ${recoveryMessage}`,
+        true
+    );
 });

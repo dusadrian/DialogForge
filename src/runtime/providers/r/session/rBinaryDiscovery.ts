@@ -219,7 +219,10 @@ const pathCandidates = async function(
             const args = platform === "win32" ? [name] : ["-a", name];
 
             return new Promise<string[]>((resolve) => {
-                execFile(probe, args, (error, stdout) => {
+                execFile(probe, args, {
+                    timeout: 2500,
+                    killSignal: "SIGKILL"
+                }, (error, stdout) => {
                     if (error || !stdout) {
                         resolve([]);
                         return;
@@ -388,7 +391,12 @@ export const collectLinuxOptExecutableCandidates = function(
 const detectedVersion = function(candidate: string): Promise<string> {
     if (!versionRequests.has(candidate)) {
         versionRequests.set(candidate, new Promise((resolve) => {
-            execFile(candidate, ["--version"], (error, stdout, stderr) => {
+            // Discovery runs before the R process host's metadata deadline.
+            // A stuck version probe must not keep that deadline from starting.
+            execFile(candidate, ["--version"], {
+                timeout: 2500,
+                killSignal: "SIGKILL"
+            }, (error, stdout, stderr) => {
                 if (error) {
                     resolve("");
                     return;

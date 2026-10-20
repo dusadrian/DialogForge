@@ -26,6 +26,7 @@ tests/contracts/*
 !tests/contracts/verify-browser-dialogqca-runnable.js
 !tests/contracts/verify-browser-dialogr-runnable.js
 !tests/contracts/verify-r-workspace-runtime-control.js
+!tests/contracts/verify-startup-recovery.js
 !src/runtime/providers/r/native/dialogforgeruntime/tests/
 !src/runtime/providers/r/native/dialogforgeruntime/tests/**
 internal/

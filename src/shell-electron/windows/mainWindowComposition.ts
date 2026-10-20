@@ -30,6 +30,7 @@ export interface MainWindowCompositionOptions {
     minimumWidth: number;
     minimumHeight: number;
     openDeveloperTools?: boolean;
+    appendBootLog?(message: string): void;
     showOnReady(): boolean;
     readSettings(): Record<string, unknown>;
     writeSettings(settings: Record<string, unknown>): void;
@@ -92,6 +93,15 @@ export const createMainWindowComposition = function(
                 }
             );
             const win = new BrowserWindow(windowOptions);
+
+            win.webContents.on("console-message", (_event, _level, message) => {
+                if (
+                    message.startsWith("DialogForge startup failed:")
+                    || message.startsWith("DialogForge runtime startup failed:")
+                ) {
+                    options.appendBootLog?.(message);
+                }
+            });
 
             win.webContents.on("page-title-updated", (event) => {
                 event.preventDefault();

@@ -13,6 +13,8 @@ export interface ConsoleRuntimeSessionControllerOptions {
     refreshPrompts(): void;
     beforeStartupTasks?(snapshot: RuntimeSessionSnapshot): Promise<void> | void;
     runStartupTasks(): Promise<void>;
+    reportStartupFailure?(message: string): void;
+    startupTimeoutMs?: number;
 }
 
 
@@ -28,10 +30,27 @@ export interface ConsoleRuntimeSessionController {
 export const createConsoleRuntimeSessionController = function(
     options: ConsoleRuntimeSessionControllerOptions
 ): ConsoleRuntimeSessionController {
+    const startupTimeoutMs = options.startupTimeoutMs ?? 15000;
+    let operationGeneration = 0;
+    let pendingStart: Promise<RuntimeSessionSnapshot> | null = null;
+
+    const hasNewerSession = function(snapshot: RuntimeSessionSnapshot): boolean {
+        const current = options.getSession();
+
+        return current?.providerId === snapshot.providerId
+            && current.lifecycleGeneration !== undefined
+            && snapshot.lifecycleGeneration !== undefined
+            && current.lifecycleGeneration > snapshot.lifecycleGeneration;
+    };
+
     const update = async function(
         action: () => Promise<RuntimeSessionSnapshot>
     ): Promise<RuntimeSessionSnapshot> {
         const snapshot = await action();
+
+        if (hasNewerSession(snapshot)) {
+            return options.getSession()!;
+        }
 
         options.applySession(snapshot);
         options.refreshRuntimeEvents();
@@ -40,8 +59,9 @@ export const createConsoleRuntimeSessionController = function(
         return snapshot;
     };
 
-    const start = async function(): Promise<RuntimeSessionSnapshot> {
+    const performStart = async function(): Promise<RuntimeSessionSnapshot> {
         const current = options.getSession();
+        const generation = ++operationGeneration;
 
         if (current?.status === "ready") {
             await options.beforeStartupTasks?.(current);
@@ -56,7 +76,67 @@ export const createConsoleRuntimeSessionController = function(
             message: "Runtime is starting."
         });
 
-        const snapshot = await update(options.startRuntime);
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        let snapshot: RuntimeSessionSnapshot;
+
+        try {
+            snapshot = await Promise.race([
+                Promise.resolve().then(options.startRuntime),
+                new Promise<never>((_resolve, reject) => {
+                    timer = setTimeout(function(): void {
+                        reject(new Error(
+                            `Runtime startup did not finish within ${
+                                Math.ceil(startupTimeoutMs / 1000)
+                            } seconds. `
+                            + "Use Restart Clean to stop this attempt and try again."
+                        ));
+                    }, startupTimeoutMs);
+                })
+            ]);
+        }
+        catch (error) {
+            const latest = options.getSession();
+
+            if (
+                generation !== operationGeneration
+                || (current && latest && latest.providerId !== current.providerId)
+                || (current?.lifecycleGeneration !== undefined
+                    && latest?.lifecycleGeneration !== undefined
+                    && latest.lifecycleGeneration > current.lifecycleGeneration + 1)
+            ) {
+                return latest || current!;
+            }
+
+            // The host's ready event can arrive while its IPC response is still
+            // waiting for ancillary startup work. Keep that accepted session.
+            options.reportStartupFailure?.(
+                error instanceof Error ? error.message : String(error)
+            );
+            snapshot = latest?.status === "ready"
+                ? latest
+                : {
+                    ...(latest || current),
+                    providerId: latest?.providerId || current?.providerId || "r",
+                    connection: latest?.connection || current?.connection || "",
+                    status: "failed",
+                    message: error instanceof Error ? error.message : String(error)
+                };
+        }
+        finally {
+            clearTimeout(timer);
+        }
+
+        if (generation !== operationGeneration || hasNewerSession(snapshot)) {
+            return options.getSession() || snapshot;
+        }
+
+        options.applySession(snapshot);
+        options.refreshRuntimeEvents();
+        options.refreshPrompts();
+
+        if (snapshot.status !== "ready") {
+            return snapshot;
+        }
 
         await options.beforeStartupTasks?.(snapshot);
         await options.runStartupTasks();
@@ -65,12 +145,26 @@ export const createConsoleRuntimeSessionController = function(
     };
 
     const stop = async function(): Promise<void> {
+        operationGeneration += 1;
+        pendingStart = null;
         await update(options.stopRuntime);
     };
 
     return {
         update,
-        start,
+        start: function(): Promise<RuntimeSessionSnapshot> {
+            if (pendingStart) {
+                return pendingStart;
+            }
+
+            const pending = performStart().finally(function(): void {
+                if (pendingStart === pending) {
+                    pendingStart = null;
+                }
+            });
+            pendingStart = pending;
+            return pending;
+        },
         stop
     };
 };

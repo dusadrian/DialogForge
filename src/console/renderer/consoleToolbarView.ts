@@ -142,6 +142,7 @@ export const renderConsoleToolbar = function(
 
     buttonById(document, "consoleToolbarStart").disabled = isReady || isStarting;
     buttonById(document, "consoleToolbarStop").disabled = !state.runtimeBusy;
-    buttonById(document, "consoleToolbarRestart").disabled = isStarting;
+    // Clean restart retires a pending startup and kills its owned process tree.
+    buttonById(document, "consoleToolbarRestart").disabled = false;
     buttonById(document, "consoleToolbarRestartWorkspace").disabled = isStarting;
 };

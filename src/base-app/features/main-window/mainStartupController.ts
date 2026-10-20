@@ -25,6 +25,7 @@ interface RuntimeStartupOptions {
 
 
 export interface MainStartupControllerBindings {
+    startupTimeoutMs?: number;
     getComposition(): Promise<ApplicationComposition>;
     applyComposition(composition: ApplicationComposition): Promise<void>;
     readPersistedWorkspacePaneVisible(): Promise<boolean>;
@@ -124,102 +125,154 @@ export const createMainStartupController = function(
 ) {
     return {
         start: async function(): Promise<void> {
-            bindings.setBootStage("composition:request");
-            const composition = await bindings.getComposition();
-            bindings.setBootStage("composition:received");
+            let retired = false;
+            let stage = "composition:request";
+            let timer: ReturnType<typeof setTimeout> | undefined;
 
-            await bindings.applyComposition(composition);
-            bindings.setBootStage("composition:rendered");
+            const setBootStage = function(nextStage: string): void {
+                stage = nextStage;
+                bindings.setBootStage(nextStage);
+            };
+            const waitForStartup = async function<Result>(
+                pending: Promise<Result>
+            ): Promise<Result> {
+                const result = await pending;
 
-            const applicationSettingsPromise = bindings.readApplicationSettings();
-            const activeDatasetPromise = bindings.readActiveDataset();
-            const workingDirectoryPromise = bindings.refreshConsoleWorkingDirectory();
-
-            bindings.initializeWorkspacePane();
-            const restoredWorkspacePaneVisible =
-                await bindings.readPersistedWorkspacePaneVisible();
-            await bindings.setWorkspacePaneVisible(
-                restoredWorkspacePaneVisible,
-                {
-                    persist: false,
-                    adjustWindow: restoredWorkspacePaneVisible,
-                    restoreExistingExpansion: restoredWorkspacePaneVisible
+                if (retired) {
+                    throw new Error("Application startup attempt was retired.");
                 }
-            );
 
-            bindings.renderMenu(composition);
-            bindings.renderProductInfo(composition);
-            bindings.renderProductSettings(composition);
-            bindings.setBootStage("settings:request");
-            const applicationSettings = await applicationSettingsPromise;
+                return result;
+            };
 
-            bindings.renderApplicationSettings(applicationSettings);
-            bindings.applyApplicationSettings(applicationSettings);
-            bindings.configureStartupMessages?.(
-                !shouldStartRuntimeQuietly(applicationSettings)
-            );
-            bindings.setBootStage("settings:rendered");
-            bindings.renderCapabilities(composition.runtime || { capabilities: [] });
-            bindings.renderRuntimeSession(composition.runtimeSession || {});
-            bindings.renderConsoleStatus(composition.runtimeSession || {});
-            bindings.bindRuntimeSessionEvents();
-            const runtimeSession = await bindings.readRuntimeSession();
+            const initialize = async function(): Promise<void> {
+                // Bind recovery before any startup IPC or renderer initialization.
+                bindings.bindMainUi();
+                setBootStage("composition:request");
+                const composition = await waitForStartup(bindings.getComposition());
+                setBootStage("composition:received");
 
-            bindings.renderRuntimeSession(runtimeSession);
-            bindings.renderConsoleStatus(runtimeSession);
-            bindings.renderRuntimeEvents(createUnavailableRuntimeEvents(composition));
-            bindings.renderPrompts(createUnavailablePrompts(composition));
-            bindings.renderFeatures(composition);
-            bindings.renderProductCapabilities(composition);
-            bindings.renderStartupTasks(composition);
-            bindings.applyMainTranslations();
-            bindings.setBootStage("active-dataset:request");
-            const activeDataset = await activeDatasetPromise;
+                await waitForStartup(bindings.applyComposition(composition));
+                setBootStage("composition:rendered");
 
-            if (bindings.renderActiveDataset(activeDataset) !== false) {
-                await bindings.refreshProductConsoleStateChips(
-                    readSelectedWorkspaceDatasetName(activeDataset)
+                const applicationSettingsPromise = Promise.resolve(
+                    bindings.readApplicationSettings()
                 );
-            }
-            bindings.setBootStage("active-dataset:rendered");
-            bindings.renderDatasetEditorSelection();
-            bindings.setBootStage("selection:rendered");
-            await workingDirectoryPromise;
-            bindings.initializeConsoleFlow();
-            bindings.bindMainUi();
-            await bindings.refreshWorkspace();
-            await bindings.initializeVisibleCommandEditor();
-            bindings.focusVisibleCommandInput();
-            bindings.setBootStage("ready");
-            bindings.markReady();
+                const activeDatasetPromise = Promise.resolve(bindings.readActiveDataset());
+                const workingDirectoryPromise = Promise.resolve(
+                    bindings.refreshConsoleWorkingDirectory()
+                );
+                // A parallel read can reject before initialization reaches its await.
+                void applicationSettingsPromise.catch(() => {});
+                void activeDatasetPromise.catch(() => {});
+                void workingDirectoryPromise.catch(() => {});
 
-            requestAnimationFrame(function(): void {
-                try {
-                    bindings.focusVisibleCommandInput();
+                bindings.initializeWorkspacePane();
+                const restoredWorkspacePaneVisible =
+                    await waitForStartup(bindings.readPersistedWorkspacePaneVisible());
+                await waitForStartup(bindings.setWorkspacePaneVisible(
+                    restoredWorkspacePaneVisible,
+                    {
+                        persist: false,
+                        adjustWindow: restoredWorkspacePaneVisible,
+                        restoreExistingExpansion: restoredWorkspacePaneVisible
+                    }
+                ));
+
+                bindings.renderMenu(composition);
+                bindings.renderProductInfo(composition);
+                bindings.renderProductSettings(composition);
+                setBootStage("settings:request");
+                const applicationSettings = await waitForStartup(applicationSettingsPromise);
+
+                bindings.renderApplicationSettings(applicationSettings);
+                bindings.applyApplicationSettings(applicationSettings);
+                bindings.configureStartupMessages?.(
+                    !shouldStartRuntimeQuietly(applicationSettings)
+                );
+                setBootStage("settings:rendered");
+                bindings.renderCapabilities(composition.runtime || { capabilities: [] });
+                bindings.renderRuntimeSession(composition.runtimeSession || {});
+                bindings.renderConsoleStatus(composition.runtimeSession || {});
+                bindings.bindRuntimeSessionEvents();
+                setBootStage("runtime-session:request");
+                const runtimeSession = await waitForStartup(bindings.readRuntimeSession());
+
+                bindings.renderRuntimeSession(runtimeSession);
+                bindings.renderConsoleStatus(runtimeSession);
+                bindings.renderRuntimeEvents(createUnavailableRuntimeEvents(composition));
+                bindings.renderPrompts(createUnavailablePrompts(composition));
+                bindings.renderFeatures(composition);
+                bindings.renderProductCapabilities(composition);
+                bindings.renderStartupTasks(composition);
+                bindings.applyMainTranslations();
+                setBootStage("active-dataset:request");
+                const activeDataset = await waitForStartup(activeDatasetPromise);
+
+                if (bindings.renderActiveDataset(activeDataset) !== false) {
+                    await waitForStartup(bindings.refreshProductConsoleStateChips(
+                        readSelectedWorkspaceDatasetName(activeDataset)
+                    ));
                 }
-                catch {}
-            });
+                setBootStage("active-dataset:rendered");
+                bindings.renderDatasetEditorSelection();
+                setBootStage("selection:rendered");
+                await waitForStartup(workingDirectoryPromise);
+                bindings.initializeConsoleFlow();
+                setBootStage("workspace:request");
+                await waitForStartup(bindings.refreshWorkspace());
+                setBootStage("console-editor:request");
+                await waitForStartup(bindings.initializeVisibleCommandEditor());
+                bindings.focusVisibleCommandInput();
+                setBootStage("ready");
+                bindings.markReady();
 
-            setTimeout(function(): void {
-                try {
-                    bindings.focusVisibleCommandInput();
-                }
-                catch {}
-            }, 250);
-
-            setTimeout(function(): void {
-                try {
-                    bindings.focusVisibleCommandInput();
-                }
-                catch {}
-            }, 1000);
-
-            if (shouldAutostartRuntime(composition)) {
-                void bindings.startRuntimeSession({
-                    showStartupMessages: !shouldStartRuntimeQuietly(
-                        applicationSettings
-                    )
+                requestAnimationFrame(function(): void {
+                    try {
+                        bindings.focusVisibleCommandInput();
+                    }
+                    catch {}
                 });
+
+                setTimeout(function(): void {
+                    try {
+                        bindings.focusVisibleCommandInput();
+                    }
+                    catch {}
+                }, 250);
+
+                setTimeout(function(): void {
+                    try {
+                        bindings.focusVisibleCommandInput();
+                    }
+                    catch {}
+                }, 1000);
+
+                if (shouldAutostartRuntime(composition)) {
+                    void bindings.startRuntimeSession({
+                        showStartupMessages: !shouldStartRuntimeQuietly(
+                            applicationSettings
+                        )
+                    });
+                }
+            };
+
+            try {
+                await Promise.race([
+                    initialize(),
+                    new Promise<never>((_resolve, reject) => {
+                        timer = setTimeout(function(): void {
+                            reject(new Error(
+                                `Application startup did not finish at ${stage}. `
+                                + "Use Restart Clean to stop this attempt and try again."
+                            ));
+                        }, bindings.startupTimeoutMs ?? 30000);
+                    })
+                ]);
+            }
+            finally {
+                retired = true;
+                clearTimeout(timer);
             }
         }
     };

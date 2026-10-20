@@ -181,6 +181,21 @@ export const createConsoleFlowView = (deps: {
     });
   };
 
+    let transcriptRenderFrame = 0;
+
+    const scheduleTranscriptRender = function(): void {
+        if (transcriptRenderFrame) {
+            return;
+        }
+
+        // Keep every stream fragment in the model, but paint the latest
+        // transcript once per frame instead of rebuilding it for every write.
+        transcriptRenderFrame = requestAnimationFrame(() => {
+            transcriptRenderFrame = 0;
+            render();
+        });
+    };
+
   const clear = () => {
     if (stickyToBottom) scrollToBottom();
   };
@@ -329,9 +344,7 @@ export const createConsoleFlowView = (deps: {
       resizeObserver.observe(requestInputHost);
     }
 
-    unsubscribeModel = deps.consoleService.subscribe(() => {
-      render();
-    });
+    unsubscribeModel = deps.consoleService.subscribe(scheduleTranscriptRender);
     render();
     scrollToBottom();
   };
@@ -341,6 +354,10 @@ export const createConsoleFlowView = (deps: {
     document.removeEventListener('mousedown', handleDocumentPointerDown, true);
     try { unsubscribeModel?.(); } catch {}
     unsubscribeModel = null;
+    if (transcriptRenderFrame) {
+        cancelAnimationFrame(transcriptRenderFrame);
+        transcriptRenderFrame = 0;
+    }
     try { resizeObserver?.disconnect(); } catch {}
     resizeObserver = null;
     if (attachInputFrame) {

@@ -78,6 +78,9 @@ export const createMainRuntimeSessionServices = function(
             void promptController.refresh();
         },
         beforeStartupTasks: options.beforeStartupTasks,
+        reportStartupFailure: function(message): void {
+            console.error("DialogForge runtime startup failed:", message);
+        },
         runStartupTasks: startupTaskController.runPending
     });
 
