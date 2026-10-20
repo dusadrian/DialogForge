@@ -322,6 +322,13 @@ const smokeLaunchCommand = function(executablePath) {
     // helper refuses to start. The sandbox is irrelevant for this smoke run.
     const electronArgs = process.platform === "linux" ? ["--no-sandbox"] : [];
 
+    if (process.platform === "win32") {
+        // Use software rendering for packaged checks on Windows runners, where
+        // Electron's hardware-accelerated GPU process can crash during startup.
+        // This launch flag does not change normal application startup.
+        electronArgs.push("--disable-gpu");
+    }
+
     if (process.platform !== "linux" || process.env.DISPLAY || !hasXvfbRun()) {
         return { command: executablePath, args: electronArgs };
     }
