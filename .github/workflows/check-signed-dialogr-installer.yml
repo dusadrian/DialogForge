@@ -1,9 +1,6 @@
 name: Check signed DialogR installer
 
 on:
-  push:
-    branches: [codex/iroh-110-qualification]
-    paths: [.github/workflows/check-signed-dialogr-installer.yml]
   workflow_dispatch:
     inputs:
       signing_run:

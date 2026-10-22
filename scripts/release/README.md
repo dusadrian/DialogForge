@@ -124,3 +124,19 @@ artifacts without changing an application release. It executes the action from
 the selected checkout, uses Node 24, validates Authenticode signatures, and
 refreshes the updater checksum/block map after signing. Review the final files
 and acceptance receipts before publishing them.
+
+Intel rollback qualification found that the published DialogR 1.0.26 installer
+(Electron 22.3.27) fails R startup on the tested Intel Mac, both before upgrade
+and after restoration. Do not use that file as the recovery target for this
+migration. The retained signed pre-migration build uses Electron 43.8.3 and
+iroh 0.35.0 and passed ready-R, settings, and file preservation before upgrade
+and after rollback in run `39857309439`. Its exact DMG SHA256 is
+`5977c99409c2cea062f5f4fadff24639d1c09eb91ddaf30e7cb2a64d9ca4965e`.
+It is retained in the maintainer-only `RODA/DialogR` draft release
+`iroh-1.1-rollback` so verification does not depend on expiring CI artifacts.
+Notarization of this recovery artifact remains maintainer-owned too.
+
+Run `check-signed-dialogr-installer.yml` against the retained signing run before
+publication: it verifies the actual signed NSIS installation through all six
+application checks and the version upgrade/rollback sequence. Signing success
+or an unpacked Script Editor check alone is not that acceptance result.

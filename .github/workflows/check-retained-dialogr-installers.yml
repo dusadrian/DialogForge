@@ -1,9 +1,6 @@
 name: Check retained DialogR installers
 
 on:
-  push:
-    branches: [codex/iroh-110-qualification]
-    paths: [.github/workflows/check-retained-dialogr-installers.yml]
   workflow_dispatch:
     inputs:
       candidate_run:
@@ -52,20 +49,15 @@ jobs:
           path: candidate
       - name: Download the retained Electron 43 and iroh 0.35 rollback build
         if: inputs.rollback != 'published-026'
-        uses: actions/download-artifact@v4
-        with:
-          repository: RODA/DialogR
-          name: dialogr-macos
-          run-id: '39839439497'
-          github-token: ${{ github.token }}
-          path: previous
+        env:
+          GH_TOKEN: ${{ secrets.PRODUCT_REPOSITORY_TOKEN }}
+        run: gh release download iroh-1.1-rollback --repo RODA/DialogR --pattern DialogR_intel.dmg --dir previous
       - name: Exercise all three installed versions and retain every phase
         shell: bash
         run: |
           if [ -f previous/DialogR_intel.dmg ]; then
-            rollback_sha=$(shasum -a 256 previous/DialogR_intel.dmg | cut -d ' ' -f 1)
-            echo "Retained rollback DMG SHA256: $rollback_sha"
-            node tests/packaging/verify-installer-upgrade-rollback.js candidate previous/DialogR_intel.dmg "$rollback_sha"
+            node tests/packaging/verify-installer-upgrade-rollback.js candidate previous/DialogR_intel.dmg \
+              5977c99409c2cea062f5f4fadff24639d1c09eb91ddaf30e7cb2a64d9ca4965e
           else
             node tests/packaging/verify-installer-upgrade-rollback.js candidate
           fi
