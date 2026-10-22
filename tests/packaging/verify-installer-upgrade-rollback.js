@@ -54,6 +54,7 @@ const preservedFiles = {
 
 const acceptInstalled = async function(artifact, version, phase) {
     const application = install(artifact);
+    asar.uncacheAll();
     const manifest = JSON.parse(asar.extractFile(path.join(application.resources, "app.asar"), "package.json"));
     assert.equal(manifest.version, version);
     const app = await _electron.launch({
