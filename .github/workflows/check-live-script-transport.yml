@@ -1,6 +1,9 @@
 name: Check native Live Script transport
 
 on:
+  push:
+    branches: [codex/iroh-110-qualification]
+    paths: [.github/workflows/check-live-script-transport.yml]
   workflow_dispatch:
     inputs:
       intel_binding_run:
@@ -34,7 +37,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: iroh-darwin-x64
-          run-id: ${{ inputs.intel_binding_run }}
+          run-id: ${{ inputs.intel_binding_run || '39848814830' }}
           github-token: ${{ github.token }}
           path: node_modules/@number0/iroh
       - name: Verify platform selection and the Intel digest

@@ -363,8 +363,26 @@ const replaceEditorText = async function(page, content) {
     });
     const input = page.locator(".monaco-editor textarea");
     await input.click({ force: true });
+    await input.focus();
+    await page.waitForFunction(() => {
+        return window.monaco?.editor?.getEditors?.()[0]?.hasTextFocus();
+    });
     await page.keyboard.press(process.platform === "darwin" ? "Meta+A" : "Control+A");
+    await page.waitForFunction(() => {
+        const editor = window.monaco?.editor?.getEditors?.()[0];
+        return editor?.getModel()?.getValueInRange(editor.getSelection()) === editor?.getValue();
+    });
     await page.keyboard.insertText(content);
+    await page.waitForFunction((expected) => {
+        return window.monaco?.editor?.getEditors?.()[0]?.getValue() === expected;
+    }, content, { timeout: 10000 }).catch(async (error) => {
+        const state = await page.evaluate(() => ({
+            focus: document.activeElement?.outerHTML,
+            text: window.monaco?.editor?.getEditors?.()[0]?.getValue(),
+            visible: document.querySelector(".view-lines")?.textContent
+        }));
+        throw new Error(`Script typing did not reach the focused editor: ${JSON.stringify(state)}`, { cause: error });
+    });
 };
 
 
