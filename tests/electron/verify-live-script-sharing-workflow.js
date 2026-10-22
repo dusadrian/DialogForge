@@ -353,7 +353,16 @@ const editorText = function(page) {
 };
 
 
-const replaceEditorText = async function(page, content) {
+const replaceEditorText = async function(page, content, electronApp) {
+    await electronApp.evaluate(({ app, BrowserWindow }) => {
+        app.focus({ steal: true });
+        const window = BrowserWindow.getAllWindows().find((candidate) => {
+            return candidate.webContents.getURL().includes("scriptEditor.html");
+        });
+        window?.show();
+        window?.focus();
+        window?.webContents.focus();
+    });
     await page.bringToFront();
     // Tab activation installs its Monaco model asynchronously. Typing before
     // the local model replaces the read-only live model loses the input.
@@ -361,9 +370,11 @@ const replaceEditorText = async function(page, content) {
         const editor = window.monaco?.editor?.getEditors?.()[0];
         return editor && !editor.getOption(window.monaco.editor.EditorOption.readOnly);
     });
-    const input = page.locator(".monaco-editor textarea");
-    await input.click({ force: true });
-    await input.focus();
+    // Chromium's EditContext uses a read-only IME textarea. Click the visible
+    // text surface, as a user does, rather than forcing focus onto that helper.
+    await page.locator(".monaco-editor .view-lines").click({
+        position: { x: 12, y: 10 }
+    });
     await page.waitForFunction(() => {
         return window.monaco?.editor?.getEditors?.()[0]?.hasTextFocus();
     });
@@ -763,7 +774,7 @@ const run = async function() {
             ".dm-script-tab:not(.dm-script-tab--live)"
         ).first();
         await participantLocalTab.click();
-        await replaceEditorText(participantEditor, spotlightCode);
+        await replaceEditorText(participantEditor, spotlightCode, participantApp);
         await participantEditor.waitForFunction((identifier) => {
             return document.querySelector(".view-lines")
                 ?.textContent?.includes(identifier);
@@ -832,7 +843,7 @@ const run = async function() {
             );
         }
 
-        await replaceEditorText(participantEditor, updatedSpotlightCode);
+        await replaceEditorText(participantEditor, updatedSpotlightCode, participantApp);
         try {
             await hostEditor.waitForFunction((expected) => {
                 return document.querySelector(".view-lines")
@@ -873,7 +884,7 @@ const run = async function() {
         );
 
         await hostEditor.getByRole("button", { name: "Close", exact: true }).click();
-        await replaceEditorText(hostEditor, sharedCode);
+        await replaceEditorText(hostEditor, sharedCode, hostApp);
 
         await participantEditor.waitForFunction((expected) => {
             return document.querySelector(".view-lines")?.textContent?.includes(expected);
