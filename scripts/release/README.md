@@ -85,3 +85,42 @@ the stock binary and this pin can be retired.
 To build and check an `iroh-ffi` tag without publishing it, dispatch **Build
 native iroh binding for Intel macOS** with `publish_release` unset; it still
 probes the result and uploads it as a workflow artifact.
+
+## Coordinated iroh 1.1 rollout
+
+The qualified pairing is native `@number0/iroh` 1.1.0 and browser artifact
+0.2.0 (Rust iroh 1.0.2). Tickets still use format 1 and application protocol 2;
+those numbers do not negotiate iroh transport compatibility. Attempts to mix
+0.35 native clients with the new browser transport failed qualification. Do
+not announce mixed-version support or continue an existing classroom through
+this transition.
+
+Before publishing application update metadata, retain the previous platform
+installers, updater files, and complete browser deployment. Finish signing,
+user-owned macOS notarization, and artifact hash checks. Windows 7/8/8.1 are
+outside this Electron 43 candidate's support boundary; Electron 22 was the last
+line supporting them. Passing current CI runners is not evidence for every
+older operating system version.
+
+Roll out between classroom sessions. End existing shares, make all four
+platform installers available, then deploy the matching complete browser
+build. Every desktop presenter and participant must install the new version;
+every browser participant must reload the application. Start a new share and
+issue new links/codes only after checking those versions. The invite-code
+service remains unchanged because its ticket format and address schema are
+unchanged. Publishing either transport by itself is not an accepted rollout.
+
+If acceptance fails after deployment, end the affected shares and restore both
+the previous desktop installers and the complete previous browser deployment.
+Do not merely point the updater feed at a lower version: automatic downgrades
+are disabled. Close the application and reinstall the retained previous version,
+keeping the user profile and research files. The qualification records distinguish
+an actual macOS Squirrel update from installer replacement/manual rollback on
+other platforms. Neither check promises arbitrary future settings migrations
+will be reversible.
+
+The signing broker accepts `publish_release=false` to retain signed workflow
+artifacts without changing an application release. It executes the action from
+the selected checkout, uses Node 24, validates Authenticode signatures, and
+refreshes the updater checksum/block map after signing. Review the final files
+and acceptance receipts before publishing them.
