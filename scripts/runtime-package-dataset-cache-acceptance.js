@@ -99,8 +99,8 @@ exports.checkActualPackageDatasetCache = async function(options) {
                 if (fallbackWork) {
                     await fallbackWork;
                 }
-                requireResult(fallbackReads === (scenario === "active" ? 1 : 0),
-                    scenario + ": retired actual batch failure started another metadata query.");
+                requireResult(fallbackReads === 0,
+                    scenario + ": failed bounded metadata read started a full metadata query.");
                 observations.push({ scenario, batchStatus: producedResult.status,
                     batchMessage: producedResult.message, fallbackReads,
                     actualRBatch: true, controlledLateReceipt: true });
@@ -411,8 +411,18 @@ exports.checkActualPackageDatasetCache = async function(options) {
                 requireResult(preview.status === "ready" && previewReads === 1
                     && preview.rows.length === 4 && preview.columns.length === 32,
                     "Unrelated invalidation repeated the actual current Data warmup.");
+                // Background page sizes adapt to the measured runtime cost.
+                // Require complete, bounded, non-overlapping reads rather than
+                // a particular timing-dependent split after the first screen.
+                let nextColumn = 1;
+                const readEachColumnOnce = pages.every(([start, count], index) => {
+                    const valid = start === nextColumn && count > 0 && count <= 100
+                        && (index !== 0 || count === 48);
+                    nextColumn += count;
+                    return valid;
+                });
                 requireResult(metadata.items.length === 145
-                    && JSON.stringify(pages) === JSON.stringify([[1, 48], [49, 97]])
+                    && readEachColumnOnce && nextColumn === 146
                     && metadata.items.every(item => item.measure === "interval"),
                     "Unrelated invalidation canceled/repeated actual current Variables warmup: "
                         + JSON.stringify({ phase, pages, variables: metadata.items.length }));

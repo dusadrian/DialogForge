@@ -140,7 +140,93 @@ const requiredProductId = function() {
 };
 
 
+const readApplicationProcessIds = function(mainPid) {
+    if (process.platform === "win32") {
+        return [mainPid];
+    }
+
+    const result = spawnSync("ps", ["-axo", "pid=,ppid="], {
+        encoding: "utf8",
+        timeout: 2000
+    });
+    const rows = String(result.stdout || "").trim().split("\n").map(function(line) {
+        return line.trim().split(/\s+/).map(Number);
+    });
+    const owned = [mainPid];
+
+    for (let index = 0; index < owned.length; index += 1) {
+        for (const [pid, parent] of rows) {
+            if (parent === owned[index] && !owned.includes(pid)) {
+                owned.push(pid);
+            }
+        }
+    }
+
+    return owned;
+};
+
+
+const closeTestApplication = async function(app) {
+    const child = app.process();
+
+    if (!child || child.exitCode !== null || child.signalCode !== null) {
+        return true;
+    }
+
+    // Capture ownership before closing. Never inspect or reactivate the UI
+    // after close, including when a renderer cannot answer the quit request.
+    const owned = readApplicationProcessIds(child.pid);
+    let timer;
+    let failure;
+
+    try {
+        failure = await Promise.race([
+            app.close().then(() => "", error => String(error)),
+            new Promise(resolve => {
+                timer = setTimeout(() => {
+                    resolve("Electron did not close within 2 seconds.");
+                }, 2000);
+            })
+        ]);
+    }
+    finally {
+        clearTimeout(timer);
+    }
+
+    if (!failure) {
+        return true;
+    }
+
+    console.error("Test application cleanup failed: " + failure);
+    process.exitCode = 1;
+
+    if (process.platform === "win32") {
+        spawnSync("taskkill", ["/PID", String(child.pid), "/T", "/F"], {
+            timeout: 5000,
+            windowsHide: true
+        });
+    }
+    else {
+        for (const pid of owned.reverse()) {
+            try {
+                process.kill(pid, "SIGKILL");
+            }
+            catch (error) {
+                if (error.code !== "ESRCH") {
+                    console.error("Could not stop test process " + pid + ": " + error);
+                }
+            }
+        }
+    }
+
+    // Cleanup must not replace the original readiness/assertion exception.
+    // Callers that relaunch within a test must require this result to be true.
+    return false;
+};
+
+
 module.exports = {
+    closeTestApplication,
     findMainWindowPage,
     productLaunchArgs,
     requiredProductId

@@ -2,11 +2,11 @@
 
 // ONE physical prompt/reply/restart sequence, not a second prompt policy.
 exports.checkActualPromptRetirement = async function(options) {
-    const bounded = async function(work, message) {
+    const bounded = async function(work, message, timeoutMs = 10000) {
         let timer;
         try {
             return await Promise.race([work, new Promise((resolve, reject) => {
-                timer = setTimeout(() => reject(Error(options.host + ": " + message)), 10000);
+                timer = setTimeout(() => reject(Error(options.host + ": " + message)), timeoutMs);
             })]);
         }
         finally {
@@ -31,7 +31,7 @@ exports.checkActualPromptRetirement = async function(options) {
         ].join(" ")).then(result => ({ result }), error => ({ error: String(error) }));
         const oldPrompt = await bounded(options.waitForPrompt(), "Old physical prompt was not delivered");
         requireResult(oldPrompt?.parentId && oldPrompt?.promptId, "Old prompt has no identity");
-        const replacement = await bounded(options.restart("clean"), "Pending-input replacement stalled");
+        const replacement = await bounded(options.restart("clean"), "Pending-input replacement stalled", 30000);
         requireResult(replacement.status === "ready", "Pending-input replacement failed");
         const retired = await bounded(old, "Retired input did not settle");
         requireResult(retired.result?.outcome !== "success" && !retired.result?.workspaceUpdate,

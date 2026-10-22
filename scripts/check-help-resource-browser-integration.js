@@ -7,7 +7,8 @@ const fs = require("node:fs");
 const http = require("node:http");
 const path = require("node:path");
 const esbuild = require("esbuild");
-const { chromium } = require("playwright");
+const browserName = process.argv[2] || "chromium";
+const browserType = require("playwright")[browserName];
 
 
 const main = async function() {
@@ -48,7 +49,7 @@ const main = async function() {
             server.listen(0, "127.0.0.1", resolve);
         });
         const origin = `http://127.0.0.1:${server.address().port}`;
-        browser = await chromium.launch({ headless: true });
+        browser = await browserType.launch({ headless: true });
         const page = await browser.newPage();
         await page.goto(origin);
         await page.evaluate(async () => {
@@ -86,6 +87,10 @@ const main = async function() {
                 reader
             });
             const resourceBase = await window.resourceChannel.register();
+            window.dialogForge = {
+                createHelpDocumentUrl: (html, base) => window.resourceChannel.createDocumentUrl(html, base),
+                releaseHelpDocumentUrl: url => window.resourceChannel.releaseDocumentUrl(url)
+            };
             const loaded = await reader.fetchPage("/library/base/html/names.html");
             if (!loaded.ok) {
                 throw new Error(loaded.error);
@@ -120,6 +125,22 @@ const main = async function() {
                 cached: Boolean(await cache.match(`${resourceBase}/doc/html/probe.css`)) };
         }, base);
         assert.deepEqual(delivery, { status: 200, policy: "no-store", cached: false });
+        const documentUrl = await document.locator("body").evaluate(element => element.ownerDocument.URL);
+        assert.ok(documentUrl.startsWith(`${base}/__viewer_document/`));
+        const retiredDocument = await page.evaluate(async url => {
+            window.resourceChannel.releaseDocumentUrl(url);
+            return (await fetch(url)).status;
+        }, documentUrl);
+        assert.equal(retiredDocument, 410, "A retired document URL must not remain readable.");
+        const foreignOwnerRejected = await page.evaluate(() => {
+            try {
+                window.resourceChannel.createDocumentUrl("retired document", "http://retired-owner");
+                return false;
+            } catch {
+                return true;
+            }
+        });
+        assert.equal(foreignOwnerRejected, true, "Document delivery must retain its runtime owner.");
         await page.evaluate(() => window.resourceChannel.close());
         await page.waitForFunction(async (resourceBase) => {
             return (await fetch(`${resourceBase}/doc/html/probe.css`)).status === 410;
@@ -131,7 +152,7 @@ const main = async function() {
         }
         await new Promise((resolve) => server.close(resolve));
     }
-    console.log("Actual service-worker/channel/shared-viewer integration passed; WebR and product acceptance remain open.");
+    console.log(`Actual service-worker/channel/shared-viewer integration passed (${browserName}); WebR and product acceptance remain open.`);
 };
 
 main().catch((error) => {

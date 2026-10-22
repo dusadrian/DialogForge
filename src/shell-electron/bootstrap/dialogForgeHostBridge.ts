@@ -90,6 +90,9 @@ export interface DialogForgeHostBridgeClipboard {
 
 export interface DialogForgeHostBridgeOptions {
     clipboard: DialogForgeHostBridgeClipboard;
+    webUtils?: {
+        getPathForFile(file: File): string;
+    };
 }
 
 
@@ -109,19 +112,20 @@ const normalizeClipboardText = function(text: string): string {
 
 export const createDialogForgeHostBridge = function(
     ipcRenderer: DialogForgeHostBridgeIpcRenderer,
-    options: DialogForgeHostBridgeOptions,
-    // webUtils: WebUtils
+    options: DialogForgeHostBridgeOptions
 ): DialogForgeHostBridge {
     const readDroppedFilePath = function(file: File): string {
-        // Future Electron versions can restore the webUtils path branch here.
-        // try {
-        //     return String(webUtils.getPathForFile(file) || "").trim();
-        // }
-        // catch {
-            // Electron 22 still needs the legacy File.path fallback here.
-            const legacyFile = file as File & { path?: string };
-            return String(legacyFile.path || "").trim();
-        // }
+        if (options.webUtils) {
+            try {
+                return String(options.webUtils.getPathForFile(file) || "").trim();
+            }
+            catch {
+                return "";
+            }
+        }
+
+        const legacyFile = file as File & { path?: string };
+        return String(legacyFile.path || "").trim();
     };
 
     return {

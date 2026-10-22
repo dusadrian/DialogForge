@@ -652,6 +652,9 @@ const assertRenderedContracts = async function() {
             }
             await typeConsoleCommand(page, "");
             await page.locator("#consoleToolbarClear").click();
+            await page.waitForFunction(() => {
+                return document.querySelectorAll("[data-console-input-line]").length === 0;
+            });
         }
         await page.locator("#workspaceSummary .workspace-variable-row.active-dataset", {
             hasText: renderedDatasetName

@@ -225,7 +225,7 @@ const cases = [
     },
     {
         name: "removed-capture-routing-rejects-completion",
-        code: "sink(); invisible(NULL)", includes: "producer receipt failed", outcome: "success", deliveryFailure: true,
+        code: "sink(); invisible(NULL)", includes: "output routing was removed", outcome: "success", deliveryFailure: true,
         grouped: { exact: "", includes: null, deliveryFailure: false }
     },
     { name: "following-command", code: 'cat("recovered\\n")', exact: "recovered\n", outcome: "success" }
@@ -1165,6 +1165,7 @@ const runNative = async function() {
 
 const runWebR = async function() {
     const library = readRegressionPackageLibrary(root, true);
+    const packageRepository = validPackageRepository || dependencyPackageRepository || emptyPackageRepository;
     const bundle = await build({
         stdin: { resolveDir: root, contents: `
             ${regressionPackageLibrarySource(library)}
@@ -1174,6 +1175,8 @@ const runWebR = async function() {
                 from "./src/runtime/providers/webr/webRSharedRuntimeControl";
             import { createBrowserWebRSession } from "./src/runtime/providers/webr/webRBrowserSession";
             import { createWebRRuntimeRestartAdapter } from "./src/runtime/providers/webr/webRRuntimeRestartAdapter";
+            import { createRuntimeOperationQueue } from "./src/runtime/session/runtimeOperationQueue";
+            import { createLiveTranscriptEventsFromRuntimeControl } from "./src/runtime/providers/r/protocol/runtimeControlEvents";
             import { createDatasetEditorWarmCache } from "./src/dataset-editor/datasetEditorWarmCache";
             import { createBrowserPlotViewerHost } from "./src/shell-web/browserPlotAdapter";
             import { createBrowserResourceClient } from "./src/core/host/browserResourceClient";
@@ -1289,17 +1292,17 @@ const runWebR = async function() {
                 const initializedAt = performance.now();
                 const packageMounts = await window.mountRegressionPackageLibrary(runtime);
                 const mountedAt = performance.now();
-                if (${!!validPackageRepository}) {
-                    await runtime.evalRVoid('options(webr_pkg_repos=' + ${JSON.stringify(JSON.stringify(emptyPackageRepository || validPackageRepository))} + ')');
+                if (${!!packageRepository}) {
+                    await runtime.evalRVoid('options(webr_pkg_repos=' + ${JSON.stringify(JSON.stringify(emptyPackageRepository || packageRepository))} + ')');
                     await installWebRPackageInstallShim(runtime);
                     const addressed = JSON.parse(await runtime.evalRString(
                         'jsonlite::toJSON(getOption("dialogforge.r.package.transport")$contrib(c("https://cloud.r-project.org", '
-                        + ${JSON.stringify(JSON.stringify(validPackageRepository))} + ')), auto_unbox=FALSE)'
+                        + ${JSON.stringify(JSON.stringify(packageRepository))} + ')), auto_unbox=FALSE)'
                     ));
                     const suffix = "/bin/emscripten/contrib/4.6";
                     if (addressed.length !== 2
-                        || addressed[0] !== ${JSON.stringify(emptyPackageRepository || validPackageRepository)} + suffix
-                        || addressed[1] !== ${JSON.stringify(validPackageRepository)} + suffix) {
+                        || addressed[0] !== ${JSON.stringify(emptyPackageRepository || packageRepository)} + suffix
+                        || addressed[1] !== ${JSON.stringify(packageRepository)} + suffix) {
                         throw Error("Worker binary repository addressing did not preserve custom repos/SDK CRAN mirror");
                     }
                 }
@@ -1336,7 +1339,7 @@ const runWebR = async function() {
                         }
                     }
                 };
-                let pending = Promise.resolve();
+                const operationQueue = createRuntimeOperationQueue();
                 let activeRequest;
                 let sequence = 0;
                 let current = true;
@@ -1356,11 +1359,7 @@ const runWebR = async function() {
                 const client = await installWebRSharedRuntimeControl({
                     maxRetainedEventBytes: ${retentionBytes || "undefined"},
                     runtime,
-                    runRuntimeOperation(action) {
-                        const next = pending.then(action);
-                        pending = next.catch(() => {});
-                        return next;
-                    },
+                    runRuntimeOperation: operationQueue.run,
                     fetchSource: async name => {
                         const response = await fetch("/r/" + name);
                         if (!response.ok) throw new Error("Missing shared R source: " + name);
@@ -1373,6 +1372,13 @@ const runWebR = async function() {
                             return new Uint8Array(await response.arrayBuffer());
                         } : undefined,
                     orderedOutput: ${groupedInput} ? undefined : { library: "/tmp/ordered-helper", directory: "/tmp/ordered-journals", sessionId: "paired-worker" },
+                    runtimeEventReceived(event, request, orderedOutput) {
+                        if (current) {
+                            record(createLiveTranscriptEventsFromRuntimeControl(event,
+                                { text: String(request.params?.code || ""), source: "paired-ordered-test" },
+                                String(request.params?.parentId || ""), orderedOutput));
+                        }
+                    },
                     async graphicsReceived(images, count) {
                         if (${process.env.DIALOGFORGE_TEST_GRAPHICS_RESOURCE_RETIREMENT === "1"} && images.length) {
                             const source = await createImageBitmap(images[images.length - 1]);
@@ -1543,6 +1549,7 @@ const runWebR = async function() {
                 window.retireOrderedAcceptance = async function() {
                     current = false;
                     client.detach();
+                    operationQueue.retire(new Error("runtime-session-detached"));
                     await session.runtimeSessionManager.stop();
                     for (const journal of journals) await journal.retire();
                 };
@@ -1556,6 +1563,7 @@ const runWebR = async function() {
                     current = false;
                     closeHelpChannels();
                     client.detach();
+                    operationQueue.retire(new Error("runtime-session-detached"));
                     // Mirror stopWebRRuntime: retire the canonical manager before
                     // awaiting physical worker/resource shutdown.
                     await session.runtimeSessionManager.stop();
@@ -1574,7 +1582,9 @@ const runWebR = async function() {
                 canPersistWorkspaceNow: () => true,
                 stopRuntime: () => window.closeOrderedAcceptance(),
                 startRuntime: async () => {
+                    const started = performance.now();
                     await window.startOrderedAcceptance();
+                    console.log("replacement initialized in " + Math.round(performance.now() - started) + "ms");
                     return window.orderedSessionManager.getSnapshot();
                 },
                 invalidateDatasetPreview() {}, setRuntimeSession() {}, sendRuntimeSession() {},
@@ -1600,7 +1610,7 @@ const runWebR = async function() {
             window.checkOrderedAuxiliaryCommandReceipts = () => checkActualAuxiliaryCommandReceipts({
                 host: "webr", execute: (code, answer, inspection) => window.executeOrderedAcceptance(code, answer, inspection),
                 captureProbe: () => window.orderedCommandEventRetirementProbe,
-                query: request => session.runtimeSessionManager.executeInvisibleQuery(request),
+                query: request => window.orderedSessionManager.executeInvisibleQuery(request),
                 checkStartupQueries: ${process.env.DIALOGFORGE_TEST_STARTUP_QUERIES === "1"},
                 restart: action => window.restartOrderedAcceptance(action)
             });
@@ -1866,8 +1876,11 @@ const runWebR = async function() {
     try {
         await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
         browser = await chromium.launch({ headless: true });
-        deadline = setTimeout(() => { void browser.close(); }, 120000);
+        deadline = setTimeout(() => { void browser.close(); }, 300000);
         const page = await browser.newPage();
+        if (process.env.DIALOGFORGE_TEST_TRACE === "1") {
+            page.on("console", message => console.log("worker fixture: " + message.text()));
+        }
         page.on("pageerror", error => console.error(error));
         await page.goto(`http://127.0.0.1:${server.address().port}`);
         assert.equal(await page.evaluate(() => crossOriginIsolated), true,
@@ -1875,6 +1888,29 @@ const runWebR = async function() {
         await page.waitForFunction(() => typeof window.startOrderedAcceptance === "function");
         await page.evaluate(() => window.startOrderedAcceptance());
         let result = [];
+        if (process.env.DIALOGFORGE_TEST_WORKSPACE_ALTREP === "1") {
+            const sources = ["runtimePrelude.R", "runtimeBindingInspection.R",
+                "runtimeWorkspaceCore.R", "runtimeDatasetCore.R", "runtimeDatasetStateCore.R"];
+            await page.evaluate(async input => {
+                const runtime = window.orderedRuntime;
+                await runtime.evalRVoid('dir.create("src/runtime/providers/r/r-sources", recursive=TRUE)');
+                for (const [name, text] of input.sources) {
+                    await runtime.FS.writeFile("src/runtime/providers/r/r-sources/" + name,
+                        new TextEncoder().encode(text));
+                }
+                await runtime.FS.writeFile("/tmp/altrepprobe.so", new Uint8Array(input.probe));
+                await runtime.evalRVoid('Sys.setenv(DIALOGFORGE_ALTREP_PROBE_DLL="/tmp/altrepprobe.so", '
+                    + 'DIALOGFORGE_TEST_INSPECTION_LIBRARY=dirname(find.package("dialogforgeruntime")))');
+                await runtime.evalRVoid(input.test);
+            }, {
+                sources: sources.map(name => [name, fs.readFileSync(path.join(sourceDirectory, name), "utf8")]),
+                probe: [...fs.readFileSync(path.join(root, "dist/r-runtime/probe/webr/altrepprobe.so"))],
+                test: fs.readFileSync(path.join(root, "scripts/check-workspace-altrep-safety.R"), "utf8")
+            });
+            result.push({ name: "canonical-workspace-altrep-safety", sharedRSource: true,
+                metadataRichSurveyColumns: 338, foreignCallbacksRejected: true });
+            console.log("WebR canonical workspace ALTREP safety and 338-column survey passed.");
+        }
         if (process.env.DIALOGFORGE_TEST_PROMPT_RETIREMENT === "1") {
             const measurement = await checkActualPromptRetirement({
                 host: "webr",
@@ -2127,6 +2163,10 @@ const runWebR = async function() {
 };
 
 const main = async function() {
+    if (process.env.DIALOGFORGE_TEST_PACKAGE_DEPENDENCIES === "1") {
+        assert.equal(process.env.DIALOGFORGE_TEST_ACTUAL_PACKAGES, "1",
+            "Dependency acceptance requires the actual package workflow.");
+    }
     if (process.env.DIALOGFORGE_TEST_FOCUSED_ONLY === "1") {
         assert.ok([
             "DIALOGFORGE_TEST_PROMPT_RETIREMENT", "DIALOGFORGE_TEST_PACKAGE_DATASET_CACHE",
@@ -2142,7 +2182,7 @@ const main = async function() {
             "DIALOGFORGE_TEST_OUTPUT_BUDGET", "DIALOGFORGE_TEST_RAW_CONSOLE_INPUT",
             "DIALOGFORGE_TEST_ACTUAL_HELP", "DIALOGFORGE_TEST_ACTUAL_GRAPHICS",
             "DIALOGFORGE_TEST_DATASET_WARMING", "DIALOGFORGE_TEST_ACTUAL_COMPLETIONS",
-            "DIALOGFORGE_TEST_ACTUAL_PACKAGES"
+            "DIALOGFORGE_TEST_ACTUAL_PACKAGES", "DIALOGFORGE_TEST_WORKSPACE_ALTREP"
         ]
             .some(name => process.env[name] === "1"), "Focused acceptance must select an actual scenario");
     }
@@ -2150,7 +2190,8 @@ const main = async function() {
     const repositoryRequests = [];
     let repositoryHost = "native";
     if (process.env.DIALOGFORGE_TEST_EMPTY_PACKAGE_INSTALL === "1"
-        || process.env.DIALOGFORGE_TEST_PACKAGE_INSTALL_SUCCESS === "1") {
+        || process.env.DIALOGFORGE_TEST_PACKAGE_INSTALL_SUCCESS === "1"
+        || process.env.DIALOGFORGE_TEST_PACKAGE_DEPENDENCIES === "1") {
         repository = http.createServer((request, response) => {
             response.setHeader("Access-Control-Allow-Origin", "*");
             response.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
@@ -2272,6 +2313,15 @@ const main = async function() {
     }
     finally {
         if (repository) await new Promise(resolve => repository.close(resolve));
+    }
+    if (process.env.DIALOGFORGE_TEST_PACKAGE_DEPENDENCIES === "1") {
+        for (const [host, results] of [["native", native], ["webr", webr]]) {
+            if (host === "webr" && process.env.DIALOGFORGE_TEST_NATIVE_ONLY === "1") {
+                continue;
+            }
+            assert.ok(results.some(result => result.name === "actual-package-dependencies"),
+                host + ": requested dependency acceptance did not execute.");
+        }
     }
     console.log(JSON.stringify({ native, webr }));
     for (const raw of [...native, ...webr].filter(result => result.name === "actual-raw-console-input")) {

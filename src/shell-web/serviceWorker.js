@@ -192,6 +192,8 @@ const serveRuntimeHelp = async function(event, url) {
                     status: response.status,
                     headers: {
                         "Content-Type": response.contentType,
+                        "Cross-Origin-Embedder-Policy": "require-corp",
+                        "Cross-Origin-Resource-Policy": "same-origin",
                         "Cache-Control": "no-store"
                     }
                 }));

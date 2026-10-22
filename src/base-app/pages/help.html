@@ -485,12 +485,30 @@
           } catch {}
         };
 
+        let helpDocumentUrl = '';
+        const releaseHelpDocument = () => {
+            if (helpDocumentUrl) {
+                getDialogForgeApi()?.releaseHelpDocumentUrl?.(helpDocumentUrl);
+                helpDocumentUrl = '';
+            }
+        };
+        window.addEventListener('pagehide', releaseHelpDocument);
+
         const renderHelpPage = (html, baseUrl, resourceBaseUrl = '') => {
           try {
             if (!frame) return;
             currentUrl = String(baseUrl || '');
             updateToolbarState();
-            frame.srcdoc = buildHelpFrameDocument(html, currentUrl, resourceBaseUrl);
+            const document = buildHelpFrameDocument(html, currentUrl, resourceBaseUrl);
+            const url = getDialogForgeApi()?.createHelpDocumentUrl?.(document, resourceBaseUrl) || '';
+            releaseHelpDocument();
+            if (url) {
+                helpDocumentUrl = url;
+                frame.removeAttribute('srcdoc');
+                frame.src = url;
+            } else {
+                frame.srcdoc = document;
+            }
           } catch {}
         };
 
@@ -529,6 +547,7 @@
           const requestId = ++helpRequestSequence;
           currentUrl = nextUrl;
           updateToolbarState();
+          releaseHelpDocument();
           frame.srcdoc = [
             '<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body style="margin:0;padding:16px;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;color:#444;background:#fff;">',
             escapeHtml('Loading help...'),

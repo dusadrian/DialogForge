@@ -30,8 +30,20 @@ const main = async function() {
                 }
             });
             const older = controller[olderAction]();
-            const rejected = assert.rejects(older, new RegExp(`Runtime ${olderAction} was superseded`));
             const newer = controller[newerAction]();
+            if (olderAction === "start" && newerAction === "start") {
+                assert.equal(pending.length, 1,
+                    "Concurrent starts join the same physical launch.");
+                pending[0].resolve({
+                    providerId: host, status: "ready", message: "joined start", connection: "connected"
+                });
+                assert.deepEqual(await older, await newer);
+                assert.equal(lifecycle.getSnapshot().lifecycleGeneration, 1);
+                assert.equal(invalidations, 1);
+                assert.equal(retirements, 0);
+                continue;
+            }
+            const rejected = assert.rejects(older, new RegExp(`Runtime ${olderAction} was superseded`));
             assert.deepEqual(pending.map((entry) => entry.action), [olderAction, newerAction]);
             pending[1].resolve({
                 providerId: host,

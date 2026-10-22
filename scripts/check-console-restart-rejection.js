@@ -173,7 +173,8 @@ const main = async function() {
         assert.equal(document.getElementById("consoleToolbarStop").disabled, true);
         currentStatus = "starting";
         sessionListener("starting");
-        assert.equal(document.getElementById("consoleToolbarRestart").disabled, true);
+        assert.equal(document.getElementById("consoleToolbarRestart").disabled, false,
+            "Restart Clean must remain usable while an existing startup is pending.");
         controller.dispose();
         assert.deepEqual(retiredListeners, ["busy", "session"]);
     }
