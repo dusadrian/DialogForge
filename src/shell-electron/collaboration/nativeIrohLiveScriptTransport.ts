@@ -1,7 +1,8 @@
 import type {
     Connection,
-    Iroh,
-    NodeAddr,
+    Endpoint,
+    EndpointAddr,
+    Incoming,
     RecvStream,
     SendStream
 } from "@number0/iroh";
@@ -18,6 +19,9 @@ import {
 import type {
     LiveScriptSessionTicket
 } from "../../script-editor/collaboration/liveScriptTicket";
+import {
+    waitForLiveScriptTransportReady
+} from "../../script-editor/collaboration/liveScriptTransportReadiness";
 import type {
     LiveScriptTransport,
     LiveScriptTransportFrameEvent,
@@ -25,11 +29,13 @@ import type {
     LiveScriptTransportSubscription
 } from "../../script-editor/collaboration/liveScriptTransport";
 const LIVE_SCRIPT_ALPN = "dialogforge/live-script/1";
+const liveScriptAlpnBytes = Array.from(new TextEncoder().encode(LIVE_SCRIPT_ALPN));
 
 
 interface NativeIrohModule {
-    Iroh: typeof import("@number0/iroh").Iroh;
-    verifyNodeAddr(address: NodeAddr): void;
+    Endpoint: typeof import("@number0/iroh").Endpoint;
+    EndpointAddr: typeof import("@number0/iroh").EndpointAddr;
+    EndpointId: typeof import("@number0/iroh").EndpointId;
 }
 
 
@@ -74,7 +80,7 @@ const createSubscription = function(
 const readTransportAddress = function(
     module: NativeIrohModule,
     ticket: LiveScriptSessionTicket
-): NodeAddr {
+): EndpointAddr {
     let value: unknown;
 
     try {
@@ -94,21 +100,13 @@ const readTransportAddress = function(
         throw new Error("Live-script presenter identity does not match the ticket.");
     }
 
-    const nodeAddress: NodeAddr = {
-        nodeId: String(address.nodeId || ""),
-        ...(typeof address.relayUrl === "string"
-            ? { relayUrl: address.relayUrl }
-            : {}),
-        ...(Array.isArray(address.addresses)
-            ? {
-                addresses: address.addresses.map((entry) => String(entry || ""))
-                    .filter(Boolean)
-            }
-            : {})
-    };
-
-    module.verifyNodeAddr(nodeAddress);
-    return nodeAddress;
+    return new module.EndpointAddr(
+        module.EndpointId.fromString(ticket.instructorEndpointId),
+        typeof address.relayUrl === "string" ? address.relayUrl : undefined,
+        Array.isArray(address.addresses)
+            ? address.addresses.map((entry) => String(entry || "")).filter(Boolean)
+            : []
+    );
 };
 
 
@@ -124,7 +122,7 @@ const errorMessage = function(error: unknown): string {
 export const createNativeIrohLiveScriptTransport = function(
     options: NativeIrohLiveScriptTransportOptions
 ): NativeIrohLiveScriptTransport {
-    let iroh: Iroh | null = null;
+    let endpoint: Endpoint | null = null;
     let irohModule: NativeIrohModule | null = null;
     let initialization: Promise<void> | null = null;
     let initializationFailure = "";
@@ -158,7 +156,7 @@ export const createNativeIrohLiveScriptTransport = function(
         }
 
         try {
-            state.connection.close(0n, new TextEncoder().encode("closed"));
+            state.connection.close(0n, Array.from(new TextEncoder().encode("closed")));
         }
         catch {}
     };
@@ -166,8 +164,7 @@ export const createNativeIrohLiveScriptTransport = function(
     const readFrames = async function(state: NativeConnectionState): Promise<void> {
         try {
             while (!state.closed && !shuttingDown) {
-                const prefix = new Uint8Array(4);
-                await state.receive.readExact(prefix);
+                const prefix = Uint8Array.from(await state.receive.readExact(4));
                 const declaredLength = new DataView(
                     prefix.buffer,
                     prefix.byteOffset,
@@ -178,8 +175,7 @@ export const createNativeIrohLiveScriptTransport = function(
                     throw new Error("Live-script frame exceeds the byte limit.");
                 }
 
-                const payload = new Uint8Array(declaredLength);
-                await state.receive.readExact(payload);
+                const payload = Uint8Array.from(await state.receive.readExact(declaredLength));
                 const parsed = parseLiveScriptJsonFrame(payload);
 
                 if (!parsed.ok) {
@@ -220,7 +216,12 @@ export const createNativeIrohLiveScriptTransport = function(
         connection: Connection,
         streams?: { send: SendStream; receive: RecvStream }
     ): Promise<NativeConnectionState> {
-        const remoteEndpointId = String(await connection.remoteNodeId());
+        if (shuttingDown) {
+            connection.close(0n, []);
+            throw new Error("Live-script transport is shutting down.");
+        }
+
+        const remoteEndpointId = connection.remoteId().toString();
         const existing = connectionsByEndpoint.get(remoteEndpointId);
 
         if (existing) {
@@ -232,6 +233,11 @@ export const createNativeIrohLiveScriptTransport = function(
         if (!opened) {
             const stream = await connection.acceptBi();
             opened = { send: stream.send, receive: stream.recv };
+        }
+
+        if (shuttingDown) {
+            connection.close(0n, []);
+            throw new Error("Live-script transport is shutting down.");
         }
 
         const state: NativeConnectionState = {
@@ -258,8 +264,51 @@ export const createNativeIrohLiveScriptTransport = function(
         return require("@number0/iroh") as NativeIrohModule;
     };
 
+    const acceptConnection = async function(incoming: Incoming): Promise<void> {
+        try {
+            const accepting = await incoming.accept();
+            const connection = await accepting.connect();
+            await registerConnection(connection);
+        }
+        catch (error) {
+            if (!shuttingDown) {
+                publishState({ state: "disconnected", message: errorMessage(error) });
+            }
+        }
+    };
+
+    const acceptConnections = async function(listener: Endpoint): Promise<void> {
+        try {
+            while (!shuttingDown && endpoint === listener) {
+                const incoming = await listener.acceptNext();
+
+                if (!incoming) {
+                    return;
+                }
+
+                if (shuttingDown) {
+                    await incoming.ignore();
+                    return;
+                }
+
+                // Each handshake progresses independently so one peer cannot
+                // prevent the endpoint from accepting another participant.
+                void acceptConnection(incoming);
+            }
+        }
+        catch (error) {
+            if (!shuttingDown) {
+                publishState({ state: "disconnected", message: errorMessage(error) });
+            }
+        }
+    };
+
     const initialize = async function(): Promise<void> {
-        if (iroh) {
+        if (shuttingDown) {
+            throw new Error("Live-script transport is shutting down.");
+        }
+
+        if (endpoint) {
             return;
         }
 
@@ -270,35 +319,17 @@ export const createNativeIrohLiveScriptTransport = function(
         if (!initialization) {
             initialization = (async () => {
                 const module = await loadModule();
-                const protocols: Record<string, unknown> = {};
+                const listener = await module.Endpoint.bind({ alpns: [liveScriptAlpnBytes] });
 
-                protocols[LIVE_SCRIPT_ALPN] = function() {
-                    return {
-                        accept: function(error: Error | null, connection: Connection): void {
-                            if (error) {
-                                publishState({
-                                    state: "disconnected",
-                                    message: error.message
-                                });
-                                return;
-                            }
-
-                            void registerConnection(connection).catch((connectionError) => {
-                                publishState({
-                                    state: "disconnected",
-                                    message: errorMessage(connectionError)
-                                });
-                            });
-                        },
-                        shutdown: function() {}
-                    };
-                };
+                if (shuttingDown) {
+                    await listener.close();
+                    throw new Error("Live-script transport is shutting down.");
+                }
 
                 irohModule = module;
-                iroh = await module.Iroh.memory({
-                    protocols: protocols as never
-                });
-                localEndpointId = await iroh.net.nodeId();
+                endpoint = listener;
+                localEndpointId = listener.id().toString();
+                void acceptConnections(listener);
             })().catch((error) => {
                 initializationFailure = errorMessage(error);
                 publishState({
@@ -333,29 +364,38 @@ export const createNativeIrohLiveScriptTransport = function(
     const host = async function(sessionId: string): Promise<string> {
         await initialize();
 
-        if (!iroh) {
+        if (!endpoint) {
             throw new Error("Native collaboration is unavailable.");
         }
 
+        await waitForLiveScriptTransportReady(endpoint.online());
+
+        if (shuttingDown || !endpoint) {
+            throw new Error("Live-script transport is shutting down.");
+        }
+
+        const address = endpoint.addr();
         hostedSessions.add(sessionId);
-        const address = await iroh.net.nodeAddr();
         publishState({ sessionId, state: "hosting" });
-        return JSON.stringify(address);
+        return JSON.stringify({
+            nodeId: localEndpointId,
+            relayUrl: address.relayUrl() || undefined,
+            addresses: address.directAddresses()
+        });
     };
 
     const join = async function(ticket: LiveScriptSessionTicket): Promise<void> {
         publishState({ sessionId: ticket.sessionId, state: "connecting" });
         await initialize();
 
-        if (!iroh || !irohModule) {
+        if (!endpoint || !irohModule) {
             throw new Error("Native collaboration is unavailable.");
         }
 
         const address = readTransportAddress(irohModule, ticket);
-        const endpoint = iroh.node.endpoint();
         const connection = await endpoint.connect(
             address,
-            new TextEncoder().encode(LIVE_SCRIPT_ALPN)
+            liveScriptAlpnBytes
         );
         const stream = await connection.openBi();
         const state = await registerConnection(connection, {
@@ -401,7 +441,7 @@ export const createNativeIrohLiveScriptTransport = function(
         state.pendingBytes += encoded.byteLength;
         state.writeQueue = state.writeQueue.then(async () => {
             try {
-                await state.send.writeAll(encoded);
+                await state.send.writeAll(Array.from(encoded));
             }
             finally {
                 state.pendingBytes = Math.max(0, state.pendingBytes - encoded.byteLength);
@@ -468,11 +508,11 @@ export const createNativeIrohLiveScriptTransport = function(
             closeConnection(state);
         }
 
-        if (iroh) {
-            await iroh.node.shutdown();
+        if (endpoint) {
+            await endpoint.close();
         }
 
-        iroh = null;
+        endpoint = null;
         publishState({ state: "closed" });
         frameListeners.clear();
         stateListeners.clear();

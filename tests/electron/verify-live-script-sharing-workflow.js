@@ -20,7 +20,7 @@ const useDefaultRendezvous =
 const {
     defaultLiveScriptRendezvousUrl
 } = require("../../dist/src/script-editor/collaboration/liveScriptRendezvous");
-const screenshotDirectory = path.join(
+const screenshotDirectory = process.env.DIALOGFORGE_LIVE_SCRIPT_SCREENSHOTS || path.join(
     os.homedir(),
     ".codex/visualizations/2026/07/18/019f7512-fe13-7743-852a-dde15ff9327a/live-script-phase4"
 );
@@ -355,6 +355,12 @@ const editorText = function(page) {
 
 const replaceEditorText = async function(page, content) {
     await page.bringToFront();
+    // Tab activation installs its Monaco model asynchronously. Typing before
+    // the local model replaces the read-only live model loses the input.
+    await page.waitForFunction(() => {
+        const editor = window.monaco?.editor?.getEditors?.()[0];
+        return editor && !editor.getOption(window.monaco.editor.EditorOption.readOnly);
+    });
     const input = page.locator(".monaco-editor textarea");
     await input.click({ force: true });
     await page.keyboard.press(process.platform === "darwin" ? "Meta+A" : "Control+A");

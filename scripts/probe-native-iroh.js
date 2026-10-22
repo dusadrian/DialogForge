@@ -116,13 +116,12 @@ const probeBinding = function(bindingPath) {
 const main = function() {
     const options = readArgs();
     const label = options.binary || options.version;
-    const bindingPath = options.binary || path.join(
-        installIroh(options.version),
-        "node_modules",
-        "@number0",
-        "iroh-darwin-universal",
-        "iroh.darwin-universal.node"
-    );
+    const installedRoot = options.binary ? "" : installIroh(options.version);
+    const bindingPath = options.binary || [
+        path.join(installedRoot, "node_modules/@number0/iroh/iroh.darwin-x64.node"),
+        path.join(installedRoot, "node_modules/@number0/iroh-darwin-x64/iroh.darwin-x64.node"),
+        path.join(installedRoot, "node_modules/@number0/iroh-darwin-universal/iroh.darwin-universal.node")
+    ].find((candidate) => fs.existsSync(candidate));
 
     const cpuBrand = spawnSync("sysctl", ["-n", "machdep.cpu.brand_string"], {
         encoding: "utf8"
@@ -133,7 +132,7 @@ const main = function() {
         + ` (${String(cpuBrand.stdout || "unknown cpu").trim()})`
     );
 
-    if (!fs.existsSync(bindingPath)) {
+    if (!bindingPath || !fs.existsSync(bindingPath)) {
         console.log(`FAIL no binary to probe: ${bindingPath}`);
         process.exitCode = 1;
         return;
@@ -171,4 +170,8 @@ const main = function() {
 };
 
 
-main();
+if (require.main === module) {
+    main();
+}
+
+module.exports = { probeBinding };

@@ -1,0 +1,47 @@
+name: Check native Live Script transport
+
+on:
+  workflow_dispatch:
+    inputs:
+      intel_binding_run:
+        description: Successful Intel binding build run matching the pinned digest.
+        required: true
+        default: "39848814830"
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  transport:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-15-intel]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Download the qualified Intel candidate
+        if: runner.os == 'macOS'
+        uses: actions/download-artifact@v4
+        with:
+          name: iroh-darwin-x64
+          run-id: ${{ inputs.intel_binding_run }}
+          github-token: ${{ github.token }}
+          path: node_modules/@number0/iroh
+      - name: Verify platform selection and the Intel digest
+        run: |
+          node tests/packaging/verify-live-script-native-dependencies.js
+          node -e "require('./scripts/nativeIrohBinding').ensureNativeIrohBinding(process.cwd(),process.platform,process.arch)"
+      - name: Compile the actual application transport
+        run: npx tsc -p tsconfig.json
+      - name: Test real Electron endpoints, edits, reconnect and shutdown
+        run: node tests/script-editor/verify-native-iroh-transport.js

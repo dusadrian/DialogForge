@@ -102,21 +102,12 @@ const stopPeer = async function(peer) {
 
 
 const openScriptEditor = async function(page) {
-    await page.locator("#webMenuBar").waitFor({ timeout: 30000 });
-    await page.evaluate(() => {
-        const normalize = function(value) {
-            return String(value || "").replace(/>$/, "").trim();
-        };
-        const item = Array.from(
-            document.querySelectorAll("#webMenuBar .web-menu-item")
-        ).find((entry) => normalize(entry.textContent) === "Script editor");
-
-        if (!item) {
-            throw new Error("Script editor menu item not found.");
-        }
-
-        item.click();
-    });
+    await page.locator("#webMenuBar .web-menu-button").filter({
+        hasText: /^File$/
+    }).click({ timeout: 30000 });
+    await page.locator(".web-menu-item:visible").filter({
+        hasText: /^Script editor$/
+    }).click();
 };
 
 

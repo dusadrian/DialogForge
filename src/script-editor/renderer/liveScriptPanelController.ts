@@ -419,6 +419,12 @@ export const createLiveScriptPanelController = function(
         showRaisedHands,
         showParticipant,
         showError: function(errorMessage) {
+            if (!footer.childElementCount) {
+                const labels = options.getLabels();
+                title.textContent = labels.shareLive;
+                footer.append(action(labels.close, false, close));
+            }
+
             message.textContent = errorMessage;
             overlay.hidden = false;
         },

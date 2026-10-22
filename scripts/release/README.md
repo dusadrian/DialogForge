@@ -43,18 +43,24 @@ workflow identity.
 
 ## Native iroh binding for Intel macOS
 
-Intel macOS does **not** ship the published `@number0/iroh` binary. n0's
-`@number0/iroh-darwin-universal` 0.35.0 faults on genuine Intel silicon
-(`EXC_I386_GPFLT` on a tokio worker thread, inside the prebuilt binary), which
-crashes the packaged application as soon as Live Script starts. The same
-`iroh-ffi` source rebuilt with a current Rust toolchain is healthy, so Intel
-builds carry a self-built `iroh.darwin-x64.node` instead.
+The iroh 1.1.0 candidate has no published Intel macOS binary. Intel builds
+continue to carry a self-built `iroh.darwin-x64.node`, qualified on a genuine
+Intel runner. Historically the published 0.35.0 universal binary crashed on
+Intel silicon; passing under Rosetta did not establish Intel compatibility.
 
-The fault does not reproduce on Apple silicon: Rosetta translates the x86_64
-slice and hides it. Only genuine Intel hardware, or the `macos-15-intel`
-runner, gives a real answer.
+Candidate run `39848814830` built upstream tag `v1.1.0` and passed its Intel
+probe. Its SHA256 is pinned in `scripts/nativeIrohBinding.js`. This binary is
+currently a workflow artifact: the reserved release tag `iroh-bindings-1.1.0`
+has not been published. A fresh Intel checkout needs that verified artifact
+copied into `node_modules/@number0/iroh/` for qualification. The manual native
+transport matrix downloads it with `actions/download-artifact`; it does not
+publish it. Durable release-asset promotion is still a release gate.
 
-Every other platform is unaffected and still uses the published binaries.
+Other platforms use the published architecture packages. The browser candidate
+uses DialogForgeIroh 0.2.0 with Rust core 1.0.2, matching the Node binding lock.
+Desktop and browser updates must be coordinated: relay connections with the
+old 0.35 transport failed qualification. Application protocol 2 alone does not
+establish transport compatibility.
 
 ### Moving the pin when `@number0/iroh` changes
 

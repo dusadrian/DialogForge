@@ -6,19 +6,17 @@ const path = require("path");
 const { spawnSync } = require("child_process");
 
 
-// n0's published 0.35.0 build for macOS x64 crashes on genuine Intel hardware
-// (EXC_I386_GPFLT on a tokio worker thread, inside the prebuilt binary itself).
-// The same iroh-ffi source rebuilt with a current toolchain is fine, so Intel
-// macOS ships a binding built by .github/workflows/build-native-iroh-binding.yml
-// instead of @number0/iroh-darwin-universal.
+// iroh 1.1.0 publishes no Intel macOS binary. Keep the established source-build
+// path, qualified on genuine Intel hardware by workflow run 39848814830.
+// The candidate binding remains a workflow artifact until release promotion.
 const nativeIrohBindingPin = {
-    version: "0.35.0",
+    version: "1.1.0",
     repository: "dusadrian/DialogForge",
-    releaseTag: "iroh-bindings-0.35.0",
+    releaseTag: "iroh-bindings-1.1.0",
     assetName: "iroh.darwin-x64.node",
     // From the build workflow's output. Empty means "download but do not
     // verify", which the ensure step reports loudly.
-    sha256: "841197e36c3d002e813006b25f3b7e884595d0fa6552c60ab4ac80e1df979606"
+    sha256: "50e901d3f6dbea918dd6002ec0d0e578275c936ae2c6a6d77e60757814c713be"
 };
 
 

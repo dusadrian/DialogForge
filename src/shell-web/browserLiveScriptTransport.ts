@@ -10,6 +10,9 @@ import {
     defaultLiveScriptRendezvousUrl
 } from "../script-editor/collaboration/liveScriptInfrastructure";
 import {
+    waitForLiveScriptTransportReady
+} from "../script-editor/collaboration/liveScriptTransportReadiness";
+import {
     parseLiveScriptSessionTicket,
     type LiveScriptSessionTicket
 } from "../script-editor/collaboration/liveScriptTicket";
@@ -50,7 +53,7 @@ export interface BrowserLiveScriptTransportController {
 }
 
 
-const defaultModuleUrl = "/vendor/dialogforge-iroh/0.1.0/index.mjs";
+const defaultModuleUrl = "/vendor/dialogforge-iroh/0.2.0/index.mjs";
 
 
 const operationFailure = function(error: unknown): LiveScriptOperationResult {
@@ -135,7 +138,12 @@ export const createBrowserLiveScriptTransport = function(
                 await transport.closeSession(activeSessionId);
             }
 
-            const transportAddress = await transport.host(sessionId);
+            const transportAddress = await waitForLiveScriptTransportReady(
+                transport.host(sessionId)
+            ).catch((error) => {
+                void transport.closeSession(sessionId).catch(() => {});
+                throw error;
+            });
             activeSessionId = sessionId;
             return {
                 ok: true,

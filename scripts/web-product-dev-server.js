@@ -1559,7 +1559,7 @@ const createWebProductDevServer = function(options) {
                 return;
             }
 
-            if (pathname.startsWith("/vendor/dialogforge-iroh/0.1.0/")) {
+            if (pathname.startsWith("/vendor/dialogforge-iroh/0.2.0/")) {
                 serveFile(
                     response,
                     resolveSafeFile(rootDir, pathname),

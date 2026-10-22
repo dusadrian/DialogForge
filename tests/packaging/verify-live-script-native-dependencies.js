@@ -15,7 +15,6 @@ const {
 
 const expectedNativePackages = [
     ["darwin", "arm64", [
-        "@number0/iroh-darwin-universal",
         "@number0/iroh-darwin-arm64"
     ]],
     ["darwin", "x64", []],

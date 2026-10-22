@@ -2,18 +2,13 @@
 
 const nativeIrohRuntimeDependencies = function(platform, arch) {
     if (platform === "darwin") {
-        // The published darwin-universal binary crashes on genuine Intel
-        // hardware, and its loader is tried before the architecture specific
-        // ones, so Intel builds must not carry it at all. Those builds use the
-        // self-built iroh.darwin-x64.node staged inside @number0/iroh instead.
+        // iroh 1.x publishes an ARM binary for macOS. Intel builds use the
+        // separately qualified binding staged inside @number0/iroh.
         if (arch === "x64") {
             return [];
         }
 
-        return [
-            "@number0/iroh-darwin-universal",
-            ...(arch === "arm64" ? ["@number0/iroh-darwin-arm64"] : [])
-        ];
+        return arch === "arm64" ? ["@number0/iroh-darwin-arm64"] : [];
     }
 
     if (platform === "linux") {

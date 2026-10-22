@@ -189,7 +189,7 @@ const waitForRemoteWeb = async function(tunnel) {
             "-fsS",
             "-o",
             "/dev/null",
-            `${webUrl}vendor/dialogforge-iroh/0.1.0/index.mjs`
+            `${webUrl}vendor/dialogforge-iroh/0.2.0/index.mjs`
         ], { encoding: "utf8" });
 
         if (request.status === 0) {

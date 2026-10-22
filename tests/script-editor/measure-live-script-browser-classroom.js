@@ -151,7 +151,7 @@ const openScriptEditor = async function(page) {
 const installBrowserParticipants = async function(page, ticket, count) {
     return page.evaluate(async ({ sessionTicket, participantCount }) => {
         const transportModule = await import(
-            "/vendor/dialogforge-iroh/0.1.0/index.mjs"
+            "/vendor/dialogforge-iroh/0.2.0/index.mjs"
         );
         const participantModule = await import(
             "/browser-esm/src/script-editor/collaboration/"

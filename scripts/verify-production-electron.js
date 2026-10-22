@@ -5,6 +5,7 @@ const os = require("os");
 const path = require("path");
 const { spawn, spawnSync } = require("child_process");
 const { assertBindingPinMatchesDependency } = require("./nativeIrohBinding");
+const { probeBinding } = require("./probe-native-iroh");
 
 
 const rootDir = path.resolve(__dirname, "..");
@@ -270,6 +271,7 @@ const checkUnpackedNativeIroh = function(application) {
     // platform keeps the published architecture packages.
     const bindingPath = [
         path.join(unpackedModules, "iroh", "iroh.darwin-x64.node"),
+        path.join(unpackedModules, "iroh-darwin-arm64", "iroh.darwin-arm64.node"),
         path.join(unpackedModules, "iroh-darwin-universal", "iroh.darwin-universal.node")
     ].find((candidate) => {
         return fs.existsSync(candidate);
@@ -279,25 +281,7 @@ const checkUnpackedNativeIroh = function(application) {
         return `No unpacked native iroh binary was found under ${unpackedModules}`;
     }
 
-    const probe = `
-        const binding = require(${JSON.stringify(bindingPath)});
-        binding.Iroh.memory()
-            .then((node) => {
-                return node.net.nodeId();
-            })
-            .then((nodeId) => {
-                console.log("native-iroh-ok " + nodeId);
-                process.exit(0);
-            })
-            .catch((error) => {
-                console.log("native-iroh-error " + error.message);
-                process.exit(3);
-            });
-    `;
-    const result = spawnSync(process.execPath, ["-e", probe], {
-        encoding: "utf8",
-        timeout: 60000
-    });
+    const result = probeBinding(bindingPath);
     const output = `${result.stdout || ""}${result.stderr || ""}`.trim();
 
     return [
