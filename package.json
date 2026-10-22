@@ -29,10 +29,10 @@
     "devDependencies": {
         "@types/qrcode": "^1.5.6",
         "@types/sortablejs": "^1.15.9",
-        "electron": "^22.0.0",
-        "electron-builder": "26.9.0",
+        "electron": "43.8.3",
+        "electron-builder": "26.15.3",
         "esbuild": "^0.28.1",
-        "js-yaml": "4.2.0",
+        "js-yaml": "4.3.2",
         "playwright": "^1.62.0",
         "typescript": "^6.0.3"
     },
@@ -44,6 +44,7 @@
         "@number0/iroh": "0.35.0",
         "diceware-wordlist-en-eff": "1.0.1",
         "electron-updater": "^6.8.9",
+        "fs-extra": "10.1.0",
         "monaco-editor": "^0.56.0",
         "preact": "^10.29.7",
         "qrcode": "^1.5.4",
@@ -98,6 +99,14 @@
         "linux": {
             "target": "AppImage",
             "category": "Development;Science"
+        }
+    },
+    "overrides": {
+        "monaco-editor": {
+            "dompurify": "3.4.17"
+        },
+        "@electron/get": {
+            "global-agent": "4.1.3"
         }
     }
 }

@@ -1,4 +1,4 @@
-import { clipboard, contextBridge, ipcRenderer } from "electron";
+import { clipboard, contextBridge, ipcRenderer, webUtils } from "electron";
 import * as path from "path";
 import {
     invokeRuntimeSessionRoute,
@@ -206,7 +206,8 @@ const loadElectronPageModule = function(
 
 // Keep the host bridge as the single Electron compatibility seam.
 const hostBridge = createDialogForgeHostBridge(ipcRenderer, {
-    clipboard
+    clipboard,
+    webUtils
 });
 
 
