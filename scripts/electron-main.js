@@ -848,7 +848,7 @@ electronApplicationLifecycle.bindElectronApplicationLifecycle({
                     if (snapshot.status === "ready") {
                         return snapshot;
                     }
-                    if (snapshot.status === "error") {
+                    if (snapshot.status === "failed" || snapshot.status === "error") {
                         throw new Error(snapshot.message || "R runtime failed to start.");
                     }
 
@@ -857,7 +857,8 @@ electronApplicationLifecycle.bindElectronApplicationLifecycle({
                     });
                 }
 
-                throw new Error("R runtime did not become ready for help smoke.");
+                throw new Error("R runtime did not become ready for packaged acceptance: "
+                    + JSON.stringify(runtimeSessionManager.getSnapshot()));
             },
             readPackageInstallSmokePrompt: function () {
                 return packageInstallSmokePrompt;
