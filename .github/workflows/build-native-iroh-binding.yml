@@ -6,12 +6,12 @@ on:
       iroh_version:
         description: iroh-ffi tag to build, without the leading v.
         required: false
-        default: "0.35.0"
+        default: "1.1.0"
         type: string
       publish_release:
         description: Upload the binding to a release.
         required: false
-        default: true
+        default: false
         type: boolean
 
 permissions:
@@ -27,7 +27,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: 22
 
       - name: Check out iroh-ffi at the pinned tag
         uses: actions/checkout@v5

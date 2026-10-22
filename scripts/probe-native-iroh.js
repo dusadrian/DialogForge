@@ -81,10 +81,21 @@ const installIroh = function(version) {
 const probeBinding = function(bindingPath) {
     const probe = `
         const binding = require(${JSON.stringify(bindingPath)});
-        binding.Iroh.memory()
-            .then((node) => {
-                return node.net.nodeId();
-            })
+        (async () => {
+            if (binding.Endpoint && typeof binding.Endpoint.bind === "function") {
+                const builder = binding.Endpoint.builder();
+                builder.applyMinimal();
+                builder.bindAddr("127.0.0.1:0");
+                const endpoint = await builder.bind();
+                const nodeId = endpoint.id().toString();
+                await endpoint.close();
+                return nodeId;
+            }
+            const node = await binding.Iroh.memory();
+            const nodeId = await node.net.nodeId();
+            await node.node.shutdown();
+            return nodeId;
+        })()
             .then((nodeId) => {
                 console.log("ok " + nodeId);
                 process.exit(0);
