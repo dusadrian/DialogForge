@@ -25,6 +25,9 @@ local({
         as.character(1:10), list(column = 1:10),
         structure(1:10000, label = "Integer wrapper"),
         structure(2147483648:2147493647, label = "Real wrapper"),
+        structure(rep(list(1:3), 3L), label = "List wrapper"),
+        structure(rep("RO", 10L), label = "String wrapper"),
+        vector("list", 5000),
         data.frame(value = 1:3), structure(1, metadata = list(values = 1:4))
     )) {
         stopifnot(stored_graph_is_inspectable(value))
@@ -35,7 +38,7 @@ local({
         !stored_graph_is_inspectable(reference),
         !stored_graph_is_inspectable(list(reference)),
         !stored_graph_is_inspectable(structure(1, metadata = reference)),
-        !stored_graph_is_inspectable(vector("list", 5000))
+        !stored_graph_is_inspectable(vector("list", 65536))
     )
     deep <- 1
     for (index in seq_len(70)) {

@@ -1,7 +1,7 @@
 Package: dialogforgeruntime
 Type: Package
 Title: Shared R Runtime Support for DialogForge
-Version: 0.1.1
+Version: 0.1.2
 Authors@R: person("Adrian", "Dusa", role = c("aut", "cre", "cph"),
     email = "dusa.adrian@unibuc.ro")
 Description: Non-evaluating object and binding inspection, physical graphics
@@ -12,8 +12,8 @@ License: file LICENSE
 Encoding: UTF-8
 Depends: R (>= 4.5.0)
 NeedsCompilation: yes
-Packaged: 2026-10-05 03:52:26 UTC; runneradmin
+Packaged: 2026-10-22 18:37:13 UTC; runneradmin
 Author: Adrian Dusa [aut, cre, cph]
 Maintainer: Adrian Dusa <dusa.adrian@unibuc.ro>
-Built: R 4.6.1; x86_64-w64-mingw32; 2026-10-05 03:52:26 UTC; windows
+Built: R 4.6.1; x86_64-w64-mingw32; 2026-10-22 18:37:13 UTC; windows
 Archs: x64

@@ -127,7 +127,7 @@ const checkCacheStaging = async function(mode) {
 };
 
 (async function() {
-    for (const helper of ["dialogforgeruntime_0.1.1"]) {
+    for (const helper of ["dialogforgeruntime_0.1.2"]) {
         for (const mode of [
             "ready", "write-failed", "extraction-failed", "cleanup-failed",
             "write-and-cleanup-failed", "extraction-and-cleanup-failed"

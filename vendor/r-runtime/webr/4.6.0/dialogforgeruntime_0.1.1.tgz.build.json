@@ -4,6 +4,6 @@
   "packageVersion": "0.1.1",
   "runtimeVersion": "4.6.0",
   "toolchainImage": "ghcr.io/r-wasm/webr:v0.6.0",
-  "sourceSha256": "bbaf89675575315a2f2459bd39ed5fc12db8c5fb005891b4d55bc4d0efccb1f0",
-  "archiveSha256": "fb1cb48ae9d5848409490ee41af9e0698c5ca800faa6d827b8ea265d246d97f1"
+  "sourceSha256": "dc961288918135a7c59d6a6d85499136469597708733395126ff2f13d65331e3",
+  "archiveSha256": "c103a1eb4ed49a33f8093417a29c5364711ca10f6881ff04f652a18e326581e7"
 }
