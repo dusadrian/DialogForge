@@ -1,0 +1,73 @@
+name: Check signed DialogR installer
+
+on:
+  push:
+    branches: [codex/iroh-110-qualification]
+    paths: [.github/workflows/check-signed-dialogr-installer.yml]
+  workflow_dispatch:
+    inputs:
+      signing_run:
+        description: Successful signing run whose retained artifacts will be installed unchanged.
+        default: "39854892631"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/checkout@v5
+        with:
+          repository: RODA/DialogR
+          ref: 5b337e428ff13b8f6069c9248f05c99d86da2852
+          path: product
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - uses: r-lib/actions/setup-r@f9a764fea8d5c63df6ef9a5c7795bf7deb5d7e05
+        with:
+          r-version: '4.6.1'
+          use-public-rspm: false
+      - name: Install the declared runtime packages
+        shell: Rscript {0}
+        run: |
+          packages <- c("httpgd", "jsonlite", "askpass", "later", "digest", "admisc", "declared", "DDIwR", "statistics", "knitr")
+          install.packages(packages, repos = c("https://dusadrian.r-universe.dev", "https://cloud.r-project.org"))
+          stopifnot(all(vapply(packages, requireNamespace, logical(1), quietly = TRUE)))
+      - run: npm ci
+      - name: Download the signed executables without rebuilding
+        uses: actions/download-artifact@v4
+        with:
+          name: signed-product-windows
+          run-id: ${{ inputs.signing_run || '39854892631' }}
+          github-token: ${{ github.token }}
+          path: candidate
+      - name: Verify the exact signed files
+        shell: pwsh
+        run: |
+          Get-ChildItem candidate/*.exe | ForEach-Object {
+            $signature = Get-AuthenticodeSignature $_.FullName
+            if ($signature.Status -ne 'Valid') { throw "Invalid signature for $($_.Name)" }
+            Write-Host "$($_.Name): $($signature.Status), $($signature.SignerCertificate.Subject)"
+          }
+      - name: Exercise the signed NSIS installation
+        run: node tests/packaging/verify-installer-artifact.js product candidate
+      - name: Exercise upgrade and manual rollback
+        run: node tests/packaging/verify-installer-upgrade-rollback.js candidate
+      - name: Retain acceptance and failure evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dialogr-signed-installed-acceptance
+          path: |
+            candidate/*acceptance.json
+            candidate/*.png
+            candidate/*.log
+          if-no-files-found: error
