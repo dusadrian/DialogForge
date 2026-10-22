@@ -19,6 +19,9 @@ inputs:
     default: ""
   release_token:
     required: true
+  publish_release:
+    required: false
+    default: "true"
   overwrite_release_assets:
     required: false
     default: "true"
@@ -55,7 +58,7 @@ runs:
     - name: Set up Node.js
       uses: actions/setup-node@v5
       with:
-        node-version: 20
+        node-version: 24
         cache: npm
 
     - name: Install DialogForge dependencies
@@ -134,7 +137,7 @@ runs:
       run: node scripts/refresh-windows-update-metadata.js --output-dir ./external-product/build/output
 
     - name: Upload files to GitHub release
-      if: ${{ inputs.release_tag != '' }}
+      if: ${{ inputs.release_tag != '' && inputs.publish_release == 'true' }}
       shell: bash
       env:
         RELEASE_TAG: ${{ inputs.release_tag }}
@@ -189,3 +192,14 @@ runs:
         cmd+=("${files[@]}")
 
         "${cmd[@]}"
+
+    - name: Retain signed qualification artifacts
+      if: ${{ inputs.publish_release != 'true' }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: signed-product-${{ inputs.platform }}
+        path: |
+          external-product/build/output/*.exe
+          external-product/build/output/*.exe.blockmap
+          external-product/build/output/latest.yml
+        if-no-files-found: error
