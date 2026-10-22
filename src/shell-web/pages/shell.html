@@ -4,6 +4,14 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>DialogForge Web</title>
+    <script type="importmap">
+        {
+            "imports": {
+                "preact": "/vendor/preact/preact.module.js",
+                "preact/hooks": "/vendor/preact/hooks.module.js"
+            }
+        }
+    </script>
     <link rel="modulepreload" href="/browser-esm/dialogBuilder.js">
     <link rel="modulepreload" href="/browser-esm/scriptEditor.js">
     <link rel="preload" href="/src/base-app/pages/dialogBuilder.css" as="style">
@@ -14,14 +22,6 @@
     <link rel="stylesheet" href="/src/base-app/pages/shared/main.css">
     <link rel="stylesheet" href="/src/shell-web/pages/shell.css">
     <link rel="stylesheet" href="/api/product.css">
-    <script type="importmap">
-        {
-            "imports": {
-                "preact": "/vendor/preact/preact.module.js",
-                "preact/hooks": "/vendor/preact/hooks.module.js"
-            }
-        }
-    </script>
 </head>
 <body class="command-pane-hidden console-cover-visible">
     <div class="web-app">
