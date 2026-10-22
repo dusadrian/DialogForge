@@ -49,12 +49,10 @@ Intel runner. Historically the published 0.35.0 universal binary crashed on
 Intel silicon; passing under Rosetta did not establish Intel compatibility.
 
 Candidate run `39848814830` built upstream tag `v1.1.0` and passed its Intel
-probe. Its SHA256 is pinned in `scripts/nativeIrohBinding.js`. This binary is
-currently a workflow artifact: the reserved release tag `iroh-bindings-1.1.0`
-has not been published. A fresh Intel checkout needs that verified artifact
-copied into `node_modules/@number0/iroh/` for qualification. The manual native
-transport matrix downloads it with `actions/download-artifact`; it does not
-publish it. Durable release-asset promotion is still a release gate.
+probe. Its SHA256 is pinned in `scripts/nativeIrohBinding.js`. The exact binary was promoted
+without rebuilding to the `iroh-bindings-1.1.0` dependency prerelease. Clean
+Intel builds download that durable release asset and verify the pinned digest.
+The transport matrix retains its original workflow-artifact source as evidence.
 
 Other platforms use the published architecture packages. The browser candidate
 uses DialogForgeIroh 0.2.0 with Rust core 1.0.2, matching the Node binding lock.

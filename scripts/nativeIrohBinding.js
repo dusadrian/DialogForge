@@ -8,7 +8,7 @@ const { spawnSync } = require("child_process");
 
 // iroh 1.1.0 publishes no Intel macOS binary. Keep the established source-build
 // path, qualified on genuine Intel hardware by workflow run 39848814830.
-// The candidate binding remains a workflow artifact until release promotion.
+// The exact accepted artifact is retained in the checksummed dependency release.
 const nativeIrohBindingPin = {
     version: "1.1.0",
     repository: "dusadrian/DialogForge",
