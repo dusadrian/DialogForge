@@ -145,9 +145,6 @@ export const saveBrowserPlot = async function(
     }
 
     return savePlotThroughHost(async () => {
-        const blob = suppliedData.length
-            ? new Blob([suppliedData.slice().buffer], { type: formatInfo.mimeType })
-            : await readBrowserPlotBlob(url);
         if (windowRef.showSaveFilePicker) {
             const fileHandle = await windowRef.showSaveFilePicker({
                 suggestedName: String(rawRequest.fileName || "").trim()
@@ -161,6 +158,9 @@ export const saveBrowserPlot = async function(
                     }
                 ]
             });
+            const blob = suppliedData.length
+                ? new Blob([suppliedData.slice().buffer], { type: formatInfo.mimeType })
+                : await readBrowserPlotBlob(url);
             const writable = await fileHandle.createWritable();
 
             try {
@@ -174,7 +174,9 @@ export const saveBrowserPlot = async function(
         }
 
         const objectUrl = suppliedData.length
-            ? URL.createObjectURL(blob)
+            ? URL.createObjectURL(new Blob([suppliedData.slice().buffer], {
+                type: formatInfo.mimeType
+            }))
             : url;
 
         downloadPlotAsFile(
