@@ -127,6 +127,17 @@ runs:
         timestamp-rfc3161: http://timestamp.acs.microsoft.com
         timestamp-digest: SHA256
 
+    - name: Verify signed Windows executables
+      if: ${{ inputs.platform == 'windows' }}
+      shell: pwsh
+      run: |
+        $artifacts = Get-ChildItem external-product/build/output/*.exe
+        foreach ($artifact in $artifacts) {
+          $signature = Get-AuthenticodeSignature $artifact.FullName
+          if ($signature.Status -ne 'Valid') { throw "Invalid signature: $($artifact.Name) $($signature.Status)" }
+          Write-Output "$($artifact.Name): $($signature.Status), $($signature.SignerCertificate.Subject)"
+        }
+
     - name: Verify packaged Script Editor and Live Script
       shell: bash
       run: node scripts/verify-production-electron.js --product-path ./external-product --output-dir ./external-product/build/output --target script-editor

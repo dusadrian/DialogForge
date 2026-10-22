@@ -3,10 +3,9 @@
 const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
-const { spawnSync } = require("child_process");
 
 const yaml = require("js-yaml");
-const { appBuilderPath } = require("app-builder-bin");
+const { buildBlockMap } = require("app-builder-lib/out/targets/blockmap/blockmap");
 
 const projectRoot = path.resolve(__dirname, "..");
 
@@ -39,28 +38,6 @@ const sha512Base64 = function(filePath) {
     const hash = crypto.createHash("sha512");
     hash.update(fs.readFileSync(filePath));
     return hash.digest("base64");
-};
-
-const runAppBuilder = function(args) {
-    const result = spawnSync(appBuilderPath, args, {
-        cwd: projectRoot,
-        encoding: "utf8",
-        stdio: "pipe"
-    });
-
-    if (result.error) {
-        throw result.error;
-    }
-    if (result.status !== 0) {
-        const output = [result.stdout, result.stderr]
-            .filter(Boolean)
-            .join("\n")
-            .trim();
-
-        throw new Error(
-            `app-builder failed while refreshing Windows update metadata.\n${output}`
-        );
-    }
 };
 
 const readLatestInfo = function(latestPath) {
@@ -98,16 +75,11 @@ const resolveInstallerPath = function(outputDir, latestInfo) {
     return installerPath;
 };
 
-const refreshBlockmap = function(installerPath) {
+const refreshBlockmap = async function(installerPath) {
     const blockmapPath = `${installerPath}.blockmap`;
 
-    runAppBuilder([
-        "blockmap",
-        "--input",
-        installerPath,
-        "--output",
-        blockmapPath
-    ]);
+    // Use the same block map generator as the pinned electron-builder.
+    await buildBlockMap(installerPath, "gzip", blockmapPath);
 
     if (!fs.existsSync(blockmapPath)) {
         throw new Error(`Windows updater blockmap was not created: ${blockmapPath}`);
@@ -150,13 +122,13 @@ const updateLatestInfo = function(latestPath, latestInfo, installerPath) {
     }));
 };
 
-const main = function() {
+const main = async function() {
     const selection = parseArgs();
     const latestPath = path.join(selection.outputDir, "latest.yml");
     const latestInfo = readLatestInfo(latestPath);
     const installerPath = resolveInstallerPath(selection.outputDir, latestInfo);
 
-    refreshBlockmap(installerPath);
+    await refreshBlockmap(installerPath);
     updateLatestInfo(latestPath, latestInfo, installerPath);
 
     console.log(
@@ -164,4 +136,7 @@ const main = function() {
     );
 };
 
-main();
+main().catch((error) => {
+    console.error(error);
+    process.exitCode = 1;
+});
