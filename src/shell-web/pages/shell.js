@@ -4089,6 +4089,19 @@ const installBrowserHelpBridge = function () {
     installBrowserSharedPageBridge(window, {
         openHelpCommandUrl: openBrowserHelpCommandUrl,
         fetchHelpPage: fetchBrowserRHelpPage,
+        createHelpDocumentUrl: function (html, resourceBaseUrl) {
+            const channel = browserHelpResourceOwner?.channel;
+            if (!resourceBaseUrl) {
+                return "";
+            }
+            if (!channel) {
+                throw new Error("help-resource-channel-unavailable");
+            }
+            return channel.createDocumentUrl(String(html), resourceBaseUrl);
+        },
+        releaseHelpDocumentUrl: function (url) {
+            browserHelpResourceOwner?.channel.releaseDocumentUrl(url);
+        },
         retireHelpRequest: browserHelpRequests.retire,
         runHelpExample: runHelpExampleInPage,
         selectImportFile: function () {

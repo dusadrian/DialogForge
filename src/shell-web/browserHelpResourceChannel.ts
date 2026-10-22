@@ -1,4 +1,5 @@
 import type { createRHelpPageReader } from "../runtime/help/rHelpPageReader";
+import { rHelpResourceMaxBytes } from "../runtime/help/rHelpResourceProtocol";
 
 
 export interface BrowserHelpResourceChannelOptions {
@@ -18,6 +19,8 @@ export const createBrowserHelpResourceChannel = function(
     const baseUrl = `${new URL(options.origin).origin}/__dialogforge_runtime_help/${owner}`;
     let registeredWorker: ServiceWorker | null = null;
     let closed = false;
+    const documents = new Map<string, Uint8Array>();
+    const documentPrefix = "/__viewer_document/";
 
     const handleMessage = function(event: MessageEvent): void {
         const data = event.data;
@@ -32,7 +35,17 @@ export const createBrowserHelpResourceChannel = function(
         const worker = registeredWorker;
         void (async function() {
             try {
-                const result = await options.reader.fetchResource(data.url);
+                const pathname = new URL(data.url).pathname;
+                let result;
+                if (pathname.startsWith(documentPrefix)) {
+                    const document = documents.get(pathname);
+                    result = document
+                        ? { ok: true, status: 200, url: data.url,
+                            contentType: "text/html; charset=utf-8", body: document }
+                        : { error: "help-document-retired", status: 410 };
+                } else {
+                    result = await options.reader.fetchResource(data.url);
+                }
                 reply.postMessage(closed || registeredWorker !== worker
                     || options.serviceWorker.controller !== worker
                     ? { error: "help-resource-retired", status: 410 }
@@ -69,6 +82,28 @@ export const createBrowserHelpResourceChannel = function(
     };
 
     return {
+        // Serve the shared viewer's prepared HTML through this owner's HTTP
+        // route. Firefox drops the worker controller on srcdoc navigation.
+        createDocumentUrl(html: string, resourceBaseUrl: string): string {
+            if (
+                closed || !registeredWorker || resourceBaseUrl !== baseUrl ||
+                registeredWorker !== options.serviceWorker.controller
+            ) {
+                throw new Error("help-resource-channel-unavailable");
+            }
+            const body = new TextEncoder().encode(html);
+            if (body.byteLength > rHelpResourceMaxBytes) {
+                throw new Error("help-resource-too-large");
+            }
+            const pathname = `${documentPrefix}${crypto.randomUUID()}`;
+            documents.set(pathname, body);
+            return `${baseUrl}${pathname}`;
+        },
+        releaseDocumentUrl(url: string): void {
+            if (url.startsWith(`${baseUrl}${documentPrefix}`)) {
+                documents.delete(url.slice(baseUrl.length));
+            }
+        },
         async register(): Promise<string> {
             const worker = options.serviceWorker.controller;
             if (closed || !worker) {
@@ -109,6 +144,7 @@ export const createBrowserHelpResourceChannel = function(
                 return;
             }
             closed = true;
+            documents.clear();
             options.serviceWorker.removeEventListener("message", handleMessage);
             if (registeredWorker) {
                 unregister(registeredWorker);

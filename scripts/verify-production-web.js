@@ -15,6 +15,7 @@ const readArgs = function() {
         productPath: "",
         webDist: "",
         build: false,
+        browsers: ["chromium", "firefox", "webkit"],
         timeoutMs: 120000
     };
     const args = process.argv.slice(2);
@@ -34,6 +35,15 @@ const readArgs = function() {
         }
         if (current === "--build") {
             options.build = true;
+            continue;
+        }
+        if (current === "--browser") {
+            index += 1;
+            const browser = args[index];
+            if (!["chromium", "firefox", "webkit"].includes(browser)) {
+                throw new Error("Choose chromium, firefox or webkit for --browser.");
+            }
+            options.browsers = [browser];
             continue;
         }
         if (current === "--timeout-ms") {
@@ -317,16 +327,16 @@ const startServer = function(options, port) {
 };
 
 
-const verifyRenderedHelp = async function(options, product, port) {
-    const { chromium } = require("playwright");
-    // .localhost is a potentially trustworthy origin without disabling browser
-    // security. Public HTTPS deployment acceptance is checked separately.
-    const host = `${product.productId.toLowerCase()}.localhost`;
+const verifyRenderedHelp = async function(options, product, port, browserName) {
+    const browserType = require("playwright")[browserName];
+    // Both loopback forms are trustworthy without disabling browser security.
+    // Chromium can map the product hostname; other engines use the numeric host.
+    const host = browserName === "chromium"
+        ? `${product.productId.toLowerCase()}.localhost` : "127.0.0.1";
     const baseUrl = `http://${host}:${port}`;
-    const browser = await chromium.launch({
-        args: [
-            `--host-resolver-rules=MAP ${host} 127.0.0.1`
-        ]
+    const browser = await browserType.launch({
+        args: browserName === "chromium"
+            ? [`--host-resolver-rules=MAP ${host} 127.0.0.1`] : []
     });
     const page = await browser.newPage();
     const failures = [];
@@ -466,6 +476,15 @@ const verifyRenderedHelp = async function(options, product, port) {
             return documentFrame?.contentDocument?.readyState === "complete";
         }, null, { timeout: options.timeoutMs });
 
+        const missingStyles = await body.evaluate((element) => {
+            return Array.from(element.ownerDocument.querySelectorAll('link[rel="stylesheet"]'))
+                .filter(link => !link.sheet)
+                .map(link => link.href);
+        });
+        if (missingStyles.length > 0) {
+            throw new Error(`Help styles did not load: ${missingStyles.join(", ")}`);
+        }
+
         await page.locator(
             ".dialogforge-web-help-window .dialogforge-web-dialog__close"
         ).click();
@@ -483,7 +502,10 @@ const verifyRenderedHelp = async function(options, product, port) {
             throw new Error(`Production web browser errors:\n${failures.join("\n")}`);
         }
 
-        console.log(`OK production web ?print help (${product.productId}) at ${baseUrl}`);
+        console.log(`OK production web ?print help (${product.productId}, ${browserName}) at ${baseUrl}`);
+    }
+    catch (error) {
+        throw new Error(`${browserName}: ${error.message}\nBrowser failures:\n${failures.join("\n") || "<none>"}`);
     }
     finally {
         await browser.close();
@@ -519,7 +541,19 @@ const main = async function() {
 
     try {
         await waitForServer(`http://127.0.0.1:${port}/`, server, 30000);
-        await verifyRenderedHelp(options, product, port);
+        const browserFailures = [];
+        for (const browser of options.browsers) {
+            try {
+                await verifyRenderedHelp(options, product, port, browser);
+            }
+            catch (error) {
+                browserFailures.push(error.message);
+                console.error(error.message);
+            }
+        }
+        if (browserFailures.length > 0) {
+            throw new Error(browserFailures.join("\n\n"));
+        }
     }
     catch (error) {
         const message = error instanceof Error ? error.stack || error.message : String(error);
