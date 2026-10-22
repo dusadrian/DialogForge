@@ -66,26 +66,38 @@ const acceptInstalled = async function(artifact, version, phase) {
         timeout: 60000
     });
     const child = app.process();
+    let page;
+    let processOutput = "";
+    child.stdout?.on("data", chunk => { processOutput += chunk.toString(); });
+    child.stderr?.on("data", chunk => { processOutput += chunk.toString(); });
     try {
-        const identity = await app.evaluate(({app}) => ({version: app.getVersion(), profile: app.getPath("userData")}));
+        const identity = await app.evaluate(({app}) => ({
+            version: app.getVersion(), profile: app.getPath("userData"),
+            electron: process.versions.electron
+        }));
         assert.equal(identity.version, version);
         assert.equal(identity.profile, userData);
-        const page = await findMainWindowPage(app);
+        page = await findMainWindowPage(app);
         const settings = await page.evaluate(() => window.dialogForge.readSettings());
         assert.equal(settings.showAttributesColumn, true);
         assert.equal(settings.terminalSettings.cursorBlink, false);
         const runtime = await page.evaluate(() => window.dialogForge.startRuntime());
-        assert.equal(runtime.status, "ready", JSON.stringify(runtime));
         for (const [name, content] of Object.entries(preservedFiles)) {
             assert.equal(fs.readFileSync(path.join(userData, name), "utf8"), content);
         }
         await page.screenshot({path: path.join(output, `${phase}.png`)});
-        record.phases.push({phase, version, runtime: runtime.status, settingsConsumed: true, preservedFiles: Object.keys(preservedFiles)});
+        record.phases.push({
+            phase, version, electron: identity.electron, runtime: runtime.status,
+            runtimeMessage: runtime.message, settingsConsumed: true,
+            preservedFiles: Object.keys(preservedFiles)
+        });
+        assert.equal(runtime.status, "ready", JSON.stringify(runtime));
     }
     finally {
         if (child.exitCode === null) {
             await app.close();
         }
+        fs.writeFileSync(path.join(output, `${phase}.log`), processOutput);
     }
 };
 
@@ -105,9 +117,21 @@ const main = async function() {
             fs.writeFileSync(path.join(userData, name), content);
         }
         const candidate = path.join(output, process.platform === "darwin" ? "DialogR-1.0.27-x64-mac.zip" : previousName);
-        await acceptInstalled(previous, "1.0.26", "before-upgrade");
-        await acceptInstalled(candidate, "1.0.27", "after-upgrade");
-        await acceptInstalled(previous, "1.0.26", "after-rollback");
+        const failures = [];
+        for (const [artifact, version, phase] of [
+            [previous, "1.0.26", "before-upgrade"],
+            [candidate, "1.0.27", "after-upgrade"],
+            [previous, "1.0.26", "after-rollback"]
+        ]) {
+            try {
+                await acceptInstalled(artifact, version, phase);
+            }
+            catch (error) {
+                failures.push({phase, error: error.stack});
+            }
+        }
+        record.failures = failures;
+        assert.equal(failures.length, 0, JSON.stringify(failures));
         record.result = "passed";
     }
     catch (error) {

@@ -1,0 +1,59 @@
+name: Check retained DialogR installers
+
+on:
+  push:
+    branches: [codex/iroh-110-qualification]
+    paths: [.github/workflows/check-retained-dialogr-installers.yml]
+  workflow_dispatch:
+    inputs:
+      candidate_run:
+        description: Successful DialogR Intel installer artifact run to qualify without rebuilding.
+        default: "39854329919"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  intel-macos:
+    runs-on: macos-15-intel
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - uses: r-lib/actions/setup-r@f9a764fea8d5c63df6ef9a5c7795bf7deb5d7e05
+        with:
+          r-version: '4.6.1'
+          use-public-rspm: false
+      - name: Install the declared runtime packages
+        shell: Rscript {0}
+        run: |
+          packages <- c("httpgd", "jsonlite", "askpass", "later", "digest", "admisc", "declared", "DDIwR", "statistics", "knitr")
+          install.packages(packages, repos = c("https://dusadrian.r-universe.dev", "https://cloud.r-project.org"))
+          stopifnot(all(vapply(packages, requireNamespace, logical(1), quietly = TRUE)))
+      - run: npm ci
+      - name: Download the already qualified signed Intel installer
+        uses: actions/download-artifact@v4
+        with:
+          repository: RODA/DialogR
+          name: dialogr-macos
+          run-id: ${{ inputs.candidate_run || '39854329919' }}
+          github-token: ${{ github.token }}
+          path: candidate
+      - name: Exercise all three installed versions and retain every phase
+        run: node tests/packaging/verify-installer-upgrade-rollback.js candidate
+      - name: Retain acceptance and failure evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dialogr-intel-installed-roundtrip
+          path: |
+            candidate/*acceptance.json
+            candidate/*.png
+            candidate/*.log
+          if-no-files-found: error
