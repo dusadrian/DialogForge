@@ -45,7 +45,8 @@ exports.checkActualPackageDependencies = async function(options) {
             const seed = await install(options.createInstallCommand(["DialogForgeDependencyFixture"], {
                 libraryPath: await query("dependency_fixture_library"), dependencies: false
             }), mode === "compatible-loaded" ? options.repository : options.seedRepository);
-            requireResult(seed.outcome === "success", "Actual old dependency seed failed");
+            requireResult(seed.outcome === "success", "Actual old dependency seed failed: "
+                + seed.records.map(record => record.event.message || "").join(""));
             requireResult(await query('as.character(utils::packageVersion("DialogForgeDependencyFixture"))')
                 === (mode === "compatible-loaded" ? "0.0.2" : "0.0.1"),
             "Dependency seed was not the actual expected version");

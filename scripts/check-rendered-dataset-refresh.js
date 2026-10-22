@@ -4,7 +4,7 @@ const projectRoot = path.resolve(__dirname, '..');
 // Actual native R/WebR and the SAME editor. The notification producer and
 // optional unavailable transport response are controlled retirement fixtures.
 const { chromium, _electron } = require('playwright');
-const { findMainWindowPage } = require('../tests/electron/product-launch');
+const { findMainWindowPage, closeTestApplication } = require('../tests/electron/product-launch');
 const [target, destination] = process.argv.slice(2);
 if (!target || !destination) {
     throw Error('Usage: node scripts/check-rendered-dataset-refresh.js <product-path|http-url> <private-result.json>');
@@ -27,6 +27,8 @@ if (!web) {
         page = web ? await app.newPage() : await findMainWindowPage(app);
         if (web) await page.goto(target);
         await page.waitForFunction(() => (document.body.dataset.dialogForgeReady === '1' || Boolean(window.dialogForgeWebConsole))
+            && !document.body.classList.contains('console-cover-visible')
+            && document.body.classList.contains('consoleMonacoReady')
             && Boolean(document.querySelector('#consoleTerminal [data-session-phase="ready"][data-runtime-busy="false"]')), undefined, {timeout: 120000});
         await page.evaluate(async web => {
             if (web) {
@@ -146,7 +148,11 @@ if (!web) {
     } finally {
         if (editor) report.reads=await editor.evaluate(() => window.probeReads).catch(error => ({error:String(error)}));
         fs.writeFileSync(destination, JSON.stringify(report,null,2));
-        await app.close();
+        if (web) {
+            await app.close();
+        } else {
+            await closeTestApplication(app);
+        }
         console.log(JSON.stringify({host:web?'webr':'native',retiredTransportFixture:Boolean(report.retiredTransportFixture),
             draftRetained:report.draftRetained,committedValue:report.committedValue,error:report.error}));
     }

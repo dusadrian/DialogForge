@@ -88,11 +88,11 @@ exports.createCommandEventRetirementProbe = function() {
 };
 
 exports.checkActualCommandEventRetirement = async function(options) {
-    const bounded = async function(work, message) {
+    const bounded = async function(work, message, timeoutMs = 10000) {
         let timer;
         try {
             return await Promise.race([work, new Promise((resolve, reject) => {
-                timer = setTimeout(() => reject(Error(options.host + ": " + message)), 10000);
+                timer = setTimeout(() => reject(Error(options.host + ": " + message)), timeoutMs);
             })]);
         } finally {
             clearTimeout(timer);
@@ -110,7 +110,7 @@ exports.checkActualCommandEventRetirement = async function(options) {
                 || JSON.stringify(producer.phases) !== JSON.stringify(["running", "evaluated"])) {
                 throw Error(options.host + ": Retirement gate did not follow actual successful R phases");
             }
-            const replacement = await bounded(options.restart("clean"), "Replacement stalled at held reply");
+            const replacement = await bounded(options.restart("clean"), "Replacement stalled at held reply", 30000);
             if (replacement.status !== "ready") {
                 throw Error(options.host + ": Replacement was not ready");
             }

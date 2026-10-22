@@ -36,7 +36,7 @@ const readDurableCacheState = function(page) {
         const registration = await navigator.serviceWorker.getRegistration();
         const names = await caches.keys();
         const assetCacheName = names.find((name) => {
-            return name.startsWith("dialogforge-assets-");
+            return name.startsWith("dialogforge-runtime-");
         });
         const entries = assetCacheName
             ? (await (await caches.open(assetCacheName)).keys())

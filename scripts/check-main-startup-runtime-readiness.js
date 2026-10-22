@@ -72,7 +72,7 @@ const createBindings = function (composition, authoritativeSession, calls) {
         focusVisibleCommandInput: noop,
         markReady: noop,
         startRuntimeSession: async function () {
-            calls.push("runtime-started");
+            calls.push("startup-requested");
             return runtimeSession("ready");
         },
         setBootStage: noop,
@@ -114,11 +114,13 @@ const verifyAuthoritativeReadyStateReplacesCompositionHint = async function () {
     assert.ok(calls.includes("session-rendered:starting"));
     assert.ok(calls.includes("session-rendered:ready"));
     assert.ok(calls.includes("console-rendered:ready"));
-    assert.ok(!calls.includes("runtime-started"));
+    assert.equal(calls.filter(call => call === "startup-requested").length, 1,
+        "An attached runtime still needs the shared product startup tasks.");
+    assert.ok(calls.indexOf("console-rendered:ready") < calls.indexOf("startup-requested"));
 };
 
 
-const verifyExistingStartupIsNotStartedAgain = async function () {
+const verifyExistingStartupStillCompletesProductStartup = async function () {
     const calls = [];
     const composition = compositionWithSession(runtimeSession("not-started"));
     const controller = createMainStartupController(
@@ -127,7 +129,8 @@ const verifyExistingStartupIsNotStartedAgain = async function () {
 
     await controller.start();
 
-    assert.ok(!calls.includes("runtime-started"));
+    assert.equal(calls.filter(call => call === "startup-requested").length, 1,
+        "The session controller owns joining an existing start and completing its tasks.");
 };
 
 
@@ -139,14 +142,17 @@ const main = async function () {
         callback();
         return 0;
     };
-    global.setTimeout = function (callback) {
+    global.setTimeout = function (callback, milliseconds) {
+        if (milliseconds >= 30000) {
+            return originalSetTimeout(callback, milliseconds);
+        }
         callback();
         return 0;
     };
 
     try {
         await verifyAuthoritativeReadyStateReplacesCompositionHint();
-        await verifyExistingStartupIsNotStartedAgain();
+        await verifyExistingStartupStillCompletesProductStartup();
     }
     finally {
         global.requestAnimationFrame = originalRequestAnimationFrame;

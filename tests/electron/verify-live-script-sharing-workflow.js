@@ -240,7 +240,7 @@ const waitForMainWindow = async function(app) {
 
 
 const verifyRuntime = async function(page, objectName) {
-    const events = await page.evaluate(async (name) => {
+    const receipt = await page.evaluate(async (name) => {
         return window.dialogForge.executeVisibleCommand({
             kind: "commands.visible",
             text: `${name} <- 1`,
@@ -249,8 +249,10 @@ const verifyRuntime = async function(page, objectName) {
         });
     }, objectName);
 
-    if (!Array.isArray(events)) {
-        throw new Error("Runtime probe did not return transcript events.");
+    if (receipt.executionDisposition !== "completed"
+        || receipt.evaluationOutcome !== "success"
+        || !Array.isArray(receipt.transcriptEvents)) {
+        throw new Error("Runtime probe did not return an accepted successful receipt: " + JSON.stringify(receipt));
     }
 
     await page.waitForFunction(async (name) => {
@@ -260,10 +262,26 @@ const verifyRuntime = async function(page, objectName) {
 };
 
 
+const waitForEditorResponse = async function(work, message, timeoutMs = 30000) {
+    let timer;
+    try {
+        return await Promise.race([
+            work,
+            new Promise((_resolve, reject) => {
+                timer = setTimeout(() => reject(new Error(message)), timeoutMs);
+            })
+        ]);
+    }
+    finally {
+        clearTimeout(timer);
+    }
+};
+
+
 const openScriptEditor = async function(app, mainPage, filePath) {
-    const result = await mainPage.evaluate((nextPath) => {
+    const result = await waitForEditorResponse(mainPage.evaluate((nextPath) => {
         return window.dialogForge.openScriptFilePathInEditor(nextPath);
-    }, filePath);
+    }, filePath), "Script Editor open request did not complete within 30 seconds.");
 
     if (result.status !== "ready") {
         throw new Error(`Could not open Script Editor: ${result.message}`);
@@ -284,7 +302,7 @@ const openScriptEditor = async function(app, mainPage, filePath) {
                 });
             }
             catch (error) {
-                const state = await page.evaluate(() => ({
+                const state = await waitForEditorResponse(page.evaluate(() => ({
                     readyState: document.readyState,
                     title: document.title,
                     bodyText: document.body?.innerText || "",
@@ -292,16 +310,26 @@ const openScriptEditor = async function(app, mainPage, filePath) {
                     textareaCount: document.querySelectorAll(
                         ".monaco-editor textarea"
                     ).length
-                }));
+                })), "Script Editor renderer is unresponsive after its render timeout.", 3000);
                 throw new Error(
                     `Script Editor did not render Monaco: ${JSON.stringify(state)}`,
                     { cause: error }
                 );
             }
-            await page.locator(".dm-script-btn-share-live").waitFor({
-                state: "attached",
-                timeout: 10000
-            });
+            try {
+                await page.locator(".dm-script-btn-share-live").waitFor({
+                    state: "attached",
+                    timeout: 10000
+                });
+            }
+            catch (error) {
+                console.error("Script toolbar state: " + JSON.stringify(await waitForEditorResponse(page.evaluate(() => ({
+                    url: location.href, body: document.body.innerText,
+                    toolbars: [...document.querySelectorAll(".dm-script-toolbar")].map(node => node.outerHTML),
+                    buttons: [...document.querySelectorAll("button")].map(node => ({text:node.innerText, className:node.className}))
+                })), "Script Editor renderer is unresponsive after its toolbar timeout.", 3000)));
+                throw error;
+            }
             return page;
         }
 
@@ -369,11 +397,7 @@ const run = async function() {
         }
         : await startRendezvous();
 
-    const hostApp = await launchInstance(
-        path.join(tempDirectory, "host-data"),
-        rendezvous.url
-    );
-    observePageErrors(hostApp, "instructor");
+    let hostApp = null;
     let participantApp = null;
     let duplicateApp = null;
     let hostMain = null;
@@ -381,6 +405,11 @@ const run = async function() {
     let duplicateMain = null;
 
     try {
+        hostApp = await launchInstance(
+            path.join(tempDirectory, "host-data"),
+            rendezvous.url
+        );
+        observePageErrors(hostApp, "instructor");
         hostMain = await waitForMainWindow(hostApp);
         await verifyRuntime(hostMain, `host_runtime_probe_${Date.now()}`);
         process.stdout.write("live-script UI: instructor main ready\n");
