@@ -1,6 +1,9 @@
 import type {
     EvaluatedMenuItem
 } from "../core/contracts/applicationComposition";
+import {
+    arrangeApplicationMenu
+} from "../base-app/menu/applicationMenuLayout";
 
 
 export interface BrowserMenuAdapterOptions {
@@ -129,7 +132,7 @@ export const createBrowserMenuAdapter = function(
     const render = function(menu: EvaluatedMenuItem[]): void {
         options.menuBar.replaceChildren();
 
-        for (const item of menu || []) {
+        for (const item of arrangeApplicationMenu(menu || [], false)) {
             const root = options.menuBar.ownerDocument.createElement("div");
             const button = options.menuBar.ownerDocument.createElement("button");
             const popup = options.menuBar.ownerDocument.createElement("div");
