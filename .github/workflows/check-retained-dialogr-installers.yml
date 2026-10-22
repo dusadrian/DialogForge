@@ -11,6 +11,11 @@ on:
         default: "39854329919"
         required: true
         type: string
+      rollback:
+        description: Rollback artifact. Published 1.0.26 is retained as a diagnostic for its startup failure.
+        default: qualified-035
+        type: choice
+        options: [qualified-035, published-026]
 
 permissions:
   contents: read
@@ -45,8 +50,25 @@ jobs:
           run-id: ${{ inputs.candidate_run || '39854329919' }}
           github-token: ${{ github.token }}
           path: candidate
+      - name: Download the retained Electron 43 and iroh 0.35 rollback build
+        if: inputs.rollback != 'published-026'
+        uses: actions/download-artifact@v4
+        with:
+          repository: RODA/DialogR
+          name: dialogr-macos
+          run-id: '39839439497'
+          github-token: ${{ github.token }}
+          path: previous
       - name: Exercise all three installed versions and retain every phase
-        run: node tests/packaging/verify-installer-upgrade-rollback.js candidate
+        shell: bash
+        run: |
+          if [ -f previous/DialogR_intel.dmg ]; then
+            rollback_sha=$(shasum -a 256 previous/DialogR_intel.dmg | cut -d ' ' -f 1)
+            echo "Retained rollback DMG SHA256: $rollback_sha"
+            node tests/packaging/verify-installer-upgrade-rollback.js candidate previous/DialogR_intel.dmg "$rollback_sha"
+          else
+            node tests/packaging/verify-installer-upgrade-rollback.js candidate
+          fi
       - name: Retain acceptance and failure evidence
         if: always()
         uses: actions/upload-artifact@v4

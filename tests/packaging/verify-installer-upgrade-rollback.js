@@ -19,9 +19,16 @@ const previousAssets = {
     linux: ["DialogR_intel.AppImage", "65999b382aac06aac41a75074dd8d8c5613aaf96d1a8773bf4f69afe1e6b0883"],
     win32: ["DialogR_setup_intel.exe", "caef7428677d5ed3ec15fbd33b6388c03de5a065950f6c5a8f50f342e3f0f8ab"]
 };
-const [previousName, previousHash] = previousAssets[process.platform];
-const previous = path.join(temporary, previousName);
-const record = { platform: process.platform, arch: process.arch, previousHash, phases: [], scope: "installer replacement and manual rollback, not automatic updater UI" };
+const [previousName, publishedHash] = previousAssets[process.platform];
+const previousArtifact = process.argv[3] ? path.resolve(process.argv[3]) : "";
+const previousHash = previousArtifact ? String(process.argv[4] || "") : publishedHash;
+assert.match(previousHash, /^[a-f0-9]{64}$/, "An explicit rollback artifact requires its SHA256");
+const previous = previousArtifact || path.join(temporary, previousName);
+const record = {
+    platform: process.platform, arch: process.arch, previousHash,
+    previousSource: previousArtifact ? "retained qualified artifact" : "published 1.0.26",
+    phases: [], scope: "installer replacement and manual rollback, not automatic updater UI"
+};
 const run = function(command, args, options = {}) {
     return execFileSync(command, args, { timeout: 600000, maxBuffer: 32 * 1024 * 1024, ...options });
 };
@@ -34,8 +41,20 @@ const install = function(artifact) {
     fs.rmSync(installed, {recursive: true, force: true});
     fs.mkdirSync(installed, {recursive: true});
     if (process.platform === "darwin") {
-        run("ditto", ["-x", "-k", artifact, installed]);
         const application = path.join(installed, "DialogR.app");
+        if (artifact.endsWith(".dmg")) {
+            const mount = path.join(temporary, "rollback-volume");
+            run("hdiutil", ["attach", artifact, "-readonly", "-nobrowse", "-mountpoint", mount]);
+            try {
+                run("ditto", [path.join(mount, "DialogR.app"), application]);
+            }
+            finally {
+                run("hdiutil", ["detach", mount]);
+            }
+        }
+        else {
+            run("ditto", ["-x", "-k", artifact, installed]);
+        }
         run("codesign", ["--verify", "--deep", "--strict", application]);
         return { executable: path.join(application, "Contents/MacOS/DialogR"), resources: path.join(application, "Contents/Resources") };
     }
@@ -88,6 +107,7 @@ const acceptInstalled = async function(artifact, version, phase) {
         await page.screenshot({path: path.join(output, `${phase}.png`)});
         record.phases.push({
             phase, version, electron: identity.electron, runtime: runtime.status,
+            iroh: manifest.dependencies["@number0/iroh"],
             runtimeMessage: runtime.message, settingsConsumed: true,
             preservedFiles: Object.keys(preservedFiles)
         });
@@ -103,9 +123,11 @@ const acceptInstalled = async function(artifact, version, phase) {
 
 const main = async function() {
     try {
-        const response = await fetch(`https://github.com/RODA/DialogR/releases/download/latest/${previousName}`);
-        assert.ok(response.ok, `Previous artifact download: ${response.status}`);
-        fs.writeFileSync(previous, Buffer.from(await response.arrayBuffer()));
+        if (!previousArtifact) {
+            const response = await fetch(`https://github.com/RODA/DialogR/releases/download/latest/${previousName}`);
+            assert.ok(response.ok, `Previous artifact download: ${response.status}`);
+            fs.writeFileSync(previous, Buffer.from(await response.arrayBuffer()));
+        }
         const actualHash = crypto.createHash("sha256").update(fs.readFileSync(previous)).digest("hex");
         assert.equal(actualHash, previousHash, "Previous release changed; review its pin before retesting");
         fs.mkdirSync(userData, {recursive: true});
