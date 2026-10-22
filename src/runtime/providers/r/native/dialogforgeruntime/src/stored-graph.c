@@ -9,6 +9,8 @@ typedef struct {
     SEXP deferred_string;
     SEXP integer_wrapper;
     SEXP real_wrapper;
+    SEXP string_wrapper;
+    SEXP list_wrapper;
     int remaining;
     int depth;
     int safe;
@@ -37,7 +39,8 @@ static int inspect_stored_graph(SEXP value, InspectionGraph *graph)
         SEXP class = ALTREP_CLASS(value);
         if (class != graph->integer_sequence && class != graph->real_sequence &&
             class != graph->deferred_string && class != graph->integer_wrapper &&
-            class != graph->real_wrapper) {
+            class != graph->real_wrapper && class != graph->string_wrapper &&
+            class != graph->list_wrapper) {
             return 0;
         }
         /* Even a stock representation can wrap callback-backed contents. */
@@ -101,14 +104,24 @@ SEXP df_stored_graph_is_inspectable(
         return Rf_ScalarLogical(0);
     }
     SEXP strings = PROTECT(Rf_coerceVector(integer_sequence, STRSXP));
+    /* Attribute assignment during labelled imports can wrap ordinary strings.
+       Obtain the stock class from R itself, never from the inspected value. */
+    SEXP string_value = PROTECT(Rf_allocVector(STRSXP, 0));
+    SEXP string_wrapper = PROTECT(R_tryWrap(string_value));
+    SEXP list_value = PROTECT(Rf_allocVector(VECSXP, 0));
+    SEXP list_wrapper = PROTECT(R_tryWrap(list_value));
     InspectionGraph graph = {
         ALTREP_CLASS(integer_sequence), ALTREP_CLASS(real_sequence),
         ALTREP(strings) ? ALTREP_CLASS(strings) : R_NilValue,
         ALTREP(integer_wrapper) ? ALTREP_CLASS(integer_wrapper) : R_NilValue,
         ALTREP(real_wrapper) ? ALTREP_CLASS(real_wrapper) : R_NilValue,
-        4096, 0, 1
+        ALTREP(string_wrapper) ? ALTREP_CLASS(string_wrapper) : R_NilValue,
+        ALTREP(list_wrapper) ? ALTREP_CLASS(list_wrapper) : R_NilValue,
+        /* Survey columns carry labels, missing values and format metadata.
+           Bound structural traversal without imposing a small-column limit. */
+        65536, 0, 1
     };
     int safe = inspect_stored_graph(value, &graph);
-    UNPROTECT(1);
+    UNPROTECT(5);
     return Rf_ScalarLogical(safe);
 }

@@ -59,7 +59,8 @@ local({
     # R representations, not foreign callback-backed ALTREP implementations.
     for (candidate in list(
         structure(1:10000, label = "Integer wrapper"),
-        structure(2147483648:2147493647, label = "Real wrapper")
+        structure(2147483648:2147493647, label = "Real wrapper"),
+        structure(rep("Survey text", 10000L), label = "String wrapper")
     )) {
         stopifnot(runtime$runtime_stored_graph_is_inspectable(candidate))
     }
@@ -70,6 +71,42 @@ local({
     before <- .Call(count)
     stopifnot(
         !runtime$runtime_stored_graph_is_inspectable(wrapped_probe),
+        .Call(count) == before
+    )
+
+    # A real survey can exceed 4096 structural nodes through column metadata
+    # alone. Keep both snapshot paths eligible without stripping any metadata.
+    survey_column <- structure(
+        rep("RO", 1846L),
+        label = "Country",
+        spss_metadata = list(
+            format = "A2", measure = "nominal", alignment = "left", width = 2L
+        ),
+        date = FALSE,
+        class = c("declared", "character")
+    )
+    survey <- structure(
+        rep(list(survey_column), 338L),
+        names = paste0("v", seq_len(338L)),
+        row.names = c(NA_integer_, -1846L),
+        class = "data.frame"
+    )
+    assign(name, survey, .GlobalEnv)
+    survey_before <- serialize(survey, NULL)
+    snapshot <- runtime$workspace_snapshot()
+    update <- runtime$collect_workspace_update(runtime$workspace_state_from_snapshot(snapshot))
+    stopifnot(
+        snapshot$variables[[1]]$has_viewer,
+        update$state$variables[[name]]$has_viewer,
+        identical(serialize(get(name, .GlobalEnv), NULL), survey_before)
+    )
+    # Insert the hostile vector without data.frame replacement inspecting it.
+    unsafe_survey <- unclass(survey)
+    unsafe_survey[338L] <- list(wrapped_probe)
+    class(unsafe_survey) <- "data.frame"
+    before <- .Call(count)
+    stopifnot(
+        !runtime$runtime_stored_graph_is_inspectable(unsafe_survey),
         .Call(count) == before
     )
 

@@ -823,6 +823,9 @@ workspace_stored_value_is_inspectable <- function(
     }
     pending <- list(value)
     inspected <- 0L
+    # Match the compiled inspection budget for metadata-rich survey datasets.
+    # Copy reuse retains its smaller bound because it is only an optimization.
+    inspection_limit <- if (isTRUE(standard_classes)) 65536L else 4096L
     supported_classes <- list("data.frame")
 
     if (isTRUE(standard_classes)) {
@@ -850,7 +853,7 @@ workspace_stored_value_is_inspectable <- function(
         pending[index] <- NULL
         inspected <- inspected + 1L
 
-        if (inspected > 4096L) {
+        if (inspected > inspection_limit) {
             return(FALSE)
         }
 
@@ -889,7 +892,7 @@ workspace_stored_value_is_inspectable <- function(
 
         if (
             inspected + length(pending) + length(stored_attributes) +
-                length(stored_values) > 4096L
+                length(stored_values) > inspection_limit
         ) {
             return(FALSE)
         }
