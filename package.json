@@ -77,6 +77,10 @@
         ],
         "mac": {
             "category": "public.app-category.developer-tools",
+            "signIgnore": [
+                "/r-runtime/native/[^/]+-linux-gnu-[0-9]+\\.[0-9]+\\.[0-9]+/",
+                "/r-runtime/native/[^/]+-mingw32-[0-9]+\\.[0-9]+\\.[0-9]+/"
+            ],
             "extendInfo": {
                 "NSHumanReadableCopyright": "© 2025-2026 Adrian Dusa — Academic Non-Commercial License (see LICENSE file for details)."
             },
