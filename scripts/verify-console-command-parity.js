@@ -29,6 +29,7 @@ const readArgs = function(argv = process.argv.slice(2)) {
         productPath: "",
         electronApp: "",
         packageMessages: "",
+        workerEntryDelayMs: 0,
         buildWeb: false,
         cases: undefined,
         report: path.join(rootDir, "artifacts/console-command-parity/paired.json"),
@@ -50,6 +51,7 @@ const readArgs = function(argv = process.argv.slice(2)) {
             "--product-path": "productPath",
             "--electron-app": "electronApp",
             "--package-messages": "packageMessages",
+            "--worker-entry-delay-ms": "workerEntryDelayMs",
             "--cases": "cases",
             "--report": "report",
             "--timeout-ms": "timeoutMs"
@@ -74,6 +76,14 @@ const normalizeOptions = function(options) {
     }
     if (!["", "cli", "tidyverse"].includes(options.packageMessages)) {
         throw new Error("--package-messages must be cli or tidyverse.");
+    }
+    options.workerEntryDelayMs = Number(options.workerEntryDelayMs || 0);
+    if (
+        !Number.isInteger(options.workerEntryDelayMs)
+        || options.workerEntryDelayMs < 0
+        || options.workerEntryDelayMs > 5000
+    ) {
+        throw new Error("--worker-entry-delay-ms must be an integer from 0 to 5000.");
     }
 
     options.distDir = path.resolve(options.distDir);
@@ -494,6 +504,46 @@ const runWeb = async function(options, report, temporaryRoot) {
         const context = await browser.newContext({
             permissions: ["clipboard-read", "clipboard-write"]
         });
+        await context.addInitScript(() => {
+            globalThis.dialogForgeRuntimeDiagnostics = {
+                enabled: true,
+                dropped: 0,
+                entries: [],
+                clear: function() {
+                    this.entries.length = 0;
+                    this.dropped = 0;
+                }
+            };
+        });
+        if (options.workerEntryDelayMs) {
+            await context.route(/\/webr\.(?:mjs|js)(?:\?.*)?$/, async function(route) {
+                const response = await route.fetch();
+                const source = await response.text();
+                const exported = source.match(/\b(\w+)\s+as\s+WebR\b/);
+                if (!exported) {
+                    failures.push("The worker entry fixture requires the actual WebR export.");
+                    await route.abort();
+                    return;
+                }
+                await route.fulfill({
+                    response,
+                    body: [
+                        source,
+                        "(() => {",
+                        `    const original = ${exported[1]}.prototype.evalRVoid;`,
+                        `    ${exported[1]}.prototype.evalRVoid = async function(command, options) {`,
+                        '        if (command.includes("execute_input") && command.includes("Sys.sleep(60)")) {',
+                        "            globalThis.dialogForgeConsoleWorkerEntryDelays =",
+                        "                (globalThis.dialogForgeConsoleWorkerEntryDelays || 0) + 1;",
+                        `            await new Promise(resolve => setTimeout(resolve, ${options.workerEntryDelayMs}));`,
+                        "        }",
+                        "        return original.call(this, command, options);",
+                        "    };",
+                        "})();"
+                    ].join("\n")
+                });
+            });
+        }
         page = await context.newPage();
         observePageFailures(page, failures);
         await page.goto(baseUrl);
@@ -508,6 +558,13 @@ const runWeb = async function(options, report, temporaryRoot) {
                 console.log(`OK WebR console ${result.name}`);
             }
         });
+        if (options.workerEntryDelayMs) {
+            report.web.delayedWorkerEntries = await page.evaluate(() => {
+                return globalThis.dialogForgeConsoleWorkerEntryDelays || 0;
+            });
+            assert.equal(report.web.delayedWorkerEntries, 1,
+                "Early Stop acceptance must delay one actual worker evaluation.");
+        }
         if (options.packageMessages) {
             const { runConsolePackageMessageParity } = require("../tests/support/console-package-message-parity");
             report.web.packageMessages = await runConsolePackageMessageParity(page, {
@@ -543,6 +600,17 @@ const runWeb = async function(options, report, temporaryRoot) {
     }
     catch (error) {
         if (options.report && page && !page.isClosed()) {
+            report.web.browserErrors = failures;
+            report.web.delayedWorkerEntries = await page.evaluate(() => {
+                return globalThis.dialogForgeConsoleWorkerEntryDelays || 0;
+            }).catch(() => null);
+            report.web.runtimeDiagnostics = await page.evaluate(() => {
+                const journal = globalThis.dialogForgeRuntimeDiagnostics;
+                return journal ? {
+                    dropped: journal.dropped,
+                    entries: journal.entries.slice(-240)
+                } : null;
+            }).catch(() => null);
             report.web.screenshot = options.report + ".web.png";
             await page.screenshot({ path: report.web.screenshot }).catch(() => undefined);
         }

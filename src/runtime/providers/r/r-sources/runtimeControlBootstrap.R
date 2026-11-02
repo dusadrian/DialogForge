@@ -557,8 +557,9 @@ write_meta(list(
 
 if (identical(session_kind, "dedicated")) {
     repeat {
+        # A frontend SIGINT can also reach an idle or incomplete native poll.
         tryCatch(
-            suspendInterrupts(safe(process_once())),
+            runtime_run_control_request_action(function() safe(process_once())),
             interrupt = function(condition) invisible(NULL)
         )
     }

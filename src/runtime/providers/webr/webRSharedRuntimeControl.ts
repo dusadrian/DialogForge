@@ -190,12 +190,15 @@ const executeWorkerRuntimeMethod = async function(
         "return null;",
         "})()"
     ].join("\n");
+    const payloadCommand = command.replace(/\n/g, "\n        ");
     const fileCommand = [
-        "local({",
-        `    on.exit(webr::eval_js(${JSON.stringify(notifyDrain)}), add = TRUE)`,
-        `    .payload <- ${command}`,
-        `    writeChar(.payload, ${JSON.stringify(responsePath)}, eos = NULL, useBytes = TRUE)`,
-        "    invisible(NULL)",
+        'as.environment("DialogApp")$runtime_run_control_request_action(function() {',
+        "    local({",
+        `        on.exit(webr::eval_js(${JSON.stringify(notifyDrain)}), add = TRUE)`,
+        `        .payload <- ${payloadCommand}`,
+        `        writeChar(.payload, ${JSON.stringify(responsePath)}, eos = NULL, useBytes = TRUE)`,
+        "        invisible(NULL)",
+        "    })",
         "})"
     ].join("\n");
     // WebR's outer evaluator normally captures/muffles conditions before R

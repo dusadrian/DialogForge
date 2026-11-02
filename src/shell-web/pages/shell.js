@@ -3661,6 +3661,7 @@ const ensureRuntime = async function () {
                     if (state.runtime !== runtime || !state.runtimeReady) {
                         return;
                     }
+                    state.runtimeSession?.recordRuntimeControlEvent(event);
                     state.console?.recordTranscriptEvents?.(
                         createLiveTranscriptEventsFromRuntimeControl(
                             event,

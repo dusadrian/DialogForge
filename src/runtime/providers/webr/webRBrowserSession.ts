@@ -18,6 +18,7 @@ import {
 } from "../../session/runtimeSessionManager";
 import { createRuntimeVisibleCommandDelivery } from "../../commands/runtimeVisibleCommandDelivery";
 import {
+    canSignalBrowserWebRInterrupt,
     signalBrowserWebRInterrupt
 } from "./webRBrowserRuntime";
 import {
@@ -35,6 +36,9 @@ import {
 import {
     createRRuntimeEventController
 } from "../r/controllers/rRuntimeEventController";
+import {
+    createRRuntimeCommandInterrupt
+} from "../r/controllers/rRuntimeCommandInterrupt";
 import {
     webRRuntimeManifest
 } from "./webRRuntimeManifest";
@@ -72,6 +76,7 @@ export interface BrowserWebRSessionBindings {
 
 export interface BrowserWebRSession {
     runtimeSessionManager: RuntimeSessionManager;
+    recordRuntimeControlEvent(event: unknown): void;
     executeVisibleCommand(
         text: string,
         options?: WebRVisibleCommandOptions
@@ -84,6 +89,16 @@ export const createBrowserWebRSession = function(
 ): BrowserWebRSession {
     const client = bindings.runtimeControlClient;
     const runtimeEvents = createRRuntimeEventController();
+    const commandInterrupt = createRRuntimeCommandInterrupt({
+        isCurrent: bindings.isCurrentSession,
+        canInterrupt: function() {
+            return canSignalBrowserWebRInterrupt(bindings.runtime);
+        },
+        signalInterrupt: function() {
+            return signalBrowserWebRInterrupt(bindings.runtime);
+        },
+        onTranscriptEvents: bindings.visibleCommands.recordTranscriptEvents
+    });
     let requestSequence = 0;
     const createRequestId = function(prefix: string): string {
         requestSequence += 1;
@@ -100,7 +115,11 @@ export const createBrowserWebRSession = function(
         createRequestId,
         resolveParentId: function(request) {
             return String(request.activityId || "");
-        }
+        },
+        onExecutionStarted: function(request, parentId) {
+            commandInterrupt.begin(parentId);
+        },
+        onExecutionFinished: commandInterrupt.finish
     });
     const executeControllerVisibleCommand = async function(
         commandText: string,
@@ -124,12 +143,7 @@ export const createBrowserWebRSession = function(
         getClient,
         createRequestId,
         executeVisibleCommand: executeControllerVisibleCommand,
-        interrupt: function() {
-            if (bindings.isCurrentSession?.() === false) {
-                return null;
-            }
-            return signalBrowserWebRInterrupt(bindings.runtime);
-        },
+        interrupt: commandInterrupt.requestInterrupt,
         interruptUnavailableMessage: "WebR interrupt is not available in this browser runtime.",
         interruptAcceptedMessage: "WebR worker accepted the interrupt request.",
         interruptFailedMessage: "WebR worker did not accept the interrupt request.",
@@ -167,6 +181,7 @@ export const createBrowserWebRSession = function(
 
     return {
         runtimeSessionManager,
+        recordRuntimeControlEvent: commandInterrupt.observeEvent,
         executeVisibleCommand: async function(text, options = {}) {
             const request = createVisibleCommandRequest({
                 text,

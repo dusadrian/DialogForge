@@ -513,6 +513,32 @@ runtime_transport_error_payload <- function(error, dedicated) {
 }
 
 
+runtime_run_control_request_action <- function(action) {
+    result <- NULL
+    completed <- FALSE
+
+    tryCatch(
+        suspendInterrupts({
+            result <- action()
+            completed <- TRUE
+            tryCatch(
+                allowInterrupts(Sys.sleep(0)),
+                interrupt = function(condition) invisible(NULL)
+            )
+        }),
+        interrupt = function(condition) {
+            if (!completed) {
+                signalCondition(condition)
+                stop("Control request was interrupted before response delivery completed.", call. = FALSE)
+            }
+            invisible(NULL)
+        }
+    )
+
+    result
+}
+
+
 runtime_evaluate_control_request <- function(request, collect_events = FALSE) {
     method <- request$method
     if (

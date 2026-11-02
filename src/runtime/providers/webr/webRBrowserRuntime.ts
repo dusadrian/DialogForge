@@ -11,14 +11,21 @@ const interruptibleRuntimes = new WeakSet<object>();
 // WebR 0.6 Automatic selects shared memory when SharedArrayBuffer is available.
 // Its PostMessage interrupt only logs unsupported and returns void, so calling
 // interrupt() alone cannot establish acceptance. Remember the factory's channel.
-export const signalBrowserWebRInterrupt = function(runtime: unknown): boolean | null {
+export const canSignalBrowserWebRInterrupt = function(runtime: unknown): boolean {
     if (!runtime || typeof runtime !== "object" || !interruptibleRuntimes.has(runtime)) {
-        return null;
+        return false;
     }
     const worker = runtime as { interrupt?: () => void };
-    if (typeof worker.interrupt !== "function") {
+
+    return typeof worker.interrupt === "function";
+};
+
+
+export const signalBrowserWebRInterrupt = function(runtime: unknown): boolean | null {
+    if (!canSignalBrowserWebRInterrupt(runtime)) {
         return null;
     }
+    const worker = runtime as { interrupt(): void };
     worker.interrupt();
     return true;
 };

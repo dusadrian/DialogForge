@@ -34,6 +34,9 @@ import {
 import {
     createRRuntimeEventController
 } from "../controllers/rRuntimeEventController";
+import {
+    createRRuntimeCommandInterrupt
+} from "../controllers/rRuntimeCommandInterrupt";
 import type { RRuntimeLaunchPlan } from "./runtimeLaunchPlan";
 import { prepareNativeOrderedOutput } from "./runtimeOrderedOutputExecutionPrototype";
 
@@ -79,12 +82,23 @@ export const createRRuntimeProcessController = function(
     const orderedCaptures = new Set<ReturnType<typeof prepareNativeOrderedOutput>>();
     const startupTimeoutMs = options.startupTimeoutMs ?? 7000;
     const runtimeEvents = createRRuntimeEventController();
+    const commandInterrupt = createRRuntimeCommandInterrupt({
+        canInterrupt: function() {
+            return processHost.canInterrupt();
+        },
+        signalInterrupt: function() {
+            return processHost.interrupt();
+        },
+        onTranscriptEvents: options.onTranscriptEvents
+    });
     let activeVisibleCommand: {
         request: VisibleCommandRequest;
         parentId: string;
     } | null = null;
 
     const streamRuntimeControlEvent = function(event: unknown): void {
+        commandInterrupt.observeEvent(event);
+
         if (!activeVisibleCommand || !options.onTranscriptEvents) {
             return;
         }
@@ -151,9 +165,11 @@ export const createRRuntimeProcessController = function(
         createRequestId,
         onRuntimeControlEvents: runtimeEvents.recordRuntimeControlEvents,
         onExecutionStarted: function(request, parentId) {
+            commandInterrupt.begin(parentId);
             activeVisibleCommand = { request, parentId };
         },
         onExecutionFinished: function(parentId) {
+            commandInterrupt.finish(parentId);
             if (activeVisibleCommand?.parentId !== parentId) {
                 return;
             }
@@ -181,6 +197,7 @@ export const createRRuntimeProcessController = function(
         startupTimeoutMs,
         onClientChanged: (nextClient, context) => {
             if (client !== nextClient) {
+                commandInterrupt.retire();
                 for (const capture of orderedCaptures) {
                     void capture.retire();
                 }
@@ -215,7 +232,7 @@ export const createRRuntimeProcessController = function(
         },
         createRequestId,
         executeVisibleCommand: executeVisibleRCommandWithEffects,
-        interrupt: processHost.interrupt
+        interrupt: commandInterrupt.requestInterrupt
     });
 
     return {

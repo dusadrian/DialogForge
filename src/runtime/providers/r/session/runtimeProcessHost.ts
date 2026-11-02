@@ -51,6 +51,7 @@ export interface RRuntimeProcessHost {
         snapshot: RuntimeSessionSnapshot
     ) => Promise<RuntimeSessionSnapshot>;
     interrupt: () => boolean | null;
+    canInterrupt: () => boolean;
 }
 
 const waitForStartupOutputDrain = async function(): Promise<void> {
@@ -443,6 +444,12 @@ export const createRRuntimeProcessHost = function(
             await stopRuntime();
 
             return stoppedSnapshot(snapshot);
+        },
+        canInterrupt: function(): boolean {
+            return Boolean(
+                child && child.exitCode === null && child.signalCode === null
+                && child.pid && (process.platform !== "win32" || plan)
+            );
         },
         interrupt: function(): boolean | null {
             if (!child || child.exitCode !== null || child.signalCode !== null) {

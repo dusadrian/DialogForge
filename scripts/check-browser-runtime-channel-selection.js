@@ -3,7 +3,7 @@
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const {
-    createBrowserWebRRuntime, signalBrowserWebRInterrupt
+    createBrowserWebRRuntime, canSignalBrowserWebRInterrupt, signalBrowserWebRInterrupt
 } = require("../dist/src/runtime/providers/webr/webRBrowserRuntime");
 const { createBrowserWebRSession } = require("../dist/src/runtime/providers/webr/webRBrowserSession");
 
@@ -37,6 +37,7 @@ const main = async function() {
 
     await createBrowserWebRRuntime({ importWebRModule });
     assert.deepEqual(received[1], {});
+    assert.equal(canSignalBrowserWebRInterrupt(interruptible), true);
     assert.equal(signalBrowserWebRInterrupt(interruptible), true);
     assert.equal(signals, 1);
     let current = true;
@@ -47,23 +48,25 @@ const main = async function() {
         workspaceChanged: async () => {}
     });
     const delivered = await session.runtimeSessionManager.executeRuntimeMethod({ method: "runtime.interrupt", params: {} });
-    assert.equal(delivered.status, "ready", "The browser session uses the SAME R extension controller");
-    assert.match(delivered.message, /WebR worker accepted/);
+    assert.equal(delivered.status, "unavailable", "An idle browser session has no command to interrupt");
+    assert.match(delivered.message, /WebR interrupt is not available/);
     assert.ok(!delivered.message.includes("SIGINT"), "Worker delivery is not a native OS signal");
-    assert.equal(signals, 2);
+    assert.equal(signals, 1, "An idle session must not leave an interrupt pending for its next command");
     current = false;
     const retired = await session.runtimeSessionManager.executeRuntimeMethod({ method: "runtime.interrupt", params: {} });
     assert.equal(retired.status, "unavailable");
-    assert.equal(signals, 2, "A retired browser session cannot signal its old worker");
+    assert.equal(signals, 1, "A retired browser session cannot signal its old worker");
+    assert.equal(canSignalBrowserWebRInterrupt({ interrupt() { signals++; } }), false);
     assert.equal(signalBrowserWebRInterrupt({ interrupt() { signals++; } }), null,
         "An untracked SDK channel cannot be assumed to support Interrupt");
     const sharedMemory = Object.getOwnPropertyDescriptor(globalThis, "SharedArrayBuffer");
     try {
         Object.defineProperty(globalThis, "SharedArrayBuffer", { configurable: true, value: undefined });
         const unsupported = await createBrowserWebRRuntime({ importWebRModule });
+        assert.equal(canSignalBrowserWebRInterrupt(unsupported), false);
         assert.equal(signalBrowserWebRInterrupt(unsupported), null,
             "PostMessage's void/log-only interrupt must not be acknowledged as accepted");
-        assert.equal(signals, 2, "Unsupported physical channels must not receive a fake-success signal");
+        assert.equal(signals, 1, "Unsupported physical channels must not receive a fake-success signal");
     } finally {
         Object.defineProperty(globalThis, "SharedArrayBuffer", sharedMemory);
     }

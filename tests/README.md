@@ -13,6 +13,9 @@ real continuation lines, semicolons, invisible results, history recall, errors,
 Stop/recovery, selected code executed with the Script Editor Run button,
 message emitters and suppression, and workspace updates after dynamic S3 method
 registration.
+An additional WebR run delays actual worker entry, clicks the same Stop button,
+and requires cancellation and a successful following command. This catches an
+early Stop arriving before R can handle interrupts.
 Native R and WebR execute the same cases and assertions. The runner starts
 Electron in a fresh working directory so its preload cannot accidentally load
 the checkout's `dist` when testing a copied or packaged application. Tests do not infer
@@ -40,6 +43,12 @@ grouped, and startup capture. They cover line endings, custom default emitters,
 signal-only conditions, suppression, sinks, warnings, and connection lifetime.
 The required rendered cases do not depend on third-party packages. CI also
 installs cli and rlang and checks their actual emitters in native R.
+
+Use `--host web --cases interrupt --worker-entry-delay-ms 200` to run the
+delayed-entry case directly. The runner wraps only WebR's actual module API to
+delay scheduling; it uses the real worker and console controls. It asserts that
+one worker entry was delayed. Failure reports retain the bounded runtime phase
+journal to distinguish evaluation, delivery, and teardown failures.
 
 For an existing build, `--host native --package-messages tidyverse` additionally
 checks actual cli/rlang output, tidyverse attachment, and subsequent console and
