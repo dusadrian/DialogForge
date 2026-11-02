@@ -34,12 +34,15 @@ jobs:
       - run: npm ci
 
       - name: Install native R runtime dependencies
-        run: Rscript --vanilla -e 'install.packages(c("later", "jsonlite"), repos = "https://cloud.r-project.org")'
+        run: Rscript --vanilla -e 'install.packages(c("later", "jsonlite", "cli", "rlang"), repos = "https://cloud.r-project.org")'
 
       - run: npx playwright install --with-deps chromium
 
       - name: Verify transcripts and reject the former implementations
         run: xvfb-run -a npm run test:console
+
+      - name: Verify actual cli and rlang message emitters
+        run: xvfb-run -a node scripts/verify-console-command-parity.js --host native --cases messages,package-methods --package-messages cli --report artifacts/console-command-parity/package-messages.json
 
       - name: Retain console regression evidence
         if: always()

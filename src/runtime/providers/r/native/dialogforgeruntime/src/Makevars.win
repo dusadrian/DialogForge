@@ -1,4 +1,5 @@
-OBJECTS = binding-info.o bounded-input.o graphics-device.o init.o output-capture.o stored-graph.o stored-list.o
+OBJECTS = binding-info.o bounded-input.o graphics-device.o init.o \
+    message-output.o output-capture.o stored-graph.o stored-list.o
 
 all: $(SHLIB) dialogforge-r-host.exe
 

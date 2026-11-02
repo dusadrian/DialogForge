@@ -70,20 +70,19 @@ const checkDataFrameAfterPackageMessages = async function(
     ], "A data frame must print normally after package messages.");
     await assertPlainMessagePresentation(page, rows);
 
-    const workspaceVisible = await page.evaluate(() => {
-        return document.body.classList.contains("workspace-pane-visible");
-    });
+    const workspacePane = page.locator("#workspacePane, #workspaceSummary");
 
-    if (!workspaceVisible) {
+    if (!await workspacePane.isVisible()) {
         await page.locator("#workspacePaneToggle").click();
     }
 
-    const row = page.locator(
-        '#workspacePane [data-workspace-variable-row="' + name + '"]'
+    await workspacePane.waitFor({ state: "visible", timeout: timeoutMs });
+    const row = workspacePane.locator(
+        '[data-workspace-variable-row="' + name + '"]'
     );
     await row.waitFor({ state: "attached", timeout: timeoutMs });
-    const groupToggle = page.locator(
-        '#workspacePane [data-workspace-group="datasets"] [data-workspace-group-toggle]'
+    const groupToggle = workspacePane.locator(
+        '[data-workspace-group="datasets"] [data-workspace-group-toggle]'
     );
 
     if (await groupToggle.getAttribute("aria-expanded") === "false") {

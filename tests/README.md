@@ -10,7 +10,9 @@ Linux also needs Xvfb.
 The rendered cases paste through Monaco and press Enter. They check every
 command prompt and output row in order, including the original `rivers` example,
 real continuation lines, semicolons, invisible results, history recall, errors,
-Stop/recovery, and selected code executed with the Script Editor Run button.
+Stop/recovery, selected code executed with the Script Editor Run button,
+message emitters and suppression, and workspace updates after dynamic S3 method
+registration.
 Native R and WebR execute the same cases and assertions. The runner starts
 Electron in a fresh working directory so its preload cannot accidentally load
 the checkout's `dist` when testing a copied or packaged application. Tests do not infer
@@ -25,12 +27,26 @@ Use `--electron-app /path/to/executable` for an unpacked packaged application an
 The `Check console command parity` workflow runs on pushes and pull requests.
 Its job is `Console command parity (native R and WebR)`; repository branch rules
 can require this check. The shared production Electron and web verification
-commands also run all seven console/script cases against their actual build
+commands also run all nine console/script cases against their actual build
 outputs (Chromium for web). Mutation checks independently restore whole-block
-submission, final-value-only printing, and the script-selection bypass in copied
-builds; all six host/defect combinations must fail the transcript assertion.
+submission, final-value-only printing, the script-selection bypass, muffled
+message reconstruction, and list-wrapped method names in copied builds; all ten
+host/defect combinations must fail the transcript assertion.
 Local test success does not establish that a published or installed application
 contains the change.
+
+The R message checks compare emitted bytes with ordinary R across ordered,
+grouped, and startup capture. They cover line endings, custom default emitters,
+signal-only conditions, suppression, sinks, warnings, and connection lifetime.
+The required rendered cases do not depend on third-party packages. CI also
+installs cli and rlang and checks their actual emitters in native R.
+
+For an existing build, `--host native --package-messages tidyverse` additionally
+checks actual cli/rlang output, tidyverse attachment, and subsequent console and
+workspace updates. `--package-messages cli` exercises cli/rlang alone. These
+checks fail if the requested packages are absent. WebR accepts the same flags
+when the selected product's browser library contains those packages; use
+`--product-path /path/to/product --web-dist /path/to/staged/web/output`.
 
 All test code used by these commands must be included in Git. The explicit
 `.gitignore` exceptions keep the rendered helper and this document in clean
