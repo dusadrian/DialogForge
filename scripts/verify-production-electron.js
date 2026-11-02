@@ -455,6 +455,15 @@ const main = async function() {
     for (const target of options.targets) {
         await runSmokeTarget(application, product, target, options.timeoutMs);
     }
+
+    if (options.targets.some(target => target === "console" || target === "script-editor")) {
+        const { runConsoleParity } = require("./verify-console-command-parity");
+        await runConsoleParity({
+            host: "native",
+            electronApp: application.executablePath,
+            timeoutMs: options.timeoutMs
+        });
+    }
 };
 
 

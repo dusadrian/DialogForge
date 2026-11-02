@@ -498,6 +498,30 @@ const verifyRenderedHelp = async function(options, product, port, browserName) {
             options.timeoutMs
         );
 
+        if (browserName === "chromium") {
+            const {
+                clearConsoleForParity,
+                runConsoleCommandParity,
+                runScriptSelectionParity
+            } = require("../tests/support/console-command-parity");
+            const { openMenuItem } = require("../tests/support/menu-interactions");
+            await runConsoleCommandParity(page, { timeoutMs: options.timeoutMs });
+            await clearConsoleForParity(page, options.timeoutMs);
+            await openMenuItem(page, "Script editor");
+            const frameElement = await page.waitForSelector(
+                "iframe.dialogforge-web-script-editor-frame",
+                { timeout: options.timeoutMs }
+            );
+            const frame = await frameElement.contentFrame();
+            if (!frame) {
+                throw new Error("The production Script editor frame is unavailable.");
+            }
+            await runScriptSelectionParity(page, frame, {
+                timeoutMs: options.timeoutMs,
+                clearConsole: false
+            });
+        }
+
         if (failures.length > 0) {
             throw new Error(`Production web browser errors:\n${failures.join("\n")}`);
         }

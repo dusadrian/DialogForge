@@ -149,6 +149,7 @@ export const createMainConsoleCoordinator = function(
         registerCompletionInput: bindings.registerCompletionInput,
         setRuntimeBusy: bindings.session.setRuntimeBusy,
         readOutputWidth: () => readConsoleOutputWidth(bindings.document, window),
+        checkFragment: checkCodeFragmentComplete,
         executeCommand: bindings.executeVisibleCommand
     });
 
@@ -356,6 +357,7 @@ export const createMainConsoleCoordinator = function(
         focusAfterPromptLayout,
         executeText,
         executeWithReceipt: visibleCommand.executeWithReceipt,
+        recordSubmittedCommand: visibleCommand.recordSubmittedCommand,
         executeCurrent,
         handleFallbackKeydown,
         clear: function(): void {

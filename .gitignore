@@ -61,3 +61,5 @@ tests/fixtures/import/*
 !tests/fixtures/import/browser-import.csv
 
 !tests/support/dialog-interactions.js
+!tests/support/console-command-parity.js
+!tests/README.md
