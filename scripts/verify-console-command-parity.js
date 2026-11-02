@@ -28,6 +28,7 @@ const readArgs = function(argv = process.argv.slice(2)) {
         webDist: "",
         productPath: "",
         electronApp: "",
+        packageMessages: "",
         buildWeb: false,
         cases: undefined,
         report: path.join(rootDir, "artifacts/console-command-parity/paired.json"),
@@ -48,6 +49,7 @@ const readArgs = function(argv = process.argv.slice(2)) {
             "--web-dist": "webDist",
             "--product-path": "productPath",
             "--electron-app": "electronApp",
+            "--package-messages": "packageMessages",
             "--cases": "cases",
             "--report": "report",
             "--timeout-ms": "timeoutMs"
@@ -69,6 +71,9 @@ const readArgs = function(argv = process.argv.slice(2)) {
 const normalizeOptions = function(options) {
     if (!["native", "web", "both"].includes(options.host)) {
         throw new Error("--host must be native, web or both.");
+    }
+    if (!["", "cli", "tidyverse"].includes(options.packageMessages)) {
+        throw new Error("--package-messages must be cli or tidyverse.");
     }
 
     options.distDir = path.resolve(options.distDir);
@@ -350,6 +355,14 @@ const runNative = async function(options, report, temporaryRoot) {
                 console.log(`OK native console ${result.name}`);
             }
         });
+        if (options.packageMessages) {
+            const { runConsolePackageMessageParity } = require("../tests/support/console-package-message-parity");
+            report.native.packageMessages = await runConsolePackageMessageParity(page, {
+                tidyverse: options.packageMessages === "tidyverse",
+                timeoutMs: options.timeoutMs
+            });
+            console.log("OK native package message output: " + options.packageMessages);
+        }
         if (!options.cases || options.cases.includes("script-selection")) {
             await clearConsoleForParity(page, options.timeoutMs);
             const opening = app.waitForEvent("window", { timeout: options.timeoutMs });
@@ -495,6 +508,14 @@ const runWeb = async function(options, report, temporaryRoot) {
                 console.log(`OK WebR console ${result.name}`);
             }
         });
+        if (options.packageMessages) {
+            const { runConsolePackageMessageParity } = require("../tests/support/console-package-message-parity");
+            report.web.packageMessages = await runConsolePackageMessageParity(page, {
+                tidyverse: options.packageMessages === "tidyverse",
+                timeoutMs: options.timeoutMs
+            });
+            console.log("OK WebR package message output: " + options.packageMessages);
+        }
         if (!options.cases || options.cases.includes("script-selection")) {
             await clearConsoleForParity(page, options.timeoutMs);
             await openMenuItem(page, "Script editor");

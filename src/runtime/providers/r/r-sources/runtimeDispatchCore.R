@@ -101,6 +101,8 @@ runtime_capture_input <- function(code, parent_id, output_width = NULL) {
     stderr <- character(0)
     output_connection <- NULL
     stderr_connection <- NULL
+    message_connection <- NULL
+    message_output <- NULL
     output_sink_active <- FALSE
     message_sink_active <- FALSE
     original_output_depth <- sink.number(type = "output")
@@ -137,6 +139,12 @@ runtime_capture_input <- function(code, parent_id, output_width = NULL) {
     on.exit({
         suspendInterrupts(restore_input_capture_sinks())
 
+        if (!is.null(message_output)) {
+            close(message_output$connection)
+        }
+        if (!is.null(message_connection)) {
+            close(message_connection)
+        }
         if (!is.null(output_connection)) {
             close(output_connection)
         }
@@ -148,9 +156,13 @@ runtime_capture_input <- function(code, parent_id, output_width = NULL) {
 
     output_connection <- textConnection("output", "w", local = TRUE)
     stderr_connection <- textConnection("stderr", "w", local = TRUE)
+    message_connection <- rawConnection(raw(), "w")
+    message_output <- runtime_create_message_output(
+        message_connection, stderr_connection
+    )
     sink(output_connection, type = "output")
     output_sink_active <- TRUE
-    sink(stderr_connection, type = "message")
+    sink(message_output$connection, type = "message")
     message_sink_active <- TRUE
 
     result <- tryCatch({
@@ -160,10 +172,7 @@ runtime_capture_input <- function(code, parent_id, output_width = NULL) {
             trace(paste0("execute_input:eval-done parent=", parent_id))
 
             list(ok = TRUE)
-        }, message = function(message) {
-            messages <<- c(messages, conditionMessage(message))
-            tryInvokeRestart("muffleMessage")
-        }, warning = function(warning) {
+        }, message = message_output$observe_message, warning = function(warning) {
             if (runtime_accept_input_warning(warning, code)) {
                 warnings <<- c(warnings, conditionMessage(warning))
             }
@@ -178,6 +187,11 @@ runtime_capture_input <- function(code, parent_id, output_width = NULL) {
     })
 
     suspendInterrupts(restore_input_capture_sinks())
+    messages <- rawToChar(rawConnectionValue(message_connection))
+    close(message_output$connection)
+    message_output <- NULL
+    close(message_connection)
+    message_connection <- NULL
     close(output_connection)
     output_connection <- NULL
     close(stderr_connection)

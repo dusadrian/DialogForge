@@ -1,0 +1,9 @@
+{
+  "format": 1,
+  "packageName": "dialogforgeruntime",
+  "packageVersion": "0.1.3",
+  "runtimeVersion": "4.6.0",
+  "toolchainImage": "ghcr.io/r-wasm/webr:v0.6.0",
+  "sourceSha256": "f7673cc889fff4995d2a342641f7986afb51f79327d9822968467ef8da479e46",
+  "archiveSha256": "7442fed65f3fff735b12f944b384bbec2e87a36d2d3ce2abd9fe2d7a04c38cff"
+}

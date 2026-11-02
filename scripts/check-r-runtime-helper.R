@@ -6,7 +6,7 @@ local({
     else {
         loadNamespace("dialogforgeruntime", lib.loc = library)
     }
-    stopifnot(identical(as.character(getNamespaceVersion(helper)), "0.1.2"))
+    stopifnot(identical(as.character(getNamespaceVersion(helper)), "0.1.3"))
     exports <- c(
         "binding_info", "closure_is_compiled", "rebind_compiled_closure",
         "stored_list_fields", "stored_graph_is_inspectable",
@@ -14,7 +14,8 @@ local({
         "graphics_device_is_open", "match_stored_names",
         "read_bounded_runtime_request", "write_checked_runtime_frame",
         "read_runtime_console_line", "with_runtime_console_input",
-        "open_output_capture", "seal_output_capture", "abort_output_capture"
+        "open_output_capture", "seal_output_capture", "abort_output_capture",
+        "open_message_output"
     )
     stopifnot(identical(sort(getNamespaceExports(helper)), sort(exports)))
     stopifnot(all(vapply(exports, function(name) {
@@ -28,12 +29,12 @@ local({
         df_match_stored_names = 2L, df_read_bounded_request = 2L,
         df_write_runtime_frame = 2L, df_read_runtime_console_line = 3L,
         df_with_runtime_console_input = 2L, df_output_open = 1L,
-        df_output_seal = 1L, df_output_abort = 1L
+        df_output_seal = 1L, df_output_abort = 1L, df_message_output_open = 3L
     )
     dll <- getLoadedDLLs()[["dialogforgeruntime"]]
     stopifnot(!is.null(dll), !dll[["dynamicLookup"]])
     registered <- getDLLRegisteredRoutines(dll)[[".Call"]]
     actual <- vapply(registered, function(routine) routine$numParameters, integer(1))
     stopifnot(identical(actual, expected))
-    cat("Single runtime namespace: all 16 exports and registered native routines are available.\n")
+    cat("Single runtime namespace:", length(exports), "exports and registered native routines are available.\n")
 })

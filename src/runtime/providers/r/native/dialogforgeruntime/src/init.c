@@ -20,6 +20,7 @@ extern SEXP df_with_runtime_console_input(SEXP, SEXP);
 extern SEXP df_output_open(SEXP);
 extern SEXP df_output_seal(SEXP);
 extern SEXP df_output_abort(SEXP);
+extern SEXP df_message_output_open(SEXP, SEXP, SEXP);
 
 static const R_CallMethodDef call_methods[] = {
     {"df_binding_info", (DL_FUNC) &df_binding_info, 2},
@@ -38,6 +39,7 @@ static const R_CallMethodDef call_methods[] = {
     {"df_output_open", (DL_FUNC) &df_output_open, 1},
     {"df_output_seal", (DL_FUNC) &df_output_seal, 1},
     {"df_output_abort", (DL_FUNC) &df_output_abort, 1},
+    {"df_message_output_open", (DL_FUNC) &df_message_output_open, 3},
     {NULL, NULL, 0}
 };
 
