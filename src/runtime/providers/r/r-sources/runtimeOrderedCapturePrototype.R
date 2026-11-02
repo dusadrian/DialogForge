@@ -19,7 +19,7 @@ runtime_create_ordered_output_config <- function(library, directory, session_id)
     }
 
     namespace <- loadNamespace("dialogforgeruntime", lib.loc = library)
-    if (!identical(as.character(getNamespaceVersion(namespace)), "0.1.2")) {
+    if (!identical(as.character(getNamespaceVersion(namespace)), "0.1.3")) {
         stop("Unsupported DialogForge output prototype version.")
     }
 
@@ -60,6 +60,7 @@ runtime_capture_ordered_input <- function(code, path, backend) {
     original_message_number <- sink.number(type = "message")
     original_message_connection <- getConnection(original_message_number)
     capture <- NULL
+    message_output <- NULL
     output_installed <- FALSE
     message_installed <- FALSE
     cleaned <- FALSE
@@ -102,6 +103,9 @@ runtime_capture_ordered_input <- function(code, path, backend) {
         }
 
         if (!is.null(capture)) {
+            if (!is.null(message_output)) {
+                tryCatch(close(message_output$connection), error = record_cleanup_failure)
+            }
             if (!length(capture_errors)) {
                 tryCatch({
                     seal_sequence <<- backend$seal(capture)
@@ -120,26 +124,23 @@ runtime_capture_ordered_input <- function(code, path, backend) {
     on.exit(suspendInterrupts(restore_capture_routing()), add = TRUE)
 
     capture <- backend$open(path)
+    message_output <- runtime_create_message_output(capture$stdout, capture$stderr)
     sink(capture$stdout, type = "output")
     output_installed <- TRUE
-    sink(capture$stderr, type = "message")
+    sink(message_output$connection, type = "message")
     message_installed <- TRUE
 
     result <- tryCatch({
         allowInterrupts(withCallingHandlers({
             runtime_evaluate_visible_expressions(code)
             list(ok = TRUE, interrupted = FALSE, error = "")
-        }, message = function(message) {
-            # R sends message conditions (including package startup notices) to
-            # stderr by default. Present them as ordinary output in both hosts.
-            cat(conditionMessage(message), file = stdout())
-            tryInvokeRestart("muffleMessage")
-        }, warning = function(warning) {
+        }, message = message_output$observe_message, warning = function(warning) {
             text <- conditionMessage(warning)
             if (!runtime_accept_input_warning(warning, code)) {
                 tryInvokeRestart("muffleWarning")
                 return(invisible(NULL))
             }
+            message_output$observe_warning(warning)
             # Observe for the existing app diagnostic, but do not re-emit warnings.
             if (is_package_loading_warning(text)) {
                 package_warnings <<- c(package_warnings, text)

@@ -6,12 +6,17 @@ local({
     sources <- file.path(root, "src/runtime/providers/r/r-sources")
     runtime <- new.env(parent = globalenv())
     runtime$opts <- list()
+    runtime$runtime_inspection_library <- Sys.getenv(
+        "DIALOGFORGE_OUTPUT_LIBRARY", unset = file.path(
+            root, "dist/r-runtime/native", paste(R.version$platform, getRversion(), sep = "-")
+        )
+    )
     runtime$app_env <- runtime
     runtime$trace <- function(message) invisible(NULL)
     runtime$dialog_record_traceback <- function() invisible(NULL)
 
     for (file in c(
-        "runtimePrelude.R", "runtimeDiagnostics.R", "runtimeDispatchCore.R",
+        "runtimePrelude.R", "runtimeDiagnostics.R", "runtimeWarningCore.R", "runtimeDispatchCore.R",
         "runtimeOrderedCapturePrototype.R"
     )) {
         sys.source(file.path(sources, file), envir = runtime)

@@ -14,6 +14,8 @@ const consoleCommandParityCases = Object.freeze([
     "history",
     "error",
     "interrupt",
+    "messages",
+    "package-methods",
     "script-selection"
 ]);
 
@@ -211,6 +213,62 @@ const runConsoleCommandParity = async function(page, options = {}) {
                 "History must recall the complete multiline submission."
             );
             await typeConsoleCommand(page, "");
+        }
+        else if (name === "messages") {
+            const command = [
+                "local({",
+                "    emit <- function(text) {",
+                "        condition <- structure(list(message = text, call = NULL),",
+                '            class = c("packageStartupMessage", "message", "condition"))',
+                "        withRestarts({",
+                "            signalCondition(condition)",
+                '            cat(conditionMessage(condition), "\\n", sep = "", file = stderr())',
+                "        }, muffleMessage = function() NULL)",
+                "    }",
+                '    cat("before\\n")',
+                '    emit("first")',
+                '    emit("second")',
+                '    suppressPackageStartupMessages(emit("hidden"))',
+                '    message("base")',
+                '    message("joined", appendLF = FALSE)',
+                '    cat("-tail\\n")',
+                '    signalCondition(simpleMessage("signal-only"))',
+                '    cat("after\\n")',
+                "})"
+            ].join("\n");
+            await runConsoleCommand(page, command);
+            rows = await assertTranscriptRows(page, [
+                ...command.split("\n").map((line, index) => (index === 0 ? "> " : "+ ") + line),
+                "before",
+                "first",
+                "second",
+                "base",
+                "joined-tail",
+                "after"
+            ], name);
+            const styledMessages = await page.evaluate(() => {
+                return Array.from(document.querySelectorAll(
+                    "#consoleTerminal [data-execution-id] > div"
+                )).filter(block => block.style.borderLeftWidth).length;
+            });
+            assert.equal(styledMessages, 0,
+                "Informational message output must retain ordinary console styling.");
+        }
+        else if (name === "package-methods") {
+            const registration = 'base::registerS3method("head", "DFConsolePackage", utils::head.default, envir = asNamespace("utils"))';
+            await runConsoleCommand(page, [
+                registration,
+                "DF_message_frame <- data.frame(value = 1:2)",
+                "DF_message_frame$value[1L] <- 9L",
+                "DF_message_frame$value"
+            ].join("\n"));
+            rows = await assertTranscriptRows(page, [
+                "> " + registration,
+                "> DF_message_frame <- data.frame(value = 1:2)",
+                "> DF_message_frame$value[1L] <- 9L",
+                "> DF_message_frame$value",
+                "[1] 9 2"
+            ], name);
         }
         else if (name === "error") {
             await runConsoleCommand(page, "11\nstop(\"console parity error\")\n99");

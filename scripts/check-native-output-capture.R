@@ -127,10 +127,8 @@ sources <- file.path(root, "src/runtime/providers/r/r-sources")
 fixture <- new.env(parent = baseenv())
 fixture$`%||%` <- function(value, fallback) if (is.null(value)) fallback else value
 sys.source(file.path(sources, "runtimeWarningCore.R"), envir = fixture)
+sys.source(file.path(sources, "runtimeDispatchCore.R"), envir = fixture)
 sys.source(file.path(sources, "runtimeOrderedCapturePrototype.R"), envir = fixture)
-fixture$runtime_print_visible_value <- function(value) {
-    do.call(base::print, list(value), quote = TRUE, envir = .GlobalEnv)
-}
 tracebacks <- 0L
 fixture$app_env <- new.env(parent = baseenv())
 fixture$app_env$dialog_record_traceback <- function() {

@@ -71,6 +71,28 @@ const restoreFinalValueOnlyPrinting = function(directory) {
 };
 
 
+const restoreMuffledMessages = function(directory) {
+    const file = path.join(directory, "src/runtime/providers/r/r-sources/runtimeWarningCore.R");
+    const source = fs.readFileSync(file, "utf8");
+    const observer = 'observe_scope("muffleMessage", TRUE)';
+    assert.ok(source.includes(observer), "The shared message observer was not found.");
+    fs.writeFileSync(file, source.replace(observer, [
+        "cat(conditionMessage(condition), file = output_connection)",
+        '            tryInvokeRestart("muffleMessage")'
+    ].join("\n")));
+};
+
+
+const restoreListWrappedMethodName = function(directory) {
+    const file = path.join(directory, "src/runtime/providers/r/r-sources/runtimeBindingInspection.R");
+    const source = fs.readFileSync(file, "utf8");
+    const extraction = /            # Dynamic S3 registration[\s\S]*?            stock_name <- \.subset2\(stock_name, 1L\)/;
+    assert.ok(extraction.test(source), "The safe S3 method extraction was not found.");
+    fs.writeFileSync(file, source.replace(extraction,
+        "            stock_name <- declarations[declaration, 3L]"));
+};
+
+
 const main = function() {
     const dist = path.join(root, "dist");
     assert.ok(fs.existsSync(path.join(dist, "browser-esm/shell.js")),
@@ -81,7 +103,9 @@ const main = function() {
     const mutations = [
         { name: "whole-block-prompts", case: "rivers" },
         { name: "final-value-only", case: "semicolons" },
-        { name: "script-selection-bypass", case: "script-selection" }
+        { name: "script-selection-bypass", case: "script-selection" },
+        { name: "muffled-message-output", case: "messages" },
+        { name: "list-wrapped-method-name", case: "package-methods" }
     ];
 
     try {
@@ -98,6 +122,12 @@ const main = function() {
             }
             else if (mutation.name === "final-value-only") {
                 restoreFinalValueOnlyPrinting(build);
+            }
+            else if (mutation.name === "muffled-message-output") {
+                restoreMuffledMessages(build);
+            }
+            else if (mutation.name === "list-wrapped-method-name") {
+                restoreListWrappedMethodName(build);
             }
             else {
                 const replacement = 'const plan = { chunks: [code], incomplete: false, remainder: "" };';

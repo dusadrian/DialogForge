@@ -62,4 +62,5 @@ tests/fixtures/import/*
 
 !tests/support/dialog-interactions.js
 !tests/support/console-command-parity.js
+!tests/support/console-package-message-parity.js
 !tests/README.md

@@ -14,3 +14,9 @@ abort_output_capture <- function(capture) {
     .Call(C_df_output_abort, capture$handle)
     invisible(NULL)
 }
+
+
+# Selection policy belongs to the shared runtime, not the connection adapter.
+open_message_output <- function(stdout, stderr, selector) {
+    .Call(C_df_message_output_open, stdout, stderr, selector)
+}

@@ -25,7 +25,7 @@ runtime_binding_info <- local({
             ), call. = FALSE)
         }
     )
-    if (!identical(as.character(getNamespaceVersion(namespace)), "0.1.2")) {
+    if (!identical(as.character(getNamespaceVersion(namespace)), "0.1.3")) {
         stop("DialogForge binding-inspection helper version mismatch; rebuild the helper.")
     }
     get("binding_info", envir = namespace, inherits = FALSE)
@@ -139,7 +139,19 @@ runtime_registered_method_is_stock <- function(methods, name, namespace) {
         declared_names <- paste(declarations[, 1L], declarations[, 2L], sep = ".")
         declaration <- runtime_match_stored_names(name, declared_names)
         if (declaration > 0L) {
-            stock_name <- declarations[declaration, 3L]
+            # Dynamic S3 registration can turn this into a list matrix.
+            # Extract its cell, not a one-element list around the method name.
+            stock_name <- declarations[[declaration, 3L]]
+            if (
+                !runtime_stored_graph_is_inspectable(stock_name) ||
+                typeof(stock_name) != "character" ||
+                is.object(stock_name) ||
+                length(stock_name) != 1L ||
+                is.na(stock_name) || !nzchar(stock_name)
+            ) {
+                return(FALSE)
+            }
+            stock_name <- .subset2(stock_name, 1L)
         }
     }
     binding <- runtime_binding_info(methods, name)

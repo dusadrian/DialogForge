@@ -65,6 +65,84 @@ is_package_loading_warning <- function(text) {
 }
 
 
+runtime_message_output_namespace <- function() {
+    library <- Sys.getenv("DIALOGFORGE_OUTPUT_LIBRARY", unset = "")
+    if (!nzchar(library)) {
+        library <- get0(
+            "runtime_inspection_library", envir = environment(),
+            inherits = TRUE, ifnotfound = ""
+        )
+    }
+    namespace <- loadNamespace(
+        "dialogforgeruntime", lib.loc = if (nzchar(library)) library else NULL
+    )
+    if (
+        !identical(as.character(getNamespaceVersion(namespace)), "0.1.3") ||
+        !exists("open_message_output", envir = namespace, inherits = FALSE)
+    ) {
+        stop("DialogForge message-output helper version mismatch; rebuild it.")
+    }
+    namespace
+}
+
+
+runtime_create_message_output <- function(output_connection, error_connection) {
+    scopes <- list()
+
+    retain_active_scopes <- function(restarts) {
+        active <- list()
+        for (scope in scopes) {
+            for (restart in restarts) {
+                if (identical(scope$exit, restart$exit)) {
+                    active[[length(active) + 1L]] <- scope
+                    break
+                }
+            }
+        }
+        scopes <<- active
+        invisible(NULL)
+    }
+
+    observe_scope <- function(name, message_output) {
+        restart <- base::findRestart(name)
+        if (is.null(restart) || is.null(restart$exit)) {
+            return(invisible(NULL))
+        }
+        retain_active_scopes(base::computeRestarts())
+        scopes[[length(scopes) + 1L]] <<- list(
+            exit = restart$exit, message_output = message_output
+        )
+        invisible(NULL)
+    }
+
+    select_output <- function() {
+        restarts <- base::computeRestarts()
+        retain_active_scopes(restarts)
+        for (restart in restarts) {
+            for (scope in base::rev(scopes)) {
+                if (identical(restart$exit, scope$exit)) {
+                    return(scope$message_output)
+                }
+            }
+        }
+        FALSE
+    }
+
+    namespace <- runtime_message_output_namespace()
+    list(
+        connection = namespace$open_message_output(
+            output_connection, error_connection, select_output
+        ),
+        observe_message = function(condition) {
+            observe_scope("muffleMessage", TRUE)
+        },
+        observe_warning = function(condition) {
+            observe_scope("muffleWarning", FALSE)
+        }
+    )
+}
+
+
 runtime_diagnostic_value <- function(expression) {
     tryCatch(
         expression,
@@ -154,22 +232,45 @@ runtime_startup_capture <- function(expression, environment) {
     warnings <- character(0)
     messages <- character(0)
     output <- character(0)
+    original_message_number <- sink.number(type = "message")
+    original_message_connection <- getConnection(original_message_number)
+    message_connection <- NULL
+    error_connection <- NULL
+    message_output <- NULL
 
     result <- tryCatch({
         connection <- textConnection("output", "w", local = TRUE)
 
         on.exit({
+            if (original_message_number == 2L) {
+                try(sink(type = "message"), silent = TRUE)
+            }
+            else {
+                try(sink(original_message_connection, type = "message"), silent = TRUE)
+            }
             try(sink(type = "output"), silent = TRUE)
+            if (!is.null(message_output)) {
+                try(close(message_output$connection), silent = TRUE)
+            }
+            if (!is.null(message_connection)) {
+                try(close(message_connection), silent = TRUE)
+            }
+            if (!is.null(error_connection)) {
+                try(close(error_connection), silent = TRUE)
+            }
             try(close(connection), silent = TRUE)
         }, add = TRUE)
 
         sink(connection, type = "output")
+        message_connection <- rawConnection(raw(), "w")
+        error_connection <- rawConnection(raw(), "w")
+        message_output <- runtime_create_message_output(
+            message_connection, error_connection
+        )
+        sink(message_output$connection, type = "message")
         value <- withCallingHandlers(
             eval(expression, envir = environment),
-            message = function(message) {
-                messages <<- c(messages, conditionMessage(message))
-                tryInvokeRestart("muffleMessage")
-            },
+            message = message_output$observe_message,
             warning = function(warning) {
                 warnings <<- c(warnings, conditionMessage(warning))
                 tryInvokeRestart("muffleWarning")
@@ -180,6 +281,17 @@ runtime_startup_capture <- function(expression, environment) {
     }, error = function(error) {
         list(ok = FALSE, error = conditionMessage(error))
     })
+
+    if (!is.null(message_connection)) {
+        messages <- rawToChar(rawConnectionValue(message_connection))
+    }
+    if (!is.null(error_connection)) {
+        errors <- rawToChar(rawConnectionValue(error_connection))
+        sink(original_message_connection, type = "message")
+        if (nzchar(errors)) {
+            cat(errors, file = stderr(), sep = "")
+        }
+    }
 
     list(
         ok = isTRUE(result$ok),
