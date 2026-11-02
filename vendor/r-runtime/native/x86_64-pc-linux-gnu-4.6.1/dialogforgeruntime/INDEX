@@ -5,6 +5,8 @@ match_stored_names      Match Ordinary Inspection Names Without Package
 observe_graphics_device
                         Observe the Lifetime of a Physical Graphics
                         Device
+open_message_output     Forward Message Output Through a Runtime-Owned
+                        Selector
 open_output_capture     Experimental Native Output Journal Connections
 read_bounded_runtime_request
                         Read One Bounded Native Runtime Request
