@@ -1,0 +1,49 @@
+name: Check console command parity
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  console-command-parity:
+    name: Console command parity (native R and WebR)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+
+      - uses: r-lib/actions/setup-r@f9a764fea8d5c63df6ef9a5c7795bf7deb5d7e05
+        with:
+          r-version: '4.6.1'
+          use-public-rspm: false
+
+      - name: Install display dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb libgtk-3-0 libnss3 libasound2t64
+
+      - run: npm ci
+
+      - name: Install native R runtime dependencies
+        run: Rscript --vanilla -e 'install.packages(c("later", "jsonlite"), repos = "https://cloud.r-project.org")'
+
+      - run: npx playwright install --with-deps chromium
+
+      - name: Verify transcripts and reject the former implementations
+        run: xvfb-run -a npm run test:console
+
+      - name: Retain console regression evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: console-command-parity
+          path: artifacts/console-command-parity/

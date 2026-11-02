@@ -127,10 +127,7 @@ runtime_capture_ordered_input <- function(code, path, backend) {
 
     result <- tryCatch({
         allowInterrupts(withCallingHandlers({
-            value <- withVisible(eval(parse(text = code), envir = .GlobalEnv))
-            if (isTRUE(value$visible)) {
-                runtime_print_visible_value(value$value)
-            }
+            runtime_evaluate_visible_expressions(code)
             list(ok = TRUE, interrupted = FALSE, error = "")
         }, message = function(message) {
             # R sends message conditions (including package startup notices) to

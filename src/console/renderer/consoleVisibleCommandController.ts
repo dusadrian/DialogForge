@@ -1,7 +1,16 @@
 import type {
-    RuntimeSessionSnapshot
+    RuntimeSessionSnapshot,
+    TranscriptEvent
 } from "../../runtime/provider-contract/runtimeProvider";
 import { normalizeConsoleCommandText } from "../commandText";
+import {
+    planConsoleInputExecution,
+    type ConsoleFragmentState
+} from "../terminal/consoleInputExecution";
+import {
+    readAcceptedRuntimeCommandResult,
+    runtimeCommandResultSucceeded
+} from "../../runtime/commands/runtimeCommandReceipt";
 
 
 export interface ConsoleVisibleCommandControllerOptions {
@@ -12,6 +21,7 @@ export interface ConsoleVisibleCommandControllerOptions {
     registerCompletionInput(text: string): void;
     setRuntimeBusy(busy: boolean): void;
     readOutputWidth?(): number | null;
+    checkFragment?(code: string): Promise<ConsoleFragmentState>;
     executeCommand(request: {
         text: string;
         source: string;
@@ -22,6 +32,7 @@ export interface ConsoleVisibleCommandControllerOptions {
 
 export interface ConsoleVisibleCommandController {
     retire(): void;
+    recordSubmittedCommand(text: string, source: string): void;
     executeWithReceipt(rawText: string, source: string): Promise<{
         accepted: boolean;
         result?: unknown;
@@ -37,6 +48,7 @@ export const createConsoleVisibleCommandController = function(
     options: ConsoleVisibleCommandControllerOptions
 ): ConsoleVisibleCommandController {
     let executionGeneration = 0;
+    let activeCommand: { text: string; source: string } | null = null;
 
     const readOutputWidth = function(): number | undefined {
         try {
@@ -84,20 +96,51 @@ export const createConsoleVisibleCommandController = function(
 
         try {
             const outputWidth = readOutputWidth();
-            const request: {
-                text: string;
-                source: string;
-                outputWidth?: number;
-            } = {
-                text,
-                source
-            };
+            const plan = options.checkFragment
+                ? await planConsoleInputExecution(text, options.checkFragment)
+                : null;
+            const chunks = plan && !plan.incomplete ? plan.chunks : [text];
+            const transcriptEvents: TranscriptEvent[] = [];
+            let result: unknown;
 
-            if (outputWidth !== undefined) {
-                request.outputWidth = outputWidth;
+            for (const chunk of chunks) {
+                if (generation !== executionGeneration) {
+                    return { accepted: false };
+                }
+
+                const request: {
+                    text: string;
+                    source: string;
+                    outputWidth?: number;
+                } = {
+                    text: chunk,
+                    source
+                };
+
+                if (outputWidth !== undefined) {
+                    request.outputWidth = outputWidth;
+                }
+
+                options.setRuntimeBusy(true);
+                activeCommand = request;
+                result = await options.executeCommand(request);
+
+                const receipt = readAcceptedRuntimeCommandResult(result, true);
+                transcriptEvents.push(...(
+                    Array.isArray(receipt) ? receipt : receipt?.transcriptEvents || []
+                ));
+
+                if (!runtimeCommandResultSucceeded(receipt)) {
+                    break;
+                }
             }
 
-            const result = await options.executeCommand(request);
+            if (chunks.length > 1) {
+                const receipt = readAcceptedRuntimeCommandResult(result, true);
+                result = Array.isArray(receipt)
+                    ? transcriptEvents
+                    : { ...receipt, transcriptEvents };
+            }
 
             if (generation === executionGeneration) {
                 return { accepted: true, result };
@@ -105,6 +148,7 @@ export const createConsoleVisibleCommandController = function(
             return { accepted: false };
         } finally {
             if (generation === executionGeneration) {
+                activeCommand = null;
                 options.setRuntimeBusy(false);
             }
         }
@@ -113,6 +157,14 @@ export const createConsoleVisibleCommandController = function(
     return {
         retire: function(): void {
             executionGeneration += 1;
+            activeCommand = null;
+        },
+        recordSubmittedCommand: function(text, source): void {
+            if (activeCommand?.text === text && activeCommand.source === source) {
+                return;
+            }
+
+            options.recordHistory(text);
         },
         executeWithReceipt,
         executeText: async function(rawText, source): Promise<"ok" | void> {

@@ -209,17 +209,10 @@ export const createScriptExecutionController = function(
             return;
         }
 
-        const runAsSingleChunk = picked.usedSelection || code.includes("\n");
-        const plan = runAsSingleChunk
-            ? {
-                chunks: [code],
-                incomplete: false,
-                remainder: ""
-            }
-            : await planConsoleInputExecution(
-                code,
-                checkFragment
-            );
+        const plan = await planConsoleInputExecution(
+            code,
+            checkFragment
+        );
         const chunks = plan.chunks;
 
         if (chunks.length > 0) {

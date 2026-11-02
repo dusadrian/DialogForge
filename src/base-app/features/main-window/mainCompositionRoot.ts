@@ -857,8 +857,8 @@ const consoleTranscriptController = createConsoleTranscriptController({
     setPromptState: setConsolePromptState,
     setRuntimeBusy: setConsoleRuntimeBusy,
     renderEvents: renderTranscript,
-    recordSubmittedCommand: function(text): void {
-        consoleCommandHistory.record(text);
+    recordSubmittedCommand: function(text, source): void {
+        mainConsoleCoordinator.recordSubmittedCommand(text, source);
         consoleCompletionModel.registerCommandInput(text);
     }
 });

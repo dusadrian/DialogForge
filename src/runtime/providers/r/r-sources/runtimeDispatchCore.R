@@ -20,6 +20,21 @@ runtime_print_visible_value <- function(value) {
 }
 
 
+runtime_evaluate_visible_expressions <- function(code) {
+    expressions <- parse(text = code)
+
+    for (expression in expressions) {
+        result <- withVisible(eval(expression, envir = .GlobalEnv))
+
+        if (isTRUE(result$visible)) {
+            runtime_print_visible_value(result$value)
+        }
+    }
+
+    invisible(NULL)
+}
+
+
 runtime_eval_code_text <- function(code) {
     withCallingHandlers({
         captured <- utils::capture.output({
@@ -141,11 +156,7 @@ runtime_capture_input <- function(code, parent_id, output_width = NULL) {
     result <- tryCatch({
         allowInterrupts(withCallingHandlers({
             trace(paste0("execute_input:eval-start parent=", parent_id))
-            value <- withVisible(eval(parse(text = code), envir = .GlobalEnv))
-
-            if (isTRUE(value$visible)) {
-                runtime_print_visible_value(value$value)
-            }
+            runtime_evaluate_visible_expressions(code)
             trace(paste0("execute_input:eval-done parent=", parent_id))
 
             list(ok = TRUE)
