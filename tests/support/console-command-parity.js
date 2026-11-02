@@ -255,7 +255,7 @@ const runConsoleCommandParity = async function(page, options = {}) {
                 "Informational message output must retain ordinary console styling.");
         }
         else if (name === "package-methods") {
-            const registration = 'base::registerS3method("head", "DFConsolePackage", utils::head.default, envir = asNamespace("utils"))';
+            const registration = 'base::registerS3method("head", "DFConsolePackage", function(x, ...) stop("fixture method must not run"), envir = asNamespace("utils"))';
             await runConsoleCommand(page, [
                 registration,
                 "DF_message_frame <- data.frame(value = 1:2)",
