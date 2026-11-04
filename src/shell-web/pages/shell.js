@@ -80,6 +80,9 @@ import {
     prepareDatasetEditorOpening
 } from "/browser-esm/src/dataset-editor/datasetEditorOpeningPreparation.js";
 import {
+    localizeDialogSource
+} from "/browser-esm/src/dialog-runtime/dialog-builder/dialogSourceLocalization.js";
+import {
     createDialogChannelAdapter
 } from "/browser-esm/src/dialog-runtime/dialogChannelAdapter.js";
 import {
@@ -841,6 +844,13 @@ const browserPreloadChannelBridge = createBrowserPreloadChannelBridge({
             selectedVariableIndex: state.dataEditor.selectedVariableIndex || 0,
             selectedCell: state.dataEditor.selectedCell || null
         };
+    },
+    refreshDataset(datasetName) {
+        postBrowserPreloadEvent(
+            state.dataEditor.frame?.contentWindow,
+            datasetEditorEventChannels.refreshDataset,
+            { datasetName }
+        );
     },
     readGoToContext() {
         const context = state.goToContext || {
@@ -4983,7 +4993,7 @@ const ensureDialogRuntimePackages = function (dialogPayload) {
 };
 
 const readBrowserDialogSource = function (payload) {
-    const source = Object.assign({}, payload.source || {});
+    const source = structuredClone(payload.source || {});
     source.properties = Object.assign({}, source.properties || {}, {
         rPackageRequirements: payload.runtimeRequirements?.rPackages || []
     });
@@ -4992,11 +5002,13 @@ const readBrowserDialogSource = function (payload) {
         source.customJS = String(payload.actions);
     }
 
+    localizeDialogSource(source, readSelectedLocale());
     return source;
 };
 
 const prepareBrowserDialogControls = function (entry) {
     entry.prepared = false;
+    entry.preparedLocale = readSelectedLocale();
     entry.surface.layer.dataset.dialogPrepared = "false";
     entry.controlsReady = new Promise((resolve, reject) => {
         const timeout = setTimeout(() => {
@@ -5097,6 +5109,11 @@ const openDialog = async function (dialog) {
         await entry.frameReady;
         await entry.controlsReady;
 
+        if (entry.preparedLocale !== readSelectedLocale()) {
+            prepareBrowserDialogControls(entry);
+            await entry.controlsReady;
+        }
+
         await ensureDialogRuntimePackages(entry.payload);
 
         if (!entry.surface.layer.inert) {
@@ -5104,6 +5121,8 @@ const openDialog = async function (dialog) {
             return;
         }
 
+        const source = readBrowserDialogSource(entry.payload);
+        browserFrameSurfaces().updateTitle(dialog.id, source.properties?.title || dialog.label || dialog.id);
         browserFrameSurfaces().show(dialog.id);
         if (!state.workspaceMetadataReady) {
             showDialogOpeningCover(dialog);

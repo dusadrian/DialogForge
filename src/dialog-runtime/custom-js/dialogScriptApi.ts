@@ -23,6 +23,7 @@ export interface DialogScriptApi {
     getValue: (name: string) => unknown;
     hide: (name: string, on?: boolean) => void;
     isChecked: (name: string) => boolean;
+    setLabel: (name: string, label: unknown) => void;
     setSelected: (name: string, selected: unknown) => void;
     setValue: (name: string, value: unknown) => void;
     show: (name: string, on?: boolean) => void;
@@ -110,6 +111,9 @@ export const createDialogScriptApi = function(model: DialogControlModel): Dialog
         },
         isChecked: function(name: string): boolean {
             return getDialogControl(model, name).checked;
+        },
+        setLabel: function(name: string, label: unknown): void {
+            setDialogControlValue(model, name, String(label ?? ""));
         },
         setSelected: function(name: string, selected: unknown): void {
             setDialogControlSelected(model, name, selected);

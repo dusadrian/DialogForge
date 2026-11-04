@@ -46,6 +46,7 @@
         "src/dialog-runtime/dialog-builder/productDialogSessionStore.ts",
         "src/dialog-runtime/dialog-builder/productDialogSessionController.ts",
         "src/dialog-runtime/dialog-builder/productDialogWorkspaceData.ts",
+        "src/dialog-runtime/dialog-builder/dialogSourceLocalization.ts",
         "src/dialog-runtime/dialog-builder/productDialogWorkspaceDelivery.ts",
         "src/dialog-runtime/dialogChannelAdapter.ts",
         "src/dialog-runtime/custom-js/dialogHostExternalCallRouter.ts",

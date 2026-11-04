@@ -133,6 +133,7 @@ export interface BrowserPreloadChannelBridgeOptions {
     liveScriptChannels(): BrowserPreloadLiveScriptChannels;
     dialogChannels(): BrowserPreloadDialogChannels;
     readActiveDatasetEditorState(): unknown;
+    refreshDataset(datasetName: string): void;
     readGoToContext(): unknown;
     gotoVariable(input: Record<string, unknown>): Promise<unknown>;
     gotoCase(input: Record<string, unknown>): Promise<unknown>;
@@ -237,6 +238,13 @@ export const createBrowserPreloadChannelBridge = function(
             }
             if (channel === datasetEditorIpcChannels.openEditor) {
                 return options.workspaceChannels().openDatasetEditor(input, args);
+            }
+            if (channel === datasetEditorIpcChannels.refreshDataset) {
+                const datasetName = String(input.datasetName || input.name || "").trim();
+
+                options.refreshDataset(datasetName);
+
+                return { status: datasetName ? "sent" : "empty", datasetName };
             }
             if (channel === datasetEditorIpcChannels.getActiveDataset) {
                 return options.workspaceChannels().getActiveDataset();

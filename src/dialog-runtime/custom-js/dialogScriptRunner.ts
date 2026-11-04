@@ -118,7 +118,7 @@ export const createDialogScriptControlSnapshot = function(model: DialogControlMo
 export const listDialogScriptControlReferences = function(code: string): string[] {
     const names = new Set<string>();
     const declaredNames = new Set<string>();
-    const pattern = /\b(?:addError|addValue|check|clearContent|clearError|clearValue|disable|enable|getSelected|getValue|hide|isChecked|onChange|onClick|onInput|setSelected|setValue|show|triggerChange|uncheck)\s*\(\s*([A-Za-z_$][A-Za-z0-9_$]*)/g;
+    const pattern = /\b(?:addError|addValue|check|clearContent|clearError|clearValue|disable|enable|getSelected|getValue|hide|isChecked|onChange|onClick|onInput|setLabel|setSelected|setValue|show|triggerChange|uncheck)\s*\(\s*([A-Za-z_$][A-Za-z0-9_$]*)/g;
     const declarationPattern = /\b(?:const|let|var|function)\s+([A-Za-z_$][A-Za-z0-9_$]*)/g;
     const bindPattern = /\bbindObjects\s*\(\s*\{([\s\S]*?)\}\s*\)/g;
     const bindControlPattern = /\b(?:datasets|variables)\s*:\s*([A-Za-z_$][A-Za-z0-9_$]*)/g;
@@ -368,6 +368,7 @@ export const createDialogScriptRunner = function(options: DialogScriptRunnerOpti
         "openImportFile",
         "resetDialog",
         "run",
+        "setLabel",
         "setSelected",
         "setValue",
         "show",
@@ -454,6 +455,7 @@ export const createDialogScriptRunner = function(options: DialogScriptRunnerOpti
 
             return { ok: true };
         },
+        api.setLabel,
         api.setSelected,
         api.setValue,
         api.show,
