@@ -61,3 +61,31 @@ All test code used by these commands must be included in Git. The explicit
 `.gitignore` exceptions keep the rendered helper and this document in clean
 checkouts. Reports and screenshots are written under
 `artifacts/console-command-parity/` and retained by CI.
+
+# Dialog label regression checks
+
+Run `node scripts/check-dialog-label-parity.js --check-regressions` from the
+DialogForge checkout after installing Playwright Chromium. This bundles the
+current shared renderer directly from source and opens the actual
+`dialogBuilder.html` page, stylesheet, fonts, adapter, controls, and CustomJS
+runtime in an iframe. The fixture supplies only host transport; R, a sibling
+product checkout, and an application build are not required.
+
+The 17 labels cover horizontal and vertical alignments, one to three lines,
+clipping, and unrestricted width in English, German, and French. Expected
+dimensions were measured in DialogCreator Preview with the same fixture and
+Inter loaded before rendering. Actual button clicks exercise `setValue()` and
+`hide()`/`show()`, with visible counters confirming that the handlers ran.
+The ordinary local variable `labelNames` also protects against treating
+arbitrary script identifiers as element bindings.
+
+The regression flag deliberately removes the text insets, restores measurement
+from the wrapping host, and resets position during `show()`. Each must fail its
+intended geometry assertion; startup errors and timeouts do not count.
+`--label-source /path/to/saved/dialogLabelBuilder.ts` can additionally compare
+an earlier implementation without changing the checkout.
+
+The `Check dialog label parity` workflow runs this command on pushes and pull
+requests. Reports under `artifacts/dialog-label-parity/` record source hashes,
+rendered rectangles, and exact failures. This check covers shared label layout
+and scripting behavior, not full application menus or runtime import actions.

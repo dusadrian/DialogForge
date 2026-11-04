@@ -1,0 +1,35 @@
+name: Check dialog label parity
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  dialog-label-parity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      - run: npx playwright install --with-deps chromium
+
+      - name: Check rendered labels and reject restored defects
+        run: node scripts/check-dialog-label-parity.js --check-regressions --report artifacts/dialog-label-parity/current.json
+
+      - name: Retain label regression evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dialog-label-parity
+          path: artifacts/dialog-label-parity/

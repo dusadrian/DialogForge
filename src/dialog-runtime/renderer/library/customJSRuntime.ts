@@ -2097,21 +2097,6 @@ const customJSRuntime = {
         'package', 'private', 'protected', 'public', 'return', 'static', 'super', 'switch',
         'this', 'throw', 'true', 'try', 'typeof', 'var', 'void', 'while', 'with', 'yield'
       ]);
-      const apiNames = new Set(Object.keys(api));
-      const controlNamePattern =
-        /\b(?:(?:b|cb|c|choice|group|input|plot|radio|txt)_[A-Za-z0-9_]*|label[A-Za-z0-9_]*|select(?:\d|_)[A-Za-z0-9_]*)\b/g;
-      let match: RegExpExecArray | null;
-
-      while ((match = controlNamePattern.exec(code)) !== null) {
-        const name = String(match[0] || '');
-
-        if (!name || reservedWords.has(name) || apiNames.has(name)) {
-          continue;
-        }
-
-        identifiers.add(name);
-      }
-
       const bindingDecl = Array.from(identifiers)
         .map((n) => String(n))
         .filter((n) => /^[$A-Z_a-z][$\w]*$/.test(n) && !reservedWords.has(n))

@@ -17,6 +17,7 @@ tests/electron/*
 !tests/fixtures/
 tests/fixtures/*
 !tests/fixtures/product-dialog-behavior.js
+!tests/fixtures/dialog-label-parity.json
 !tests/support/
 tests/support/*
 !tests/support/dialog-behavior-contract.js

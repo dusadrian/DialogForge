@@ -76,6 +76,7 @@ export const createDialogLabelBuilder = function(
             "#000000"
         );
         const fontWeight = asText(spec.fontWeight, "400");
+        const horizontalInset = 2;
         const maximumWidth = ensureNumber(
             spec.maxWidth,
             200
@@ -132,7 +133,11 @@ export const createDialogLabelBuilder = function(
             host.style.textOverflow = "ellipsis";
             host.style.textAlign = alignment;
             host.style.transformOrigin = "top left";
-            host.style.removeProperty("padding-top");
+            host.style.boxSizing = "border-box";
+            host.style.paddingLeft = horizontalInset + "px";
+            host.style.paddingRight = horizontalInset + "px";
+            host.style.paddingTop = "0px";
+            host.style.paddingBottom = "0px";
 
             textNode.style.fontSize = fontSize + "px";
             textNode.style.fontWeight = fontWeight;
@@ -178,80 +183,67 @@ export const createDialogLabelBuilder = function(
             host.style.removeProperty("position");
             host.style.removeProperty("top");
             host.style.removeProperty("left");
+            host.style.removeProperty("transform");
             label.style.alignItems = verticalAlign;
             label.style.justifyContent = "flex-start";
             label.style.removeProperty("max-height");
         };
 
+        const measureNoWrapLabelWidth = function(text: string): number {
+            const probe = document.createElement("span");
+            const computed = window.getComputedStyle(host);
+            probe.textContent = text;
+            probe.style.position = "absolute";
+            probe.style.visibility = "hidden";
+            probe.style.pointerEvents = "none";
+            probe.style.whiteSpace = "nowrap";
+            probe.style.fontFamily = computed.fontFamily;
+            probe.style.fontSize = fontSize + "px";
+            probe.style.fontWeight = computed.fontWeight;
+            probe.style.fontStyle = computed.fontStyle;
+            probe.style.letterSpacing = computed.letterSpacing;
+            probe.style.lineHeight = "1.2";
+            probe.style.padding = "0";
+            probe.style.border = "0";
+            probe.style.boxSizing = "content-box";
+            document.body.appendChild(probe);
+
+            const width = Math.ceil(Math.max(
+                probe.scrollWidth || 0,
+                probe.getBoundingClientRect().width || 0
+            ));
+            probe.remove();
+
+            return width + horizontalInset * 2 + 2;
+        };
+
         const measureLabelBox = function(
             text: string
-        ): { width: number; height: number } {
-            const naturalProbe = document.createElement("div");
-            naturalProbe.textContent = text;
-            naturalProbe.style.position = "absolute";
-            naturalProbe.style.visibility = "hidden";
-            naturalProbe.style.pointerEvents = "none";
-            naturalProbe.style.fontSize = fontSize + "px";
-            naturalProbe.style.fontWeight = fontWeight;
-            naturalProbe.style.lineHeight = "1.2";
-            naturalProbe.style.whiteSpace = "nowrap";
-            naturalProbe.style.display = "block";
-            naturalProbe.style.width = "auto";
-            root.appendChild(naturalProbe);
-
-            const naturalWidth = Math.max(
-                0,
-                Math.ceil(naturalProbe.scrollWidth || 0),
-                Math.ceil(
-                    naturalProbe.getBoundingClientRect().width || 0
-                )
-            );
-            naturalProbe.remove();
-
+        ): { naturalWidth: number; width: number; height: number } {
+            const naturalWidth = measureNoWrapLabelWidth(text);
             const width = Math.max(
                 0,
                 maximumWidth > 0
-                    ? Math.min(naturalWidth + 2, maximumWidth)
-                    : naturalWidth + 2
+                    ? Math.min(naturalWidth, maximumWidth)
+                    : naturalWidth
             );
-            const heightProbe = document.createElement("div");
-            heightProbe.textContent = text;
+            const heightProbe = host.cloneNode(true) as HTMLElement;
+            const probeText = heightProbe.querySelector(
+                ".smart-label-text"
+            ) as HTMLSpanElement;
+            probeText.textContent = text;
             heightProbe.style.position = "absolute";
             heightProbe.style.visibility = "hidden";
             heightProbe.style.pointerEvents = "none";
-            heightProbe.style.fontSize = fontSize + "px";
-            heightProbe.style.fontWeight = fontWeight;
-            heightProbe.style.lineHeight = "1.2";
             heightProbe.style.width = width + "px";
             heightProbe.style.maxWidth = maximumWidth > 0
                 ? maximumWidth + "px"
                 : "";
-            heightProbe.style.overflow = "hidden";
-            heightProbe.style.textOverflow = "ellipsis";
-
-            if (lineClamp > 1) {
-                heightProbe.style.display = "-webkit-box";
-                heightProbe.style.whiteSpace = "normal";
-                heightProbe.style.wordBreak = "break-word";
-                heightProbe.style.setProperty(
-                    "-webkit-line-clamp",
-                    String(lineClamp)
-                );
-                heightProbe.style.setProperty(
-                    "-webkit-box-orient",
-                    "vertical"
-                );
-            }
-            else {
-                heightProbe.style.display = "block";
-                heightProbe.style.whiteSpace = "nowrap";
-            }
-
             root.appendChild(heightProbe);
 
             const singleLineHeight = Math.ceil(fontSize * 1.2);
             const wrappedTextHeight =
-                lineClamp > 1 && naturalWidth + 2 > width
+                lineClamp > 1 && naturalWidth > width
                     ? Math.ceil(
                         fontSize * 1.2 * Math.max(1, lineClamp)
                     )
@@ -267,7 +259,7 @@ export const createDialogLabelBuilder = function(
             );
             heightProbe.remove();
 
-            return { width, height };
+            return { naturalWidth, width, height };
         };
 
         let control: ReturnType<
@@ -348,10 +340,6 @@ export const createDialogLabelBuilder = function(
             const hasMeasuredWidth = currentWidth > 0;
             const hasMeasuredHeight = currentHeight > 0;
             const text = asText(control.value, "");
-            const singleLineHeight = Math.ceil(
-                fontSize * 1.2
-            );
-
             textNode.textContent = text;
             setTextTypography();
             configureLineLayout();
@@ -362,41 +350,12 @@ export const createDialogLabelBuilder = function(
             host.style.width = "auto";
             host.style.removeProperty("max-width");
 
-            const naturalWidth = Math.max(
-                Math.ceil(host.scrollWidth || 0),
-                Math.ceil(
-                    host.getBoundingClientRect().width || 0
-                )
-            );
-            const width = Math.max(
-                0,
-                maximumWidth > 0
-                    ? Math.min(
-                        naturalWidth + 2,
-                        maximumWidth
-                    )
-                    : naturalWidth + 2
-            );
+            const { naturalWidth, width, height } = measureLabelBox(text);
             host.style.maxWidth = maximumWidth > 0
                 ? maximumWidth + "px"
                 : "";
             host.style.width = width + "px";
 
-            const wrappedTextHeight =
-                lineClamp > 1 && naturalWidth > width
-                    ? Math.ceil(
-                        fontSize * 1.2 * Math.max(1, lineClamp)
-                    )
-                    : 0;
-            const height = Math.max(
-                0,
-                Math.ceil(host.scrollHeight || 0),
-                Math.ceil(
-                    host.getBoundingClientRect().height || 0
-                ),
-                wrappedTextHeight,
-                singleLineHeight
-            );
             const boxWidth =
                 rotation === 90 || rotation === 270
                     ? height
@@ -427,19 +386,7 @@ export const createDialogLabelBuilder = function(
                 }
             }
 
-            if (rotation === 0 && hasMeasuredHeight) {
-                if (valign === "bottom") {
-                    top = currentTop + currentHeight - boxHeight;
-                }
-                else if (valign === "middle") {
-                    top = Math.round(
-                        currentTop
-                        + currentHeight / 2
-                        - boxHeight / 2
-                    );
-                }
-            }
-            else if (
+            if (
                 (rotation === 90 || rotation === 270)
                 && hasMeasuredHeight
             ) {
@@ -553,7 +500,7 @@ export const createDialogLabelBuilder = function(
         const show = control.show;
         control.show = function(): void {
             show();
-            applyLayout(true);
+            applyLayout(false);
         };
 
         requestAnimationFrame(function(): void {
