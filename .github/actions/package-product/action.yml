@@ -55,7 +55,7 @@ runs:
     - name: Set up Node.js
       uses: actions/setup-node@v5
       with:
-        node-version: 20
+        node-version: 24
         cache: npm
 
     - name: Install DialogForge dependencies
@@ -95,6 +95,28 @@ runs:
       env:
         DIALOGFORGE_ROOT: ${{ github.workspace }}
       run: npm run check
+
+    - name: Set up R for Windows packaging and verification
+      if: ${{ inputs.platform == 'windows' }}
+      uses: r-lib/actions/setup-r@v2
+      with:
+        r-version: '4.6.1'
+        use-public-rspm: true
+
+    - name: Prepare Windows console test dependencies
+      if: ${{ inputs.platform == 'windows' }}
+      shell: bash
+      run: |
+        Rscript --vanilla - <<'RS'
+        packages <- c("later", "jsonlite", "cli", "rlang")
+        install.packages(packages, repos = "https://cloud.r-project.org")
+        missing <- packages[!vapply(packages, requireNamespace, logical(1), quietly = TRUE)]
+        if (length(missing)) {
+            stop("Windows console test dependencies are missing: ", paste(missing, collapse = ", "))
+        }
+        cat("DIALOGFORGE_R_BINARY=", file.path(R.home("bin"), "Rterm.exe"), "\n",
+            file = Sys.getenv("GITHUB_ENV"), append = TRUE, sep = "")
+        RS
 
     - name: Build product package
       shell: bash

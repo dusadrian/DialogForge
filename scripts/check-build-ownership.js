@@ -91,6 +91,9 @@ const assertSigningBrokerUsesProductOutput = function() {
         "utf8"
     );
 
+    if (!actionSource.includes("node-version: 24")) {
+        fail("The signing broker must use the Node 24 runtime qualified by the Windows build.");
+    }
     if (!actionSource.includes("files-folder: ${{ github.workspace }}\\external-product\\build\\output")) {
         fail("Windows signing must target the product-owned external-product/build/output directory.");
     }
