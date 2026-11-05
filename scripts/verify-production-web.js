@@ -248,7 +248,7 @@ const verifyDialogPackageReadiness = async function(
 
     const frame = page.frameLocator(`${layerSelector} iframe`);
 
-    await frame.locator("#paper .dm-el").first().waitFor({
+    await frame.locator("#paper [data-control-name]").first().waitFor({
         state: "visible",
         timeout: timeoutMs
     });

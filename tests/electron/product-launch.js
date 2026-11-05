@@ -166,7 +166,7 @@ const readApplicationProcessIds = function(mainPid) {
 };
 
 
-const closeTestApplication = async function(app) {
+const closeTestApplication = async function(app, timeoutMs = 2000) {
     const child = app.process();
 
     if (!child || child.exitCode !== null || child.signalCode !== null) {
@@ -184,8 +184,8 @@ const closeTestApplication = async function(app) {
             app.close().then(() => "", error => String(error)),
             new Promise(resolve => {
                 timer = setTimeout(() => {
-                    resolve("Electron did not close within 2 seconds.");
-                }, 2000);
+                    resolve(`Electron did not close within ${timeoutMs / 1000} seconds.`);
+                }, timeoutMs);
             })
         ]);
     }

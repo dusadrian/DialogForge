@@ -554,7 +554,7 @@ const verifyDependenciesStayLoaded = async function(app, mainPage) {
     );
 
     await secondDialogPage.waitForLoadState("domcontentloaded");
-    await secondDialogPage.waitForSelector(".dm-el", {
+    await secondDialogPage.waitForSelector("[data-control-name]", {
         timeout: 30000
     });
     await mainPage.waitForTimeout(500);
@@ -607,7 +607,7 @@ const verifyDialog = async function(dialogPage) {
 
             return Boolean(
                 paper
-                && paper.querySelectorAll(".dm-el").length >= count
+                && paper.querySelectorAll("[data-control-name]").length >= count
                 && (!text || bodyText.includes(text))
                 && (!workspaceObject || bodyText.includes(workspaceObject))
             );
@@ -624,7 +624,7 @@ const verifyDialog = async function(dialogPage) {
             const paper = document.getElementById("paper");
 
             return {
-                controls: paper?.querySelectorAll(".dm-el").length || 0,
+                controls: paper?.querySelectorAll("[data-control-name]").length || 0,
                 text: String(paper?.innerText || ""),
                 containers: Array.from(
                     document.querySelectorAll(".container-item")
@@ -648,7 +648,7 @@ const verifyDialog = async function(dialogPage) {
         const paper = document.getElementById("paper");
 
         return {
-            controls: paper?.querySelectorAll(".dm-el").length || 0,
+            controls: paper?.querySelectorAll("[data-control-name]").length || 0,
             text: String(paper?.innerText || "")
         };
     });
@@ -668,7 +668,7 @@ const clickContainerItem = async function(dialogPage, value, controlName = "") {
     }
 
     const selector = controlName
-        ? `.dm-el[data-control-name=${JSON.stringify(controlName)}] .container-item[data-value=${JSON.stringify(value)}]`
+        ? `[data-control-name=${JSON.stringify(controlName)}] .container-item[data-value=${JSON.stringify(value)}]`
         : `.container-item[data-value=${JSON.stringify(value)}]`;
 
     const item = dialogPage.locator(selector).first();
@@ -692,7 +692,7 @@ const clickContainerItem = async function(dialogPage, value, controlName = "") {
 const setDialogInputs = async function(dialogPage) {
     for (const [name, value] of Object.entries(dialogInputValues)) {
         const input = dialogPage.locator(
-            `.dm-el[data-control-name=${JSON.stringify(name)}] textarea`
+            `[data-control-name=${JSON.stringify(name)}] textarea`
         );
 
         await assertDialogTargetEnabled(input, name);
@@ -706,7 +706,7 @@ const readDialogLayout = async function(dialogPage) {
     return await dialogPage.evaluate(({ grow, moving, stationary, square }) => {
         const rectFor = function(name) {
             const node = document.querySelector(
-                `.dm-el[data-control-name=${JSON.stringify(name)}]`
+                `[data-control-name=${JSON.stringify(name)}]`
             );
             const rect = node?.getBoundingClientRect();
 
@@ -720,7 +720,7 @@ const readDialogLayout = async function(dialogPage) {
         const root = document.querySelector(".dialog-root")?.getBoundingClientRect();
         const squareHost = square
             ? document.querySelector(
-                `.dm-el[data-control-name=${JSON.stringify(square)}]`
+                `[data-control-name=${JSON.stringify(square)}]`
             )
             : null;
         const frame = squareHost
@@ -784,7 +784,7 @@ const verifyResizableLayout = async function(app, dialogPage) {
         const root = document.querySelector(".dialog-root")?.getBoundingClientRect();
         const plot = grow
             ? document.querySelector(
-                `.dm-el[data-control-name=${JSON.stringify(grow)}]`
+                `[data-control-name=${JSON.stringify(grow)}]`
             )?.getBoundingClientRect()
             : null;
 
@@ -911,7 +911,7 @@ const verifyRunCommand = async function(mainPage, dialogPage) {
     const libraryCountBefore = (before.match(/> library\(/g) || []).length;
     const startedAt = Date.now();
 
-    await dialogPage.locator(".dm-button .smart-button").filter({
+    await dialogPage.locator('[data-control-type="button"] .smart-button').filter({
         hasText: /^Run$/
     }).click();
     if (expectedCommand) {
