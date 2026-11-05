@@ -178,10 +178,17 @@ runs:
             )
             ;;
           windows)
+            executables=(external-product/build/output/*.exe)
+            blockmaps=(external-product/build/output/*.exe.blockmap)
+            metadata=external-product/build/output/latest.yml
+            if [ "${#executables[@]}" -eq 0 ] || [ "${#blockmaps[@]}" -eq 0 ] || [ ! -f "$metadata" ]; then
+              echo "Windows release requires executables, an installer blockmap, and latest.yml." >&2
+              exit 1
+            fi
             files=(
-              external-product/build/output/*.exe
-              external-product/build/output/*.exe.blockmap
-              external-product/build/output/latest.yml
+              "${executables[@]}"
+              "${blockmaps[@]}"
+              "$metadata"
             )
             ;;
           macos)
@@ -211,3 +218,18 @@ runs:
         cmd+=("${files[@]}")
 
         "${cmd[@]}"
+
+        if [ "$BUILD_PLATFORM" = "windows" ]; then
+          published=$(gh release view "$RELEASE_TAG" --repo "$TARGET_REPO" --json assets \
+            --jq '.assets[] | select(.state == "uploaded") | [.name, .digest] | @tsv')
+          for file in "${files[@]}"; do
+            name=$(basename "$file")
+            read -r hash _ < <(sha256sum "$file")
+            digest=$(awk -F '\t' -v asset="$name" '$1 == asset { print $2 }' <<< "$published")
+            if [ "$digest" != "sha256:$hash" ]; then
+              echo "Release asset is missing or its SHA-256 does not match: $name" >&2
+              exit 1
+            fi
+            echo "Verified published Windows asset $name ($digest)."
+          done
+        fi

@@ -30,6 +30,10 @@ permissions:
   contents: write
   id-token: write
 
+concurrency:
+  group: windows-release-${{ inputs.release_repository || inputs.product_repository }}-${{ inputs.release_tag }}
+  cancel-in-progress: false
+
 jobs:
   prepare-release:
     runs-on: windows-latest
@@ -76,7 +80,7 @@ jobs:
         uses: actions/checkout@v5
 
       - name: Build, sign, and upload Windows artifacts
-        uses: dusadrian/DialogForge/.github/actions/package-product@main
+        uses: ./.github/actions/package-product
         with:
           product_repository: ${{ inputs.product_repository }}
           product_ref: ${{ inputs.product_ref }}
