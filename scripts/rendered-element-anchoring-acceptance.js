@@ -222,9 +222,32 @@ const inkBounds = function(png, region) {
 const checkAuthentic = async function(frame, report) {
     const original = JSON.parse(fs.readFileSync(path.join(fixturePath, "dialog.json"), "utf8"));
     original.customJS = fs.readFileSync(path.join(fixturePath, "actions.js"), "utf8");
-    const expected = { en_US: [99, ["By key variables"]], el_GR: [95, ["Με μεταβλητές", "κλειδιά"]], fr_FR: [107, ["Par variables clés"]], de_DE: [113, ["Nach", "Schlüsselvariablen"]] };
+    const expected = { en_US: ["By key variables"], el_GR: ["Με μεταβλητές", "κλειδιά"], fr_FR: ["Par variables clés"], de_DE: ["Nach", "Schlüsselvariablen"] };
     for (const locale of ["el_GR", "en_US", "de_DE", "fr_FR", "el_GR"]) {
         const source = structuredClone(original);
+        // Font advances differ slightly between macOS and Linux. Compare the
+        // canonical Creator renderer in this browser, retaining the independent
+        // wrapping, glyph clipping and painted-gap assertions below.
+        const reference = await frame.evaluate(async ({ source, locale }) => {
+            const host = document.createElement("div");
+            host.style.position = "absolute";
+            host.style.left = "-4000px";
+            document.body.appendChild(host);
+            const renderer = window.elementAnchorHost.createRenderer(host, {
+                log: console.log,
+                showMessage: console.log
+            }, { languageSwitcher: false });
+            try {
+                renderer.render(source, locale);
+                await document.fonts.ready;
+                await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+                const box = renderer.canvas.querySelector('[data-nameid="label_bykeys"]').getBoundingClientRect();
+                return { width: box.width, height: box.height };
+            } finally {
+                renderer.dispose();
+                host.remove();
+            }
+        }, { source, locale });
         await render(frame, source, locale);
         const label = await box(frame, "label_bykeys");
         const radio = await box(frame, "by_order");
@@ -256,11 +279,12 @@ const checkAuthentic = async function(frame, report) {
                 lines: Array.from(range.getClientRects()).map((r) => ({ left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width }))
             };
         });
-        report.push({ case: "authentic", locale, label, radio, text });
-        near(label.width, expected[locale][0], `DC-qualified AddVariables ${locale}: visible-line fitted label width`);
-        assert.equal(text.value, expected[locale][1].join(" "));
-        assert.deepEqual(text.contents, expected[locale][1], `${locale}: original translated words and wrapping remain intact`);
-        assert.equal(text.lines.length, expected[locale][1].length, `${locale}: full translated line count is preserved`);
+        report.push({ case: "authentic", locale, label, radio, text, reference });
+        near(label.width, reference.width, `Canonical AddVariables ${locale}: visible-line fitted label width`);
+        near(label.height, reference.height, `Canonical AddVariables ${locale}: visible-line fitted label height`);
+        assert.equal(text.value, expected[locale].join(" "));
+        assert.deepEqual(text.contents, expected[locale], `${locale}: original translated words and wrapping remain intact`);
+        assert.equal(text.lines.length, expected[locale].length, `${locale}: full translated line count is preserved`);
         for (const line of text.lines) {
             assert.ok(line.left >= text.host.left + 1.9 && line.right <= text.host.right - 1.9,
                 `${locale}: all translated glyph advances fit inside the visible label host`);

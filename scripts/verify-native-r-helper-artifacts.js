@@ -7,7 +7,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const { fileSha256, readArtifactFileHashes } = require("./r-helper-artifact-files");
-const { hashUnsignedMacHelper } = require("./mac-r-helper-code-signature");
+const { hashUnsignedMacHelper, hashMacHelperAfterSigning } = require("./mac-r-helper-code-signature");
 const {
     bundleNativeRHelperArtifacts, prepareNativeRHelperArtifacts, assertNativeRHelperArtifacts,
     importNativeRHelperArtifacts
@@ -115,5 +115,27 @@ assert.notEqual(hashUnsignedMacHelper(macho), hashUnsignedMacHelper(resigned));
 resigned.writeUInt32LE(0x1d, 32);
 assert.throws(() => hashUnsignedMacHelper(resigned), /signature remaining/);
 assert.throws(() => hashUnsignedMacHelper(Buffer.alloc(20)), /64-bit native Mac/);
+
+// Reproduce the macOS 15 Intel result: an eight-byte zero extension, matching
+// __LINKEDIT filesize growth, and the separately permitted allocation change.
+const unaligned = Buffer.alloc(136);
+macho.copy(unaligned);
+unaligned.writeBigUInt64LE(104n, 72);
+unaligned.writeBigUInt64LE(32n, 80);
+const aligned = Buffer.concat([unaligned, Buffer.alloc(8)]);
+aligned.writeBigUInt64LE(32768n, 64);
+aligned.writeBigUInt64LE(40n, 80);
+assert.equal(hashUnsignedMacHelper(unaligned), hashMacHelperAfterSigning(unaligned, aligned));
+const rejectMutation = function(offset) {
+    const mutated = Buffer.from(aligned);
+    mutated[offset] ^= 1;
+    assert.notEqual(hashUnsignedMacHelper(unaligned), hashMacHelperAfterSigning(unaligned, mutated));
+};
+rejectMutation(120); // Existing code/data cannot change.
+rejectMutation(136); // Added padding must be zero.
+rejectMutation(72);  // File offsets cannot change.
+rejectMutation(80);  // File-size growth must equal the padding.
+assert.notEqual(hashUnsignedMacHelper(unaligned), hashMacHelperAfterSigning(unaligned, aligned.subarray(0, 128)));
+assert.notEqual(hashUnsignedMacHelper(unaligned), hashMacHelperAfterSigning(unaligned, Buffer.concat([aligned, Buffer.alloc(16)])));
 console.log("Native helper artifact fixtures passed; these are not native ABI or rendered acceptance.");
 console.log("Retained fixtures: " + root);

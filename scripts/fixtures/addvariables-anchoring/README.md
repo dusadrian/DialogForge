@@ -29,7 +29,10 @@ between wrappers but approximately 40px between painted text and the radio.
 `maxWidth` is a cap: the box should fit its visible lines with the existing
 horizontal padding and clipping allowance, preserving wrapping and content.
 
-Qualified Creator widths are English 99px, Greek 95px, French 107px and German
-113px at Inter 12px. The Radio box gap is 10px; the painted text-to-circle gap is
+The original macOS Creator widths were English 99px, Greek 95px, French 107px and
+German 113px at Inter 12px. Linux font advances can differ by a pixel; acceptance
+compares the canonical Creator renderer in the same browser while checking the
+original words, wrapping, clipping and attachment geometry independently.
+The Radio box gap is 10px; the painted text-to-circle gap is
 15px in all four locales because text has its normal internal inset and clipping
 allowance. The expected Greek lines remain `Με μεταβλητές` and `κλειδιά`.

@@ -6,7 +6,7 @@ const path = require("node:path");
 const crypto = require("node:crypto");
 const { execFileSync, spawnSync } = require("node:child_process");
 
-const hashUnsignedMacHelper = function(bytes) {
+const normalizeUnsignedMacHelper = function(bytes) {
     const contents = Buffer.from(bytes);
     if (contents.length < 32 || contents.readUInt32LE(0) !== 0xfeedfacf) {
         throw new Error("Only a thin, 64-bit native Mac helper can be compared after signing.");
@@ -18,6 +18,7 @@ const hashUnsignedMacHelper = function(bytes) {
     }
     let offset = 32;
     let linkEditCount = 0;
+    let linkEditOffset = 0;
     for (let index = 0; index < commandCount; index += 1) {
         if (offset + 8 > commandEnd) {
             throw new Error("Truncated native Mac load command.");
@@ -34,11 +35,41 @@ const hashUnsignedMacHelper = function(bytes) {
             // linkage, entitlements in the shipped signature or other metadata.
             contents.fill(0, offset + 32, offset + 40);
             linkEditCount += 1;
+            linkEditOffset = offset;
         }
         offset += size;
     }
     if (offset !== commandEnd || linkEditCount !== 1) {
         throw new Error("Unexpected native Mac helper load-command layout.");
+    }
+    return { contents, linkEditOffset };
+};
+
+const hashUnsignedMacHelper = function(bytes) {
+    return crypto.createHash("sha256").update(normalizeUnsignedMacHelper(bytes).contents).digest("hex");
+};
+
+const hashMacHelperAfterSigning = function(suppliedBytes, packagedBytes) {
+    const supplied = normalizeUnsignedMacHelper(suppliedBytes);
+    const packaged = normalizeUnsignedMacHelper(packagedBytes);
+    let contents = packaged.contents;
+    const padding = (16 - supplied.contents.length % 16) % 16;
+    const offset = supplied.linkEditOffset;
+
+    // macOS 15 can retain zero padding up to the 16-byte signature boundary.
+    // Only accept an extension of the trusted payload, with the corresponding
+    // __LINKEDIT filesize increase. Never trim bytes from the pinned source.
+    if (padding > 0 && contents.length === supplied.contents.length + padding
+        && packaged.linkEditOffset === offset
+        && contents.subarray(supplied.contents.length).every(byte => byte === 0)) {
+        const fileOffset = supplied.contents.readBigUInt64LE(offset + 40);
+        const fileSize = supplied.contents.readBigUInt64LE(offset + 48);
+        if (fileOffset + fileSize === BigInt(supplied.contents.length)
+            && contents.readBigUInt64LE(offset + 40) === fileOffset
+            && contents.readBigUInt64LE(offset + 48) === fileSize + BigInt(padding)) {
+            contents.writeBigUInt64LE(fileSize, offset + 48);
+            contents = contents.subarray(0, supplied.contents.length);
+        }
     }
     return crypto.createHash("sha256").update(contents).digest("hex");
 };
@@ -66,6 +97,7 @@ const assertMacHelperSigningOnly = function(suppliedPath, packagedPath) {
             unsigned.push(bytes);
             hashes.push(hashUnsignedMacHelper(bytes));
         }
+        hashes[1] = hashMacHelperAfterSigning(unsigned[0], unsigned[1]);
         if (hashes[0] !== hashes[1]) {
             const differences = [];
             for (let offset = 0; offset < Math.min(unsigned[0].length, unsigned[1].length)
@@ -88,4 +120,4 @@ const assertMacHelperSigningOnly = function(suppliedPath, packagedPath) {
     }
 };
 
-module.exports = { assertMacHelperSigningOnly, hashUnsignedMacHelper };
+module.exports = { assertMacHelperSigningOnly, hashUnsignedMacHelper, hashMacHelperAfterSigning };
