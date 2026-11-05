@@ -129,7 +129,7 @@ const readConsoleInput = async function(page) {
             return candidate.getDomNode()?.closest("#consoleTerminal");
         });
 
-        return editor?.getValue();
+        return editor?.getValue({ preserveBOM: false, lineEnding: "\n" });
     });
 };
 
@@ -355,7 +355,7 @@ const runScriptSelectionParity = async function(
     await scriptPage.keyboard.press(modifier + "+V");
     await scriptSurface.waitForFunction((expected) => {
         return window.monaco?.editor?.getEditors?.().some((editor) => {
-            return editor.getValue() === expected;
+            return editor.getValue({ preserveBOM: false, lineEnding: "\n" }) === expected;
         });
     }, riversCommand, { timeout: timeoutMs });
     await scriptPage.keyboard.press(modifier + "+A");
@@ -364,7 +364,7 @@ const runScriptSelectionParity = async function(
             const selection = editor.getSelection();
 
             return selection
-                && editor.getModel()?.getValueInRange(selection) === expected;
+                && editor.getModel()?.getValueInRange(selection, window.monaco.editor.EndOfLinePreference.LF) === expected;
         });
     }, riversCommand, { timeout: timeoutMs });
     await scriptSurface.locator(".dm-script-btn-run").click();

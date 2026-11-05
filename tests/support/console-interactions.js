@@ -16,12 +16,12 @@ const typeConsoleCommand = async function(page, command) {
         const editor = window.monaco?.editor?.getEditors?.().find((candidate) => {
             return candidate.getDomNode()?.closest("#consoleTerminal");
         });
-        return editor?.getValue() === expected;
+        return editor?.getValue({ preserveBOM: false, lineEnding: "\n" }) === expected;
     }, command, { timeout: 10000 }).catch(async (error) => {
         const actual = await page.evaluate(() => {
             return window.monaco?.editor?.getEditors?.().filter((candidate) => {
                 return candidate.getDomNode()?.closest("#consoleTerminal");
-            }).map((candidate) => candidate.getValue());
+            }).map((candidate) => candidate.getValue({ preserveBOM: false, lineEnding: "\n" }));
         });
         console.error("Console typing mismatch", { expected: command, actual });
         throw error;
