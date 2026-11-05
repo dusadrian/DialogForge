@@ -1,3 +1,5 @@
+import type { PreviewUI } from '@dialogcreator/renderer';
+import { createCanonicalControlAdapter } from './dialogCanonicalControlAdapter';
 import { coms } from './coms';
 import { RuntimeDialogSchema } from './dialog.types';
 import {
@@ -28,9 +30,6 @@ import {
 import {
   createDialogRuntimeConditionController
 } from './dialogRuntimeConditionController';
-import {
-  createDialogRuntimeControlBuilderController
-} from './dialogRuntimeControlBuilderController';
 import customJSRuntime from '../library/customJSRuntime';
 import { SimpleEventEmitter } from './simpleEventEmitter';
 import type {
@@ -52,6 +51,7 @@ export function createDialogRuntime() {
   >;
 
   const runtime = {
+    rendererUI: null as PreviewUI | null,
     dialogID: '',
     command: '',
     dialogCurrentData: {} as Record<string, Record<string, unknown>>,
@@ -220,7 +220,7 @@ export function createDialogRuntime() {
   });
   runtimeEvents.register();
   const controlBuilderController =
-    createDialogRuntimeControlBuilderController(root, runtime);
+    createCanonicalControlAdapter(root, runtime);
 
   const runtimeBuildController = createDialogRuntimeBuildController({
     root,
@@ -233,12 +233,9 @@ export function createDialogRuntime() {
         runtimeEvents.register();
       } catch {}
     },
-    buildElement: controlBuilderController.buildElement,
+    renderControls: controlBuilderController.render,
     setupCustomJS: function(dialogSpec, runtimeState): Promise<void> {
       return customJSRuntime.setup(dialogSpec, runtimeState, coms);
-    },
-    logBuildError: function(message): void {
-      coms.sendTo('main', dialogRuntimeEventChannels.log, message);
     }
   });
 

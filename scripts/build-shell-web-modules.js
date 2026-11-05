@@ -494,15 +494,8 @@ const sharedDialogCustomRuntimeSource = fs.readFileSync(
     "utf8"
 );
 const sharedDialogContainerSource = fs.readFileSync(
-    path.join(
-        sourceRoot,
-        "src",
-        "dialog-runtime",
-        "renderer",
-        "modules",
-        "dialogContainerBuilder.ts"
-    ),
-    "utf8"
+    path.join(sourceRoot, 'node_modules/@dialogcreator/renderer/renderer.js'),
+    'utf8'
 );
 
 requireSourceContract(browserShellSource, [
@@ -543,8 +536,8 @@ requireSourceContract(sharedDialogCustomRuntimeSource, [
 
 requireSourceContract(sharedDialogContainerSource, [
     "document.createDocumentFragment()",
-    "content.replaceChildren(fragment)",
-    "|| !control.pinOnTopEnabled"
+    "target.replaceChildren(fragment)",
+    "pinontop"
 ], "Shared variable containers must batch DOM updates:");
 
 const qrCodeOutput = path.join(outputRoot, "vendor", "qrcode", "qrcode.mjs");
@@ -557,3 +550,5 @@ esbuild.buildSync({
     platform: "browser",
     target: "es2022"
 });
+
+require('./stage-dialog-renderer-assets').stageDialogRendererAssets(sourceRoot, outputRoot);

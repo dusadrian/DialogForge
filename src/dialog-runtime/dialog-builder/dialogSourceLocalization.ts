@@ -1,3 +1,6 @@
+import { localizeDialogDocument } from '@dialogcreator/renderer/core';
+import type { PreviewDialog } from '@dialogcreator/renderer';
+
 const asRecord = function(value: unknown): Record<string, unknown> {
     return value && typeof value === "object" && !Array.isArray(value)
         ? value as Record<string, unknown>
@@ -33,44 +36,5 @@ export const localizeDialogSource = function(
     if (Object.keys(translations).length === 0) {
         return;
     }
-
-    const properties = asRecord(source.properties);
-    const title = String(translations["dialog.title"] || "").trim();
-
-    if (title) {
-        properties.title = title;
-    }
-    properties.language = selectedLocale;
-    source.properties = properties;
-
-    if (!Array.isArray(source.elements)) {
-        return;
-    }
-
-    source.elements.forEach((value) => {
-        const element = asRecord(value);
-        const id = String(element.id || "").trim();
-
-        if (!id) {
-            return;
-        }
-
-        ["label", "value"].forEach((property) => {
-            const key = `elements.${id}.${property}`;
-
-            if (Object.prototype.hasOwnProperty.call(translations, key)) {
-                if (
-                    property === "value"
-                    && !Object.prototype.hasOwnProperty.call(
-                        element,
-                        "__baseValue"
-                    )
-                ) {
-                    element.__baseValue = String(element.value ?? "");
-                }
-
-                element[property] = String(translations[key] ?? "");
-            }
-        });
-    });
+    Object.assign(source, localizeDialogDocument(source as unknown as PreviewDialog, selectedLocale));
 };

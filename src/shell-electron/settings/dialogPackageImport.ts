@@ -242,7 +242,9 @@ const readPackageDialog = function(packagePath: string): {
         throw new Error(`Invalid DialogCreator package: missing ${DIALOG_JSON}.`);
     }
 
-    const dialog = parseNewDialogJson(dialogFile.toString("utf8")) as unknown as Record<string, unknown>;
+    const dialog = parseNewDialogJson(dialogFile.toString("utf8"), {
+        requireValidAttachments: true
+    }) as unknown as Record<string, unknown>;
     const script = dialog.script && typeof dialog.script === "object" && !Array.isArray(dialog.script)
         ? dialog.script as Record<string, unknown>
         : {};
@@ -315,7 +317,9 @@ const normalizeProviderBucket = function(value: string): string {
 
 
 const dialogProperties = function(dialogJson: string): Record<string, unknown> {
-    const parsed = parseNewDialogJson(dialogJson);
+    const parsed = parseNewDialogJson(dialogJson, {
+        requireValidAttachments: true
+    });
     const properties = parsed.properties && typeof parsed.properties === "object"
         ? parsed.properties as unknown as Record<string, unknown>
         : {};

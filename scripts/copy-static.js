@@ -44,8 +44,8 @@ const assertCanonicalDialogStylesheet = function () {
     );
 
     [
-        "@import url('./shared/dmSelect.css');",
-        "@import url('./shared/appCodicon.css');",
+        "@import url('./dialog-renderer/css/global.css');",
+        "@import url('./dialog-renderer/css/preview.css');",
         "@import url('./shared/plotToolbar.css');"
     ].forEach((expectedImport) => {
         if (!dialogCss.includes(expectedImport)) {
@@ -247,6 +247,7 @@ else if (cacheBuild.error || cacheBuild.status !== 0) {
     throw cacheBuild.error || new Error("Canonical runtime compilation cache build failed.");
 }
 copyPackageJson();
+require('./stage-dialog-renderer-assets').stageDialogRendererAssets(sourceRoot, rootDir);
 for (const helper of [
     { directory: "r-runtime", hosts: includeWebRuntime ? ["webr"] : [] }
 ]) {

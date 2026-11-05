@@ -17,6 +17,7 @@
         "sdk:core": "node scripts/generate-core-sdk.js",
         "generate:live-script-words": "node scripts/generate-live-script-short-code-words.js",
         "test:r-package-compatibility": "node scripts/test-r-package-compatibility.js",
+        "test:dialog-anchoring:rendered": "node scripts/rendered-element-anchoring-acceptance.js",
         "test:console:unit": "node scripts/check-console-command-submission.js && node scripts/check-r-runtime-command-interrupt.js && Rscript --vanilla scripts/check-console-expression-printing.R && Rscript --vanilla scripts/check-console-message-output.R && Rscript --vanilla scripts/check-workspace-package-attachment.R && Rscript --vanilla scripts/check-runtime-control-interrupt-envelope.R",
         "test:console": "npm run build && npm run test:console:unit && node scripts/verify-console-command-parity.js --build-web && node scripts/verify-console-command-parity.js --host web --cases interrupt --worker-entry-delay-ms 200 --report artifacts/console-command-parity/early-stop.json --timeout-ms 30000 && node scripts/check-console-regression-detection.js",
         "check:build-ownership": "node scripts/check-build-ownership.js",
@@ -26,7 +27,9 @@
         "verify:electron-product-dialog": "node tests/electron/verify-product-dialog-workflow.js",
         "verify:production": "node scripts/verify-production.js",
         "verify:production:electron": "node scripts/verify-production-electron.js",
-        "verify:production:web": "node scripts/verify-production-web.js"
+        "verify:production:web": "node scripts/verify-production-web.js",
+        "renderer:update": "node scripts/update-dialog-renderer.js",
+        "test:dialog-renderer:rendered": "node scripts/check-dialog-label-parity.js && node scripts/rendered-canonical-controls.js && node scripts/rendered-canonical-venn.js"
     },
     "devDependencies": {
         "@types/qrcode": "^1.5.6",
@@ -39,6 +42,7 @@
         "typescript": "^6.0.3"
     },
     "dependencies": {
+        "@dialogcreator/renderer": "file:vendor/dialogcreator-renderer-0.1.0.tgz",
         "@fontsource/fira-code": "^5.3.0",
         "@fontsource/jetbrains-mono": "^5.3.0",
         "@fontsource/source-code-pro": "^5.3.0",
@@ -84,7 +88,7 @@
                 "/r-runtime/native/[^/]+-mingw32-[0-9]+\\.[0-9]+\\.[0-9]+/"
             ],
             "extendInfo": {
-                "NSHumanReadableCopyright": "© 2025-2026 Adrian Dusa — Academic Non-Commercial License (see LICENSE file for details)."
+                "NSHumanReadableCopyright": "\u00a9 2025-2026 Adrian Dusa \u2014 Academic Non-Commercial License (see LICENSE file for details)."
             },
             "target": [
                 {

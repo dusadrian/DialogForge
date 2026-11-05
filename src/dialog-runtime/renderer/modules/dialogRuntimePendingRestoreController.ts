@@ -74,6 +74,10 @@ export const createDialogRuntimePendingRestoreController = function(
     target.initialize = true;
 
     try {
+      if (target.restoreValue === false) {
+        delete updates.value;
+      }
+
       if (updates.visible !== void 0) {
         delete options.runtime.pendingRestoreData[elementName].visible;
       }

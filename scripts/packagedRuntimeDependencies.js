@@ -86,6 +86,7 @@ const sharedPackagedRuntimeDependencies = [
     "tiny-typed-emitter",
     "universalify",
     "sortablejs",
+    "@dialogcreator/renderer",
     "which-module"
 ];
 

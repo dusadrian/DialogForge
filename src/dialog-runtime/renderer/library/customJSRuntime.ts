@@ -161,6 +161,7 @@ const customJSRuntime = {
     const registeredRawClicks = new Set();
     const activeEmits = new Set();
     const containerDataBindings = new Map();
+    const objectBindingOptions = new Map<string, { autoSelect?: boolean; excludeSelected?: string }>();
     const validationMessages = new Map();
     const selectionMemoryBindings = new Map();
     const selectionMemoryByDependent = new Map();
@@ -491,8 +492,11 @@ const customJSRuntime = {
       } catch {}
     };
 
-    const chooseDatasetSelection = (items: DialogScriptValue) => {
+    const chooseDatasetSelection = (items: DialogScriptValue, controlName: string) => {
       const names = toItems(items);
+      if (objectBindingOptions.get(controlName)?.autoSelect === false) {
+        return getSelected(controlName).filter((name: string) => names.includes(name));
+      }
       const active = getCachedActiveDataset();
       if (active && names.includes(active)) return [active];
       return names.length === 1 ? [names[0]] : [];
@@ -629,6 +633,11 @@ const customJSRuntime = {
 
     const setContainerItems = (containerObj: DialogScriptValue, items: DialogScriptValue) => {
       const entries = toContainerEntries(items);
+      const excludedControl = objectBindingOptions.get(String(containerObj.name))?.excludeSelected;
+      const excluded = excludedControl ? getSelected(excludedControl) : [];
+      entries.forEach((entry) => {
+        entry.enabled = entry.enabled && !excluded.includes(entry.name);
+      });
       const list = entries.map((entry) => entry.name);
       const variableType = (containerObj.variableType && String(containerObj.variableType).trim()) ? String(containerObj.variableType) : 'any';
       const signature = JSON.stringify([
@@ -720,7 +729,7 @@ const customJSRuntime = {
       setContainerItems(containerObj, names);
       const keep = current.filter((x: DialogScriptValue) => names.includes(String(x)));
       const nextSelection = normalized === 'datasets'
-        ? (keep.includes(getCachedActiveDataset()) ? keep : chooseDatasetSelection(names))
+        ? (keep.includes(getCachedActiveDataset()) ? keep : chooseDatasetSelection(names, String(containerObj.name)))
         : (keep.length === 0 && names.length === 1 ? [names[0]] : keep);
       const sameSelection = nextSelection.length === current.length
         && nextSelection.every((value: DialogScriptValue, index: DialogScriptValue) => String(value) === String(current[index]));
@@ -792,7 +801,7 @@ const customJSRuntime = {
           const nextItems = toItems(value);
           setContainerItems(obj, value);
           if (source === 'datasets') {
-            obj.setValue(chooseDatasetSelection(nextItems));
+            obj.setValue(chooseDatasetSelection(nextItems, String(obj.name)));
           } else if (source && nextItems.length === 1) {
             obj.setValue(nextItems);
           } else if (source) {
@@ -857,7 +866,17 @@ const customJSRuntime = {
       if (!obj) return;
       const t = inferType(obj);
       if (t === 'container') {
-        obj.setValue(asArray(value).map(String));
+        const excludedControl = objectBindingOptions.get(String(obj.name))?.excludeSelected;
+        const excluded = excludedControl ? getSelected(excludedControl) : [];
+        // Scripted selections are silent, as in the DialogCreator API. Only
+        // the initiating user change should run mutually clearing handlers.
+        const initializing = obj.initialize;
+        obj.initialize = true;
+        try {
+          obj.setValue(asArray(value).map(String).filter(name => !excluded.includes(name)));
+        } finally {
+          obj.initialize = initializing;
+        }
         storeDependentSelectionForCurrentSource(String(obj.name));
       } else if (t === 'choice') {
         const selected = new Set(asArray(value).map((x) => String(x).trim()).filter(Boolean));
@@ -1028,49 +1047,11 @@ const customJSRuntime = {
     };
 
     const searchIn = (input: DialogScriptValue, ...containers: DialogScriptValue[]) => {
-      const inputName = coerceName(input);
-      const inputObj = find(inputName);
-      const inputType = inferType(inputObj);
-      if (inputType !== 'value') {
-        throw new SyntaxError(`searchIn() expects an Input as the first argument; ${inputName} is ${inputType}`);
-      }
-      if (!containers.length) {
-        throw new SyntaxError('searchIn() expects at least one container');
-      }
-
-      const applyQuery = () => {
-        const query = String(getValue(inputName) ?? '').trim();
-        containers.forEach((container) => {
-          const containerName = coerceName(container);
-          const containerObj = find(containerName);
-          const containerType = inferType(containerObj);
-          if (containerType !== 'container') {
-            throw new SyntaxError(`searchIn() supports only Container targets; ${containerName} is ${containerType}`);
-          }
-          containerObj.searchQuery = query;
-          applyContainerSearchFilter(containerObj);
-        });
-      };
-
-      onInput(inputName, applyQuery);
-      onChange(inputName, applyQuery);
-      applyQuery();
+      objects.rendererUI.searchIn(String(input), ...containers.map(String));
     };
 
     const enableSearch = (...containers: DialogScriptValue[]) => {
-      if (!containers.length) {
-        throw new SyntaxError('enableSearch() expects at least one container');
-      }
-
-      containers.forEach((container) => {
-        const containerName = coerceName(container);
-        const containerObj = find(containerName);
-        const containerType = inferType(containerObj);
-        if (containerType !== 'container') {
-          throw new SyntaxError(`enableSearch() supports only Container targets; ${containerName} is ${containerType}`);
-        }
-        containerObj.autoSearchEnabled = true;
-      });
+      objects.rendererUI.enableSearch(...containers.map(String));
     };
 
     const getElementNode = (el: DialogScriptValue) => {
@@ -1395,6 +1376,8 @@ const customJSRuntime = {
         dialog: String(record.dialog || '').trim(),
         datasets,
         variables: record.variables,
+        autoSelect: record.autoSelect,
+        excludeSelected: record.excludeSelected,
         autoRefresh: record.autoRefresh
       };
     };
@@ -1403,6 +1386,14 @@ const customJSRuntime = {
       const normalized = normalizeObjectBindingRequest(request);
       const autoRefresh = normalized.autoRefresh !== false;
       const datasetControl = normalized.datasets;
+      const excludeSelected = String(normalized.excludeSelected || '').trim();
+      objectBindingOptions.set(datasetControl, {
+        autoSelect: normalized.autoSelect !== false,
+        excludeSelected
+      });
+      if (normalized.autoSelect === false) {
+        activeDatasetOptOut.add(datasetControl);
+      }
       const variableContainers = collectObjectBindingVariableContainers(normalized.variables);
       const bindingKey = [
         datasetControl,
@@ -1417,6 +1408,11 @@ const customJSRuntime = {
           `binding:${datasetControl}:refresh`
         );
         return existing;
+      }
+
+      if (normalized.autoSelect === false) {
+        find(datasetControl).restoreValue = false;
+        setSelected(datasetControl, []);
       }
 
       const refreshDatasetObjects = () => {
@@ -1452,6 +1448,10 @@ const customJSRuntime = {
         // getReference() can answer synchronously as soon as the user picks.
         await refreshObjectReferences(listObjects('datasets'));
       };
+
+      if (excludeSelected) {
+        onChange(excludeSelected, refreshFromLocal);
+      }
 
       if (variableContainers.length > 0) {
         onChange(datasetControl, refreshVariables);
@@ -1494,20 +1494,9 @@ const customJSRuntime = {
     };
 
     const applyErrorState = (name: DialogScriptValue) => {
-      const host = getErrorHost(name);
-      if (!(host instanceof HTMLElement)) return;
       const messages = validationMessages.get(name) || [];
-      const text = messages.length ? String(messages[0]) : '';
-      host.classList.remove('error-in-field', 'error-in-radio');
-      if (!text) {
-        host.removeAttribute('data-error-tooltip');
-        host.removeAttribute('title');
-        return;
-      }
-      const kind = isRadioGroup(name) || inferType(find(name)) === 'radio' ? 'error-in-radio' : 'error-in-field';
-      host.classList.add(kind);
-      host.setAttribute('data-error-tooltip', text);
-      host.setAttribute('title', text);
+      objects.rendererUI.clearError(String(name));
+      messages.forEach((message: string) => objects.rendererUI.addError(String(name), message));
     };
 
     const getVariableValues = async (dataset: DialogScriptValue, variable: DialogScriptValue) => {

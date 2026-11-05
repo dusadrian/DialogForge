@@ -208,7 +208,7 @@ export const createDialogExternalCallHost = function(options: DialogExternalCall
     ): Promise<DialogControlUpdateResult> {
         const datasets = await resolveDatasets();
         const selectedDataset = getSelectedControlValue(parameters, datasetControl)
-            || String(datasets[0]?.name || "");
+            || (parameters.autoSelect === false ? "" : String(datasets[0]?.name || ""));
         const dataset = datasets.find((entry) => {
             return entry.name === selectedDataset;
         });

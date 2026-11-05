@@ -1,4 +1,4 @@
-import { RuntimeDialogSchema, RuntimeElementSpec } from './dialog.types';
+import { RuntimeDialogSchema } from './dialog.types';
 import { RuntimeControl } from './dialogRuntimeTypes';
 import {
   createDialogCanvasResizeController,
@@ -35,12 +35,11 @@ interface DialogRuntimeBuildControllerOptions {
   runtime: DialogRuntimeBuildState;
   parseDependencies(value: unknown): string[];
   resetEventHandlers(): void;
-  buildElement(spec: RuntimeElementSpec): unknown;
+  renderControls(dialogSpec: RuntimeDialogSchema): void;
   setupCustomJS(
     dialogSpec: RuntimeDialogSchema,
     runtime: DialogRuntimeBuildState
   ): Promise<void>;
-  logBuildError(message: string): void;
 }
 
 function applyDialogCanvasStyle(root: HTMLElement, dialogSpec: RuntimeDialogSchema): void {
@@ -51,7 +50,7 @@ function applyDialogCanvasStyle(root: HTMLElement, dialogSpec: RuntimeDialogSche
   const resizable = asBoolean(dialogSpec?.properties?.resizable);
 
   root.innerHTML = '';
-  root.className = 'dialog-root preview-canvas';
+  root.className = 'dialog-root';
   root.tabIndex = -1;
   // A resizable dialog keeps its authored size as the floor and follows the
   // window from there; a fixed dialog stays pinned to the authored size.
@@ -85,9 +84,8 @@ export function createDialogRuntimeBuildController(options: DialogRuntimeBuildCo
     runtime,
     parseDependencies,
     resetEventHandlers,
-    buildElement,
-    setupCustomJS,
-    logBuildError
+    renderControls,
+    setupCustomJS
   } = options;
 
   let canvasResize: DialogCanvasResizeController | null = null;
@@ -128,16 +126,7 @@ export function createDialogRuntimeBuildController(options: DialogRuntimeBuildCo
 
       applyDialogCanvasStyle(root, dialogSpec);
 
-      const values = Object.values(dialogSpec?.elements || {}) as RuntimeElementSpec[];
-      values.forEach((spec) => {
-        try {
-          buildElement(spec);
-        } catch (error) {
-          logBuildError(
-            `[dialog-runtime] build element failed: name=${asText(spec.name, '')} type=${asText(spec.type, '')} error=${error instanceof Error ? error.message : String(error)}`
-          );
-        }
-      });
+      renderControls(dialogSpec);
 
       applyGroupStateAfterBuild(runtime);
 
@@ -155,6 +144,7 @@ export function createDialogRuntimeBuildController(options: DialogRuntimeBuildCo
         return;
       }
       await setupCustomJS(dialogSpec, runtime);
+
       root.focus({ preventScroll: true });
     },
     async activatePrepared(): Promise<void> {
@@ -163,6 +153,7 @@ export function createDialogRuntimeBuildController(options: DialogRuntimeBuildCo
 
       if (dialogSpec) {
         await setupCustomJS(dialogSpec, runtime);
+
         root.focus({ preventScroll: true });
       }
     }

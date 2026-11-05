@@ -1,6 +1,7 @@
 import { DialogCreatorSchema } from './dialog.types';
+import { inspectDialogElementAnchors } from './dialogElementAnchoringContract';
 
-export const DIALOGCREATOR_CONTRACT_VERSION = '2026-03-01';
+export const DIALOGCREATOR_CONTRACT_VERSION = '2026-11-04';
 export const DIALOGCREATOR_SCHEMA_VERSIONS = Object.freeze(['1']);
 
 export const DIALOGCREATOR_SUPPORTED_ELEMENTS = Object.freeze([
@@ -26,12 +27,19 @@ type ContractReport = {
   warnings: string[];
 };
 
+export interface DialogCreatorContractOptions {
+    requireValidAttachments?: boolean;
+}
+
 function isFiniteNumberLike(value: unknown): boolean {
   const n = Number(value);
   return Number.isFinite(n);
 }
 
-export function validateDialogCreatorContract(dialog: DialogCreatorSchema): ContractReport {
+export function validateDialogCreatorContract(
+  dialog: DialogCreatorSchema,
+  options: DialogCreatorContractOptions = {}
+): ContractReport {
   const errors: string[] = [];
   const warnings: string[] = [];
 
@@ -109,6 +117,21 @@ export function validateDialogCreatorContract(dialog: DialogCreatorSchema): Cont
       }
     });
   });
+
+  const attachments = inspectDialogElementAnchors(dialog.elements);
+  errors.push(...attachments.metadataErrors);
+  for (const issue of attachments.issues) {
+    const element = attachments.elements.find((candidate) => candidate.id === issue.elementId);
+    const message = `${element?.name || issue.elementId}: ${issue.message}`;
+    if (attachments.metadataErrors.includes(message)) {
+      continue;
+    }
+    if (options.requireValidAttachments) {
+      errors.push(message);
+    } else {
+      warnings.push(message);
+    }
+  }
 
   return { errors, warnings };
 }

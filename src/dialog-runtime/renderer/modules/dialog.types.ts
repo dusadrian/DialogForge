@@ -1,6 +1,7 @@
 import type {
   RPackageRequirement
 } from '../../../core/contracts/applicationComposition';
+import type { ElementAnchorProperties } from '../../core/elementAnchoring';
 
 
 export interface DialogCreatorProperties {
@@ -32,7 +33,7 @@ export interface DialogCreatorMeta {
   exportedAt?: string;
 }
 
-export interface DialogCreatorElement {
+export interface DialogCreatorElement extends ElementAnchorProperties {
   id?: string;
   type: string;
   nameid: string;
@@ -53,6 +54,7 @@ export interface DialogCreatorSchema {
 export type RuntimeElementSpec = Record<string, unknown>;
 
 export interface RuntimeDialogSchema {
+  rendererDocument?: DialogCreatorSchema;
   properties: {
     name: string;
     title: string;

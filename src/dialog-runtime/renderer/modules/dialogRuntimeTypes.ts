@@ -8,6 +8,7 @@ export interface RuntimeControl {
     visible: boolean;
     enabled: boolean;
     initialize: boolean;
+    restoreValue?: boolean;
     kind?: string;
     value?: unknown;
     checked?: boolean;

@@ -2,9 +2,12 @@ import { DialogCreatorElement, DialogCreatorSchema, RuntimeDialogSchema } from '
 import defaultSettings from '../library/defaultSettings';
 import {
   DIALOGCREATOR_SUPPORTED_ELEMENTS,
+  DialogCreatorContractOptions,
   formatContractErrors,
   validateDialogCreatorContract
 } from './dialogImportContract';
+import { ELEMENT_ANCHOR_PROPERTY_TYPES } from '../../core/elementAnchoring';
+import { inspectDialogElementAnchors } from './dialogElementAnchoringContract';
 
 const RUNTIME_SUPPORTED_TYPES = new Set(DIALOGCREATOR_SUPPORTED_ELEMENTS.map((x) => x.toLowerCase()));
 
@@ -342,6 +345,7 @@ function mapChoice(el: DialogCreatorElement): Record<string, unknown> {
     width: toNumber(el.width, defaultSettings.choice.width),
     height: toNumber(el.height, defaultSettings.choice.height),
     items,
+    itemLabels: isRecord(el.__itemLabels) ? el.__itemLabels : {},
     backgroundColor: toStringOr(el.backgroundColor, String(defaultSettings.choice.backgroundColor || '#ffffff')),
     fontColor: toStringOr(el.fontColor, String(defaultSettings.choice.fontColor || '#000000')),
     sortable: toBoolString(el.sortable, true),
@@ -441,10 +445,13 @@ const mapperByType: Record<string, (el: DialogCreatorElement) => Record<string, 
   slider: mapSlider
 };
 
-export function parseNewDialogJson(raw: string): DialogCreatorSchema {
+export function parseNewDialogJson(
+  raw: string,
+  options: DialogCreatorContractOptions = {}
+): DialogCreatorSchema {
   const parsed = JSON.parse(raw);
   assertCreatorShape(parsed);
-  const report = validateDialogCreatorContract(parsed);
+  const report = validateDialogCreatorContract(parsed, options);
   if (report.errors.length) {
     throw new Error(formatContractErrors(report));
   }
@@ -452,6 +459,10 @@ export function parseNewDialogJson(raw: string): DialogCreatorSchema {
 }
 
 export function normalizeNewDialogForRuntime(source: DialogCreatorSchema): RuntimeDialogSchema {
+  const attachments = inspectDialogElementAnchors(source.elements);
+  if (attachments.metadataErrors.length) {
+    throw new Error(attachments.metadataErrors.join(' '));
+  }
   const runtimeElements: Record<string, Record<string, unknown>> = {};
   const namesById = new Map<string, string>();
   const localizedMessages = isRecord(source.__localizedMessages)
@@ -498,8 +509,15 @@ export function normalizeNewDialogForRuntime(source: DialogCreatorSchema): Runti
         .map((item) => String(item).trim())
         .filter(Boolean);
       mapped = mapGroup(rawElement, memberNames);
+      mapped.sourceMemberIds = toArray(rawElement.elementIds);
     } else {
       mapped = mapperByType[type](rawElement);
+    }
+    mapped.sourceElementId = String(rawElement.id ?? '');
+    for (const key of Object.keys(ELEMENT_ANCHOR_PROPERTY_TYPES)) {
+      if (Object.prototype.hasOwnProperty.call(rawElement, key)) {
+        mapped[key] = rawElement[key];
+      }
     }
     // applyPosition honours this for every element type, so it is carried here
     // rather than repeated in each per-type mapper. The raw value is kept
@@ -514,6 +532,7 @@ export function normalizeNewDialogForRuntime(source: DialogCreatorSchema): Runti
   const runtimeDefaults = isRecord(defaults) ? defaults : {};
 
   return {
+    rendererDocument: source,
     properties: {
       name: String(source.properties.name),
       title: String(source.properties.title),
