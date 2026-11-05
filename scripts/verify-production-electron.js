@@ -444,6 +444,8 @@ const runSmokeTarget = function(application, product, target, timeoutMs) {
 const main = async function() {
     const options = readArgs();
 
+    await require("./check-console-fixture-cleanup").checkConsoleFixtureCleanup();
+
     assertBindingPinMatchesDependency(rootDir);
 
     const product = readProduct(options.productPath);
@@ -458,11 +460,17 @@ const main = async function() {
 
     if (options.targets.some(target => target === "console" || target === "script-editor")) {
         const { runConsoleParity } = require("./verify-console-command-parity");
-        await runConsoleParity({
-            host: "native",
-            electronApp: application.executablePath,
-            timeoutMs: options.timeoutMs
-        });
+        // Exercise Windows process teardown repeatedly, with a fresh profile
+        // each time, so one lucky directory removal cannot qualify cleanup.
+        const passes = process.platform === "win32" ? 3 : 1;
+        for (let pass = 1; pass <= passes; pass += 1) {
+            await runConsoleParity({
+                host: "native",
+                electronApp: application.executablePath,
+                timeoutMs: options.timeoutMs
+            });
+            console.log(`OK packaged console lifecycle ${pass}/${passes}`);
+        }
     }
 };
 

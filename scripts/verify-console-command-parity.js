@@ -646,6 +646,38 @@ const runWeb = async function(options, report, temporaryRoot) {
 };
 
 
+const finishConsoleParity = function(report, temporaryRoot, reportPath, primaryFailure) {
+    let failure = primaryFailure;
+    try {
+        // Windows may retain handles briefly after the owned process tree exits.
+        // Retry transient locks, but keep an exhausted cleanup failure fatal.
+        fs.rmSync(temporaryRoot, {
+            recursive: true,
+            force: true,
+            maxRetries: 10,
+            retryDelay: 200
+        });
+    }
+    catch (error) {
+        report.ok = false;
+        report.cleanupError = error instanceof Error ? error.stack : String(error);
+        failure = failure || error;
+    }
+    if (failure) {
+        report.ok = false;
+        report.error = failure instanceof Error ? failure.stack : String(failure);
+    }
+    report.finishedAt = new Date().toISOString();
+    if (reportPath) {
+        fs.writeFileSync(reportPath, JSON.stringify(report, null, 4) + "\n");
+    }
+    if (failure) {
+        throw failure;
+    }
+    return report;
+};
+
+
 const runConsoleParity = async function(input = {}) {
     const options = normalizeOptions({
         ...readArgs([]),
@@ -664,6 +696,7 @@ const runConsoleParity = async function(input = {}) {
         fs.mkdirSync(path.dirname(options.report), { recursive: true });
     }
 
+    let failure;
     try {
         if (options.host === "native" || options.host === "both") {
             await runNative(options, report, temporaryRoot);
@@ -672,19 +705,11 @@ const runConsoleParity = async function(input = {}) {
             await runWeb(options, report, temporaryRoot);
         }
         report.ok = true;
-        return report;
     }
     catch (error) {
-        report.error = error instanceof Error ? error.stack : String(error);
-        throw error;
+        failure = error;
     }
-    finally {
-        report.finishedAt = new Date().toISOString();
-        if (options.report) {
-            fs.writeFileSync(options.report, JSON.stringify(report, null, 4) + "\n");
-        }
-        fs.rmSync(temporaryRoot, { recursive: true, force: true });
-    }
+    return finishConsoleParity(report, temporaryRoot, options.report, failure);
 };
 
 
@@ -696,4 +721,4 @@ if (require.main === module) {
 }
 
 
-module.exports = { readArgs, runConsoleParity };
+module.exports = { readArgs, runConsoleParity, finishConsoleParity };
