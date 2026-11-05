@@ -80,7 +80,9 @@ export const createRRuntimeProcessController = function(
     let processOutputSequence = 0;
     let processOutputOwner = createRequestId("runtime-process-output");
     const orderedCaptures = new Set<ReturnType<typeof prepareNativeOrderedOutput>>();
-    const startupTimeoutMs = options.startupTimeoutMs ?? 7000;
+    // A cold start compiles canonical R sources when the build cache is absent
+    // or belongs to another R version. Allow that work on slower machines.
+    const startupTimeoutMs = options.startupTimeoutMs ?? 30000;
     const runtimeEvents = createRRuntimeEventController();
     const commandInterrupt = createRRuntimeCommandInterrupt({
         canInterrupt: function() {

@@ -330,7 +330,6 @@ export const createRuntimeProvider = function(options: RuntimeProviderOptions = 
 
                 return plan;
             },
-            startupTimeoutMs: 7000,
             onTranscriptEvents: options.onTranscriptEvents,
             onUnexpectedExit: options.onUnexpectedExit
         });

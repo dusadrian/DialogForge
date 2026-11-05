@@ -842,13 +842,13 @@ electronApplicationLifecycle.bindElectronApplicationLifecycle({
                     await runtimeSessionManager.start();
                 }
 
-                for (let attempt = 0; attempt < 100; attempt += 1) {
+                for (let attempt = 0; attempt < 350; attempt += 1) {
                     const snapshot = runtimeSessionManager.getSnapshot();
 
                     if (snapshot.status === "ready") {
                         return snapshot;
                     }
-                    if (snapshot.status === "error") {
+                    if (snapshot.status === "error" || snapshot.status === "failed") {
                         throw new Error(snapshot.message || "R runtime failed to start.");
                     }
 
@@ -857,7 +857,8 @@ electronApplicationLifecycle.bindElectronApplicationLifecycle({
                     });
                 }
 
-                throw new Error("R runtime did not become ready for help smoke.");
+                throw new Error("R runtime did not become ready for smoke: "
+                    + JSON.stringify(runtimeSessionManager.getSnapshot()));
             },
             readPackageInstallSmokePrompt: function () {
                 return packageInstallSmokePrompt;
