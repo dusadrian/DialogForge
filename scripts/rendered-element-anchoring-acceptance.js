@@ -219,6 +219,29 @@ const inkBounds = function(png, region) {
     return { left, right };
 };
 
+const canonicalLabelBox = async function(frame, source, locale, name) {
+    return frame.evaluate(async ({ source, locale, name }) => {
+        const host = document.createElement("div");
+        host.style.position = "absolute";
+        host.style.left = "-4000px";
+        document.body.appendChild(host);
+        const renderer = window.elementAnchorHost.createRenderer(host, {
+            log: console.log,
+            showMessage: console.log
+        }, { languageSwitcher: false });
+        try {
+            renderer.render(source, locale);
+            await document.fonts.ready;
+            await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+            const box = renderer.canvas.querySelector(`[data-nameid="${name}"]`).getBoundingClientRect();
+            return { width: box.width, height: box.height };
+        } finally {
+            renderer.dispose();
+            host.remove();
+        }
+    }, { source, locale, name });
+};
+
 const checkAuthentic = async function(frame, report) {
     const original = JSON.parse(fs.readFileSync(path.join(fixturePath, "dialog.json"), "utf8"));
     original.customJS = fs.readFileSync(path.join(fixturePath, "actions.js"), "utf8");
@@ -228,26 +251,7 @@ const checkAuthentic = async function(frame, report) {
         // Font advances differ slightly between macOS and Linux. Compare the
         // canonical Creator renderer in this browser, retaining the independent
         // wrapping, glyph clipping and painted-gap assertions below.
-        const reference = await frame.evaluate(async ({ source, locale }) => {
-            const host = document.createElement("div");
-            host.style.position = "absolute";
-            host.style.left = "-4000px";
-            document.body.appendChild(host);
-            const renderer = window.elementAnchorHost.createRenderer(host, {
-                log: console.log,
-                showMessage: console.log
-            }, { languageSwitcher: false });
-            try {
-                renderer.render(source, locale);
-                await document.fonts.ready;
-                await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-                const box = renderer.canvas.querySelector('[data-nameid="label_bykeys"]').getBoundingClientRect();
-                return { width: box.width, height: box.height };
-            } finally {
-                renderer.dispose();
-                host.remove();
-            }
-        }, { source, locale });
+        const reference = await canonicalLabelBox(frame, source, locale, "label_bykeys");
         await render(frame, source, locale);
         const label = await box(frame, "label_bykeys");
         const radio = await box(frame, "by_order");
@@ -373,6 +377,9 @@ const mixedDialog = function() {
 
 const checkMixed = async function(frame, report) {
     const source = mixedDialog();
+    const unrotated = structuredClone(source);
+    unrotated.elements.find(item => item.id === "rotated").rotate = 0;
+    const reference = await canonicalLabelBox(frame, unrotated, "en_US", "rotated");
     await render(frame, source);
     assert.equal(await control(frame, "hidden_root").locator(".native-radio").isChecked(), true,
         "Measuring a hidden target must retain its native selected state");
@@ -391,7 +398,7 @@ const checkMixed = async function(frame, report) {
     for (const item of visibleAnchors) {
         await relation(frame, item, source.elements, "Observed host move/resize reflows the complete graph");
     }
-    near((await box(frame, "rotated")).height, 95, "Rotated Greek label uses its fitted width on the rotated axis");
+    near((await box(frame, "rotated")).height, reference.width, "Rotated Greek label uses its fitted width on the rotated axis");
     near((await box(frame, "overflow")).width, 120, "Clamped overflow keeps the maximum width for ellipsis");
     near((await box(frame, "overflow")).height, 29, "Clamped overflow keeps a two-line box");
     const hiddenCaption = await box(frame, "hidden_caption");
