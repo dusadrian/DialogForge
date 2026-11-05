@@ -51,6 +51,7 @@ const assertMacHelperSigningOnly = function(suppliedPath, packagedPath) {
     const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "dialogforge-helper-signature-"));
     try {
         const hashes = [];
+        const unsigned = [];
         for (const [name, original] of [["supplied.so", suppliedPath], ["packaged.so", packagedPath]]) {
             const copy = path.join(temporary, name);
             fs.copyFileSync(original, copy);
@@ -61,10 +62,22 @@ const assertMacHelperSigningOnly = function(suppliedPath, packagedPath) {
                 && !String(removal.stderr).includes("code object is not signed at all"))) {
                 throw removal.error || new Error("Cannot isolate the Mac helper's code-signing transformation.");
             }
-            hashes.push(hashUnsignedMacHelper(fs.readFileSync(copy)));
+            const bytes = fs.readFileSync(copy);
+            unsigned.push(bytes);
+            hashes.push(hashUnsignedMacHelper(bytes));
         }
         if (hashes[0] !== hashes[1]) {
-            throw new Error("Packaged native helper changed beyond Apple's code-signing transformation.");
+            const differences = [];
+            for (let offset = 0; offset < Math.min(unsigned[0].length, unsigned[1].length)
+                && differences.length < 16; offset += 1) {
+                if (unsigned[0][offset] !== unsigned[1][offset]) {
+                    differences.push("0x" + offset.toString(16) + ":"
+                        + unsigned[0][offset].toString(16) + "/" + unsigned[1][offset].toString(16));
+                }
+            }
+            throw new Error("Packaged native helper changed beyond Apple's code-signing transformation. "
+                + packagedPath + "; unsigned byte lengths " + unsigned[0].length + "/" + unsigned[1].length
+                + "; first differences (offset:supplied/packaged): " + differences.join(", "));
         }
         return hashes[0];
     } finally {
