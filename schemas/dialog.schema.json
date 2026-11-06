@@ -135,6 +135,12 @@
                     "label": {
                         "type": "string"
                     },
+                    "valign": {
+                        "type": "string",
+                        "description": "Label V align. Use top (default), middle, optical-middle, or bottom. Optical middle centers the visible text in the label box and keeps its attachment edges fixed. It uses the shared DialogCreator renderer from version 0.1.1.",
+                        "default": "top",
+                        "examples": ["top", "middle", "optical-middle", "bottom"]
+                    },
                     "isEnabled": {
                         "type": "boolean"
                     },

@@ -42,7 +42,7 @@
         "typescript": "^6.0.3"
     },
     "dependencies": {
-        "@dialogcreator/renderer": "file:vendor/dialogcreator-renderer-0.1.0.tgz",
+        "@dialogcreator/renderer": "file:vendor/dialogcreator-renderer-0.1.1.tgz",
         "@fontsource/fira-code": "^5.3.0",
         "@fontsource/jetbrains-mono": "^5.3.0",
         "@fontsource/source-code-pro": "^5.3.0",
