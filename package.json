@@ -17,6 +17,7 @@
         "sdk:core": "node scripts/generate-core-sdk.js",
         "generate:live-script-words": "node scripts/generate-live-script-short-code-words.js",
         "test:r-package-compatibility": "node scripts/test-r-package-compatibility.js",
+        "test:packaging:minimatch": "node scripts/check-packaging-minimatch.js",
         "test:dialog-anchoring:rendered": "node scripts/rendered-element-anchoring-acceptance.js",
         "test:console:unit": "node scripts/check-console-command-submission.js && node scripts/check-r-runtime-command-interrupt.js && Rscript --vanilla scripts/check-console-expression-printing.R && Rscript --vanilla scripts/check-console-message-output.R && Rscript --vanilla scripts/check-workspace-package-attachment.R && Rscript --vanilla scripts/check-runtime-control-interrupt-envelope.R",
         "test:console": "npm run build && npm run test:console:unit && node scripts/verify-console-command-parity.js --build-web && node scripts/verify-console-command-parity.js --host web --cases interrupt --worker-entry-delay-ms 200 --report artifacts/console-command-parity/early-stop.json --timeout-ms 30000 && node scripts/check-console-regression-detection.js",
@@ -117,6 +118,12 @@
         },
         "@electron/get": {
             "global-agent": "4.1.3"
+        },
+        "app-builder-lib": {
+            "minimatch@^10.2.5": "11.0.1"
+        },
+        "@electron/universal": {
+            "minimatch@^9.0.3": "11.0.1"
         }
     }
 }
