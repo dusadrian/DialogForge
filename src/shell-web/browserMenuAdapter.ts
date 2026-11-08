@@ -114,16 +114,22 @@ export const createBrowserMenuAdapter = function(
                 popup.setAttribute("role", "menu");
                 renderItems(children, popup);
                 container.appendChild(popup);
-                container.addEventListener("mouseenter", () => {
-                    Array.from(container.parentElement?.children || [])
-                        .forEach((sibling) => {
-                            if (sibling !== container) {
-                                sibling.classList.remove("is-open");
-                            }
-                        });
-                    container.classList.add("is-open");
-                });
             }
+
+            container.addEventListener("mouseenter", () => {
+                for (const sibling of parent.children) {
+                    if (sibling !== container) {
+                        sibling.classList.remove("is-open");
+                        sibling.querySelectorAll(".is-open").forEach((node) => {
+                            node.classList.remove("is-open");
+                        });
+                    }
+                }
+
+                if (hasChildren) {
+                    container.classList.add("is-open");
+                }
+            });
 
             parent.appendChild(container);
         }
