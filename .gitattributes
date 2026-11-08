@@ -4,3 +4,6 @@ vendor/r-runtime/** -text
 src/runtime/providers/r/native/** text eol=lf
 src/runtime/providers/r/r-sources/** text eol=lf
 scripts/** text eol=lf
+# Keep reviewable adapter sources identical to their packed npm archives.
+vendor/lodash-isequal/** text eol=lf
+vendor/temp-cleanup/** text eol=lf
