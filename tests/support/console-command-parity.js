@@ -373,6 +373,15 @@ const runScriptSelectionParity = async function(
             '#consoleTerminal [data-console-input-line="true"]'
         )).some((input) => input.dataset.consoleInputCode === "class(x)");
     }, undefined, { timeout: timeoutMs });
+
+    // The final input is echoed before its request enters WebR. At that point
+    // the prompt can still be ready from the previous statement, so readiness
+    // alone does not establish that the selected batch has finished.
+    await consolePage.waitForFunction(() => {
+        return Array.from(document.querySelectorAll(
+            "#consoleTerminal [data-execution-id] > div > div"
+        )).some((output) => output.textContent === '[1] "integer"');
+    }, undefined, { timeout: timeoutMs });
     await waitForConsoleReady(consolePage, timeoutMs);
 
     const rows = await assertTranscriptRows(

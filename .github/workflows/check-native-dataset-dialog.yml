@@ -51,6 +51,16 @@ jobs:
         working-directory: product
         run: Rscript scripts/install-native-test-packages.R
 
-      - name: Check product and native dataset-to-dialog workflow
+      - name: Check product
         working-directory: product
-        run: xvfb-run -a npm test
+        run: npm run check
+
+      - name: Build the shared native host
+        working-directory: DialogForge
+        run: node scripts/build-desktop.js
+
+      # The product's aggregate test commands also exercise development-only
+      # dialogs. This shared-host check covers the released dataset workflows.
+      - name: Check native dataset-to-dialog workflow
+        working-directory: product
+        run: xvfb-run -a node tests/electron/verify-DialogQCA-dialog-window.js
