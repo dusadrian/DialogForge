@@ -124,8 +124,14 @@ const main = async function() {
     try {
         checkDependencyCompatibility();
         checkPackagedFileSelection(root);
-        await checkUniversalArchiveMerge(root);
-        console.log("Packaging file filters, legacy matchers and universal ASAR merging passed.");
+        console.log("Packaging file filters and matcher compatibility passed.");
+
+        // The universal macOS merger assumes POSIX archive paths and invokes
+        // Apple's lipo for native binaries. Portable ASAR checks run on every OS.
+        if (process.platform === "darwin") {
+            await checkUniversalArchiveMerge(root);
+            console.log("Universal macOS ASAR merging passed.");
+        }
     }
     finally {
         fs.rmSync(root, { recursive: true, force: true });

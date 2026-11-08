@@ -6,7 +6,8 @@ legacy matcher consumers, actual universal ASAR merging, dotfiles and unpacked
 native files, updater cache reuse/invalidation, and the Windows installer's
 tracked-file cleanup (sync, callback, promise, and process exit). It also rejects
 deprecated lockfile entries and checks that installed adapters match their
-reviewable sources. CI runs these cases on Linux, macOS, and Windows.
+reviewable sources. CI runs the portable cases on Linux, macOS, and Windows;
+the universal macOS merger is exercised on macOS.
 
 The stable Electron packaging and updater dependencies still use legacy APIs.
 The scoped overrides select ASAR 4, patched glob/minimatch releases, and two
