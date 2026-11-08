@@ -1,0 +1,12 @@
+{
+    "name": "@dialogforge/lodash-isequal",
+    "version": "1.0.0",
+    "private": true,
+    "description": "electron-updater compatibility entry point for maintained Lodash isEqual",
+    "main": "index.js",
+    "license": "SEE LICENSE IN LICENSE",
+    "files": ["index.js"],
+    "dependencies": {
+        "lodash": "4.18.1"
+    }
+}

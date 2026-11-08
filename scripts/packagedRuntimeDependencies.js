@@ -63,6 +63,7 @@ const sharedPackagedRuntimeDependencies = [
     "js-yaml",
     "jsonfile",
     "lazy-val",
+    "lodash",
     "lodash.escaperegexp",
     "lodash.isequal",
     "marked",

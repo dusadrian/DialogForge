@@ -1,3 +1,24 @@
+# Packaging dependency compatibility
+
+Use Node 22.12 or newer, then run `npm ci --include=dev` and
+`npm run test:packaging:dependencies`. The packaging check covers file filters,
+legacy matcher consumers, actual universal ASAR merging, dotfiles and unpacked
+native files, updater cache reuse/invalidation, and the Windows installer's
+tracked-file cleanup (sync, callback, promise, and process exit). It also rejects
+deprecated lockfile entries and checks that installed adapters match their
+reviewable sources. CI runs these cases on Linux, macOS, and Windows.
+
+The stable Electron packaging and updater dependencies still use legacy APIs.
+The scoped overrides select ASAR 4, patched glob/minimatch releases, and two
+small adapters under `vendor/`: one delegates equality to maintained Lodash;
+the other delegates temp's literal-path cleanup to Node's filesystem API.
+Their README files document how to regenerate the archives and when to remove
+the adapters. Runtime staging includes both the equality adapter and Lodash.
+
+After changing packaging dependencies, also build a real product package and
+run `scripts/verify-production-electron.js` against that output. The focused
+compatibility check does not establish that a packaged application launches.
+
 # Console command regression checks
 
 Run `npm run test:console` from the DialogForge checkout. It builds the app,

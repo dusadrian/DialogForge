@@ -155,7 +155,8 @@ assert.deepEqual(
         .sort(),
     ["build-native-iroh-binding.yml", "build-r-runtime-helpers.yml",
         "check-console-command-parity.yml", "check-dialog-label-parity.yml",
-        "check-native-dataset-dialog.yml", "probe-intel-iroh.yml", "sign-windows-product.yml"],
+        "check-native-dataset-dialog.yml", "check-packaging-dependencies.yml",
+        "probe-intel-iroh.yml", "sign-windows-product.yml"],
     "DialogForge owns runtime helper and binding builds, acceptance probes, and shared signing; products own releases."
 );
 

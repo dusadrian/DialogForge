@@ -11,26 +11,33 @@ const asar = require("@electron/asar");
 
 
 const checkDependencyCompatibility = function() {
-    for (const packageName of ["app-builder-lib", "@electron/universal"]) {
-        const requireDependency = createRequire(require.resolve(packageName));
+    const requireAsar = createRequire(require.resolve("@electron/asar"));
+    const consumers = [
+        require.resolve("app-builder-lib"),
+        require.resolve("@electron/universal"),
+        require.resolve("@electron/asar"),
+        requireAsar.resolve("glob")
+    ];
+
+    for (const consumer of consumers) {
+        const requireDependency = createRequire(consumer);
 
         assert.strictEqual(
             requireDependency("minimatch/package.json").version,
-            "11.0.1",
-            `${packageName} must resolve the patched matcher.`
+            "11.0.5",
+            `${consumer} must resolve the patched matcher.`
         );
     }
 
-    // These older consumers call the module itself as a function. A broad
+    // This older consumer calls the module itself as a function. A broad
     // parent override would silently replace that API with an exports object.
-    for (const packageName of ["glob", "dir-compare", "@electron/asar"]) {
-        const requireDependency = createRequire(require.resolve(packageName));
-        const match = requireDependency("minimatch");
+    const requireUniversal = createRequire(require.resolve("@electron/universal"));
+    const requireDirCompare = createRequire(requireUniversal.resolve("dir-compare"));
+    const match = requireDirCompare("minimatch");
 
-        assert.strictEqual(typeof match, "function", packageName);
-        assert.strictEqual(match("assets/icon.png", "**/*.png"), true);
-        assert.strictEqual(match("assets/icon.txt", "**/*.png"), false);
-    }
+    assert.strictEqual(typeof match, "function", "dir-compare");
+    assert.strictEqual(match("assets/icon.png", "**/*.png"), true);
+    assert.strictEqual(match("assets/icon.txt", "**/*.png"), false);
 };
 
 

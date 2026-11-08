@@ -1,0 +1,9 @@
+{
+    "name": "@dialogforge/temp-cleanup",
+    "version": "1.0.0",
+    "private": true,
+    "description": "Node file-removal adapter for temp's legacy rimraf calls",
+    "main": "index.js",
+    "license": "SEE LICENSE IN LICENSE",
+    "files": ["index.js"]
+}
