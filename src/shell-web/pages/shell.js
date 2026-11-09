@@ -1318,7 +1318,7 @@ const browserDialogExternalCallHost = function () {
                 browse(fileName, extension) {
                     return selectBrowserSaveFileHandle(fileName, [{
                         description: extension.toUpperCase(),
-                        accept: { "application/octet-stream": ["." + extension] }
+                        accept: { [extension === "zip" ? "application/zip" : "application/octet-stream"]: ["." + extension] }
                     }]);
                 },
                 download: downloadBrowserBytes

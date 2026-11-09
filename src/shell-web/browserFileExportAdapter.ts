@@ -1,3 +1,4 @@
+import { zipSync } from 'fflate';
 import type { FileExportAdapter, ExportFileSelection } from '../dialog-runtime/custom-js/fileExportHost';
 
 interface ExportFileSystem {
@@ -10,41 +11,55 @@ interface ExportSaveHandle {
     createWritable(): Promise<{ write(bytes: Uint8Array): Promise<void>; close(): Promise<void> }>;
 }
 
+interface BrowsedExport {
+    token: string;
+    handle: ExportSaveHandle;
+    archive: boolean;
+}
+
 export const createBrowserFileExportAdapter = function(options: {
     fileSystem(): Promise<ExportFileSystem>;
     queryRuntimeText(query: string): Promise<string>;
     browse(fileName: string, extension: string): Promise<ExportSaveHandle | false | null>;
-    download(name: string, bytes: Uint8Array): void;
+    download(name: string, bytes: Uint8Array, type?: string): void;
 }): FileExportAdapter {
-    const browsedFiles = new Map<string, { token: string; handle: ExportSaveHandle }>();
+    const browsedFiles = new Map<string, BrowsedExport>();
     const preparedExports = new WeakMap<ExportFileSelection, {
         fs: ExportFileSystem;
-        handle?: ExportSaveHandle;
+        browsed?: BrowsedExport;
         companion?: { path: string; previousId?: number; expectedQuery: string };
     }>();
     const paths = (selection: ExportFileSelection) => [selection.filePath, ...selection.companionPaths];
     return {
-        async select(fileName, extension, companions) {
-            const handle = await options.browse(fileName.slice(fileName.lastIndexOf('/') + 1), extension);
+        async select(fileName, extension, companions, optionalCompanion) {
+            const archive = companions.length > 0 || Boolean(optionalCompanion);
+            const name = fileName.split(/[\\/]/).pop()!;
+            const pickerExtension = archive ? 'zip' : extension;
+            const handle = await options.browse(name.slice(0, -extension.length) + pickerExtension, pickerExtension);
             if (handle === false) {
                 return null;
             }
             if (!handle) {
-                throw new Error('This browser cannot browse save destinations. Enter a runtime file path instead.');
+                throw new Error('Use Export to download in this browser.');
             }
-            const name = handle.name.toLowerCase().endsWith('.' + extension)
-                ? handle.name : handle.name + '.' + extension;
-            const filePath = fileName.slice(0, fileName.lastIndexOf('/') + 1) + name;
+            if (archive && !handle.name.toLowerCase().endsWith('.zip')) {
+                throw new Error('Choose a .zip file.');
+            }
+            const filePath = archive ? name
+                : handle.name.toLowerCase().endsWith('.' + extension) ? handle.name : handle.name + '.' + extension;
             const browseToken = crypto.randomUUID();
-            browsedFiles.set(filePath, { token: browseToken, handle });
+            browsedFiles.set(filePath, { token: browseToken, handle, archive });
             return { filePath, browseToken, companionPaths: companions.map(ext => filePath.slice(0, -extension.length) + ext) };
         },
         async prepare(fileName, extension, companions, workingDirectory, browseToken, optionalCompanion) {
             const fs = await options.fileSystem();
             const filePath = fileName.startsWith('/') ? fileName
                 : workingDirectory.replace(/\/$/, '') + '/' + fileName;
-            const browsed = browsedFiles.get(filePath);
-            const selection = { filePath, browseToken, companionPaths: companions.map(ext => filePath.slice(0, -extension.length) + ext) };
+            const browsed = browsedFiles.get(fileName);
+            const selection = {
+                filePath, browseToken, commandPath: fileName,
+                companionPaths: companions.map(ext => filePath.slice(0, -extension.length) + ext)
+            };
             let companion;
             if (optionalCompanion) {
                 const path = filePath.slice(0, -extension.length) + optionalCompanion.extension;
@@ -53,7 +68,7 @@ export const createBrowserFileExportAdapter = function(options: {
             }
             preparedExports.set(selection, {
                 fs,
-                handle: browsed?.token === browseToken ? browsed.handle : undefined,
+                browsed: browsed?.token === browseToken ? browsed : undefined,
                 companion
             });
             return selection;
@@ -75,27 +90,35 @@ export const createBrowserFileExportAdapter = function(options: {
                     outputPaths.push(path);
                 }
             }
-            // Read every output before initiating any download, so failed paired
-            // exports cannot publish just the data file without its catalog.
+            // Read every output before creating the local download or archive.
             const files = await Promise.all(outputPaths.map(async path => {
-                const bytes = await entry.fs.readFile(path);
+                let bytes = await entry.fs.readFile(path);
                 if (!bytes.length) {
                     throw new Error('The runtime created an empty export file.');
                 }
+                if (path === entry.companion?.path && /\.xpt$/i.test(selection.filePath) && /\.sas$/i.test(path)) {
+                    // The downloaded setup script runs in the user's SAS session.
+                    const script = new TextDecoder().decode(bytes);
+                    bytes = new TextEncoder().encode(script.replace(/^libname datadir "[^\r\n]*";/i, 'libname datadir ".";'));
+                }
                 return { name: path.slice(path.lastIndexOf('/') + 1), bytes };
             }));
-            for (const [index, file] of files.entries()) {
-                if (index === 0 && entry.handle) {
-                    const writable = await entry.handle.createWritable();
-                    await writable.write(file.bytes);
-                    await writable.close();
-                }
-                else {
-                    options.download(file.name, file.bytes);
-                }
+            const archive = files.length > 1 || Boolean(entry.browsed?.archive);
+            const output = archive ? {
+                name: files[0].name.replace(/\.[^.]+$/, '.zip'),
+                bytes: zipSync(Object.fromEntries(files.map(file => [file.name, file.bytes])), { level: 0 })
+            } : files[0];
+            if (entry.browsed && entry.browsed.archive === archive) {
+                const writable = await entry.browsed.handle.createWritable();
+                await writable.write(output.bytes);
+                await writable.close();
             }
-            if (browsedFiles.get(selection.filePath)?.token === selection.browseToken) {
-                browsedFiles.delete(selection.filePath);
+            else {
+                options.download(output.name, output.bytes, archive ? 'application/zip' : undefined);
+            }
+            const commandPath = selection.commandPath ?? selection.filePath;
+            if (browsedFiles.get(commandPath)?.token === selection.browseToken) {
+                browsedFiles.delete(commandPath);
             }
         },
         async release(selection) {

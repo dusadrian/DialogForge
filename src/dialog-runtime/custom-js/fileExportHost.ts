@@ -4,6 +4,7 @@ export interface ExportFileSelection {
     filePath: string;
     companionPaths: string[];
     browseToken?: string;
+    commandPath?: string;
 }
 
 export interface OptionalExportCompanion {
@@ -12,7 +13,7 @@ export interface OptionalExportCompanion {
 }
 
 export interface FileExportAdapter {
-    select(fileName: string, extension: string, companions: string[]): Promise<ExportFileSelection | null>;
+    select(fileName: string, extension: string, companions: string[], optionalCompanion?: OptionalExportCompanion): Promise<ExportFileSelection | null>;
     prepare(fileName: string, extension: string, companions: string[], workingDirectory: string, browseToken: string, optionalCompanion?: OptionalExportCompanion): Promise<ExportFileSelection | null>;
     publish(selection: ExportFileSelection): Promise<void>;
     release(selection: ExportFileSelection): Promise<void>;
@@ -43,14 +44,15 @@ export const createFileExportHost = function(adapter: FileExportAdapter): Dialog
                     || /[\x00-\x1f]/.test(fileName)) {
                     throw new Error('Invalid export file name or extension.');
                 }
+                const optionalCompanion = optionalExtension ? {
+                    extension: optionalExtension,
+                    expectedQuery: String(parameters.optionalCompanionQuery || '')
+                } : undefined;
                 const selection = name === 'selectExportFile'
-                    ? await adapter.select(fileName, extension, [...new Set(companions)])
+                    ? await adapter.select(fileName, extension, [...new Set(companions)], optionalCompanion)
                     : await adapter.prepare(fileName, extension, [...new Set(companions)],
                         String(parameters.workingDirectory || ''), String(parameters.browseToken || ''),
-                        optionalExtension ? {
-                            extension: optionalExtension,
-                            expectedQuery: String(parameters.optionalCompanionQuery || '')
-                        } : undefined);
+                        optionalCompanion);
                 if (selection) {
                     if (name === 'prepareExportFile') {
                         const ticket = String(++sequence);

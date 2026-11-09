@@ -208,6 +208,7 @@ esbuild.buildSync({
     // preact stays on the page importmap so the shell and the dialog renderer
     // keep sharing one copy.
     external: ["preact", "preact/hooks", ...shellExternalModules],
+    nodePaths: [path.join(sourceRoot, "node_modules")],
     alias: nodeStubPaths
 });
 
