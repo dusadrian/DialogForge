@@ -1314,6 +1314,7 @@ const browserDialogExternalCallHost = function () {
         const sharedHost = createDialogExternalCallHost({
             fileExport: createFileExportHost(createBrowserFileExportAdapter({
                 async fileSystem() { return (await ensureRuntime()).FS; },
+                queryRuntimeText: queryBrowserRuntimeText,
                 browse(fileName, extension) {
                     return selectBrowserSaveFileHandle(fileName, [{
                         description: extension.toUpperCase(),

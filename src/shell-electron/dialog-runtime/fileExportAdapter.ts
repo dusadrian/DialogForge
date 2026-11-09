@@ -23,7 +23,7 @@ export const createDesktopFileExportAdapter = function(): FileExportAdapter {
                 ? selected.filePath : selected.filePath + '.' + extension;
             return { filePath, companionPaths: companions.map(ext => filePath.slice(0, -extension.length) + ext) };
         },
-        async prepare(fileName, extension, companions, workingDirectory) {
+        async prepare(fileName, extension, companions, workingDirectory, _browseToken, optionalCompanion) {
             if (!workingDirectory || !path.isAbsolute(workingDirectory)) {
                 throw new Error('The runtime working directory is unavailable.');
             }
@@ -35,8 +35,12 @@ export const createDesktopFileExportAdapter = function(): FileExportAdapter {
                 throw new Error('The destination folder does not exist.');
             }
             const companionPaths = companions.map(ext => filePath.slice(0, -extension.length) + ext);
+            const destinations = [filePath, ...companionPaths];
+            if (optionalCompanion) {
+                destinations.push(filePath.slice(0, -extension.length) + optionalCompanion.extension);
+            }
             const window = BrowserWindow.getFocusedWindow();
-            for (const destinationPath of [filePath, ...companionPaths]) {
+            for (const destinationPath of destinations) {
                 const exists = await fs.stat(destinationPath).then(() => true, error => {
                     if (error.code === 'ENOENT') {
                         return false;

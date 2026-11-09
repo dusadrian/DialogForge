@@ -2,6 +2,7 @@ import type { FileExportAdapter, ExportFileSelection } from '../dialog-runtime/c
 
 interface ExportFileSystem {
     readFile(path: string): Promise<Uint8Array>;
+    analyzePath(path: string): Promise<{ exists: boolean; object?: { id: number } }>;
 }
 
 interface ExportSaveHandle {
@@ -11,6 +12,7 @@ interface ExportSaveHandle {
 
 export const createBrowserFileExportAdapter = function(options: {
     fileSystem(): Promise<ExportFileSystem>;
+    queryRuntimeText(query: string): Promise<string>;
     browse(fileName: string, extension: string): Promise<ExportSaveHandle | false | null>;
     download(name: string, bytes: Uint8Array): void;
 }): FileExportAdapter {
@@ -18,6 +20,7 @@ export const createBrowserFileExportAdapter = function(options: {
     const preparedExports = new WeakMap<ExportFileSelection, {
         fs: ExportFileSystem;
         handle?: ExportSaveHandle;
+        companion?: { path: string; previousId?: number; expectedQuery: string };
     }>();
     const paths = (selection: ExportFileSelection) => [selection.filePath, ...selection.companionPaths];
     return {
@@ -36,13 +39,23 @@ export const createBrowserFileExportAdapter = function(options: {
             browsedFiles.set(filePath, { token: browseToken, handle });
             return { filePath, browseToken, companionPaths: companions.map(ext => filePath.slice(0, -extension.length) + ext) };
         },
-        async prepare(fileName, extension, companions, workingDirectory, browseToken) {
+        async prepare(fileName, extension, companions, workingDirectory, browseToken, optionalCompanion) {
             const fs = await options.fileSystem();
             const filePath = fileName.startsWith('/') ? fileName
                 : workingDirectory.replace(/\/$/, '') + '/' + fileName;
             const browsed = browsedFiles.get(filePath);
             const selection = { filePath, browseToken, companionPaths: companions.map(ext => filePath.slice(0, -extension.length) + ext) };
-            preparedExports.set(selection, { fs, handle: browsed?.token === browseToken ? browsed.handle : undefined });
+            let companion;
+            if (optionalCompanion) {
+                const path = filePath.slice(0, -extension.length) + optionalCompanion.extension;
+                const previous = await fs.analyzePath(path);
+                companion = { path, previousId: previous.object?.id, expectedQuery: optionalCompanion.expectedQuery };
+            }
+            preparedExports.set(selection, {
+                fs,
+                handle: browsed?.token === browseToken ? browsed.handle : undefined,
+                companion
+            });
             return selection;
         },
         async publish(selection) {
@@ -50,9 +63,21 @@ export const createBrowserFileExportAdapter = function(options: {
             if (!entry) {
                 throw new Error('The export runtime is no longer available.');
             }
+            const outputPaths = paths(selection);
+            if (entry.companion) {
+                const { path, previousId, expectedQuery } = entry.companion;
+                const current = await entry.fs.analyzePath(path);
+                // Atomically published companions get a new filesystem node.
+                // A writer that overwrites in place supplies its own condition.
+                if (current.exists && (expectedQuery
+                    ? (await options.queryRuntimeText(expectedQuery)) === 'yes'
+                    : current.object?.id !== previousId)) {
+                    outputPaths.push(path);
+                }
+            }
             // Read every output before initiating any download, so failed paired
             // exports cannot publish just the data file without its catalog.
-            const files = await Promise.all(paths(selection).map(async path => {
+            const files = await Promise.all(outputPaths.map(async path => {
                 const bytes = await entry.fs.readFile(path);
                 if (!bytes.length) {
                     throw new Error('The runtime created an empty export file.');

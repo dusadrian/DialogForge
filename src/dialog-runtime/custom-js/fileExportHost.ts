@@ -6,9 +6,14 @@ export interface ExportFileSelection {
     browseToken?: string;
 }
 
+export interface OptionalExportCompanion {
+    extension: string;
+    expectedQuery: string;
+}
+
 export interface FileExportAdapter {
     select(fileName: string, extension: string, companions: string[]): Promise<ExportFileSelection | null>;
-    prepare(fileName: string, extension: string, companions: string[], workingDirectory: string, browseToken: string): Promise<ExportFileSelection | null>;
+    prepare(fileName: string, extension: string, companions: string[], workingDirectory: string, browseToken: string, optionalCompanion?: OptionalExportCompanion): Promise<ExportFileSelection | null>;
     publish(selection: ExportFileSelection): Promise<void>;
     release(selection: ExportFileSelection): Promise<void>;
 }
@@ -28,8 +33,11 @@ export const createFileExportHost = function(adapter: FileExportAdapter): Dialog
                 const extension = String(parameters.extension || '');
                 const companions = Array.isArray(parameters.companionExtensions)
                     ? parameters.companionExtensions.map(String) : [];
+                const optionalExtension = String(parameters.optionalCompanionExtension || '');
+                const allExtensions = optionalExtension ? [...companions, optionalExtension] : companions;
                 if (!/^[a-z0-9]+$/i.test(extension)
-                    || companions.some(item => !/^[a-z0-9]+$/i.test(item) || item === extension)
+                    || allExtensions.some(item => !/^[a-z0-9]+$/i.test(item) || item.toLowerCase() === extension.toLowerCase())
+                    || (optionalExtension && companions.includes(optionalExtension))
                     || !fileName.toLowerCase().endsWith('.' + extension.toLowerCase())
                     || fileName.split(/[\\/]/).pop()!.length <= extension.length + 1
                     || /[\x00-\x1f]/.test(fileName)) {
@@ -38,7 +46,11 @@ export const createFileExportHost = function(adapter: FileExportAdapter): Dialog
                 const selection = name === 'selectExportFile'
                     ? await adapter.select(fileName, extension, [...new Set(companions)])
                     : await adapter.prepare(fileName, extension, [...new Set(companions)],
-                        String(parameters.workingDirectory || ''), String(parameters.browseToken || ''));
+                        String(parameters.workingDirectory || ''), String(parameters.browseToken || ''),
+                        optionalExtension ? {
+                            extension: optionalExtension,
+                            expectedQuery: String(parameters.optionalCompanionQuery || '')
+                        } : undefined);
                 if (selection) {
                     if (name === 'prepareExportFile') {
                         const ticket = String(++sequence);
