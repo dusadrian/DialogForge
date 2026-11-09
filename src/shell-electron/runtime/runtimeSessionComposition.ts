@@ -1,3 +1,5 @@
+import { createFileExportHost } from '../../dialog-runtime/custom-js/fileExportHost';
+import { createDesktopFileExportAdapter } from '../dialog-runtime/fileExportAdapter';
 import type {
     ApplicationComposition
 } from "../../core/contracts/applicationComposition";
@@ -64,6 +66,7 @@ export const createRuntimeSessionComposition = function(
     );
     const productContribution = getProductContribution(options.location);
     const sharedDialogExternalCallHost = createDialogExternalCallHost({
+        fileExport: createFileExportHost(createDesktopFileExportAdapter()),
         resolveDatasets: resolveDialogDatasets,
         state: dialogBindingState,
         onFilterStateChanged: options.onFilterStateChanged,

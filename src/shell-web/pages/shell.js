@@ -1,3 +1,5 @@
+import { createFileExportHost } from "/browser-esm/src/dialog-runtime/custom-js/fileExportHost.js";
+import { createBrowserFileExportAdapter } from "/browser-esm/src/shell-web/browserFileExportAdapter.js";
 import { createRuntimeHelpEventDelivery } from "/browser-esm/src/runtime/help/runtimeHelpEventDelivery.js";
 import { createHelpRequestOwner } from "/browser-esm/src/runtime/help/helpRequestOwner.js";
 import { runtimeCommandResultSucceeded } from "/browser-esm/src/runtime/commands/runtimeCommandReceipt.js";
@@ -1310,6 +1312,16 @@ const browserDialogDatasets = async function () {
 const browserDialogExternalCallHost = function () {
     if (!state.dialogExternalCallHost) {
         const sharedHost = createDialogExternalCallHost({
+            fileExport: createFileExportHost(createBrowserFileExportAdapter({
+                async fileSystem() { return (await ensureRuntime()).FS; },
+                browse(fileName, extension) {
+                    return selectBrowserSaveFileHandle(fileName, [{
+                        description: extension.toUpperCase(),
+                        accept: { "application/octet-stream": ["." + extension] }
+                    }]);
+                },
+                download: downloadBrowserBytes
+            })),
             resolveDatasets: browserDialogDatasets,
             state: state.dialogBindingState
         });
@@ -4570,7 +4582,7 @@ const browserDialogChannels = function () {
                 return String(state.composition?.product?.id || "base-app");
             },
             getWorkingDirectory() {
-                return state.workingDirectoryPath || "/";
+                return queryBrowserRuntimeText("getwd()");
             },
             openImportFile() {
                 return browserImportAdapter().selectOpenFile();

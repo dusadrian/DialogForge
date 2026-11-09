@@ -13,7 +13,7 @@ import {
 
 export interface DialogChannelAdapterBindings {
     getProductId?(): string;
-    getWorkingDirectory(): string;
+    getWorkingDirectory(): string | Promise<string>;
     openImportFile(): Promise<unknown>;
     previewImportFile(input: unknown): Promise<unknown>;
     readVariableValues(input: unknown): Promise<unknown>;
@@ -32,7 +32,7 @@ export interface DialogChannelAdapterBindings {
 }
 
 export interface DialogChannelAdapter {
-    getWorkingDirectory(): string;
+    getWorkingDirectory(): string | Promise<string>;
     openImportFile(): Promise<DialogImportFileResult>;
     previewImportFile(input: unknown): Promise<unknown>;
     readVariableValues(input: unknown): Promise<unknown>;

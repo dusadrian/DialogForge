@@ -30,7 +30,7 @@
             {
                 "id": "SetWorkingDirectory",
                 "labelKey": "menu.root.file.setwd",
-                "label": "Set working directory",
+                "label": "Set working directory…",
                 "type": "shell-command",
                 "command": "runtime.setWorkingDirectory"
             },
@@ -45,34 +45,35 @@
             {
                 "id": "OpenScriptFile",
                 "labelKey": "menu.root.file.openScript",
-                "label": "Open script file",
+                "label": "Open script file…",
                 "type": "shell-command",
                 "command": "script.openFile"
             },
             {
                 "id": "RunScriptFile",
                 "labelKey": "menu.root.file.runScript",
-                "label": "Run script file",
+                "label": "Run script file…",
                 "type": "shell-command",
                 "command": "runtime.runScriptFile"
             },
             {
                 "id": "ImportData",
                 "labelKey": "menu.root.file.importdata",
+                "label": "Import data…",
                 "type": "shared-dialog",
                 "dialog": "import"
             },
             {
                 "id": "WorkspaceOpenFile",
                 "labelKey": "menu.workspace.openFile",
-                "label": "Open workspace file",
+                "label": "Open workspace file…",
                 "type": "shell-command",
                 "command": "workspace.openFile"
             },
             {
                 "id": "WorkspaceSaveFile",
                 "labelKey": "menu.workspace.saveFile",
-                "label": "Save workspace file",
+                "label": "Save workspace file…",
                 "type": "shell-command",
                 "command": "workspace.saveFile"
             }
@@ -157,14 +158,14 @@
             {
                 "id": "AppGoToCase",
                 "labelKey": "menu.root.edit.gotocase",
-                "label": "Go to case...",
+                "label": "Go to case…",
                 "type": "shell-command",
                 "command": "dataset.goToCase"
             },
             {
                 "id": "AppGoToVariable",
                 "labelKey": "menu.root.edit.gotovariable",
-                "label": "Go to variable...",
+                "label": "Go to variable…",
                 "type": "shell-command",
                 "command": "dataset.goToVariable"
             }

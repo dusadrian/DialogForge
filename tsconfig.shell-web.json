@@ -68,6 +68,7 @@
         "src/runtime/help/rHelpResourceProtocol.ts",
         "src/runtime/providers/webr/webRHelpResourceTransport.ts",
         "src/shell-web/browserHostAdapter.ts",
+        "src/shell-web/browserFileExportAdapter.ts",
         "src/shell-web/browserImportAdapter.ts",
         "src/shell-web/browserLiveScriptTransport.ts",
         "src/script-editor/collaboration/liveScriptParticipantRendezvous.ts",

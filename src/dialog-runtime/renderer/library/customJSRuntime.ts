@@ -1135,7 +1135,7 @@ const customJSRuntime = {
                     dependencyOverride.map((name) => ({ name })),
                     requirementOverride
                 )
-                : dialogRPackageRequirements.slice(),
+                : dialogRPackageRequirements.concat(requirementOverride),
             dialogID: String(objects?.dialogID || '')
         });
 
@@ -1154,7 +1154,7 @@ const customJSRuntime = {
                 String(result.error || '')
             );
         }
-        if (result?.ok && dialogId) {
+        if (result?.ok && dialogId && !(options && typeof options === 'object' && options.close === false)) {
             coms.sendTo('main', dialogRuntimeEventChannels.closeWindow, { dialogID: dialogId });
         }
         return result;

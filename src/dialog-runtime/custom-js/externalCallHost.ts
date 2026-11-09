@@ -1,3 +1,4 @@
+import type { DialogExternalCallHost } from '../../core/contracts/dialogExternalCall';
 import {
     addSortByVariables,
     bindSelectExpression,
@@ -39,6 +40,7 @@ export type {
 
 
 export interface DialogExternalCallHostOptions {
+    fileExport?: DialogExternalCallHost;
     datasets?: DialogDatasetDescriptor[];
     resolveDatasets?: () => Promise<DialogDatasetDescriptor[]> | DialogDatasetDescriptor[];
     state?: DialogBindingState;
@@ -253,9 +255,12 @@ export const createDialogExternalCallHost = function(options: DialogExternalCall
     return {
         state,
         supports: function(name: string): boolean {
-            return implementedBindings.has(name);
+            return implementedBindings.has(name) || options.fileExport?.supports?.(name) === true;
         },
         call: async function(name: string, parameters: Record<string, unknown> = {}): Promise<DialogExternalCallResult> {
+            if (options.fileExport?.supports?.(name)) {
+                return options.fileExport.call(name, parameters);
+            }
             if (name === "getDatasetVariablesForDialog") {
                 const datasets = await resolveDatasets();
                 const dataset = datasets.find((entry) => {
