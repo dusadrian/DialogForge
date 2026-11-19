@@ -11,6 +11,7 @@ import {
     useState
 } from "preact/hooks";
 import {
+    ActivityItemInput,
     RuntimeItem,
     RuntimeItemActivity,
     RuntimeItemPendingInput
@@ -57,14 +58,15 @@ const consoleTranscriptItemKey = function(item: RuntimeItem, index: number): str
 
 const renderConsoleTranscriptItemNode = function(
     item: RuntimeItem,
-    activeRequest: ActiveConsoleRequest | null
+    activeRequest: ActiveConsoleRequest | null,
+    inputRows: WeakMap<ActivityItemInput, HTMLElement>
 ): HTMLElement | null {
     if (item instanceof RuntimeItemPendingInput) {
         return renderRuntimeItemPendingInput(item);
     }
 
     if (item instanceof RuntimeItemActivity) {
-        return renderRuntimeItemActivity(item, activeRequest);
+        return renderRuntimeItemActivity(item, activeRequest, inputRows);
     }
 
     return null;
@@ -224,6 +226,7 @@ const ConsoleTranscriptItem = function(props: {
     onHeight: (itemKey: string, height: number) => void;
 }): ComponentChildren {
     const hostRef = useRef<HTMLDivElement | null>(null);
+    const inputRows = useMemo(() => new WeakMap<ActivityItemInput, HTMLElement>(), []);
     const activeRequestKey = props.activeRequest
         ? String(props.activeRequest.activityId || "")
         : "";
@@ -237,7 +240,8 @@ const ConsoleTranscriptItem = function(props: {
 
         const node = renderConsoleTranscriptItemNode(
             props.item,
-            props.activeRequest
+            props.activeRequest,
+            inputRows
         );
 
         if (node) {

@@ -358,7 +358,8 @@ export const renderActivityItemStream = (item: ActivityItemStream) => {
 
 export const renderRuntimeItemActivity = (
   item: RuntimeItemActivity,
-  activeRequest: { activityId: string; promptId?: string } | null
+  activeRequest: { activityId: string; promptId?: string } | null,
+  inputRows: WeakMap<ActivityItemInput, HTMLElement>
 ) => {
   const host = document.createElement('div');
   host.dataset.executionId = String(item.id || '');
@@ -370,7 +371,12 @@ export const renderRuntimeItemActivity = (
 
   item.activityItems.forEach((activityItem) => {
     if (activityItem instanceof ActivityItemInput) {
-      host.appendChild(renderActivityItemInput(activityItem));
+      let rows = inputRows.get(activityItem);
+      if (!rows) {
+        rows = renderActivityItemInput(activityItem);
+        inputRows.set(activityItem, rows);
+      }
+      host.appendChild(rows);
       return;
     }
     if (activityItem instanceof ActivityItemPrompt) {
