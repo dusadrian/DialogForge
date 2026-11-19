@@ -841,25 +841,33 @@ export const runElectronSmoke = async function(options: ElectronSmokeRunnerOptio
         return;
     }
 
+    // Renderer boot can finish while the native runtime is still starting.
+    const consoleState = `(() => {
+        const input = document.getElementById("visibleCommandInput");
+        const prompt = document.querySelector("#consoleTerminal [data-session-phase][data-runtime-busy]");
+        return {
+            phase: prompt?.dataset.sessionPhase || "",
+            busy: prompt?.dataset.runtimeBusy || "",
+            editorReady: Boolean(prompt?.querySelector(".monaco-editor"))
+                && typeof input?.dialogForgeConsoleInputView?.submit === "function",
+            status: document.getElementById("consoleStatus")?.textContent || ""
+        };
+    })()`;
+    await waitForRendererCondition(
+        win,
+        `(() => {
+            const state = ${consoleState};
+            return state.phase === "ready" && state.busy === "false" && state.editorReady;
+        })()`,
+        15000,
+        consoleState
+    );
+
     await win.webContents.executeJavaScript(
         `(async () => {
-            const input = document.getElementById("visibleCommandInput");
-            const run = document.getElementById("visibleCommandRun");
-            if (input?.dialogForgeConsoleInputView?.setText) {
-                input.dialogForgeConsoleInputView.setText("1 + 1");
-                if (input.dialogForgeConsoleInputView.submit) {
-                    await input.dialogForgeConsoleInputView.submit();
-                    return true;
-                }
-            }
-            else if (input?.dialogForgeMonacoModel) {
-                input.dialogForgeMonacoModel.setValue("1 + 1");
-            }
-            else if (input) {
-                input.textContent = "1 + 1";
-            }
-            run.click();
-            return true;
+            const input = document.getElementById("visibleCommandInput").dialogForgeConsoleInputView;
+            input.setText("1 + 1");
+            await input.submit();
         })()`,
         true
     );
@@ -874,7 +882,7 @@ export const runElectronSmoke = async function(options: ElectronSmokeRunnerOptio
                 consoleTerminal ? consoleTerminal.innerText || "" : "",
                 transcript ? transcript.innerText || "" : ""
             ].join("\\n");
-            return text.includes("[1] 2") || text.includes("2")
+            return text.includes("[1] 2")
                 ? { ok: true, status: status ? status.textContent : "", transcript: text }
                 : null;
         })()`,
