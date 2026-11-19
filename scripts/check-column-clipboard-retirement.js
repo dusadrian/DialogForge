@@ -34,7 +34,7 @@ const checkOperation = async function(operation, stage, transition) {
         getRowCount: () => 501,
         readColumnClipboardPage: ({ rowStart }) => waitStage(rowStart === 1 ? "content" : "next-page", {
             total: 501,
-            cells: Array(rowStart === 1 ? 500 : 1).fill({ display: "1", raw: "1" }),
+            values: Array(rowStart === 1 ? 500 : 1).fill("1"),
             metadata: null
         }),
         writeClipboard: () => waitStage("write", true),

@@ -101,7 +101,7 @@ cell_scalar_value_text <- function(cell) {
 }
 
 
-cell_scalar_text <- function(cell) {
+cell_scalar_text <- function(cell, preview = TRUE) {
     text <- tryCatch(
         cell_scalar_value_text(cell),
         error = function(error) ""
@@ -127,7 +127,7 @@ cell_scalar_text <- function(cell) {
         text <- "NA"
     }
 
-    if (nchar(text, type = "chars") > 160L) {
+    if (preview && nchar(text, type = "chars") > 160L) {
         text <- paste0(substr(text, 1L, 160L), "...")
     }
 
@@ -192,8 +192,11 @@ cell_is_declared_missing <- function(source_column, cell) {
 }
 
 
-declared_missing_cell_json <- function(cell) {
-    raw_value <- cell_scalar_text(cell)
+declared_missing_cell_json <- function(cell, clipboard = FALSE) {
+    raw_value <- cell_scalar_text(cell, preview = !clipboard)
+    if (clipboard) {
+        return(c(raw_value, paste0("NA(", raw_value, ")")))
+    }
 
     paste0(
         "{",
@@ -235,7 +238,7 @@ empty_cell_json <- function() {
 }
 
 
-cell_state_json <- function(source_column, source_index) {
+cell_state_json <- function(source_column, source_index, clipboard = FALSE) {
     if (
         is.null(source_column) ||
         !is.finite(source_index) ||
@@ -243,7 +246,7 @@ cell_state_json <- function(source_column, source_index) {
         source_index < 1L ||
         length(source_column) < source_index
     ) {
-        return(empty_cell_json())
+        return(if (clipboard) "" else empty_cell_json())
     }
 
     cell <- tryCatch(
@@ -258,16 +261,19 @@ cell_state_json <- function(source_column, source_index) {
         )
 
         if (!is.null(declared_value)) {
-            return(declared_missing_cell_json(declared_value))
+            return(declared_missing_cell_json(declared_value, clipboard))
         }
 
-        return(empty_cell_json())
+        return(if (clipboard) "" else empty_cell_json())
     }
 
     if (isTRUE(cell_is_declared_missing(source_column, cell))) {
-        return(declared_missing_cell_json(cell))
+        return(declared_missing_cell_json(cell, clipboard))
     }
 
+    if (clipboard) {
+        return(cell_scalar_text(cell, preview = FALSE))
+    }
     value_json <- cell_to_json(cell)
 
     paste0(
@@ -487,6 +493,17 @@ workspace_dataset_row_names <- function(value, page) {
 # Keep the previous successful copy while the renderer prepares a replacement.
 column_clipboard <- list()
 
+clipboard_json_strings <- function(values) {
+    if (!length(values)) {
+        return(character())
+    }
+    cells <- paste0('"', values, '"')
+    escaped <- grepl('[[:cntrl:]"\\\\]', values)
+    cells[escaped] <- vapply(values[escaped], json_str, character(1))
+    cells
+}
+
+
 workspace_column_clipboard_page <- function(params) {
     key <- params$key
     first <- as.integer(params$rowStart)
@@ -500,27 +517,69 @@ workspace_column_clipboard_page <- function(params) {
         }
         copies <- column_clipboard[intersect(names(column_clipboard), params$retainKey)]
         column <- dataset$value[[params$column]]
-        copies[[key]] <- unserialize(serialize(column, NULL))
+        column <- unserialize(serialize(column, NULL))
+        categories <- list()
+        if (isTRUE(params$includeLabels)) {
+            attributes <- workspace_dataset_declared_attributes(column)
+            categories <- workspace_dataset_category_state(column, attributes$labels, attributes$na_values)
+            categories$include_labels <- TRUE
+        }
+        copies[[key]] <- list(column = column, categories = categories)
         column_clipboard <<- copies
     }
 
     if (!is.element(key, names(column_clipboard))) {
         return(list(ok = FALSE, error = "The copied column is no longer available."))
     }
-    column <- column_clipboard[[key]]
-    page <- workspace_dataset_page_bounds(first, 500L, length(column))
-    rows <- seq_len(page$count) + page$first - 1L
-    cells <- vapply(rows, function(row) cell_state_json(column, row), character(1))
-    metadata <- if (first == 1L && isTRUE(params$includeLabels)) {
-        workspace_dataset_variable_json(params$column, column)
+    snapshot <- column_clipboard[[key]]
+    column <- snapshot$column
+    plain <- is.null(attributes(column)) &&
+        is.element(typeof(column), c("integer", "character", "logical"))
+    # Complex cells can invoke class-specific formatting. Bound that work per request.
+    limit <- if (plain) 8192L else 500L
+    count <- min(limit, max(0, length(column) - first + 1))
+    rows <- seq_len(count) + first - 1
+    if (plain) {
+        # These scalar types have the same text in isolation and in a vector.
+        values <- as.character(column[rows])
+        values[is.na(values)] <- ""
+        if (is.character(column) && length(values)) {
+            # Bound the strings before quoting and escaping them. Always
+            # return at least one row, including a single oversized value.
+            bytes <- cumsum(as.double(nchar(values, type = "bytes")) + 3)
+            values <- values[seq_len(max(1L, sum(bytes <= 256L * 1024L)))]
+        }
+        display <- values
     } else {
-        "null"
+        states <- lapply(rows, function(row) cell_state_json(column, row, clipboard = TRUE))
+        values <- vapply(states, `[[`, character(1), 1L)
+        display <- vapply(states, function(cell) cell[[length(cell)]], character(1))
+    }
+    cells <- clipboard_json_strings(values)
+    if (isTRUE(snapshot$categories$include_labels)) {
+        categories <- snapshot$categories
+        index <- match(values, categories$values)
+        matched <- !is.na(index)
+        labels <- categories$labels[index[matched]]
+        display[matched] <- ifelse(nzchar(labels), labels, values[matched])
+        labelled <- which(values != display)
+        if (length(labelled)) {
+            cells[labelled] <- paste0("[", cells[labelled], ",", clipboard_json_strings(display[labelled]), "]")
+        }
+    }
+    # Bound the encoded values in addition to the maximum row count.
+    bytes <- cumsum(as.double(nchar(cells, type = "bytes")) + 1)
+    if (length(bytes) && bytes[[1L]] > 256L * 1024L) {
+        # One indivisible value can exceed the target page size. The transport
+        # still enforces its frame limit, and no subsequent rows join this page.
+        cells <- cells[1L]
+    } else {
+        cells <- cells[bytes <= 256L * 1024L]
     }
 
     list(ok = TRUE, result_json = paste0(
         '{"total":', json_num(length(column)),
-        ',"metadata":', metadata,
-        ',"cells":[', paste(cells, collapse = ","), "]}"
+        ',"values":[', paste(cells, collapse = ","), "]}"
     ))
 }
 
@@ -528,7 +587,7 @@ workspace_copied_column <- function(key, target_rows, include_labels) {
     if (!is.element(key, names(column_clipboard))) {
         stop("The copied column is no longer available.")
     }
-    column <- column_clipboard[[key]]
+    column <- column_clipboard[[key]]$column
     if (length(column) != target_rows) {
         stop("The target dataset has a different number of rows.")
     }

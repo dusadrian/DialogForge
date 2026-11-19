@@ -8,7 +8,7 @@ export interface DatasetEditorCommandTransportControllerOptions {
 }
 
 export interface DatasetEditorCommandTransportController {
-    writeClipboardText: (text: string) => Promise<boolean>;
+    writeClipboardText: DatasetEditorRendererTransport["writeClipboardText"];
     readClipboardText: () => Promise<string | null>;
     runVisibleCommand: (
         command: string,

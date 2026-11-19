@@ -1087,7 +1087,7 @@ const datasetColumnClipboardActions =
       datasetSchema.snapshot.schema?.rowCount || 0
     ),
     readColumnClipboardPage: (request) => window.dialogForge.datasetViewer.readColumnClipboardPage(request),
-    writeClipboard: writeTextToClipboard,
+    writeClipboard: text => writeTextToClipboard(text, true),
     readClipboard: readTextFromClipboard,
     runCommand: runVisibleDatasetEditorCommand,
     refreshDataset: (datasetName) => refreshCurrentDataset(datasetName),

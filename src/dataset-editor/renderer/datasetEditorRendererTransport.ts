@@ -6,7 +6,7 @@ import type {
 export interface DatasetEditorRendererTransport {
     persistVariableColumnWidths(widths: VariableColumnWidths): Promise<void>;
     publishDatasetState(datasetName: string): void;
-    writeClipboardText(text: string): Promise<boolean>;
+    writeClipboardText(text: string, allowEmpty?: boolean): Promise<boolean>;
     readClipboardText(): Promise<string | null>;
     runVisibleCommand(
         command: string,
@@ -29,7 +29,7 @@ export interface DatasetEditorTransportBridge {
 }
 
 
-const normalizeClipboardText = function(text: string): string {
+export const normalizeClipboardText = function(text: string): string {
     return String(text || "")
         .replace(/\r\n/g, "\n")
         .replace(/\r/g, "\n");
@@ -50,10 +50,10 @@ export const createDatasetEditorRendererTransport = function(
                 bridge.publishDatasetState(String(datasetName || "").trim());
             } catch {}
         },
-        writeClipboardText: async (text) => {
+        writeClipboardText: async (text, allowEmpty = false) => {
             const normalized = normalizeClipboardText(text);
 
-            if (!normalized) {
+            if (!normalized && !allowEmpty) {
                 return false;
             }
 

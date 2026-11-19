@@ -82,8 +82,7 @@ export interface ColumnClipboardPageRequest {
 }
 
 export interface ColumnClipboardPage {
-    cells: DatasetViewerCell[];
-    metadata: DatasetVariableMetadata | null;
+    values: Array<string | [string, string]>;
     total: number;
 }
 

@@ -1,21 +1,16 @@
 import type {
-    DatasetVariableMetadata,
-    DatasetViewerCell,
     ColumnClipboardPageRequest,
     ColumnClipboardPage
 } from "../../runtime/tabular-data/datasetViewerTypes";
 import type {
     DatasetEditorClipboardState
 } from "../clipboard/editorClipboardState";
+import { normalizeClipboardText } from "./datasetEditorRendererTransport";
 import { quoteTsvCell } from "../clipboard/editorClipboardState";
 import {
     asRObjectReference,
     asRStringLiteral
 } from "../commands/visibleCommandText";
-import {
-    readDatasetCellRawValue,
-    readDatasetCellValueLabel
-} from "../view/cellText";
 
 
 export interface DatasetColumnClipboardActionsOptions {
@@ -87,46 +82,34 @@ export const createDatasetColumnClipboardActions = function(
 
         try {
             const snapshotKey = crypto.randomUUID();
-            const cells: DatasetViewerCell[] = [];
-            let metadata: DatasetVariableMetadata | null = null;
+            const textPages: string[] = [];
+            let copiedRows = 0;
             do {
                 const page = await options.readColumnClipboardPage({
-                    name: datasetName,
-                    column: columnName,
-                    key: snapshotKey,
-                    retainKey: lastCopiedKey,
-                    rowStart: cells.length + 1,
-                    includeLabels
+                    name: datasetName, column: columnName, key: snapshotKey, retainKey: lastCopiedKey,
+                    rowStart: copiedRows + 1, includeLabels
                 });
                 if (!isCurrent()) {
                     return;
                 }
-                if (!page || page.total !== rowCount || !Array.isArray(page.cells)
-                    || cells.length + page.cells.length > rowCount
-                    || (rowCount > 0 && page.cells.length === 0)) {
+                if (!page || page.total !== rowCount || !Array.isArray(page.values)
+                    || copiedRows + page.values.length > rowCount || (rowCount && !page.values.length)) {
                     options.showNotice(options.translate("Column copy failed"));
                     return;
                 }
-                if (cells.length === 0) {
-                    metadata = page.metadata;
-                }
-                cells.push(...page.cells);
-            } while (cells.length < rowCount);
+                const lines = page.values.map(value => {
+                    const raw = typeof value === "string" ? value : value[0];
+                    if (!includeLabels) {
+                        return quoteTsvCell(raw);
+                    }
+                    const display = typeof value === "string" ? value : value[1];
+                    return quoteTsvCell(raw) + "\t" + quoteTsvCell(display);
+                });
+                textPages.push(lines.join("\n"));
+                copiedRows += lines.length;
+            } while (copiedRows < rowCount);
 
-            const rawValues = cells.map(readDatasetCellRawValue);
-            const labelValues = includeLabels
-                ? cells.map((cell) => {
-                    return readDatasetCellValueLabel(cell, metadata);
-                })
-                : [];
-            const text = includeLabels
-                ? rawValues.map((value, index) => {
-                    return [
-                        quoteTsvCell(value),
-                        quoteTsvCell(labelValues[index] ?? "")
-                    ].join("\t");
-                }).join("\n")
-                : rawValues.map(quoteTsvCell).join("\n");
+            const text = normalizeClipboardText(textPages.join("\n"));
             const copied = await options.writeClipboard(text);
             if (!isCurrent()) {
                 return;
@@ -146,7 +129,7 @@ export const createDatasetColumnClipboardActions = function(
             options.clipboardState.setDataColumn(
                 datasetName,
                 columnName,
-                cells.length,
+                copiedRows,
                 includeLabels
                     ? "values-and-labels"
                     : "values",
