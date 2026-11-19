@@ -132,16 +132,32 @@ runtime_inspection_declared_namespace <- local({
 })
 
 
-runtime_registered_method_is_stock <- function(methods, name, namespace) {
+runtime_namespace_method_declarations <- function(namespace) {
+    if (identical(namespace, asNamespace("base"))) {
+        return(NULL)
+    }
+    declarations <- getNamespaceInfo(namespace, "S3methods")
+    list(
+        names = paste(declarations[, 1L], declarations[, 2L], sep = "."),
+        rows = declarations
+    )
+}
+
+
+runtime_registered_method_is_stock <- function(
+    methods,
+    name,
+    namespace,
+    declarations = runtime_namespace_method_declarations(namespace),
+    binding = runtime_binding_info(methods, name)
+) {
     stock_name <- name
-    if (!identical(namespace, asNamespace("base"))) {
-        declarations <- getNamespaceInfo(namespace, "S3methods")
-        declared_names <- paste(declarations[, 1L], declarations[, 2L], sep = ".")
-        declaration <- runtime_match_stored_names(name, declared_names)
+    if (!is.null(declarations)) {
+        declaration <- runtime_match_stored_names(name, declarations$names)
         if (declaration > 0L) {
             # Dynamic S3 registration can turn this into a list matrix.
             # Extract its cell, not a one-element list around the method name.
-            stock_name <- declarations[[declaration, 3L]]
+            stock_name <- declarations$rows[[declaration, 3L]]
             if (
                 !runtime_stored_graph_is_inspectable(stock_name) ||
                 typeof(stock_name) != "character" ||
@@ -154,13 +170,17 @@ runtime_registered_method_is_stock <- function(methods, name, namespace) {
             stock_name <- .subset2(stock_name, 1L)
         }
     }
-    binding <- runtime_binding_info(methods, name)
     if (runtime_inspection_names_contain(binding$state, c("value", "forced"))) {
         stock <- get0(stock_name, envir = namespace, inherits = FALSE)
         return(is.function(stock) && identical(binding$value, stock))
     }
     if (identical(binding$state, "delayed")) {
         stock_binding <- runtime_binding_info(namespace, stock_name)
+        # All delayed paths require a stock definition in this exact frame.
+        # An absent one cannot become valid by following the method's resolver.
+        if (identical(stock_binding$state, "unbound")) {
+            return(FALSE)
+        }
         if (
             identical(stock_binding$state, "delayed") &&
             identical(binding$expression, stock_binding$expression) &&
@@ -181,9 +201,21 @@ runtime_registered_method_is_stock <- function(methods, name, namespace) {
 
     context <- binding$environment
     method <- runtime_binding_info(context, "method")
-    home <- runtime_binding_info(context, "home")
+    # Named S3 declarations can retain names on the method string.
+    # Inspect its scalar contents before looking in the proposed home.
     if (
         !runtime_inspection_names_contain(method$state, c("value", "forced")) ||
+        !runtime_stored_graph_is_inspectable(method$value) ||
+        typeof(method$value) != "character" ||
+        is.object(method$value) ||
+        length(method$value) != 1L ||
+        !identical(.subset2(method$value, 1L), stock_name)
+    ) {
+        return(FALSE)
+    }
+
+    home <- runtime_binding_info(context, "home")
+    if (
         !runtime_inspection_names_contain(home$state, c("value", "forced")) ||
         !is.environment(home$value)
     ) {
@@ -205,24 +237,13 @@ runtime_registered_method_is_stock <- function(methods, name, namespace) {
         }
     }
 
-    # Named S3 declarations can retain a names attribute on the stored method
-    # string. get() uses its scalar text, not that attribute. Inspect only an
-    # ordinary stored character value, without forcing or dispatching methods.
-    if (
-        !runtime_stored_graph_is_inspectable(method$value) ||
-        typeof(method$value) != "character" ||
-        is.object(method$value) ||
-        length(method$value) != 1L ||
-        !identical(.subset2(method$value, 1L), stock_name)
-    ) {
-        return(FALSE)
-    }
-
     # An identical expression is insufficient if its environment shadows get().
     stock_get <- base::get
     for (depth in seq_len(32L)) {
-        resolver <- runtime_binding_info(context, "get")
-        if (!identical(resolver$state, "unbound")) {
+        # An exact-frame existence check does not force active or delayed
+        # bindings. Inspect the first present slot before trusting its value.
+        if (base::exists("get", envir = context, inherits = FALSE)) {
+            resolver <- runtime_binding_info(context, "get")
             return(
                 runtime_inspection_names_contain(resolver$state, c("value", "forced")) &&
                 identical(resolver$value, stock_get) &&

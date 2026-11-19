@@ -319,6 +319,32 @@ local({
             )
         })
         restore()
+
+        if (is.function(get0(registered_name, namespace, inherits = FALSE))) {
+            # The first slot named get still shadows base::get when it is active,
+            # delayed or a missing argument. Checking it must never run its body.
+            missing_resolver <- function(get) environment()
+            active_resolver <- new.env()
+            delayed_resolver <- new.env()
+            makeActiveBinding("get", hostile, active_resolver)
+            delayedAssign("get", hostile(), assign.env = delayed_resolver)
+            for (resolver in list(active_resolver, delayed_resolver, missing_resolver())) {
+                context <- new.env(parent = resolver)
+                context$method <- registered_name
+                context$home <- namespace
+                if (exists(registered_name, table, inherits = FALSE)) {
+                    rm(list = registered_name, envir = table)
+                }
+                delayedAssign(registered_name, get(method, envir = home),
+                    eval.env = context, assign.env = table)
+                stopifnot(
+                    !runtime$runtime_registered_method_is_stock(table, registered_name, namespace),
+                    identical(runtime$runtime_binding_info(table, registered_name)$state, "delayed"),
+                    hits == 0L
+                )
+                restore()
+            }
+        }
     }
     check_registered_method("as.character", "Date", as.Date("2026-09-29"), "base")
     check_registered_method("head", "Date", as.Date("2026-09-29"), "utils")
