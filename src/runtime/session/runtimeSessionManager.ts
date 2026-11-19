@@ -194,6 +194,7 @@ export const createRuntimeSessionManager = function(
 
     const startupTaskExecutionController =
         createRuntimeStartupTaskExecutionController({
+            getGeneration: () => lifecycleState.getSnapshot().lifecycleGeneration,
             checkDependencies: function(request) {
                 return checkDependencies(request);
             },

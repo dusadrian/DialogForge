@@ -38,6 +38,9 @@ export interface RuntimeCompositionOperationController {
 export const createRuntimeCompositionOperationController = function(
     options: RuntimeCompositionOperationControllerOptions
 ): RuntimeCompositionOperationController {
+    let startupGeneration: number | undefined;
+    const automaticTasks = new Map<string, Promise<StartupTaskExecutionResult>>();
+
     return {
         executeDialog: function(request): DialogExecutionResult {
             const snapshot = options.getSnapshot();
@@ -99,10 +102,27 @@ export const createRuntimeCompositionOperationController = function(
                 });
             }
 
-            return options.compositionExecutionController.executeStartupTask(
+            if (request.generation !== undefined && request.generation !== snapshot.lifecycleGeneration) {
+                throw new Error("Runtime startup request belongs to a retired session.");
+            }
+            if (startupGeneration !== snapshot.lifecycleGeneration) {
+                startupGeneration = snapshot.lifecycleGeneration;
+                automaticTasks.clear();
+            }
+            const key = JSON.stringify([request.owner, request.taskId]);
+            const previous = automaticTasks.get(key);
+            if (request.automatic && previous) {
+                return previous;
+            }
+
+            const execution = options.compositionExecutionController.executeStartupTask(
                 snapshot.providerId,
-                request
+                { ...request, generation: snapshot.lifecycleGeneration }
             );
+            // An explicit Run can also satisfy the automatic startup gate.
+            // A retired generation retains its own promise and cannot write here later.
+            automaticTasks.set(key, execution);
+            return execution;
         }
     };
 };

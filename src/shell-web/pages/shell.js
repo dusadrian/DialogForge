@@ -217,7 +217,7 @@ import {
     releaseOwnedRuntimeResource
 } from "/browser-esm/src/runtime/session/runtimeResourceRelease.js";
 import {
-    runOwnedRuntimeStartupStage
+    runOwnedRuntimeStartupStage, runApplicationStartupTasks, RuntimeStartupRetiredError
 } from "/browser-esm/src/runtime/session/runtimeStartupStage.js";
 import {
     createWebRRuntimeRestartAdapter
@@ -3725,46 +3725,24 @@ const ensureRuntime = async function () {
             ? state.composition.startupTasks
             : [];
 
-        for (const task of startupTasks) {
-            if (task?.enabled !== true) {
-                continue;
+        // Package-only tasks can name native transport dependencies. The web
+        // image resolves those requirements when a product action needs them.
+        const webTasks = startupTasks.filter(task => !(task.rPackages?.length
+            && !task.commands?.length && (task.requiredRuntime || []).every(
+                capability => capability === "dependencies.packages"
+            )));
+        await runApplicationStartupTasks({
+            tasks: webTasks,
+            session: runtimeSessionManager.getSnapshot(),
+            isCurrent: isCurrentStartup,
+            execute: request => runtimeSessionManager.executeStartupTask(request),
+            observe(task, result) {
+                if (result.status !== "ready" && result.status !== "planned") {
+                    appendTranscript(result.message || `Startup task failed: ${task.label || task.id}`,
+                        "web-transcript__line--stderr");
+                }
             }
-
-            // Retain the existing package-only task policy. Product lists may
-            // contain native transport dependencies unavailable in WebR.
-            // All shipped images are already mounted; actions still inspect
-            // their actual requirements through the shared package controller.
-            if (
-                (task.rPackages || []).length > 0
-                && !(task.commands || []).length
-                && (task.requiredRuntime || []).every((capability) => {
-                    return capability === "dependencies.packages";
-                })
-            ) {
-                continue;
-            }
-
-            const result = await runOwnedRuntimeStartupStage({
-                isCurrent: isCurrentStartup,
-                run: async () => runtimeSessionManager?.executeStartupTask({
-                    taskId: String(task.id || ""),
-                    owner: String(task.owner || ""),
-                    source: "base-app.startup"
-                })
-            });
-
-            if (
-                result
-                && result.status !== "ready"
-                && result.status !== "planned"
-            ) {
-                appendTranscript(
-                    result.message
-                    || `Startup task failed: ${String(task.label || task.id || "")}`,
-                    "web-transcript__line--stderr"
-                );
-            }
-        }
+        });
         setRuntimeStatus("Reading WebR workspace...");
         await runOwnedRuntimeStartupStage({
             isCurrent: isCurrentStartup,
@@ -3806,7 +3784,7 @@ const ensureRuntime = async function () {
         return await pendingStartup;
     }
     catch (error) {
-        if (state.runtimeStartPromise === pendingStartup) {
+        if (state.runtimeStartPromise === pendingStartup && !(error instanceof RuntimeStartupRetiredError)) {
             try {
                 await stopWebRRuntime("WebR startup failed.");
             }
@@ -3826,9 +3804,11 @@ const ensureRuntime = async function () {
 };
 
 const ensureRuntimeReady = async function () {
-    await ensureRuntime();
-
-    return state.runtimeReady;
+    const runtime = await (state.runtimeStartPromise || ensureRuntime());
+    if (!state.runtimeReady || state.runtime !== runtime || state.runtimeOperationQueue?.isRetired()) {
+        throw new RuntimeStartupRetiredError("Runtime startup was retired before completion.");
+    }
+    return true;
 };
 
 const checkCodeFragmentComplete = async function (code) {
@@ -4156,7 +4136,7 @@ const browserVisibleCommandSession = function () {
 };
 
 const executeVisibleCommand = async function (text, options = {}) {
-    await ensureRuntime();
+    await ensureRuntimeReady();
 
     maybeOpenPlotViewerForCommand(String(text || ""));
 
@@ -4329,7 +4309,7 @@ const initializeSharedConsole = async function () {
         isStartupPending: () => state.runtimeStarting,
         readRuntimeSnapshot,
         startRuntimeSession: async function () {
-            await (state.runtimeStartPromise || ensureRuntime());
+            await ensureRuntimeReady();
 
             return runtimeSnapshot("ready", "WebR ready.");
         },
@@ -5206,11 +5186,10 @@ loadComposition()
         await openMoodleLaunchScriptEditor();
     })
     .catch((error) => {
+        if (error instanceof RuntimeStartupRetiredError) {
+            return;
+        }
         console.error(error);
-        state.runtimeReady = false;
-        state.runtimeStarting = false;
-        state.runtimeStartPromise = null;
-        notifyConsoleSession();
         setRuntimeStatus(state.composition ? "WebR failed" : "Composition failed.");
         appendTranscript(error instanceof Error ? error.message : String(error), "web-transcript__line--stderr");
     });

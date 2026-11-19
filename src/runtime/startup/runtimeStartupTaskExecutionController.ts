@@ -29,6 +29,7 @@ import {
 
 
 export interface RuntimeStartupTaskExecutionControllerOptions {
+    getGeneration(): number | undefined;
     checkDependencies(
         request: DependencyCheckRequest
     ): Promise<DependencyCheckResult>;
@@ -65,6 +66,12 @@ export const createRuntimeStartupTaskExecutionController = function(
         task: EvaluatedStartupTask,
         request: StartupTaskExecutionRequest
     ): Promise<StartupTaskExecutionResult> {
+        const assertCurrent = function(): void {
+            if (request.generation !== undefined && request.generation !== options.getGeneration()) {
+                throw new Error("Runtime startup task belongs to a retired session.");
+            }
+        };
+        assertCurrent();
         let executedRequirement = false;
         let dependencyStatus = "";
         let dependencyMessage = "";
@@ -79,6 +86,7 @@ export const createRuntimeStartupTaskExecutionController = function(
                     source: request.source || "startup.task"
                 })
             );
+            assertCurrent();
             executedRequirement = true;
             dependencyStatus = dependencies.status;
             dependencyMessage = dependencies.message;
@@ -98,6 +106,7 @@ export const createRuntimeStartupTaskExecutionController = function(
 
         if ((task.requiredRuntime || []).includes("workspace.objects")) {
             const workspace = await options.listWorkspaceObjects();
+            assertCurrent();
             executedRequirement = true;
             workspaceMessage =
                 "Startup task refreshed " + workspace.objects.length +
@@ -133,6 +142,7 @@ export const createRuntimeStartupTaskExecutionController = function(
                         source: `${request.source || "startup.task"}.${task.id}`
                     })
                 );
+                assertCurrent();
                 const failure = result.status !== "ready";
 
                 executedRequirement = true;
@@ -155,6 +165,7 @@ export const createRuntimeStartupTaskExecutionController = function(
                     source: `${request.source || "startup.task"}.${task.id}`
                 })
             );
+            assertCurrent();
             const failure = events.find(isTranscriptFailureEvent);
             const unsuccessful = commandExecutionDidNotSucceed({ transcriptEvents: events });
 

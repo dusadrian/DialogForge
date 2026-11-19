@@ -896,6 +896,8 @@ export interface PromptSnapshot {
 
 
 export interface StartupTaskExecutionRequest {
+    generation?: number;
+    automatic?: boolean;
     taskId: string;
     owner: string;
     source: string;

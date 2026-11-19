@@ -42,10 +42,12 @@ export interface MainRuntimeSessionServicesOptions {
 export const createMainRuntimeSessionServices = function(
     options: MainRuntimeSessionServicesOptions
 ) {
-    const refreshRuntimeEvents = async function(): Promise<void> {
+    const refreshRuntimeEvents = async function(isCurrent = () => true): Promise<void> {
         const snapshot = await options.dialogForge.listRuntimeEvents();
 
-        options.renderRuntimeEvents(snapshot);
+        if (isCurrent()) {
+            options.renderRuntimeEvents(snapshot);
+        }
     };
     const promptController = createMainPromptController({
         promptText: options.promptText,
@@ -55,6 +57,7 @@ export const createMainRuntimeSessionServices = function(
         renderPrompts: options.renderPrompts
     });
     const startupTaskController = createMainStartupTaskController({
+        getSession: options.getRuntimeSession,
         getTasks: options.getStartupTasks,
         getRunnableTasks: startupPromptPanelApi.getRunnableStartupTasks,
         renderResult: options.renderStartupTaskResult,

@@ -3,7 +3,7 @@
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
-const { runOwnedRuntimeStartupStage } = require("../dist/src/runtime/session/runtimeStartupStage");
+const { runApplicationStartupTasks, runOwnedRuntimeStartupStage } = require("../dist/src/runtime/session/runtimeStartupStage");
 const { createRuntimeOperationQueue } = require("../dist/src/runtime/session/runtimeOperationQueue");
 const { startBrowserWebRRuntime } = require("../dist/src/runtime/providers/webr/webRBrowserStartup");
 
@@ -38,6 +38,31 @@ const main = async function() {
             assert.deepEqual(discarded, retire ? [resource] : []);
         }
     }
+
+    let generation = 1;
+    let releaseTask;
+    const observed = [];
+    const dispatched = [];
+    const startTasks = (owner) => runApplicationStartupTasks({
+        session: { lifecycleGeneration: owner },
+        isCurrent: () => generation === owner,
+        tasks: [{ enabled: true, id: "load" }, { enabled: true, id: "workspace" }],
+        execute: async request => {
+            dispatched.push([request.generation, request.taskId]);
+            if (owner === 1) {
+                await new Promise(resolve => { releaseTask = resolve; });
+            }
+            return { status: "ready" };
+        },
+        observe: task => { observed.push([owner, task.id]); }
+    });
+    const oldStart = startTasks(1);
+    generation = 2;
+    await startTasks(2);
+    releaseTask();
+    await assert.rejects(oldStart, /retired before completion/);
+    assert.deepEqual(observed, [[2, "load"], [2, "workspace"]]);
+    assert.deepEqual(dispatched, [[1, "load"], [2, "load"], [2, "workspace"]]);
 
     const queue = createRuntimeOperationQueue();
     assert.equal(queue.isRetired(), false);

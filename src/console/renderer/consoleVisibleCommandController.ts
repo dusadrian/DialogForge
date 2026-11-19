@@ -15,6 +15,7 @@ import {
 
 export interface ConsoleVisibleCommandControllerOptions {
     getSession(): RuntimeSessionSnapshot | null;
+    isStartupPending?(): boolean;
     startSession(): Promise<RuntimeSessionSnapshot>;
     renderStatus(snapshot: RuntimeSessionSnapshot): void;
     recordHistory(text: string): void;
@@ -77,7 +78,7 @@ export const createConsoleVisibleCommandController = function(
 
         const current = options.getSession();
         const generation = executionGeneration;
-        const snapshot = current?.status === "ready"
+        const snapshot = current?.status === "ready" && !options.isStartupPending?.()
             ? current
             : await options.startSession();
 

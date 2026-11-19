@@ -12,7 +12,7 @@ export interface ConsoleRuntimeSessionControllerOptions {
     refreshRuntimeEvents(): void;
     refreshPrompts(): void;
     beforeStartupTasks?(snapshot: RuntimeSessionSnapshot): Promise<void> | void;
-    runStartupTasks(): Promise<void>;
+    runStartupTasks(session: RuntimeSessionSnapshot, isCurrent: () => boolean): Promise<void>;
     onStartupPendingChange?(pending: boolean): void;
     reportStartupFailure?(message: string): void;
     startupTimeoutMs?: number;
@@ -64,10 +64,38 @@ export const createConsoleRuntimeSessionController = function(
         const current = options.getSession();
         const generation = ++operationGeneration;
 
+        const finishStartup = async function(session: RuntimeSessionSnapshot): Promise<RuntimeSessionSnapshot> {
+            const isCurrent = function(): boolean {
+                const latest = options.getSession();
+                return generation === operationGeneration && latest?.status === "ready"
+                    && latest.providerId === session.providerId
+                    && latest.lifecycleGeneration === session.lifecycleGeneration;
+            };
+
+            try {
+                await options.beforeStartupTasks?.(session);
+                if (isCurrent()) {
+                    await options.runStartupTasks(session, isCurrent);
+                }
+                if (isCurrent()) {
+                    return session;
+                }
+            }
+            catch (error) {
+                if (isCurrent()) {
+                    const message = error instanceof Error ? error.message : String(error);
+                    const failed = { ...session, status: "failed", message };
+                    options.applySession(failed);
+                    options.renderStatus(failed);
+                    options.reportStartupFailure?.(message);
+                    return failed;
+                }
+            }
+            return { ...session, status: "stopped", message: "Runtime startup was superseded." };
+        };
+
         if (current?.status === "ready") {
-            await options.beforeStartupTasks?.(current);
-            await options.runStartupTasks();
-            return current;
+            return finishStartup(current);
         }
 
         options.renderStatus({
@@ -105,7 +133,7 @@ export const createConsoleRuntimeSessionController = function(
                     && latest?.lifecycleGeneration !== undefined
                     && latest.lifecycleGeneration > current.lifecycleGeneration + 1)
             ) {
-                return latest || current!;
+                return { ...(latest || current!), status: "stopped", message: "Runtime startup was superseded." };
             }
 
             // The host's ready event can arrive while its IPC response is still
@@ -128,7 +156,7 @@ export const createConsoleRuntimeSessionController = function(
         }
 
         if (generation !== operationGeneration || hasNewerSession(snapshot)) {
-            return options.getSession() || snapshot;
+            return { ...snapshot, status: "stopped", message: "Runtime startup was superseded." };
         }
 
         options.applySession(snapshot);
@@ -139,10 +167,7 @@ export const createConsoleRuntimeSessionController = function(
             return snapshot;
         }
 
-        await options.beforeStartupTasks?.(snapshot);
-        await options.runStartupTasks();
-
-        return snapshot;
+        return finishStartup(snapshot);
     };
 
     const stop = async function(): Promise<void> {

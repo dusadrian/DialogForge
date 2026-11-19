@@ -32,6 +32,7 @@ const workspaceQuitDialogControllerModule = require("../src/shell-electron/lifec
 const runtimeRecoveryDialogControllerModule = require("../src/shell-electron/lifecycle/runtimeRecoveryDialogController");
 const runtimeRestartComposition = require("../src/shell-electron/lifecycle/runtimeRestartComposition");
 const runtimeIpcCompositionModule = require("../src/shell-electron/runtime/runtimeIpcComposition");
+const { runApplicationStartupTasks } = require("../src/runtime/session/runtimeStartupStage");
 const runtimeSessionCompositionModule = require("../src/shell-electron/runtime/runtimeSessionComposition");
 const { createDialogFilterStateDelivery } = require("../src/dialog-runtime/custom-js/dialogStateCallRouter");
 const { createActiveDatasetStateChipReader } = require("../src/base-app/features/workspace-pane/activeDatasetStateChips");
@@ -463,11 +464,23 @@ const productDialogRuntime = productDialogRuntimeComposition.registerProductDial
         console.error(error instanceof Error ? error.stack : String(error));
     }
 });
+const finishProductStartup = async function (snapshot) {
+    if (snapshot.status !== "ready") {
+        return false;
+    }
+    const isCurrent = function () {
+        const current = runtimeSessionManager.getSnapshot();
+        return current.status === "ready" && current.lifecycleGeneration === snapshot.lifecycleGeneration;
+    };
+    await runApplicationStartupTasks({
+        tasks: composition.startupTasks, session: snapshot, isCurrent,
+        execute: request => runtimeSessionManager.executeStartupTask(request)
+    });
+    return isCurrent();
+};
 const ensureRuntimeReadyForScriptEditor = async function () {
     const snapshot = await runtimeSessionManager.start();
-    composition.runtimeSession = snapshot;
-    sendRuntimeSession(snapshot);
-    return snapshot.status === "ready";
+    return finishProductStartup(snapshot);
 };
 let mainWindowCloseApprovedForQuit = false;
 const mainWindowComposition = mainWindowCompositionModule.createMainWindowComposition({
@@ -796,6 +809,7 @@ applicationShellIpcComposition.registerApplicationShellIpc({
     showDevDiagnostics: !electronSmokeMode
 });
 runtimeRestartComposition.registerRuntimeRestartComposition({
+    finishProductStartup,
     ipcMain: electron.ipcMain,
     runtimeSessionManager,
     temporaryDirectory: electron.app.getPath("temp"),

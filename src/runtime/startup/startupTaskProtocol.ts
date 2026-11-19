@@ -8,6 +8,8 @@ export const createStartupTaskExecutionRequest = function(
     input: Partial<StartupTaskExecutionRequest>
 ): StartupTaskExecutionRequest {
     return {
+        generation: input?.generation,
+        automatic: input?.automatic === true,
         taskId: String(input && input.taskId ? input.taskId : ""),
         owner: String(input && input.owner ? input.owner : ""),
         source: String(input && input.source ? input.source : "base-app.startup")

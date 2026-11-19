@@ -15,6 +15,7 @@ import { createRuntimeRestartController } from "./runtimeRestartController";
 
 
 export interface RuntimeRestartCompositionOptions {
+    finishProductStartup(snapshot: RuntimeSessionSnapshot): Promise<boolean>;
     ipcMain: IpcMain;
     runtimeSessionManager: RuntimeSessionManager;
     temporaryDirectory: string;
@@ -35,6 +36,7 @@ export const registerRuntimeRestartComposition = function(
 ): void {
     const controller = createRuntimeRestartController({
         runtimeSessionManager: options.runtimeSessionManager,
+        finishProductStartup: options.finishProductStartup,
         // The native control socket can persist while the console waits for input.
         canPersistWorkspaceNow: () => true,
         createWorkspacePath: function(): string {

@@ -143,6 +143,7 @@ export const createMainConsoleCoordinator = function(
 
     const visibleCommand = createConsoleVisibleCommandController({
         getSession: bindings.getRuntimeSession,
+        isStartupPending: () => bindings.session.getSessionPhase() === "starting",
         startSession: bindings.startRuntimeSession,
         renderStatus: bindings.renderStatus,
         recordHistory: bindings.recordHistory,

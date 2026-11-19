@@ -26,6 +26,7 @@ interface RuntimeRestartOperation {
 
 export interface RuntimeRestartControllerOptions {
     runtimeSessionManager: RestartRuntimeManager;
+    finishProductStartup?(session: RuntimeSessionSnapshot): Promise<boolean>;
     getRuntimeOwner?(): unknown;
     canPersistWorkspaceNow?(): boolean;
     createWorkspacePath(): string;
@@ -205,6 +206,11 @@ export const createRuntimeRestartController = function(
                 requireCurrent();
                 workspaceRestoreMessage = `R restarted, but the workspace could not be restored. ${recovery}`;
             }
+        }
+
+        if (snapshot.status === "ready" && options.finishProductStartup) {
+            await options.finishProductStartup(snapshot);
+            requireCurrent();
         }
 
         if (restore) {

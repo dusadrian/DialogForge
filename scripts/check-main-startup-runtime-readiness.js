@@ -155,7 +155,8 @@ const verifyPromptWaitsForProductStartup = async function () {
     await Promise.resolve();
     const stop = controller.stop();
     finishTasks();
-    await nextStartup;
+    assert.equal((await nextStartup).status, "stopped",
+        "A retired task must not return its old ready snapshot.");
     assert.equal(consoleState.getSessionPhase(), "starting");
     finishStop(runtimeSession("stopped"));
     await stop;
