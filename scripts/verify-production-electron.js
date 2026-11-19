@@ -4,6 +4,7 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const { spawn, spawnSync } = require("child_process");
+const { getRawHeader } = require("@electron/asar");
 const { assertBindingPinMatchesDependency } = require("./nativeIrohBinding");
 
 
@@ -172,6 +173,12 @@ const assertProductionLayout = function(application, productPath) {
 
     if (!fs.existsSync(appAsarPath)) {
         throw new Error(`Packaged app.asar was not found: ${appAsarPath}`);
+    }
+    const productFiles = getRawHeader(appAsarPath).header.files.product.files;
+    for (const directory of ["internal", "artifacts"]) {
+        if (Object.hasOwn(productFiles, directory)) {
+            throw new Error(`Packaged app.asar contains product/${directory}.`);
+        }
     }
     if (!fs.existsSync(unpackedRuntimePath)) {
         throw new Error(`Unpacked R runtime sources were not found: ${unpackedRuntimePath}`);

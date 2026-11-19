@@ -488,7 +488,9 @@ const copyProductSourceFiles = function (sourcePath, targetPath) {
 
     fs.readdirSync(sourcePath, { withFileTypes: true }).forEach((entry) => {
         if (
-            excludedDirectories.has(entry.name)
+            entry.name === "internal"
+            || entry.name === "artifacts"
+            || excludedDirectories.has(entry.name)
             || excludedFiles.has(entry.name)
             || entry.name.endsWith(".ts")
         ) {
