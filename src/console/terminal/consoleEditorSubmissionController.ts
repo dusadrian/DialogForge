@@ -28,6 +28,7 @@ export interface ConsoleEditorSubmissionBindings {
     recordHelpCommand?(code: string): void;
     parseHelpCommand?: ParseConsoleHelpCommand;
     showHelpTopic?(request: ConsoleHelpTopicRequest): void;
+    reportFailure?(message: string): void;
     checkFragment(code: string): Promise<ConsoleFragmentState>;
     executeCode(code: string): Promise<ConsoleSubmissionResult>;
     debugLog?(message: string, data?: unknown): void;
@@ -191,6 +192,11 @@ export const createConsoleEditorSubmissionController = function(
             if (status === "incomplete") {
                 bindings.setInputValue(`${code}\n`);
                 bindings.refreshPrompt();
+            }
+        }
+        catch (error) {
+            if (generation === submissionGeneration) {
+                bindings.reportFailure?.(error instanceof Error ? error.message : String(error));
             }
         }
         finally {

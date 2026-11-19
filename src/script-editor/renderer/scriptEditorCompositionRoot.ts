@@ -233,13 +233,13 @@ const scriptEditorHostTransport = {
 
     if (channel === scriptEditorIpcChannels.checkFragment) {
       return window.dialogForge?.checkScriptFragment(
-        payload as { code?: string }
+        payload as { code?: string; plan?: boolean }
       );
     }
 
     if (channel === scriptEditorIpcChannels.runCodeBatch) {
       return window.dialogForge?.runScriptCodeBatch(
-        payload as { chunks?: string[] }
+        payload as { code?: string; chunks?: string[] }
       );
     }
 

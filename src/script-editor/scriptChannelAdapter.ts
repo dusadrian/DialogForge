@@ -2,7 +2,7 @@ import type {
     ScriptEditorDocumentState
 } from "./scriptEditorIpc";
 import {
-    createScriptFragmentCheckResult
+    createScriptFragmentCheckResult, planScriptSelection
 } from "./run/scriptFragmentCheck";
 import {
     readScriptCodeBatchInput,
@@ -17,8 +17,9 @@ import { readAcceptedRuntimeCommandResult } from "../runtime/commands/runtimeCom
 
 export interface ScriptChannelAdapterBindings {
     ensureRuntimeReady(): Promise<boolean>;
+    executeRuntimeMethod: Parameters<typeof planScriptSelection>[2];
     checkFragment(code: string): Promise<string>;
-    executeVisibleCommand(command: string): Promise<unknown>;
+    executeVisibleCommand(command: string, options?: { planInput?: "script" | "console"; source: string }): Promise<unknown>;
     publishCommandBoundary?(command: string): void;
     getDocument(): ScriptEditorDocumentState;
     saveFile(input: unknown, saveAs: boolean): Promise<unknown>;
@@ -48,6 +49,11 @@ export const createScriptChannelAdapter = function(
         async checkFragment(value) {
             const input = readInput(value);
 
+            if (input.plan === true) {
+                return planScriptSelection(String(input.code || ""), bindings.ensureRuntimeReady,
+                    bindings.executeRuntimeMethod);
+            }
+
             return createScriptFragmentCheckResult({
                 state: await bindings.checkFragment(String(input.code || ""))
             });
@@ -57,7 +63,7 @@ export const createScriptChannelAdapter = function(
             return runScriptCodeBatch(readScriptCodeBatchInput(value), {
                 ensureRuntimeReady: bindings.ensureRuntimeReady,
                 executeVisibleCommand: async function(request) {
-                    const result = await bindings.executeVisibleCommand(request.text);
+                    const result = await bindings.executeVisibleCommand(request.text, { planInput: request.planInput, source: request.source });
                     return readAcceptedRuntimeCommandResult(result, true);
                 },
                 publishCommandBoundary: bindings.publishCommandBoundary

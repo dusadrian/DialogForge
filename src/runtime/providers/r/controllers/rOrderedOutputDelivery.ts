@@ -5,6 +5,7 @@ import type { RRuntimeControlResponse } from "../protocol/runtimeControlClient";
 import { createRuntimeOutputDeliveryDiagnostics } from "../protocol/runtimeControlDiagnostics";
 import {
     asRuntimeControlObject,
+    isDeferredRInput,
     readRuntimeCommandCompletionMarker
 } from "../protocol/runtimeControlEvents";
 
@@ -67,6 +68,12 @@ export const createROrderedOutputDelivery = function(options: {
         }
         const receipt = asRuntimeControlObject(response.result);
         const events = Array.isArray(response.events) ? response.events : [];
+        if (!events.length && receipt.sessionId === sessionId
+            && isDeferredRInput(receipt, options.request.planInput, parentId)) {
+            // R inspected the buffer without starting evaluation or opening the journal.
+            await pipeline.retire();
+            return response;
+        }
         const completionMarker = readRuntimeCommandCompletionMarker(events, parentId);
         const hasMatchingCompletion = completionMarker.status !== "missing";
         hasValidCompletion = completionMarker.status === "valid";

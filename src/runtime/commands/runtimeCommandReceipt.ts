@@ -6,6 +6,7 @@ import { commandExecutionDidNotSucceed, isTranscriptFailureEvent } from "./comma
 
 
 export interface RuntimeCommandReceipt {
+    inputPlan?: RuntimeCommandExecutionResult["inputPlan"];
     ok?: boolean;
     transcriptEvents?: TranscriptEvent[];
     executionDisposition?: RuntimeCommandExecutionResult["executionDisposition"];
@@ -22,6 +23,7 @@ export const createRuntimeCommandReceipt = function(
     return {
         ok: accepted && !commandExecutionDidNotSucceed(result),
         transcriptEvents: accepted ? result.transcriptEvents : [],
+        ...(accepted && result.inputPlan ? { inputPlan: result.inputPlan } : {}),
         executionDisposition: result.executionDisposition,
         evaluationOutcome: result.evaluationOutcome
     };

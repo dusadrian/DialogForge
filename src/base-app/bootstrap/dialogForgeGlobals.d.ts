@@ -133,8 +133,8 @@ declare global {
         executeVisibleCommand(input: Partial<VisibleCommandRequest>): Promise<
             import("../../runtime/commands/runtimeCommandReceipt").RuntimeCommandReceipt
         >;
-        checkScriptFragment(input: { code?: string }): Promise<{ ok: boolean; state: string; message?: string }>;
-        runScriptCodeBatch(input: { chunks?: string[] }): Promise<{ status: string; events: TranscriptEvent[] }>;
+        checkScriptFragment(input: { code?: string; plan?: boolean }): Promise<{ ok: boolean; state: string; message?: string; ends?: number[] }>;
+        runScriptCodeBatch(input: { code?: string; chunks?: string[] }): Promise<{ status: string; events: TranscriptEvent[] }>;
         executeProductCommand(input: Partial<ProductCommandRequest>): Promise<ProductCommandResult>;
         confirmPackageRestart(packages: string[]): Promise<{ action: "clean" | "restore" | "cancel" }>;
         choosePackageInstallLibrary(input: {

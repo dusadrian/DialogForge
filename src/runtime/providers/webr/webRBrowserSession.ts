@@ -48,6 +48,7 @@ const manifest = webRRuntimeManifest;
 
 
 export interface WebRVisibleCommandOptions {
+    planInput?: "console" | "script";
     activityId?: string;
     source?: string;
     outputWidth?: number;
@@ -186,6 +187,7 @@ export const createBrowserWebRSession = function(
             const request = createVisibleCommandRequest({
                 text,
                 activityId: options.activityId,
+                planInput: options.planInput,
                 source: options.source || "browser.webr.visible-command",
                 outputWidth: options.outputWidth
                     || bindings.visibleCommands.readConsoleOutputWidth()

@@ -13,6 +13,7 @@ export interface ScriptStatementModel {
 
 
 export interface ScriptStatement {
+    complete?: boolean;
     startLine: number;
     endLine: number;
     code: string;
@@ -87,6 +88,7 @@ export const findScriptStatementAtLine = async function(
             return {
                 startLine: blockStart,
                 endLine: blockEnd,
+                complete: state === "complete",
                 code: blockCode
             };
         }
@@ -112,6 +114,7 @@ export const findScriptStatementAtLine = async function(
                 return {
                     startLine: candidateStart,
                     endLine: candidateEnd,
+                    complete: state === "complete",
                     code
                 };
             }

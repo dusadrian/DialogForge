@@ -5,6 +5,7 @@ import type {
 
 export const implementedRRuntimeCapabilities: RuntimeCapability[] = [
     "commands.visible",
+    "commands.planInput",
     "commands.invisible",
     "data.import",
     "workspace.objects",

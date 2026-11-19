@@ -57,11 +57,51 @@ const canRunSingleLineImmediately = function(source: string): boolean {
 };
 
 
+export interface RuntimeConsoleInputPlan {
+    state: ConsoleFragmentState;
+    plan: ConsoleInputExecutionPlan;
+}
+
+
+export const readRuntimeConsoleInputPlan = function(code: string, value: unknown): RuntimeConsoleInputPlan {
+    const result = value as { state?: ConsoleFragmentState; ends?: number[] } | null;
+    if (!result || !Array.isArray(result.ends) || !result.state
+        || !["complete", "invalid", "incomplete"].includes(result.state)) {
+        throw new Error("Runtime could not plan console input.");
+    }
+    const lines = code.split("\n");
+    const chunks: string[] = [];
+    let first = 0;
+
+    const skipBlankLines = function(): void {
+        while (first < lines.length && !lines[first].trim()) {
+            first++;
+        }
+    };
+    for (const end of result.ends) {
+        skipBlankLines();
+        if (!Number.isSafeInteger(end) || end <= first || end > lines.length) {
+            throw new Error("Runtime returned an invalid console input range.");
+        }
+        chunks.push(lines.slice(first, end).join("\n"));
+        first = end;
+    }
+    skipBlankLines();
+    return {
+        state: result.state,
+        plan: first < lines.length
+            ? { chunks, incomplete: true, remainder: lines.slice(first).join("\n") + "\n" }
+            : { chunks, incomplete: false, remainder: "" }
+    };
+};
+
+
 export const planConsoleInputExecution = async function(
     code: string,
     checkFragment: (
         code: string
-    ) => Promise<ConsoleFragmentState>
+    ) => Promise<ConsoleFragmentState>,
+    planMultiline?: (code: string) => Promise<ConsoleInputExecutionPlan>
 ): Promise<ConsoleInputExecutionPlan> {
     const source = String(code || "")
         .replace(/\r\n/g, "\n")
@@ -73,6 +113,10 @@ export const planConsoleInputExecution = async function(
             incomplete: false,
             remainder: ""
         };
+    }
+
+    if (source.includes("\n") && planMultiline) {
+        return planMultiline(source);
     }
 
     const chunks: string[] = [];

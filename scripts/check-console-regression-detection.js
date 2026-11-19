@@ -27,30 +27,17 @@ const copyBuild = function(source, target) {
 };
 
 
-const changeJavaScript = function(directory, before, after) {
-    let replacements = 0;
-
-    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
-        if (entry.isSymbolicLink()) {
-            continue;
-        }
-
-        const file = path.join(directory, entry.name);
-
-        if (entry.isDirectory()) {
-            replacements += changeJavaScript(file, before, after);
-        }
-        else if (entry.name.endsWith(".js")) {
-            const source = fs.readFileSync(file, "utf8");
-
-            if (source.includes(before)) {
-                fs.writeFileSync(file, source.replaceAll(before, after));
-                replacements += 1;
-            }
-        }
-    }
-
-    return replacements;
+const restoreWholeBlockSubmission = function(directory, inputMode) {
+    const file = path.join(directory, "src/runtime/providers/r/r-sources/runtimeDispatchCore.R");
+    const source = fs.readFileSync(file, "utf8");
+    const planner = "input_plan <- runtime_console_input_boundaries(code)";
+    assert.ok(source.includes(planner), "The input planner was not found in the isolated build.");
+    fs.writeFileSync(file, source.replace(planner, [
+        planner,
+        `        if (identical(params$planInput, "${inputMode}")) {`,
+        "            input_plan$ends <- length(input_plan$lines)",
+        "        }"
+    ].join("\n")));
 };
 
 
@@ -114,11 +101,7 @@ const main = function() {
             copyBuild(dist, build);
 
             if (mutation.name === "whole-block-prompts") {
-                const replacements = changeJavaScript(build,
-                    "const chunks = plan && !plan.incomplete ? plan.chunks : [text];",
-                    "const chunks = [text];");
-                assert.ok(replacements >= 2,
-                    "The isolated native and browser command planners must both be reverted.");
+                restoreWholeBlockSubmission(build, "console");
             }
             else if (mutation.name === "final-value-only") {
                 restoreFinalValueOnlyPrinting(build);
@@ -130,15 +113,7 @@ const main = function() {
                 restoreListWrappedMethodName(build);
             }
             else {
-                const replacement = 'const plan = { chunks: [code], incomplete: false, remainder: "" };';
-                const native = changeJavaScript(build,
-                    "const plan = await (0, consoleInputExecution_1.planConsoleInputExecution)(code, checkFragment);",
-                    replacement);
-                const browser = changeJavaScript(build,
-                    "const plan = await planConsoleInputExecution(code, checkFragment);",
-                    replacement);
-                assert.ok(native >= 1 && browser >= 1,
-                    "The isolated native and browser script planners must both be bypassed.");
+                restoreWholeBlockSubmission(build, "script");
             }
 
             for (const host of ["native", "web"]) {

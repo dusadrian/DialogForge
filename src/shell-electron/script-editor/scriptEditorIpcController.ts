@@ -37,7 +37,7 @@ import {
 } from "../../script-editor/scriptEditorIpc";
 import {
     createScriptFragmentCheckResult,
-    normalizeScriptFragmentState
+    normalizeScriptFragmentState, planScriptSelection
 } from "../../script-editor/run/scriptFragmentCheck";
 import {
     runScriptCodeBatch
@@ -166,9 +166,15 @@ export const createScriptEditorIpcController = function(
 ): void {
     options.ipcMain.handle(scriptEditorIpcChannels.checkFragment, async (
         _event: IpcMainInvokeEvent,
-        input: { code?: string }
+        input: { code?: string; plan?: boolean }
     ) => {
         const code = String(input?.code || "");
+
+        if (input?.plan) {
+            return planScriptSelection(code, options.ensureRuntimeReady, request =>
+                options.runtimeSessionManager.executeRuntimeMethod(request)
+            );
+        }
 
         if (!code.trim()) {
             return {
@@ -196,7 +202,7 @@ export const createScriptEditorIpcController = function(
 
     options.ipcMain.handle(scriptEditorIpcChannels.runCodeBatch, async (
         _event: IpcMainInvokeEvent,
-        input: { chunks?: unknown[] }
+        input: { code?: string; chunks?: unknown[] }
     ) => {
         return runScriptCodeBatch(input || {}, {
             ensureRuntimeReady: options.ensureRuntimeReady,

@@ -73,6 +73,7 @@ export type ScriptEditorIpcChannel =
 
 
 export interface ScriptFragmentCheckResult {
+    ends?: number[];
     ok: boolean;
     state: string;
     message?: string;
@@ -80,6 +81,7 @@ export interface ScriptFragmentCheckResult {
 
 
 export interface ScriptCodeBatchResult {
+    incomplete?: boolean;
     status: string;
     events: TranscriptEvent[];
 }
@@ -99,8 +101,8 @@ export interface ScriptEditorInsertResult {
 
 
 interface ScriptEditorIpcInputs {
-    "base-app:checkScriptFragment": { code?: string };
-    "base-app:runScriptCodeBatch": { chunks?: string[] };
+    "base-app:checkScriptFragment": { code?: string; plan?: boolean };
+    "base-app:runScriptCodeBatch": { code?: string; chunks?: string[] };
     "base-app:getScriptEditorDocument": undefined;
     "base-app:openScriptEditor": undefined;
     "base-app:insertScriptEditorCode": { code?: string };

@@ -27,6 +27,7 @@ import type {
 
 
 export interface MainConsoleCoordinatorBindings {
+    supportsConsoleInputPlan?(): boolean;
     document: Document;
     session: ConsoleSessionState;
     completionModel: CompletionModel;
@@ -46,6 +47,7 @@ export interface MainConsoleCoordinatorBindings {
         text: string;
         source: string;
         outputWidth?: number;
+        planInput?: "console";
     }): Promise<unknown>;
     openHelpTopic(input: {
         topic: string;
@@ -151,6 +153,7 @@ export const createMainConsoleCoordinator = function(
         setRuntimeBusy: bindings.session.setRuntimeBusy,
         readOutputWidth: () => readConsoleOutputWidth(bindings.document, window),
         checkFragment: checkCodeFragmentComplete,
+        planDuringExecution: bindings.supportsConsoleInputPlan,
         executeCommand: bindings.executeVisibleCommand
     });
 
@@ -195,9 +198,20 @@ export const createMainConsoleCoordinator = function(
                     throw new Error("Prompt reply was not accepted. You can retry or interrupt the command.");
                 }
             },
-            isCodeFragmentComplete: checkCodeFragmentComplete,
+            async isCodeFragmentComplete(code) {
+                if (bindings.supportsConsoleInputPlan?.() || code.trim().includes("\n")) {
+                    return "unknown";
+                }
+                return checkCodeFragmentComplete(code);
+            },
             executeCode: async function(code: string) {
-                return executeText(code, "base-app.visible-command");
+                const receipt = await visibleCommand.executeWithReceipt(code, "base-app.visible-command", true);
+                if (receipt.incomplete) {
+                    return "incomplete";
+                }
+                if (receipt.accepted) {
+                    return "ok";
+                }
             },
             interruptExecution: interrupt,
             buildContextualHelpRequest: bindings.buildContextualHelpRequest,
@@ -358,6 +372,7 @@ export const createMainConsoleCoordinator = function(
         focusAfterPromptLayout,
         executeText,
         executeWithReceipt: visibleCommand.executeWithReceipt,
+        recordActiveSubmission: visibleCommand.recordActiveSubmission,
         recordSubmittedCommand: visibleCommand.recordSubmittedCommand,
         executeCurrent,
         handleFallbackKeydown,

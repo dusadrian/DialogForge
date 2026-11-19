@@ -10,6 +10,7 @@ import type {
 
 export type RuntimeCapability =
     | "commands.visible"
+    | "commands.planInput"
     | "commands.invisible"
     | "data.import"
     | "workspace.objects"
@@ -80,6 +81,7 @@ export interface RuntimeSessionSnapshot {
 
 
 export interface VisibleCommandRequest {
+    planInput?: "console" | "script";
     activityId?: string;
     kind: "commands.visible";
     text: string;
@@ -1031,6 +1033,7 @@ export type RuntimeEvaluationOutcome = "success" | "error" | "interrupted";
 
 
 export interface RuntimeCommandExecutionResult {
+    inputPlan?: { state: "complete" | "invalid" | "incomplete"; ends: number[] };
     executionDisposition?: "completed" | "not_started" | "session_lost";
     evaluationOutcome?: RuntimeEvaluationOutcome;
     activityId?: string;

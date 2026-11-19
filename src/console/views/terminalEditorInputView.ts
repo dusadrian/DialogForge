@@ -26,6 +26,7 @@ export { resolveConsoleEditorHeight } from '../terminal/consoleEditorPresentatio
 
 export const createTerminalConsoleEditorInputView = (deps: {
   isCodeFragmentComplete: (code: string) => Promise<'complete' | 'incomplete' | 'invalid' | 'unknown'>;
+  reportSubmissionFailure: (message: string) => void;
   executeCode: (code: string) => Promise<'ok' | 'incomplete' | void>;
   debugLog?: (message: string, data?: unknown) => void;
   timingLog?: (message: string, data?: unknown) => void;
@@ -153,6 +154,7 @@ export const createTerminalConsoleEditorInputView = (deps: {
     recordHelpCommand: deps.recordHelpCommand,
     parseHelpCommand: deps.parseHelpCommand,
     showHelpTopic: deps.showHelpTopic,
+    reportFailure: deps.reportSubmissionFailure,
     checkFragment: deps.isCodeFragmentComplete,
     executeCode: deps.executeCode,
     debugLog: deps.debugLog,

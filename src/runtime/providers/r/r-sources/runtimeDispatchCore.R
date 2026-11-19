@@ -310,6 +310,29 @@ runtime_finish_input <- function(
 runtime_execute_input <- function(params) {
     code <- as.character(params$code %||% "")
     parent_id <- as.character(params$parentId %||% "")
+    input_plan <- NULL
+    if (is.element(params$planInput %||% "", c("console", "script"))) {
+        input_plan <- runtime_console_input_boundaries(code)
+        if (identical(params$planInput, "console") && identical(input_plan$state, "invalid")) {
+            # The interactive console submits the original invalid buffer when
+            # a later fragment is unfinished, so earlier lines have no effects.
+            last <- max(c(0L, input_plan$ends))
+            if (last < length(input_plan$lines) &&
+                any(nzchar(trimws(input_plan$lines[(last + 1L):length(input_plan$lines)])))) {
+                input_plan$ends <- length(input_plan$lines)
+            }
+        }
+        if (!length(input_plan$ends) ||
+            (identical(params$planInput, "console") && identical(input_plan$state, "incomplete"))) {
+            return(list(ok = TRUE, result_json = paste0(
+                '{"inputDeferred":true,"parentId":', json_str(parent_id),
+                ',"sessionId":', json_str(params$outputCaptureSession %||% ""),
+                ',"inputPlan":', runtime_console_plan_json(input_plan), '}'
+            )))
+        }
+        code <- paste(input_plan$lines[seq_len(input_plan$ends[[1L]])], collapse = "\n")
+        code <- trimws(code, whitespace = "[\\h\\v]")
+    }
     output_width <- runtime_output_width(params$outputWidth)
     visible <- identical(as.character(params$mode %||% "interactive"), "interactive")
 
@@ -384,6 +407,7 @@ runtime_execute_input <- function(params) {
         runtime_emit_input_result(result, code, parent_id, visible)
     }
     attach_output_receipt <- function(response) {
+        response$input_plan <- input_plan
         if (ordered_capture) {
             response$output_capture <- list(
                 sessionId = ordered_config$session_id, parentId = parent_id,
@@ -686,6 +710,89 @@ runtime_unresolved_function_warnings <- function(expression, code) {
 }
 
 
+runtime_incomplete_parse <- function(message) {
+    grepl(
+        "unexpected end of input|unexpected end of line|incomplete final line",
+        message, ignore.case = TRUE
+    )
+}
+
+
+runtime_console_input_boundaries <- function(code) {
+    # Preserve empty final lines and the console's line-by-line error boundaries.
+    lines <- strsplit(paste0(code, "\n."), "\n", fixed = TRUE)[[1L]]
+    lines <- lines[-length(lines)]
+    multiline <- length(lines) > 1L
+    parsed <- tryCatch(parse(text = code, keep.source = multiline), error = identity)
+    if (!multiline) {
+        state <- "complete"
+        if (inherits(parsed, "error")) {
+            state <- if (runtime_incomplete_parse(conditionMessage(parsed))) "incomplete" else "invalid"
+            parsed <- expression()
+        }
+        ends <- which(nzchar(trimws(lines)) & state != "incomplete")
+        return(list(ends = ends, state = state, lines = lines, expressions = parsed))
+    }
+    if (!inherits(parsed, "error")) {
+        tokens <- utils::getParseData(parsed, includeText = FALSE)
+        if (!is.null(tokens) && !any(tokens$terminal & tokens$line1 != tokens$line2)) {
+            # A line can be submitted when no top-level expression continues
+            # past it. Expressions separated by semicolons share that line.
+            continuing <- integer(length(lines) + 1L)
+            for (span in attr(parsed, "srcref")) {
+                start <- span[[1L]]
+                end <- span[[3L]]
+                if (end > start) {
+                    continuing[[start]] <- continuing[[start]] + 1L
+                    continuing[[end]] <- continuing[[end]] - 1L
+                }
+            }
+            ends <- which(cumsum(continuing)[seq_along(lines)] == 0L &
+                nzchar(trimws(lines, whitespace = "[\\h\\v]")))
+            return(list(ends = ends, state = "complete", lines = lines))
+        }
+    }
+
+    # Invalid fragments and quoted tokens spanning lines retain the original
+    # interactive parser boundaries, including the first invalid line.
+    ends <- integer(length(lines))
+    count <- 0L
+    first <- 1L
+    parse_state <- function(text) {
+        tryCatch({
+            parse(text = text, keep.source = FALSE)
+            "complete"
+        }, error = function(error) {
+            if (runtime_incomplete_parse(conditionMessage(error))) "incomplete" else "invalid"
+        })
+    }
+
+    for (last in seq_along(lines)) {
+        if (first == last && !nzchar(trimws(lines[[last]], whitespace = "[\\h\\v]"))) {
+            first <- last + 1L
+            next
+        }
+        if (!identical(parse_state(lines[first:last]), "incomplete")) {
+            count <- count + 1L
+            ends[[count]] <- last
+            first <- last + 1L
+        }
+    }
+
+    list(ends = ends[seq_len(count)], state = parse_state(code), lines = lines)
+}
+
+
+runtime_console_plan_json <- function(plan) {
+    paste0('{"ends":[', paste(plan$ends, collapse = ","), '],"state":', json_str(plan$state), '}')
+}
+
+
+runtime_plan_console_input <- function(params) {
+    list(ok = TRUE, result_json = runtime_console_plan_json(runtime_console_input_boundaries(params$code)))
+}
+
+
 runtime_check_completeness <- function(params) {
     code <- as.character(params$code %||% "")
     result <- tryCatch({
@@ -697,11 +804,7 @@ runtime_check_completeness <- function(params) {
         )
     }, error = function(error) {
         message <- conditionMessage(error)
-        incomplete <- grepl(
-            "unexpected end of input|unexpected end of line|incomplete final line",
-            message,
-            ignore.case = TRUE
-        )
+        incomplete <- runtime_incomplete_parse(message)
 
         list(
             state = if (incomplete) "incomplete" else "invalid",
@@ -1373,6 +1476,7 @@ runtime_dispatch_service <- function(method, params) {
         "reply_prompt" = runtime_reply_prompt(params),
         "evaluate_code" = evaluate_code_result(as.character(params$code %||% "")),
         "completion.request" = runtime_completion_request(params),
+        "plan_console_input" = runtime_plan_console_input(params),
         "check_completeness" = runtime_check_completeness(params),
         "get_working_directory" = list(
             ok = TRUE,

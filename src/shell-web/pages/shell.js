@@ -1964,6 +1964,7 @@ const browserScriptChannels = function () {
         state.scriptChannelAdapter = createScriptChannelAdapter({
             ensureRuntimeReady,
             checkFragment: checkCodeFragmentComplete,
+            executeRuntimeMethod,
             executeVisibleCommand,
             getDocument() {
                 return {
@@ -3624,7 +3625,8 @@ const ensureRuntime = async function () {
                         parentId: String(request.params?.parentId || ""),
                         request: {
                             text: String(request.params?.code || ""),
-                            source: "browser.webr.visible-command"
+                            planInput: request.params?.planInput,
+                            source: String(request.params?.source || "browser.webr.visible-command")
                         },
                         isCurrent: () => state.runtime === runtime && state.runtimeReady,
                         onTranscriptEvents: function (events) {
@@ -3689,7 +3691,7 @@ const ensureRuntime = async function () {
                             event,
                             {
                                 text: String(request.params?.code || ""),
-                                source: "browser.webr.visible-command"
+                                source: String(request.params?.source || "browser.webr.visible-command")
                             },
                             String(request.params?.parentId || ""),
                             orderedOutput
@@ -4286,6 +4288,7 @@ const initializeSharedConsole = async function () {
     };
 
     const consoleBootstrap = await createBrowserConsoleBootstrap({
+        supportsConsoleInputPlan: () => state.composition?.runtime?.capabilities?.includes("commands.planInput") === true,
         document,
         productId: String(state.composition?.product?.id || "base"),
         runtimeId: String(state.composition?.runtime?.id || "webr"),
@@ -4325,6 +4328,8 @@ const initializeSharedConsole = async function () {
         executeRuntimeMethod,
         executeVisibleCommand: async function (input) {
             return executeVisibleCommand(String(input?.text || ""), {
+                planInput: input?.planInput,
+                source: input?.source,
                 outputWidth: input?.outputWidth
             });
         },

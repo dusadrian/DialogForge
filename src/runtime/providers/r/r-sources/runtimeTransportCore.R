@@ -162,6 +162,7 @@ runtime_transport_dedicated_params <- function(raw) {
         code = runtime_transport_value(raw, "code"),
         mode = runtime_transport_value(raw, "mode"),
         outputWidth = runtime_transport_integer(raw, "outputWidth"),
+        planInput = runtime_transport_value(raw, "planInput"),
         timeoutMs = runtime_transport_number(raw, "timeoutMs"),
         sessionId = runtime_transport_number(raw, "sessionId"),
         diagnosticSession = runtime_transport_value(raw, "diagnosticSession"),
@@ -462,9 +463,13 @@ runtime_transport_result_json <- function(method, output) {
             ",\"parentId\":", json_str(receipt$parentId),
             ",\"captureStatus\":", json_str(receipt$captureStatus),
             ",\"captureError\":", json_str(receipt$captureError %||% ""),
+            if (!is.null(output$input_plan)) paste0(',"inputPlan":', runtime_console_plan_json(output$input_plan)),
             ",\"outputSequence\":", if (is.null(receipt$outputSequence)) "null" else
                 as.character(receipt$outputSequence), "}"
         ))
+    }
+    if (identical(method, "execute_input") && !is.null(output$input_plan)) {
+        return(paste0('{"inputPlan":', runtime_console_plan_json(output$input_plan), '}'))
     }
     if (is.element(method, c("execute_input", "reply_prompt", "load_workspace"))) {
         return("true")

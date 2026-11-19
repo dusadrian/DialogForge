@@ -1,3 +1,4 @@
+import { readRuntimeConsoleInputPlan } from "../../console/terminal/consoleInputExecution";
 import {
     normalizeConsoleCommandText
 } from "../../console/commandText";
@@ -16,6 +17,7 @@ import type {
 
 export interface ScriptCodeBatchInput {
     chunks?: unknown[];
+    code?: string;
 }
 
 export interface ScriptCodeBatchRunnerOptions {
@@ -47,7 +49,8 @@ export const runScriptCodeBatch = async function(
     input: ScriptCodeBatchInput,
     options: ScriptCodeBatchRunnerOptions
 ): Promise<ScriptCodeBatchResult> {
-    const chunks = normalizeScriptCodeBatchChunks(input);
+    const code = typeof input.code === "string" ? normalizeConsoleCommandText(input.code).trim() : "";
+    let chunks = code ? [code] : normalizeScriptCodeBatchChunks(input);
 
     if (chunks.length === 0) {
         return {
@@ -68,12 +71,23 @@ export const runScriptCodeBatch = async function(
     const events: TranscriptEvent[] = [];
     const source = options.source || "base-app.script-editor";
 
-    for (const chunk of chunks) {
-        const result = await options.executeVisibleCommand(
-            createVisibleCommandRequest({
-                text: chunk,
-                source
-            })
+    let first: RuntimeCommandResult;
+    let incomplete = false;
+    if (code) {
+        first = await options.executeVisibleCommand(createVisibleCommandRequest({
+            text: code, source, planInput: "script"
+        }));
+        if (!first || Array.isArray(first) || !first.inputPlan) {
+            return { status: "unavailable", events: first && !Array.isArray(first) ? first.transcriptEvents || [] : [] };
+        }
+        const parsed = readRuntimeConsoleInputPlan(code, first.inputPlan);
+        chunks = parsed.plan.chunks.map(chunk => chunk.trim());
+        incomplete = parsed.plan.incomplete;
+    }
+
+    for (const [index, chunk] of chunks.entries()) {
+        const result = code && index === 0 ? first : await options.executeVisibleCommand(
+            createVisibleCommandRequest({ text: chunk, source })
         );
 
         const nextEvents = Array.isArray(result) ? result : result?.transcriptEvents || [];
@@ -95,6 +109,7 @@ export const runScriptCodeBatch = async function(
 
     return {
         status: "submitted",
+        ...(incomplete ? { incomplete } : {}),
         events
     };
 };

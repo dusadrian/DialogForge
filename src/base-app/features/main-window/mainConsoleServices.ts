@@ -36,6 +36,7 @@ import {
 
 
 export interface MainConsoleServicesOptions {
+    supportsConsoleInputPlan(): boolean;
     document: Document;
     dialogForge: DialogForgeApi;
     session: ConsoleSessionState;
@@ -88,6 +89,7 @@ export const createMainConsoleServices = function(
         },
         coordinator: {
             getRuntimeSession: options.getRuntimeSession,
+            supportsConsoleInputPlan: options.supportsConsoleInputPlan,
             startRuntimeSession: options.startRuntimeSession,
             renderStatus: options.renderStatus,
             recordHistory: options.recordHistory,

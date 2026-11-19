@@ -10,6 +10,7 @@ const {
 const {
     createScriptExecutionController
 } = require("../dist/src/script-editor/renderer/scriptExecutionController");
+const { runScriptCodeBatch } = require("../dist/src/script-editor/run/scriptCodeBatch");
 
 
 const successfulReceipt = function(request, index) {
@@ -74,6 +75,7 @@ const createSubmissionFixture = function(options = {}) {
         readOutputWidth: function() {
             return 96;
         },
+        planDuringExecution: options.planDuringExecution,
         checkFragment: async function(code) {
             fragmentChecks.push(code);
 
@@ -87,7 +89,9 @@ const createSubmissionFixture = function(options = {}) {
             requests.push(request);
 
             // Runtime submitted echoes must not add each chunk to history.
-            controller.recordSubmittedCommand(request.text, request.source);
+            if (!request.planInput) {
+                controller.recordSubmittedCommand(request.text, request.source);
+            }
 
             if (options.executeCommand) {
                 return options.executeCommand(request, requests.length, controller);
@@ -284,17 +288,24 @@ const checkStoppedSubmission = async function(outcome) {
 
 
 const checkScriptSelection = async function(text, expectedChunks) {
-    const batches = [];
+    const requests = [];
+    const boundaries = [];
     const controller = createScriptExecutionController({
         transport: {
             invoke: async function(channel, input) {
-                if (channel === "base-app:checkScriptFragment") {
-                    return { state: "complete" };
-                }
-
                 assert.equal(channel, "base-app:runScriptCodeBatch");
-                batches.push(input);
-                return { status: "submitted" };
+                return runScriptCodeBatch(input, {
+                    ensureRuntimeReady: async () => true,
+                    executeVisibleCommand: async function(request) {
+                        requests.push([request.text, request.planInput]);
+                        const result = successfulReceipt(request, requests.length);
+                        if (request.planInput) {
+                            result.inputPlan = { state: "complete", ends: [1, 2, 3] };
+                        }
+                        return result;
+                    },
+                    publishCommandBoundary: chunk => boundaries.push(chunk)
+                });
             }
         },
         getMonaco: function() {
@@ -327,14 +338,47 @@ const checkScriptSelection = async function(text, expectedChunks) {
     await controller.runAtCursor();
 
     assert.deepEqual(
-        batches,
-        [{ chunks: expectedChunks }],
-        "Script selections must use the same completed-expression chunks as console input."
+        requests,
+        [[text, text.includes("\n") ? "script" : undefined],
+            ...expectedChunks.slice(1).map(chunk => [chunk, undefined])],
+        "The first execution must plan the selection without resubmitting its first command."
     );
+    assert.deepEqual(boundaries, expectedChunks);
+};
+
+
+const checkSingleLineSubmission = async function() {
+    const fixture = createSubmissionFixture({
+        planDuringExecution: () => true,
+        executeCommand: function(request, sequence, controller) {
+            const incomplete = request.text === "if (TRUE) {";
+            if (!incomplete && request.planInput) {
+                controller.recordSubmittedCommand(request.text, request.source);
+                assert.deepEqual(fixture.history, [request.text], "Accepted input is already in history.");
+            }
+            return {
+                ...successfulReceipt(request, sequence),
+                inputPlan: { state: incomplete ? "incomplete" : "complete", ends: incomplete ? [] : [1] }
+            };
+        }
+    });
+    const controller = fixture.controller;
+    const pending = await controller.executeWithReceipt("if (TRUE) {", "console.fixture", true);
+    assert.equal(pending.incomplete, true);
+    assert.deepEqual(fixture.history, []);
+    const done = await controller.executeWithReceipt("x <- 4L", "console.fixture", true);
+    assert.equal(done.accepted, true);
+    assert.deepEqual(fixture.history, ["x <- 4L"]);
+    assert.deepEqual(fixture.fragmentChecks, []);
+    assert.deepEqual(fixture.requests.map(request => request.planInput), ["console", "console"]);
+
+    await controller.executeWithReceipt("x <- 5L", "dialog.fixture");
+    assert.equal(fixture.requests.at(-1).planInput, undefined);
 };
 
 
 const main = async function() {
+    await checkSingleLineSubmission();
     await checkCompleteCommands();
     await checkMultilineCall();
     await checkSemicolonInput();

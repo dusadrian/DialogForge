@@ -356,12 +356,12 @@ const api: DialogForgeApi = {
             input
         );
     },
-    checkScriptFragment: function(input: { code?: string }) {
+    checkScriptFragment: function(input: { code?: string; plan?: boolean }) {
         return invokeScriptEditor(scriptEditorIpcChannels.checkFragment,
             input
         );
     },
-    runScriptCodeBatch: function(input: { chunks?: string[] }) {
+    runScriptCodeBatch: function(input: { code?: string; chunks?: string[] }) {
         return invokeScriptEditor(scriptEditorIpcChannels.runCodeBatch,
             input
         );

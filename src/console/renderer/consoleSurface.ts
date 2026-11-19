@@ -187,6 +187,9 @@ export const createConsoleSurface = function(
         }
 
         commandInput = createTerminalConsoleEditorInputView({
+            reportSubmissionFailure(message) {
+                transcript?.recordRuntimeMessageStream({ name: "stderr", origin: "console", text: message + "\n" });
+            },
             isCodeFragmentComplete: options.isCodeFragmentComplete,
             executeCode: options.executeCode,
             getPromptState: function() {

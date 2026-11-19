@@ -64,6 +64,9 @@ export const createVisibleCommandRequest = function(input: Partial<VisibleComman
     if (input?.activityId) {
         request.activityId = String(input.activityId);
     }
+    if (input?.planInput === "script" || input?.planInput === "console") {
+        request.planInput = input.planInput;
+    }
 
     return request;
 };

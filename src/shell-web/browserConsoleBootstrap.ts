@@ -32,6 +32,7 @@ import {
 export interface BrowserConsoleBootstrapOptions {
     document: Document;
     productId: string;
+    supportsConsoleInputPlan(): boolean;
     runtimeId: string;
     completionOptions: CompletionModelOptions;
     readRuntimeStatus(): string;
@@ -119,6 +120,7 @@ export const createBrowserConsoleBootstrap = async function(
             },
             executeRuntimeMethod: options.executeRuntimeMethod,
             executeVisibleCommand: options.executeVisibleCommand,
+            supportsConsoleInputPlan: options.supportsConsoleInputPlan,
             buildContextualHelpRequest: options.buildContextualHelpRequest,
             parseHelpCommand: options.parseHelpCommand,
             openHelpTopic: options.openHelpTopic,
@@ -135,6 +137,7 @@ export const createBrowserConsoleBootstrap = async function(
         getTranscript: function() {
             return coordinator.getTranscript();
         },
+        recordSubmittedCommand: coordinator.recordActiveSubmission,
         setPromptState: coordinator.setPromptState,
         setRuntimeBusy: coordinator.setRuntimeBusy,
         renderEvents: function() {

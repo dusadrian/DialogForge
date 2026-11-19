@@ -5,6 +5,7 @@ import {
 import { createRuntimeEvent } from "../../../events/runtimeEventProtocol";
 import { hasValidRWorkspaceReconciliationPayload } from "./rWorkspacePayloadValidation";
 import type {
+    RuntimeCommandExecutionResult,
     RuntimeEventRecord,
     RuntimeEvaluationOutcome,
     RuntimeSessionSnapshot,
@@ -21,6 +22,32 @@ export const asRuntimeControlObject = function(
         !Array.isArray(value)
         ? value as Record<string, unknown>
         : {};
+};
+
+
+export const readRInputPlan = function(result: unknown): RuntimeCommandExecutionResult["inputPlan"] {
+    const plan = asRuntimeControlObject(asRuntimeControlObject(result).inputPlan);
+    const { ends, state } = plan;
+    if (state !== "complete" && state !== "invalid" && state !== "incomplete") {
+        return undefined;
+    }
+    if (!Array.isArray(ends) || !ends.every((end, i) =>
+        Number.isSafeInteger(end) && end > (i ? ends[i - 1] : 0))) {
+        return undefined;
+    }
+    return { ends, state };
+};
+
+
+export const isDeferredRInput = function(
+    result: unknown, mode: VisibleCommandRequest["planInput"], parentId: string
+): boolean {
+    const receipt = asRuntimeControlObject(result);
+    if (!mode || receipt.inputDeferred !== true || receipt.parentId !== parentId) {
+        return false;
+    }
+    const plan = readRInputPlan(receipt);
+    return Boolean(plan && (!plan.ends.length || (mode === "console" && plan.state === "incomplete")));
 };
 
 

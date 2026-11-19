@@ -22,6 +22,62 @@ local({
         sys.source(file.path(sources, file), envir = runtime)
     }
 
+    # The transport returns physical line boundaries. Preserve the interactive
+    # parser's decisions even when a later error invalidates the whole buffer.
+    plans <- list(
+        list("x <- 4L", 1L, "complete"),
+        list("if (TRUE)", integer(0), "incomplete"),
+        list('print(")")', 1L, "complete"),
+        list("x <- 4L; print(x)", 1L, "complete"),
+        list("x <- 4L; if (TRUE) {", integer(0), "incomplete"),
+        list("x <- 4L; )", 1L, "invalid"),
+        list("# unmatched ( in a comment", 1L, "complete"),
+        list("x <- 1\n# comment\n", c(1L, 2L), "complete"),
+        list("1; sum(\n    2,\n    3\n); 4", 4L, "complete"),
+        list("# first\n\n{\n  # inside\n  1\n}\n# last", c(1L, 6L, 7L), "complete"),
+        list("1\nif (TRUE) {", 1L, "incomplete"),
+        list("1\n)\n2", 1:3, "invalid"),
+        list('"multiline\nstring"', 1:2, "complete"),
+        list(paste(c("function() {", rep("    x <- 1", 5000L), "}"), collapse = "\n"),
+            5002L, "complete")
+    )
+    for (case in plans) {
+        planned <- runtime$runtime_plan_console_input(list(code = case[[1L]]))
+        expected <- paste0('{"ends":[', paste(case[[2L]], collapse = ","),
+            '],"state":"', case[[3L]], '"}')
+        stopifnot(identical(planned$result_json, expected))
+    }
+
+    parse_options <- options(keep.parse.data = FALSE)
+    quoted <- runtime$runtime_plan_console_input(list(code = '"first\nsecond"'))
+    options(parse_options)
+    stopifnot(identical(quoted$result_json, '{"ends":[1,2],"state":"complete"}'))
+
+    runtime$workspace_hashes_current <- TRUE
+    pending <- runtime$runtime_execute_input(list(
+        code = "DF_pending_prefix <- TRUE; if (TRUE) {", planInput = "console",
+        parentId = "pending", outputCaptureSession = "session"
+    ))
+    stopifnot(runtime$workspace_hashes_current,
+        !exists("DF_pending_prefix", envir = .GlobalEnv, inherits = FALSE),
+        identical(pending$result_json, paste0(
+            '{"inputDeferred":true,"parentId":"pending","sessionId":"session",',
+            '"inputPlan":{"ends":[],"state":"incomplete"}}'
+        ))
+    )
+
+    deferred <- runtime$runtime_execute_input(list(
+        code = "DF_pending_prefix <- TRUE\nif (TRUE) {", planInput = "console",
+        parentId = "activity", outputCaptureSession = "session"
+    ))
+    stopifnot(
+        !exists("DF_pending_prefix", envir = .GlobalEnv, inherits = FALSE),
+        identical(deferred$result_json, paste0(
+            '{"inputDeferred":true,"parentId":"activity","sessionId":"session",',
+            '"inputPlan":{"ends":[1],"state":"incomplete"}}'
+        ))
+    )
+
     fixture_name <- "DF_console_expression_value"
     stopifnot(!exists(fixture_name, .GlobalEnv, inherits = FALSE))
     on.exit({

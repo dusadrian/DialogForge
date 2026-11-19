@@ -19,6 +19,7 @@ import {
     asRuntimeControlObject,
     type RRuntimeCommandCompletionMarker,
     readRuntimeEvaluationOutcome,
+    readRInputPlan, isDeferredRInput,
     readRuntimeCommandCompletionMarker,
     createTranscriptEventsFromRuntimeControl
 } from "../protocol/runtimeControlEvents";
@@ -157,7 +158,9 @@ export const createRVisibleCommandExecutor = function(
             request: VisibleCommandRequest,
             snapshot: RuntimeSessionSnapshot
         ): Promise<RuntimeCommandExecutionResult> {
-            if (isCommentOnlyRInput(request.text)) {
+            const singleComment = request.planInput === "console"
+                && !/[\r\n]/.test(request.text) && request.text.trimStart().startsWith("#");
+            if (singleComment || (!request.planInput && isCommentOnlyRInput(request.text))) {
                 return {
                     transcriptEvents: [
                         createTranscriptEvent("submitted", request),
@@ -165,6 +168,7 @@ export const createRVisibleCommandExecutor = function(
                             state: "idle"
                         })
                     ],
+                    ...(singleComment ? { inputPlan: { state: "complete" as const, ends: [1] } } : {}),
                     workspaceUpdate: null,
                     evaluationOutcome: "success",
                     // No R code was executed for blank or comment-only input.
@@ -204,8 +208,10 @@ export const createRVisibleCommandExecutor = function(
                     params: {
                         ...outputCapture?.params,
                         code: request.text,
+                        source: request.source,
                         parentId,
                         mode: "interactive",
+                        ...(request.planInput ? { planInput: request.planInput } : {}),
                         outputWidth: request.outputWidth
                     }
                 }, {
@@ -213,12 +219,14 @@ export const createRVisibleCommandExecutor = function(
                     onDispatched: function(): void {
                         dispatched = true;
                         options.onExecutionStarted?.(request, parentId);
-                        options.onTranscriptEvents?.([
-                            createTranscriptEvent("submitted", request, {
-                                id: options.createRequestId("dispatched-input"),
-                                parentId
-                            })
-                        ]);
+                        if (!request.planInput) {
+                            options.onTranscriptEvents?.([
+                                createTranscriptEvent("submitted", request, {
+                                    id: options.createRequestId("dispatched-input"),
+                                    parentId
+                                })
+                            ]);
+                        }
                         outputCapture?.onDispatched();
                     }
                 });
@@ -305,6 +313,10 @@ export const createRVisibleCommandExecutor = function(
                 };
             }
 
+            const inputPlan = request.planInput ? readRInputPlan(result.result) : undefined;
+            if (result.ok && !result.events?.length && isDeferredRInput(result.result, request.planInput, parentId)) {
+                return { inputPlan, executionDisposition: "not_started", transcriptEvents: [], workspaceUpdate: null };
+            }
             if (result.ok) {
                 options.onRuntimeControlEvents?.(result.events, snapshot);
             }
@@ -342,6 +354,7 @@ export const createRVisibleCommandExecutor = function(
                 return {
                     activityId: parentId,
                     evaluationOutcome: readRuntimeEvaluationOutcome(result.events, parentId),
+                    ...(inputPlan ? { inputPlan } : {}),
                     transcriptEvents: [...transcriptEvents, ...cleanupTranscriptEvents],
                     workspaceUpdate: workspaceResult.workspaceUpdate,
                     workspaceReconciliation: workspaceResult.workspaceReconciliation

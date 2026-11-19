@@ -86,6 +86,7 @@ export const createScriptExecutionController = function(
             return {
                 startLine: 1,
                 endLine: 1,
+                complete: false,
                 code: ""
             };
         }
@@ -159,6 +160,7 @@ export const createScriptExecutionController = function(
             code: normalizeConsoleCommandText(statement.code),
             lineNumber: Number(statement.startLine || lineNumber),
             endLineNumber: Number(statement.endLine || lineNumber),
+            complete: statement.complete,
             usedSelection: false
         };
     };
@@ -209,22 +211,34 @@ export const createScriptExecutionController = function(
             return;
         }
 
-        const plan = await planConsoleInputExecution(
-            code,
-            checkFragment
-        );
-        const chunks = plan.chunks;
-
-        if (chunks.length > 0) {
-            void options.transport.invoke(
-                "base-app:runScriptCodeBatch",
-                { chunks }
-            );
+        if (code.trim().includes("\n")) {
+            const editor = picked.usedSelection ? null : options.getEditor();
+            const model = editor?.getModel();
+            const position = editor?.getPosition();
+            const version = model?.getVersionId();
+            const submitted = options.transport.invoke("base-app:runScriptCodeBatch", { code });
+            if (!picked.usedSelection && picked.complete) {
+                advanceCursor(picked.endLineNumber || picked.lineNumber);
+            }
+            const response = await submitted as {
+                status: string; incomplete?: boolean
+            };
+            if (!picked.usedSelection && !picked.complete && response?.status === "submitted"
+                && !response.incomplete && model && editor?.getModel() === model
+                && version === model.getVersionId() && position && editor.getPosition()?.equals(position)) {
+                advanceCursor(picked.endLineNumber || picked.lineNumber);
+            }
+            return;
         }
+        const plan = await planConsoleInputExecution(code, checkFragment);
+        const chunks = plan.chunks;
+        if (!chunks.length) {
+            return;
+        }
+        const submitted = options.transport.invoke("base-app:runScriptCodeBatch", { chunks });
 
         if (
             !picked.usedSelection
-            && chunks.length > 0
             && !plan.incomplete
         ) {
             advanceCursor(
@@ -234,6 +248,7 @@ export const createScriptExecutionController = function(
                 )
             );
         }
+        await submitted;
     };
 
     const showHelpAtCursor = function(): void {
@@ -279,7 +294,22 @@ export const createScriptExecutionController = function(
     };
 
     return {
-        runAtCursor,
+        async runAtCursor() {
+            const editor = options.getEditor();
+            const model = editor?.getModel?.();
+            const position = editor?.getPosition?.();
+            try {
+                await runAtCursor();
+            }
+            catch (error) {
+                if (model && position && editor?.getModel() === model) {
+                    const messages = editor.getContribution<Monaco.editor.IEditorContribution & {
+                        showMessage(text: string, position: Monaco.IPosition): void;
+                    }>("editor.contrib.messageController");
+                    messages?.showMessage(error instanceof Error ? error.message : String(error), position);
+                }
+            }
+        },
         showHelpAtCursor
     };
 };

@@ -211,6 +211,7 @@ let productDisplayName = "DialogForge";
 let packageSourcePolicy: ProductPackageSourcePolicy = {};
 let applicationI18n: Record<string, string> = {};
 let runtimeProviderId = "none";
+let supportsConsoleInputPlan = false;
 let runtimeDisplayName = "Runtime";
 let uiActionCommandVisibility: "hidden" | "visible" = "hidden";
 let consoleWorkingDirectoryPath = "";
@@ -223,6 +224,7 @@ const consoleSessionState = createConsoleSessionState(function(): string {
     return document.body.dataset.dialogForgeReady !== "1" || runtimeStartupPending;
 });
 const mainConsoleServices = createMainConsoleServices({
+    supportsConsoleInputPlan: () => supportsConsoleInputPlan,
     document,
     dialogForge: dialogForge,
     session: consoleSessionState,
@@ -1519,7 +1521,10 @@ const mainStartupController = createMainStartupController({
     getComposition: function(): Promise<ApplicationComposition> {
         return dialogForge.getComposition();
     },
-    applyComposition: mainCompositionBootstrapController.apply,
+    applyComposition: function(composition) {
+        supportsConsoleInputPlan = composition.runtime?.capabilities.includes("commands.planInput") === true;
+        return mainCompositionBootstrapController.apply(composition);
+    },
     readPersistedWorkspacePaneVisible: workspacePaneVisibility.readPersisted,
     setWorkspacePaneVisible: workspacePaneVisibility.set,
     initializeWorkspacePane,
