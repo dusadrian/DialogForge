@@ -126,9 +126,11 @@ fixture$pending_prompt_reply <- list(
 stopifnot(is.null(fixture$runtime_prompt_pending_reply("activity", "current")))
 stopifnot(is.null(fixture$pending_prompt_reply))
 
-decoded <- fixture$runtime_transport_dedicated_params(
-    '{"parentId":"activity","promptId":"prompt%2Fone","reply":""}'
-)
+decoded <- fixture$runtime_transport_decode_request(
+    paste0('{"prefix":"DMRUNTIME1","id":"fixture","method":"reply_prompt",',
+        '"parentId":"activity","promptId":"prompt%2Fone","reply":""}'),
+    TRUE, require_auth = FALSE
+)$params
 stopifnot(identical(decoded$promptId, "prompt/one"))
 stopifnot(identical(decoded$reply, ""))
 legacy_parts <- rep("", 21L)
@@ -183,12 +185,12 @@ stopifnot(grepl(
     ), fixed = TRUE
 ))
 packet <- '{"prefix":"DMRUNTIME1","id":"worker","method":"reply_prompt"}'
-stopifnot(!fixture$runtime_transport_validate_json_request(packet))
-stopifnot(fixture$runtime_transport_validate_json_request(packet, require_auth = FALSE))
-stopifnot(!fixture$runtime_transport_validate_json_request(
+stopifnot(!fixture$runtime_transport_decode_request(packet, TRUE)$valid)
+stopifnot(fixture$runtime_transport_decode_request(packet, TRUE, require_auth = FALSE)$valid)
+stopifnot(!fixture$runtime_transport_decode_request(
     '{"prefix":"DMRUNTIME1","id":"worker","id":"duplicate","method":"reply_prompt"}',
-    require_auth = FALSE
-))
+    TRUE, require_auth = FALSE
+)$valid)
 
 fixture$runtime_prompt_transport_read <- function(prompt_event) stop("worker input failed")
 failure <- tryCatch(fixture$wait_for_prompt_reply("Failure:"),

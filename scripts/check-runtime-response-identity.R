@@ -44,6 +44,17 @@ encoded_code <- utils::URLencode("cat('é😀\\n')\nvalue <- 1 + 2", reserved = 
 with_code <- sub("}$", paste0(',"code":"', encoded_code, '"}'), raw)
 decoded <- fixture$runtime_transport_decode_request(with_code, TRUE)
 stopifnot(decoded$valid, identical(decoded$params$code, "cat('é😀\\n')\nvalue <- 1 + 2"))
+
+# Encoded separators belong to their value. Only the wire envelope is split.
+reordered <- paste0(
+    '{"code":"%22a%2Cb%3Ac%25%22","auth":"secret",',
+    '"idExtra":"other","method":"execute_input","mode":"",',
+    '"prefix":"DMRUNTIME1","id":"request"}'
+)
+decoded <- fixture$runtime_transport_decode_request(reordered, TRUE)
+stopifnot(decoded$valid, identical(decoded$id, "request"),
+    identical(decoded$params$code, '"a,b:c%"'), identical(decoded$params$mode, ""),
+    identical(decoded$params$header, TRUE), is.na(decoded$params$outputWidth))
 output <- list(
     id = request$id, method = request$method, ok = TRUE,
     transportNonce = request$transportNonce

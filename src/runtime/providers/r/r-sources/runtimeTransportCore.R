@@ -8,39 +8,27 @@ runtime_transport_decode <- function(value) {
 }
 
 
-runtime_transport_extract_json_string <- function(raw, key) {
-    raw <- as.character(raw %||% "")
-    key <- as.character(key %||% "")
-
-    if (!nzchar(raw) || !nzchar(key)) return("")
-
-    pattern <- paste0('"', key, '":"([^"]*)"')
-    match <- regexec(pattern, raw, perl = TRUE)
-    parts <- regmatches(raw, match)[[1L]]
-
-    if (length(parts) < 2L) return("")
-
-    as.character(parts[[2L]] %||% "")
+runtime_transport_value <- function(fields, key) {
+    value <- fields[[key]] %||% ""
+    if (grepl("%", value, fixed = TRUE)) {
+        return(runtime_transport_decode(value))
+    }
+    value
 }
 
 
-runtime_transport_value <- function(raw, key) {
-    runtime_transport_decode(runtime_transport_extract_json_string(raw, key))
+runtime_transport_number <- function(fields, key) {
+    suppressWarnings(as.numeric(runtime_transport_value(fields, key)))
 }
 
 
-runtime_transport_number <- function(raw, key) {
-    suppressWarnings(as.numeric(runtime_transport_value(raw, key)))
+runtime_transport_integer <- function(fields, key) {
+    suppressWarnings(as.integer(runtime_transport_value(fields, key)))
 }
 
 
-runtime_transport_integer <- function(raw, key) {
-    suppressWarnings(as.integer(runtime_transport_value(raw, key)))
-}
-
-
-runtime_transport_flag <- function(raw, key, default = FALSE) {
-    value <- runtime_transport_value(raw, key)
+runtime_transport_flag <- function(fields, key, default = FALSE) {
+    value <- runtime_transport_value(fields, key)
 
     if (!nzchar(value)) return(isTRUE(default))
 
@@ -48,8 +36,8 @@ runtime_transport_flag <- function(raw, key, default = FALSE) {
 }
 
 
-runtime_transport_vector <- function(raw, key) {
-    value <- runtime_transport_value(raw, key)
+runtime_transport_vector <- function(fields, key) {
+    value <- runtime_transport_value(fields, key)
 
     if (!nzchar(value)) return(character(0))
 
@@ -57,33 +45,33 @@ runtime_transport_vector <- function(raw, key) {
 }
 
 
-runtime_transport_numeric_vector <- function(raw, key) {
-    suppressWarnings(as.numeric(runtime_transport_vector(raw, key)))
+runtime_transport_numeric_vector <- function(fields, key) {
+    suppressWarnings(as.numeric(runtime_transport_vector(fields, key)))
 }
 
 
-runtime_transport_optional_value <- function(raw, key, supplied) {
+runtime_transport_optional_value <- function(fields, key, supplied) {
     if (!isTRUE(supplied)) {
         return(NULL)
     }
 
-    runtime_transport_value(raw, key)
+    runtime_transport_value(fields, key)
 }
 
 
-runtime_transport_optional_number <- function(raw, key, supplied) {
+runtime_transport_optional_number <- function(fields, key, supplied) {
     if (!isTRUE(supplied)) {
         return(NULL)
     }
 
-    runtime_transport_number(raw, key)
+    runtime_transport_number(fields, key)
 }
 
 
-runtime_transport_categories <- function(raw, supplied = FALSE) {
-    values <- runtime_transport_vector(raw, "categoryValues")
-    labels <- runtime_transport_vector(raw, "categoryLabels")
-    missing <- runtime_transport_vector(raw, "categoryMissing")
+runtime_transport_categories <- function(fields, supplied = FALSE) {
+    values <- runtime_transport_vector(fields, "categoryValues")
+    labels <- runtime_transport_vector(fields, "categoryLabels")
+    missing <- runtime_transport_vector(fields, "categoryMissing")
     count <- max(length(values), length(labels), length(missing), 0L)
 
     if (!count) {
@@ -104,9 +92,9 @@ runtime_transport_categories <- function(raw, supplied = FALSE) {
 }
 
 
-runtime_transport_missing_range <- function(raw, supplied = FALSE) {
-    minimum <- runtime_transport_value(raw, "missingRangeMin")
-    maximum <- runtime_transport_value(raw, "missingRangeMax")
+runtime_transport_missing_range <- function(fields, supplied = FALSE) {
+    minimum <- runtime_transport_value(fields, "missingRangeMin")
+    maximum <- runtime_transport_value(fields, "missingRangeMax")
 
     if (identical(minimum, "__NULL__") || identical(maximum, "__NULL__")) {
         return(list(min = "", max = ""))
@@ -124,11 +112,11 @@ runtime_transport_missing_range <- function(raw, supplied = FALSE) {
 }
 
 
-runtime_transport_attribute_changes <- function(raw) {
-    if (!runtime_transport_flag(raw, "hasAttributeChanges")) {
+runtime_transport_attribute_changes <- function(fields) {
+    if (!runtime_transport_flag(fields, "hasAttributeChanges")) {
         return(NULL)
     }
-    encoded <- runtime_transport_value(raw, "attributeChanges")
+    encoded <- runtime_transport_value(fields, "attributeChanges")
     if (!nzchar(encoded)) {
         return(list())
     }
@@ -148,115 +136,115 @@ runtime_transport_attribute_changes <- function(raw) {
 }
 
 
-runtime_transport_dedicated_params <- function(raw) {
-    has_type <- runtime_transport_flag(raw, "hasType")
-    has_measure <- runtime_transport_flag(raw, "hasMeasure")
-    has_label <- runtime_transport_flag(raw, "hasLabel")
-    has_width <- runtime_transport_flag(raw, "hasWidth")
-    has_decimals <- runtime_transport_flag(raw, "hasDecimals")
-    has_align <- runtime_transport_flag(raw, "hasAlign")
-    has_categories <- runtime_transport_flag(raw, "hasCategories")
-    has_missing_range <- runtime_transport_flag(raw, "hasMissingRange")
+runtime_transport_dedicated_params <- function(fields) {
+    has_type <- runtime_transport_flag(fields, "hasType")
+    has_measure <- runtime_transport_flag(fields, "hasMeasure")
+    has_label <- runtime_transport_flag(fields, "hasLabel")
+    has_width <- runtime_transport_flag(fields, "hasWidth")
+    has_decimals <- runtime_transport_flag(fields, "hasDecimals")
+    has_align <- runtime_transport_flag(fields, "hasAlign")
+    has_categories <- runtime_transport_flag(fields, "hasCategories")
+    has_missing_range <- runtime_transport_flag(fields, "hasMissingRange")
 
     list(
-        code = runtime_transport_value(raw, "code"),
-        mode = runtime_transport_value(raw, "mode"),
-        outputWidth = runtime_transport_integer(raw, "outputWidth"),
-        planInput = runtime_transport_value(raw, "planInput"),
-        timeoutMs = runtime_transport_number(raw, "timeoutMs"),
-        sessionId = runtime_transport_number(raw, "sessionId"),
-        diagnosticSession = runtime_transport_value(raw, "diagnosticSession"),
-        topic = runtime_transport_value(raw, "topic"),
-        package = runtime_transport_value(raw, "package"),
-        prefix = runtime_transport_value(raw, "requestPrefix"),
-        cursorColumn = runtime_transport_integer(raw, "cursorColumn"),
-        includeInternals = runtime_transport_flag(raw, "includeInternals"),
-        forceRefresh = runtime_transport_flag(raw, "forceRefresh"),
-        path = runtime_transport_value(raw, "path"),
-        reader = runtime_transport_value(raw, "reader"),
-        nrows = runtime_transport_number(raw, "nrows"),
-        binary = runtime_transport_flag(raw, "binary"),
-        header = runtime_transport_flag(raw, "header", default = TRUE),
-        rowNames = runtime_transport_integer(raw, "rowNames"),
-        sep = runtime_transport_value(raw, "sep"),
-        quote = runtime_transport_value(raw, "quote"),
-        dec = runtime_transport_value(raw, "dec"),
-        naStrings = runtime_transport_value(raw, "naStrings"),
-        skip = runtime_transport_number(raw, "skip"),
-        stripWhite = runtime_transport_flag(raw, "stripWhite"),
-        commentChar = runtime_transport_value(raw, "commentChar"),
-        fileEncoding = runtime_transport_value(raw, "fileEncoding"),
-        parentId = runtime_transport_value(raw, "parentId"),
-        outputCaptureName = runtime_transport_value(raw, "outputCaptureName"),
-        outputCaptureSession = runtime_transport_value(raw, "outputCaptureSession"),
-        promptId = runtime_transport_value(raw, "promptId"),
-        reply = runtime_transport_value(raw, "reply"),
-        names = runtime_transport_vector(raw, "names"),
-        name = runtime_transport_value(raw, "name"),
-        oldName = runtime_transport_value(raw, "oldName"),
-        newName = runtime_transport_value(raw, "newName"),
-        nextName = runtime_transport_value(raw, "nextName"),
-        targetName = runtime_transport_value(raw, "targetName"),
-        variableName = runtime_transport_value(raw, "variableName"),
-        variableNames = runtime_transport_vector(raw, "variableNames"),
-        xVariableName = runtime_transport_value(raw, "xVariableName"),
-        yVariableName = runtime_transport_value(raw, "yVariableName"),
-        solutionName = runtime_transport_value(raw, "solutionName"),
-        branch = runtime_transport_value(raw, "branch"),
-        model = runtime_transport_value(raw, "model"),
-        ambiguity = runtime_transport_value(raw, "ambiguity"),
-        title = runtime_transport_value(raw, "title"),
-        legend = runtime_transport_flag(raw, "legend", default = TRUE),
-        useLabels = if (nzchar(runtime_transport_value(raw, "useLabels"))) {
-            runtime_transport_flag(raw, "useLabels")
+        code = runtime_transport_value(fields, "code"),
+        mode = runtime_transport_value(fields, "mode"),
+        outputWidth = runtime_transport_integer(fields, "outputWidth"),
+        planInput = runtime_transport_value(fields, "planInput"),
+        timeoutMs = runtime_transport_number(fields, "timeoutMs"),
+        sessionId = runtime_transport_number(fields, "sessionId"),
+        diagnosticSession = runtime_transport_value(fields, "diagnosticSession"),
+        topic = runtime_transport_value(fields, "topic"),
+        package = runtime_transport_value(fields, "package"),
+        prefix = runtime_transport_value(fields, "requestPrefix"),
+        cursorColumn = runtime_transport_integer(fields, "cursorColumn"),
+        includeInternals = runtime_transport_flag(fields, "includeInternals"),
+        forceRefresh = runtime_transport_flag(fields, "forceRefresh"),
+        path = runtime_transport_value(fields, "path"),
+        reader = runtime_transport_value(fields, "reader"),
+        nrows = runtime_transport_number(fields, "nrows"),
+        binary = runtime_transport_flag(fields, "binary"),
+        header = runtime_transport_flag(fields, "header", default = TRUE),
+        rowNames = runtime_transport_integer(fields, "rowNames"),
+        sep = runtime_transport_value(fields, "sep"),
+        quote = runtime_transport_value(fields, "quote"),
+        dec = runtime_transport_value(fields, "dec"),
+        naStrings = runtime_transport_value(fields, "naStrings"),
+        skip = runtime_transport_number(fields, "skip"),
+        stripWhite = runtime_transport_flag(fields, "stripWhite"),
+        commentChar = runtime_transport_value(fields, "commentChar"),
+        fileEncoding = runtime_transport_value(fields, "fileEncoding"),
+        parentId = runtime_transport_value(fields, "parentId"),
+        outputCaptureName = runtime_transport_value(fields, "outputCaptureName"),
+        outputCaptureSession = runtime_transport_value(fields, "outputCaptureSession"),
+        promptId = runtime_transport_value(fields, "promptId"),
+        reply = runtime_transport_value(fields, "reply"),
+        names = runtime_transport_vector(fields, "names"),
+        name = runtime_transport_value(fields, "name"),
+        oldName = runtime_transport_value(fields, "oldName"),
+        newName = runtime_transport_value(fields, "newName"),
+        nextName = runtime_transport_value(fields, "nextName"),
+        targetName = runtime_transport_value(fields, "targetName"),
+        variableName = runtime_transport_value(fields, "variableName"),
+        variableNames = runtime_transport_vector(fields, "variableNames"),
+        xVariableName = runtime_transport_value(fields, "xVariableName"),
+        yVariableName = runtime_transport_value(fields, "yVariableName"),
+        solutionName = runtime_transport_value(fields, "solutionName"),
+        branch = runtime_transport_value(fields, "branch"),
+        model = runtime_transport_value(fields, "model"),
+        ambiguity = runtime_transport_value(fields, "ambiguity"),
+        title = runtime_transport_value(fields, "title"),
+        legend = runtime_transport_flag(fields, "legend", default = TRUE),
+        useLabels = if (nzchar(runtime_transport_value(fields, "useLabels"))) {
+            runtime_transport_flag(fields, "useLabels")
         } else {
             NULL
         },
         coreSelections = stats::setNames(
-            runtime_transport_vector(raw, "coreSelectionValues"),
-            runtime_transport_vector(raw, "coreSelectionNames")
+            runtime_transport_vector(fields, "coreSelectionValues"),
+            runtime_transport_vector(fields, "coreSelectionNames")
         ),
-        thresholds = runtime_transport_numeric_vector(raw, "thresholds"),
-        thresholdNames = runtime_transport_vector(raw, "thresholdNames"),
-        variant = runtime_transport_value(raw, "variant"),
-        logistic = runtime_transport_flag(raw, "logistic"),
-        ecdf = runtime_transport_flag(raw, "ecdf"),
-        idm = runtime_transport_number(raw, "idm"),
-        below = runtime_transport_number(raw, "below"),
-        above = runtime_transport_number(raw, "above"),
-        increasing = runtime_transport_flag(raw, "increasing", default = TRUE),
-        bell = runtime_transport_flag(raw, "bell"),
-        decreasing = runtime_transport_flag(raw, "decreasing"),
-        naLast = runtime_transport_flag(raw, "naLast", default = TRUE),
-        emptyLast = runtime_transport_flag(raw, "emptyLast", default = TRUE),
-        type = runtime_transport_optional_value(raw, "type", has_type),
+        thresholds = runtime_transport_numeric_vector(fields, "thresholds"),
+        thresholdNames = runtime_transport_vector(fields, "thresholdNames"),
+        variant = runtime_transport_value(fields, "variant"),
+        logistic = runtime_transport_flag(fields, "logistic"),
+        ecdf = runtime_transport_flag(fields, "ecdf"),
+        idm = runtime_transport_number(fields, "idm"),
+        below = runtime_transport_number(fields, "below"),
+        above = runtime_transport_number(fields, "above"),
+        increasing = runtime_transport_flag(fields, "increasing", default = TRUE),
+        bell = runtime_transport_flag(fields, "bell"),
+        decreasing = runtime_transport_flag(fields, "decreasing"),
+        naLast = runtime_transport_flag(fields, "naLast", default = TRUE),
+        emptyLast = runtime_transport_flag(fields, "emptyLast", default = TRUE),
+        type = runtime_transport_optional_value(fields, "type", has_type),
         measure = runtime_transport_optional_value(
-            raw,
+            fields,
             "measure",
             has_measure
         ),
-        label = runtime_transport_optional_value(raw, "label", has_label),
-        attributeChanges = runtime_transport_attribute_changes(raw),
-        categories = runtime_transport_categories(raw, has_categories),
-        missingRange = runtime_transport_missing_range(raw, has_missing_range),
-        width = runtime_transport_optional_number(raw, "width", has_width),
+        label = runtime_transport_optional_value(fields, "label", has_label),
+        attributeChanges = runtime_transport_attribute_changes(fields),
+        categories = runtime_transport_categories(fields, has_categories),
+        missingRange = runtime_transport_missing_range(fields, has_missing_range),
+        width = runtime_transport_optional_number(fields, "width", has_width),
         decimals = runtime_transport_optional_number(
-            raw,
+            fields,
             "decimals",
             has_decimals
         ),
-        align = runtime_transport_optional_value(raw, "align", has_align),
-        row = runtime_transport_number(raw, "row"),
-        column = runtime_transport_value(raw, "column"),
-        position = runtime_transport_value(raw, "position"),
-        value = runtime_transport_value(raw, "value"),
-        rowStart = runtime_transport_number(raw, "rowStart"),
-        rowCount = runtime_transport_number(raw, "rowCount"),
-        columnCount = runtime_transport_number(raw, "columnCount"),
-        start = runtime_transport_number(raw, "start"),
-        nth = runtime_transport_integer(raw, "nth"),
-        count = runtime_transport_number(raw, "count"),
-        columns = runtime_transport_vector(raw, "columns")
+        align = runtime_transport_optional_value(fields, "align", has_align),
+        row = runtime_transport_number(fields, "row"),
+        column = runtime_transport_value(fields, "column"),
+        position = runtime_transport_value(fields, "position"),
+        value = runtime_transport_value(fields, "value"),
+        rowStart = runtime_transport_number(fields, "rowStart"),
+        rowCount = runtime_transport_number(fields, "rowCount"),
+        columnCount = runtime_transport_number(fields, "columnCount"),
+        start = runtime_transport_number(fields, "start"),
+        nth = runtime_transport_integer(fields, "nth"),
+        count = runtime_transport_number(fields, "count"),
+        columns = runtime_transport_vector(fields, "columns")
     )
 }
 
@@ -297,48 +285,49 @@ runtime_transport_interactive_params <- function(parts) {
 }
 
 
-runtime_transport_validate_json_request <- function(raw, require_auth = TRUE) {
+runtime_transport_json_fields <- function(raw, require_auth = TRUE) {
     # Both host adapters use compact, flat URL-encoded string fields.
     field <- "\"[A-Za-z][A-Za-z0-9]*\":\"[A-Za-z0-9_.!~*'()%+-]*\""
     envelope <- paste0("\\A\\{", field, "(?:,", field, ")*\\}\\z")
-    if (!grepl(envelope, raw, perl = TRUE)) {
-        return(FALSE)
+    if (!grepl(envelope, raw, perl = TRUE) ||
+        grepl("%(?![A-Fa-f0-9]{2})", raw, perl = TRUE) ||
+        grepl("%00", raw, fixed = TRUE)) {
+        return(NULL)
     }
-    if (grepl("%(?![A-Fa-f0-9]{2})", raw, perl = TRUE)) {
-        return(FALSE)
+
+    # Validated URL-encoded values contain neither literal commas nor quotes.
+    pairs <- strsplit(substr(raw, 2L, nchar(raw) - 1L), ",", fixed = TRUE)[[1L]]
+    if (length(pairs) > 256L) {
+        return(NULL)
     }
-    if (grepl("%00", raw, fixed = TRUE)) {
-        return(FALSE)
+    separators <- regexpr('":"', pairs, fixed = TRUE)
+    keys <- substr(pairs, 2L, separators - 1L)
+    if (base::anyDuplicated.default(keys)) {
+        return(NULL)
     }
-    matches <- gregexpr('"[A-Za-z][A-Za-z0-9]*":', raw, perl = TRUE)
-    keys <- regmatches(raw, matches)[[1L]]
-    if (length(keys) > 256L) {
-        return(FALSE)
-    }
-    for (index in seq_along(keys)) {
-        if (base::match(keys[[index]], keys) != index) {
-            return(FALSE)
-        }
-    }
+
+    values <- substr(pairs, separators + 3L, nchar(pairs) - 1L)
+    fields <- stats::setNames(as.list(values), keys)
     required <- c("prefix", "id", "method")
     if (isTRUE(require_auth)) {
         required <- c(required, "auth")
     }
     for (key in required) {
-        if (!nzchar(runtime_transport_extract_json_string(raw, key))) {
-            return(FALSE)
+        if (!nzchar(fields[[key]] %||% "")) {
+            return(NULL)
         }
     }
-    TRUE
+    fields
 }
 
 
 runtime_transport_decode_request <- function(raw, dedicated, require_auth = TRUE) {
     if (isTRUE(dedicated)) {
-        if (!runtime_transport_validate_json_request(raw, require_auth)) {
+        fields <- runtime_transport_json_fields(raw, require_auth)
+        if (is.null(fields)) {
             return(list(valid = FALSE, error = "invalid-request-envelope"))
         }
-        prefix <- runtime_transport_value(raw, "prefix")
+        prefix <- runtime_transport_value(fields, "prefix")
 
         if (!identical(prefix, "DMRUNTIME1")) {
             return(list(valid = FALSE, error = "invalid-request"))
@@ -346,18 +335,18 @@ runtime_transport_decode_request <- function(raw, dedicated, require_auth = TRUE
 
         request <- tryCatch(list(
             valid = TRUE,
-            id = runtime_transport_value(raw, "id"),
-            method = runtime_transport_value(raw, "method"),
-            auth = runtime_transport_value(raw, "auth"),
-            transportNonce = runtime_transport_value(raw, "transportNonce"),
-            params = runtime_transport_dedicated_params(raw)
+            id = runtime_transport_value(fields, "id"),
+            method = runtime_transport_value(fields, "method"),
+            auth = runtime_transport_value(fields, "auth"),
+            transportNonce = runtime_transport_value(fields, "transportNonce"),
+            params = runtime_transport_dedicated_params(fields)
         ), error = function(error) {
             list(valid = FALSE, error = "invalid-request-encoding")
         })
         if (identical(request$method, "workspace.column_clipboard_page")) {
-            request$params$key <- runtime_transport_value(raw, "clipboardKey")
-            request$params$retainKey <- runtime_transport_value(raw, "retainClipboardKey")
-            request$params$includeLabels <- runtime_transport_flag(raw, "includeLabels")
+            request$params$key <- runtime_transport_value(fields, "clipboardKey")
+            request$params$retainKey <- runtime_transport_value(fields, "retainClipboardKey")
+            request$params$includeLabels <- runtime_transport_flag(fields, "includeLabels")
         }
         return(request)
     }
