@@ -224,6 +224,11 @@ export const createMainStartupController = function(
                 setBootStage("console-editor:request");
                 await waitForStartup(bindings.initializeVisibleCommandEditor());
                 bindings.focusVisibleCommandInput();
+                if (shouldAutostartRuntime(composition)) {
+                    void bindings.startRuntimeSession({
+                        showStartupMessages: !shouldStartRuntimeQuietly(applicationSettings)
+                    });
+                }
                 setBootStage("ready");
                 bindings.markReady();
 
@@ -247,14 +252,6 @@ export const createMainStartupController = function(
                     }
                     catch {}
                 }, 1000);
-
-                if (shouldAutostartRuntime(composition)) {
-                    void bindings.startRuntimeSession({
-                        showStartupMessages: !shouldStartRuntimeQuietly(
-                            applicationSettings
-                        )
-                    });
-                }
             };
 
             try {

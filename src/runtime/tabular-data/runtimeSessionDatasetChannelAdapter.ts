@@ -181,6 +181,7 @@ export const createRuntimeSessionDatasetChannelAdapter = function(
 
     return {
         readSchema: reads.readSchema,
+        readColumnClipboardPage: reads.readColumnClipboardPage,
         tabularColumns,
         tabularRows,
         readTabularSchema: tabularReads.readTabularSchema,

@@ -64,6 +64,7 @@ interface BrowserPreloadDatasetChannels {
     readSchema(input: unknown): Promise<unknown>;
     readTabularSchema(input: unknown): Promise<unknown>;
     readTabularPreview(input: unknown): Promise<unknown>;
+    readColumnClipboardPage(input: unknown): Promise<unknown>;
     readContent(input: unknown): Promise<unknown>;
     readFilterMask(input: unknown): unknown;
     readVariables(input: unknown): Promise<unknown>;
@@ -276,6 +277,9 @@ export const createBrowserPreloadChannelBridge = function(
             }
             if (channel === datasetEditorIpcChannels.getSchema) {
                 return options.datasetChannels().readSchema(input.name);
+            }
+            if (channel === datasetEditorIpcChannels.readColumnClipboardPage) {
+                return options.datasetChannels().readColumnClipboardPage(input);
             }
             if (channel === datasetEditorIpcChannels.getContent) {
                 return options.datasetChannels().readContent(input);

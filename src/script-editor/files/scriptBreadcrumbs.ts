@@ -74,7 +74,7 @@ export const createScriptBreadcrumbModel = function(
         };
     }
 
-    const root = readPathRoot(fullPath) || "/";
+    const root = readPathRoot(fullPath);
     const relativePath = normalizePathSeparators(fullPath).slice(root.length);
     const labels = relativePath
         ? relativePath.split("/").filter(Boolean)

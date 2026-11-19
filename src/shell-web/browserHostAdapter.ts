@@ -16,7 +16,7 @@ export const createBrowserHostAdapter = function(): HostAdapter {
         },
         readClipboardText: async function(): Promise<string> {
             if (!navigator.clipboard?.readText) {
-                return "";
+                throw new Error("Clipboard read failed");
             }
 
             return navigator.clipboard.readText();

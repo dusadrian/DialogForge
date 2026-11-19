@@ -28,6 +28,7 @@ export interface ScriptEditorFileControllerOptions {
     createTab(options: {
         kind?: ScriptDocument["kind"];
         displayName?: string;
+        fileKey?: string;
         filePath?: string;
         content?: string;
         dirty?: boolean;
@@ -45,7 +46,8 @@ export interface ScriptEditorFileController {
     openFile(
         filePath: string,
         content: string,
-        preferCurrent?: boolean
+        preferCurrent?: boolean,
+        fileKey?: string
     ): Promise<void>;
     closeTab(tabId: string): Promise<boolean>;
     restoreSession(): Promise<boolean>;
@@ -72,7 +74,8 @@ const asOpenScriptFileResponse = function(
 export const createScriptEditorFileController = function(
     options: ScriptEditorFileControllerOptions
 ): ScriptEditorFileController {
-    const saveTab = async function(
+    const pendingSaves = new WeakMap<ScriptDocument, Promise<boolean>>();
+    const writeTab = async function(
         tab: ScriptDocument,
         saveAs = false
     ): Promise<boolean> {
@@ -80,25 +83,46 @@ export const createScriptEditorFileController = function(
             return false;
         }
 
+        const version = tab.model.getAlternativeVersionId();
         const saved = await options.persistence.save(
             {
                 filePath: tab.filePath,
+                fileKey: tab.fileKey,
                 content: String(tab.model?.getValue?.() || "")
             },
             saveAs
         );
 
-        if (!saved) {
+        if (!saved || tab.model.isDisposed()) {
             return false;
         }
 
+        if (saveAs) {
+            tab.fileKey = undefined;
+        }
         tab.filePath = saved.filePath;
-        tab.dirty = false;
+        tab.dirty = tab.model.getAlternativeVersionId() !== version;
         options.tabs.refresh();
         options.documentStateChanged();
         options.tabs.persistSession();
 
-        return true;
+        return !tab.dirty;
+    };
+
+    const saveTab = async function(tab: ScriptDocument, saveAs = false): Promise<boolean> {
+        const prior = pendingSaves.get(tab);
+        const write = prior
+            ? prior.then(() => !tab.model.isDisposed() && writeTab(tab, saveAs))
+            : writeTab(tab, saveAs);
+        pendingSaves.set(tab, write);
+        try {
+            return await write;
+        }
+        finally {
+            if (pendingSaves.get(tab) === write) {
+                pendingSaves.delete(tab);
+            }
+        }
     };
 
     const saveCurrent = async function(
@@ -116,18 +140,21 @@ export const createScriptEditorFileController = function(
     const openFile = async function(
         filePath: string,
         content: string,
-        preferCurrent = true
+        preferCurrent = true,
+        fileKey?: string
     ): Promise<void> {
         const tabs = options.tabs.getTabs();
         const plan = createScriptTabOpenPlan(
             tabs.map((tab) => ({
                 id: tab.id,
                 filePath: tab.filePath,
+                fileKey: tab.fileKey,
                 dirty: tab.dirty
             })),
             options.tabs.getActiveTabId(),
             filePath,
-            preferCurrent
+            preferCurrent,
+            fileKey
         );
 
         if (plan.action === "activate-existing") {
@@ -154,6 +181,7 @@ export const createScriptEditorFileController = function(
             if (active.kind === "live-participant") {
                 options.createTab({
                     filePath,
+                    fileKey,
                     content,
                     activate: true
                 });
@@ -161,6 +189,7 @@ export const createScriptEditorFileController = function(
             }
 
             active.filePath = filePath;
+            active.fileKey = fileKey;
             setScriptDocumentContent(active, content, false);
             options.tabs.refresh();
             options.documentStateChanged();
@@ -171,6 +200,7 @@ export const createScriptEditorFileController = function(
 
         options.createTab({
             filePath,
+            fileKey,
             content,
             activate: true
         });

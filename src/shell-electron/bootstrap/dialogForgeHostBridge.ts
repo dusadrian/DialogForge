@@ -525,18 +525,8 @@ export const createDialogForgeHostBridge = function(
 
                 return Promise.resolve(false);
             },
-            readClipboardText: function() {
-                try {
-                    if (navigator?.clipboard?.readText) {
-                        return navigator.clipboard.readText().then((value) => String(value || ""));
-                    }
-                } catch {}
-
-                try {
-                    return Promise.resolve(String(options.clipboard.readText() || ""));
-                } catch {}
-
-                return Promise.resolve("");
+            readClipboardText: async function() {
+                return options.clipboard.readText();
             },
             runVisibleCommand: function(command: string, datasetName: string, visible = true) {
                 return invokeDatasetEditorRoute(

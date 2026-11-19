@@ -72,6 +72,21 @@ export type DatasetVariableMissingRange = {
   max: string;
 };
 
+export interface ColumnClipboardPageRequest {
+    name: string;
+    column: string;
+    key: string;
+    retainKey: string;
+    rowStart: number;
+    includeLabels: boolean;
+}
+
+export interface ColumnClipboardPage {
+    cells: DatasetViewerCell[];
+    metadata: DatasetVariableMetadata | null;
+    total: number;
+}
+
 export type DatasetViewerContentRequest = {
   rowStart?: number;
   rowCount?: number;

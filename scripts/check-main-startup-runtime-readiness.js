@@ -4,6 +4,8 @@ const assert = require("node:assert/strict");
 const {
     createMainStartupController
 } = require("../dist/src/base-app/features/main-window/mainStartupController");
+const { createConsoleSessionState } = require("../dist/src/console/services/consoleSessionState");
+const { createConsoleRuntimeSessionController } = require("../dist/src/console/renderer/consoleRuntimeSessionController");
 
 
 const runtimeSession = function (status) {
@@ -70,7 +72,7 @@ const createBindings = function (composition, authoritativeSession, calls) {
         refreshWorkspace: async function () {},
         initializeVisibleCommandEditor: async function () {},
         focusVisibleCommandInput: noop,
-        markReady: noop,
+        markReady: () => calls.push("window-ready"),
         startRuntimeSession: async function () {
             calls.push("startup-requested");
             return runtimeSession("ready");
@@ -117,6 +119,47 @@ const verifyAuthoritativeReadyStateReplacesCompositionHint = async function () {
     assert.equal(calls.filter(call => call === "startup-requested").length, 1,
         "An attached runtime still needs the shared product startup tasks.");
     assert.ok(calls.indexOf("console-rendered:ready") < calls.indexOf("startup-requested"));
+    assert.ok(calls.indexOf("startup-requested") < calls.indexOf("window-ready"));
+};
+
+const verifyPromptWaitsForProductStartup = async function () {
+    let session = runtimeSession("ready");
+    let startupPending = false;
+    let finishTasks;
+    let finishStop;
+    const consoleState = createConsoleSessionState(() => session.status, () => startupPending);
+    const phases = [];
+    consoleState.onDidSessionPhase(phase => phases.push(phase));
+    const controller = createConsoleRuntimeSessionController({
+        getSession: () => session,
+        runStartupTasks: () => new Promise(resolve => { finishTasks = resolve; }),
+        stopRuntime: () => new Promise(resolve => { finishStop = resolve; }),
+        applySession: snapshot => { session = snapshot; },
+        refreshRuntimeEvents() {},
+        refreshPrompts() {},
+        onStartupPendingChange(pending) {
+            startupPending = pending;
+            consoleState.notifySessionPhase();
+        }
+    });
+
+    const startup = controller.start();
+    assert.equal(controller.start(), startup);
+    await Promise.resolve();
+    assert.equal(consoleState.getSessionPhase(), "starting");
+    finishTasks();
+    await startup;
+    assert.deepEqual(phases, ["ready", "starting", "ready"]);
+
+    const nextStartup = controller.start();
+    await Promise.resolve();
+    const stop = controller.stop();
+    finishTasks();
+    await nextStartup;
+    assert.equal(consoleState.getSessionPhase(), "starting");
+    finishStop(runtimeSession("stopped"));
+    await stop;
+    assert.equal(consoleState.getSessionPhase(), "stopped");
 };
 
 
@@ -153,6 +196,7 @@ const main = async function () {
     try {
         await verifyAuthoritativeReadyStateReplacesCompositionHint();
         await verifyExistingStartupStillCompletesProductStartup();
+        await verifyPromptWaitsForProductStartup();
     }
     finally {
         global.requestAnimationFrame = originalRequestAnimationFrame;

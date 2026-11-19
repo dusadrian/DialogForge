@@ -1,4 +1,5 @@
 {
+    "Clipboard read failed": "No se pudo leer el portapapeles",
     "Settings": "Configuración",
     "Language": "Idioma",
     "Runtime provider": "Proveedor de ejecución",

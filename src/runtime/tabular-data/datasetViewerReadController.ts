@@ -52,6 +52,19 @@ export const createDatasetViewerReadController = function(
     };
 
     return {
+        async readColumnClipboardPage(value: unknown) {
+            const isCurrent = captureReadScope();
+            if (!isCurrent()) {
+                return null;
+            }
+            const result = await runtime.executeRuntimeMethod(createRuntimeExtensionMethodRequest({
+                method: "workspace.column_clipboard_page",
+                params: recordInput(value),
+                source: "base-app.dataset-editor"
+            }));
+            return isCurrent() && result.status === "ready" ? result.value : null;
+        },
+
         async readSchema(value: unknown) {
             const isCurrent = captureReadScope();
             const name = String(value || "").trim();

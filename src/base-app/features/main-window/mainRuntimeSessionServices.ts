@@ -34,6 +34,7 @@ export interface MainRuntimeSessionServicesOptions {
     renderRuntimeSession(snapshot: RuntimeSessionSnapshot): void;
     renderConsoleStatus(snapshot: RuntimeSessionSnapshot): void;
     beforeStartupTasks?(snapshot: RuntimeSessionSnapshot): Promise<void> | void;
+    onStartupPendingChange(pending: boolean): void;
     refreshWorkspace(): Promise<void>;
 }
 
@@ -78,6 +79,7 @@ export const createMainRuntimeSessionServices = function(
             void promptController.refresh();
         },
         beforeStartupTasks: options.beforeStartupTasks,
+        onStartupPendingChange: options.onStartupPendingChange,
         reportStartupFailure: function(message): void {
             console.error("DialogForge runtime startup failed:", message);
         },

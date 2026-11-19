@@ -15,6 +15,7 @@ export interface ScriptEditorLanguagePayload {
 
 
 export interface ScriptEditorOpenFilePayload {
+    fileKey?: string;
     filePath: string;
     content: string;
 }

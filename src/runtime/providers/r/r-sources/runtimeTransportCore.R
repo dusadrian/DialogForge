@@ -353,6 +353,11 @@ runtime_transport_decode_request <- function(raw, dedicated, require_auth = TRUE
         ), error = function(error) {
             list(valid = FALSE, error = "invalid-request-encoding")
         })
+        if (identical(request$method, "workspace.column_clipboard_page")) {
+            request$params$key <- runtime_transport_value(raw, "clipboardKey")
+            request$params$retainKey <- runtime_transport_value(raw, "retainClipboardKey")
+            request$params$includeLabels <- runtime_transport_flag(raw, "includeLabels")
+        }
         return(request)
     }
 

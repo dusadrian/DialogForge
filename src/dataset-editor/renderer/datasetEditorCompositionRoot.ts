@@ -249,7 +249,7 @@ const createNoopDatasetEditorBridge = function(): DatasetEditorBridge {
     persistVariableColumnWidths: async () => {},
     publishDatasetState: () => {},
     writeClipboardText: async () => false,
-    readClipboardText: async () => "",
+    readClipboardText: async () => null,
     runVisibleCommand: async () => false
   };
 };
@@ -1086,15 +1086,7 @@ const datasetColumnClipboardActions =
     getRowCount: () => Number(
       datasetSchema.snapshot.schema?.rowCount || 0
     ),
-    getColumnNames: () => {
-      return (datasetSchema.snapshot.schema?.columns || []).map((entry) => {
-        return String(entry?.name || '');
-      });
-    },
-    getContent: (datasetName, request) => {
-      return datasetViewerClient.getContent(datasetName, request);
-    },
-    getVariableMetadata: variableMetadataLookup.getForColumn,
+    readColumnClipboardPage: (request) => window.dialogForge.datasetViewer.readColumnClipboardPage(request),
     writeClipboard: writeTextToClipboard,
     readClipboard: readTextFromClipboard,
     runCommand: runVisibleDatasetEditorCommand,
@@ -1195,6 +1187,7 @@ const datasetOpening = createDatasetOpeningController<
   prepareDataset: (datasetName) => {
     datasetStructuralActions.invalidate();
     datasetColumnClipboardActions.invalidate();
+    datasetCellClipboardActions.invalidate();
     datasetChanges.invalidate();
     variableRowRefresh.invalidate();
     datasetRefresh.invalidate();
@@ -1527,6 +1520,7 @@ const datasetSession = createDatasetEditorSessionController({
         variableRowRefresh.invalidate();
         datasetExternalActions.invalidate();
         datasetColumnClipboardActions.invalidate();
+        datasetCellClipboardActions.invalidate();
         datasetOpening.invalidate();
         datasetRefresh.invalidate();
         invalidatePendingDataLoads();

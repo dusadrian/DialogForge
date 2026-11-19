@@ -9,6 +9,7 @@ import type {
 
 
 export interface ScriptDocumentCreationOptions {
+    fileKey?: string;
     kind?: ScriptDocument["kind"];
     displayName?: string;
     filePath?: string;
@@ -73,6 +74,7 @@ export const createScriptDocumentLifecycleController = function(
 
         const document = createScriptDocument(monaco, {
             kind: creationOptions.kind,
+            fileKey: creationOptions.fileKey,
             displayName: String(creationOptions.displayName || ""),
             filePath: String(creationOptions.filePath || ""),
             content: String(creationOptions.content || ""),

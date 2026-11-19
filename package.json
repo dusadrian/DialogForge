@@ -23,7 +23,7 @@
         "test:packaging:minimatch": "node scripts/check-packaging-minimatch.js",
         "test:packaging:dependencies": "npm run test:packaging:minimatch && node scripts/check-packaging-dependencies.js",
         "test:dialog-anchoring:rendered": "node scripts/rendered-element-anchoring-acceptance.js",
-        "test:console:unit": "node scripts/check-console-command-submission.js && node scripts/check-r-runtime-command-interrupt.js && Rscript --vanilla scripts/check-console-expression-printing.R && Rscript --vanilla scripts/check-console-message-output.R && Rscript --vanilla scripts/check-workspace-package-attachment.R && Rscript --vanilla scripts/check-runtime-control-interrupt-envelope.R",
+        "test:console:unit": "node scripts/check-main-startup-runtime-readiness.js && node scripts/check-console-command-submission.js && node scripts/check-r-runtime-command-interrupt.js && Rscript --vanilla scripts/check-console-expression-printing.R && Rscript --vanilla scripts/check-console-message-output.R && Rscript --vanilla scripts/check-workspace-package-attachment.R && Rscript --vanilla scripts/check-runtime-control-interrupt-envelope.R",
         "test:console": "npm run build && npm run test:console:unit && node scripts/verify-console-command-parity.js --build-web && node scripts/verify-console-command-parity.js --host web --cases interrupt --worker-entry-delay-ms 200 --report artifacts/console-command-parity/early-stop.json --timeout-ms 30000 && node scripts/check-console-regression-detection.js",
         "check:build-ownership": "node scripts/check-build-ownership.js",
         "start": "npm run build && node dist/scripts/start-app.js",

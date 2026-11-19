@@ -1,7 +1,8 @@
 import type {
     DatasetVariableMetadata,
     DatasetViewerCell,
-    DatasetViewerContentPage
+    ColumnClipboardPageRequest,
+    ColumnClipboardPage
 } from "../../runtime/tabular-data/datasetViewerTypes";
 import type {
     DatasetEditorClipboardState
@@ -22,20 +23,9 @@ export interface DatasetColumnClipboardActionsOptions {
     getDatasetName(): string;
     getMetadataSequence(): number;
     getRowCount(): number;
-    getColumnNames(): string[];
-    getContent(
-        datasetName: string,
-        request: {
-            rowStart: number;
-            rowCount: number;
-            columns: string[];
-        }
-    ): Promise<DatasetViewerContentPage | null>;
-    getVariableMetadata(
-        columnName: string
-    ): Promise<DatasetVariableMetadata | null>;
+    readColumnClipboardPage(request: ColumnClipboardPageRequest): Promise<ColumnClipboardPage | null>;
     writeClipboard(text: string): Promise<boolean>;
-    readClipboard(): Promise<string>;
+    readClipboard(): Promise<string | null>;
     runCommand(command: string, visible: boolean): Promise<boolean>;
     refreshDataset(datasetName: string): Promise<void>;
     hideHeaderMenu(): void;
@@ -62,56 +52,7 @@ export const createDatasetColumnClipboardActions = function(
 ): DatasetColumnClipboardActions {
     let operationSequence = 0;
 
-    const fetchColumn = async function(
-        datasetName: string,
-        columnName: string,
-        rowCount: number,
-        isCurrent: () => boolean
-    ): Promise<DatasetViewerCell[] | null> {
-        if (!datasetName || !columnName || rowCount === 0) {
-            return [];
-        }
-
-        const cells: DatasetViewerCell[] = [];
-        const batchSize = 2000;
-
-        for (
-            let rowStart = 1;
-            rowStart <= rowCount;
-            rowStart += batchSize
-        ) {
-            if (!isCurrent()) {
-                return null;
-            }
-            const page = await options.getContent(
-                datasetName,
-                {
-                    rowStart,
-                    rowCount: Math.min(
-                        batchSize,
-                        rowCount - rowStart + 1
-                    ),
-                    columns: [columnName]
-                }
-            );
-
-            if (!isCurrent() || !page || !Array.isArray(page.rows)) {
-                return null;
-            }
-
-            page.rows.forEach((row) => {
-                cells.push(
-                    (Array.isArray(row) ? row[0] : null)
-                    || {
-                        display: "",
-                        raw: ""
-                    }
-                );
-            });
-        }
-
-        return cells;
-    };
+    let lastCopiedKey = "";
 
     const copy = async function(
         columnInput: string,
@@ -145,25 +86,33 @@ export const createDatasetColumnClipboardActions = function(
         );
 
         try {
-            const cells = await fetchColumn(datasetName, columnName, rowCount, isCurrent);
+            const snapshotKey = crypto.randomUUID();
+            const cells: DatasetViewerCell[] = [];
+            let metadata: DatasetVariableMetadata | null = null;
+            do {
+                const page = await options.readColumnClipboardPage({
+                    name: datasetName,
+                    column: columnName,
+                    key: snapshotKey,
+                    retainKey: lastCopiedKey,
+                    rowStart: cells.length + 1,
+                    includeLabels
+                });
+                if (!isCurrent()) {
+                    return;
+                }
+                if (!page || page.total !== rowCount || !Array.isArray(page.cells)
+                    || cells.length + page.cells.length > rowCount
+                    || (rowCount > 0 && page.cells.length === 0)) {
+                    options.showNotice(options.translate("Column copy failed"));
+                    return;
+                }
+                if (cells.length === 0) {
+                    metadata = page.metadata;
+                }
+                cells.push(...page.cells);
+            } while (cells.length < rowCount);
 
-            if (!isCurrent()) {
-                return;
-            }
-
-            if (!cells) {
-                options.showNotice(
-                    options.translate("Column copy failed")
-                );
-                return;
-            }
-
-            const metadata = includeLabels
-                ? await options.getVariableMetadata(columnName)
-                : null;
-            if (!isCurrent()) {
-                return;
-            }
             const rawValues = cells.map(readDatasetCellRawValue);
             const labelValues = includeLabels
                 ? cells.map((cell) => {
@@ -201,8 +150,10 @@ export const createDatasetColumnClipboardActions = function(
                 includeLabels
                     ? "values-and-labels"
                     : "values",
-                text
+                text,
+                snapshotKey
             );
+            lastCopiedKey = snapshotKey;
             if (!isCurrent()) {
                 return;
             }
@@ -242,18 +193,17 @@ export const createDatasetColumnClipboardActions = function(
         if (!isCurrentSource()) {
             return;
         }
+        if (text === null) {
+            options.showNotice(options.translate("Clipboard read failed"));
+            return;
+        }
         const payload = options.clipboardState.readDataColumn(text);
         const rowCount = Math.max(0, options.getRowCount());
-        const hasSourceColumn = Boolean(
-            payload
-            && options.getColumnNames().includes(payload.columnName)
-        );
-
         if (
             !payload
             || payload.datasetName !== datasetName
             || payload.rowCount !== rowCount
-            || !hasSourceColumn
+            || !payload.snapshotKey
         ) {
             options.showNotice(
                 options.translate("Copy a variable first")
@@ -271,12 +221,9 @@ export const createDatasetColumnClipboardActions = function(
             const targetReference = (
                 `${datasetReference}[[${asRStringLiteral(columnName)}]]`
             );
-            const sourceReference = (
-                `${datasetReference}[[${asRStringLiteral(payload.columnName)}]]`
-            );
-            const command = payload.mode === "values"
-                ? `${targetReference} <- local({ .source <- ${sourceReference}; if (inherits(.source, "declared") && requireNamespace("declared", quietly = TRUE)) .source <- declared::undeclare(.source, drop = TRUE); .source })`
-                : `${targetReference} <- ${sourceReference}`;
+            const copy = 'as.environment("DialogApp")$app_env$workspace_copied_column';
+            const includeLabels = payload.mode === "values-and-labels" ? "TRUE" : "FALSE";
+            const command = `${targetReference} <- ${copy}(${asRStringLiteral(payload.snapshotKey)}, nrow(${datasetReference}), ${includeLabels})`;
             const pasted = await options.runCommand(command, false);
             if (!isCurrentSource()) {
                 return;

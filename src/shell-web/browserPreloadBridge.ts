@@ -1,3 +1,4 @@
+import type { ColumnClipboardPageRequest } from "../runtime/tabular-data/datasetViewerTypes";
 import {
     applicationEventChannels
 } from "../base-app/bootstrap/applicationEvents";
@@ -306,6 +307,8 @@ const datasetViewer = {
     getSchema: function(name: string): Promise<unknown> {
         return invokeHost(datasetEditorIpcChannels.getSchema, { name });
     },
+    readColumnClipboardPage: (request: ColumnClipboardPageRequest): Promise<unknown> =>
+        invokeHost(datasetEditorIpcChannels.readColumnClipboardPage, request),
     getContent: function(name: string, request?: Record<string, unknown>): Promise<unknown> {
         return invokeHost(datasetEditorIpcChannels.getContent, { name, ...request });
     },
@@ -371,6 +374,7 @@ const scriptEditor = {
 
         return result.status === "opened" || result.status === "ready"
             ? {
+                fileKey: typeof result.fileKey === "string" ? result.fileKey : undefined,
                 filePath: String(result.filePath || ""),
                 content: String(result.content || "")
             }
@@ -564,9 +568,15 @@ const datasetEditor = {
         shellClipboardIpcChannels.copyPayload,
         { text: String(value || "") }
     ).then((result) => asRecord(result).status === "copied"),
-    readClipboardText: (): Promise<string> => invokeHost(
+    readClipboardText: (): Promise<string | null> => invokeHost(
         shellClipboardIpcChannels.readText
-    ).then((value) => String(asRecord(value).text ?? value ?? "")),
+    ).then((value) => {
+        if (typeof value === "string") {
+            return value;
+        }
+        const result = asRecord(value);
+        return result.status === "ready" && typeof result.text === "string" ? result.text : null;
+    }),
     runVisibleCommand: (
         command: string,
         datasetName: string,

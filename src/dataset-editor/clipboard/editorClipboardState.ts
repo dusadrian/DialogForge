@@ -29,6 +29,7 @@ export interface DataColumnClipboardPayload {
     columnName: string;
     rowCount: number;
     mode: "values" | "values-and-labels";
+    snapshotKey: string;
 }
 
 
@@ -56,7 +57,8 @@ export interface DatasetEditorClipboardState {
         columnName: string,
         rowCount: number,
         mode: DataColumnClipboardPayload["mode"],
-        text: string
+        text: string,
+        snapshotKey: string
     ) => void;
     readDataColumn: (text: string) => DataColumnClipboardPayload | null;
     clearVariableMetadata: () => void;
@@ -124,7 +126,8 @@ export const createDatasetEditorClipboardState = function(): DatasetEditorClipbo
         columnName: string,
         rowCount: number,
         mode: DataColumnClipboardPayload["mode"],
-        text: string
+        text: string,
+        snapshotKey: string
     ): void {
         dataColumnPayload = {
             kind: "dialog-dataset-data-column",
@@ -132,7 +135,8 @@ export const createDatasetEditorClipboardState = function(): DatasetEditorClipbo
             datasetName: String(datasetName || "").trim(),
             columnName: String(columnName || "").trim(),
             rowCount: Math.max(0, Number(rowCount) || 0),
-            mode
+            mode,
+            snapshotKey
         };
         dataColumnText = text;
     };

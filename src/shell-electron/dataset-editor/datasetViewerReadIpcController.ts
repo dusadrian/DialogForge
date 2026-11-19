@@ -47,6 +47,8 @@ export const createDatasetViewerReadIpcController = function(
         readFilterState: options.getFilterState
     });
 
+    options.ipcMain.handle(datasetEditorIpcChannels.readColumnClipboardPage,
+        (_event: IpcMainInvokeEvent, payload: unknown) => reads.readColumnClipboardPage(payload));
     options.ipcMain.handle(datasetEditorIpcChannels.getSchema,
         (_event: IpcMainInvokeEvent, payload: { name?: string }) => reads.readSchema(payload?.name));
     options.ipcMain.handle(datasetEditorIpcChannels.getContent,

@@ -7,7 +7,7 @@ export interface DatasetEditorRendererTransport {
     persistVariableColumnWidths(widths: VariableColumnWidths): Promise<void>;
     publishDatasetState(datasetName: string): void;
     writeClipboardText(text: string): Promise<boolean>;
-    readClipboardText(): Promise<string>;
+    readClipboardText(): Promise<string | null>;
     runVisibleCommand(
         command: string,
         datasetName: string,
@@ -20,7 +20,7 @@ export interface DatasetEditorTransportBridge {
     persistVariableColumnWidths(widths: VariableColumnWidths): Promise<void>;
     publishDatasetState(datasetName: string): void;
     writeClipboardText(text: string): Promise<boolean>;
-    readClipboardText(): Promise<string>;
+    readClipboardText(): Promise<string | null>;
     runVisibleCommand(
         command: string,
         datasetName: string,
@@ -80,10 +80,10 @@ export const createDatasetEditorRendererTransport = function(
             } catch {}
 
             try {
-                return String(await bridge.readClipboardText() || "");
+                return await bridge.readClipboardText();
             } catch {}
 
-            return "";
+            return null;
         },
         runVisibleCommand: async (
             command,

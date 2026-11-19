@@ -1,4 +1,5 @@
 export interface SelectedScriptEditorFile {
+    fileKey?: string;
     filePath: string;
     content: string;
 }
@@ -9,7 +10,8 @@ export interface ScriptEditorOpenFileControllerOptions {
     openFile(
         filePath: string,
         content: string,
-        preferCurrent: boolean
+        preferCurrent: boolean,
+        fileKey?: string
     ): Promise<void>;
 }
 
@@ -32,7 +34,8 @@ export const createScriptEditorOpenFileController = function(
         await options.openFile(
             selected.filePath,
             selected.content,
-            true
+            true,
+            selected.fileKey
         );
 
         return true;

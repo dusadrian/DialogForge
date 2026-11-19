@@ -174,6 +174,11 @@ export const encodeRuntimeControlRequest = function(
         id: safeEncode(request.id),
         method: safeEncode(request.method),
         ...(request.transportNonce ? { transportNonce: safeEncode(request.transportNonce) } : {}),
+        ...(request.method === "workspace.column_clipboard_page" ? {
+            clipboardKey: safeEncode(params.key),
+            retainClipboardKey: safeEncode(params.retainKey),
+            includeLabels: safeEncode(params.includeLabels ? "1" : "0")
+        } : {}),
         auth: safeEncode(token),
         code: safeEncode(params.code),
         outputCaptureName: safeEncode(params.outputCaptureName),

@@ -27,14 +27,16 @@ const checkOperation = async function(operation, stage, transition) {
         clipboardState: {
             clearVariableMetadata: () => effects.push("clear-metadata"),
             setDataColumn: () => effects.push("remember"),
-            readDataColumn: () => ({ datasetName: "data", columnName: "x", rowCount: 2001, mode: "values" })
+            readDataColumn: () => ({ datasetName: "data", columnName: "x", rowCount: 501, mode: "values", snapshotKey: "copied-x" })
         },
         getDatasetName: () => datasetName,
         getMetadataSequence: () => metadataSequence,
-        getRowCount: () => 2001,
-        getColumnNames: () => ["x", "y"],
-        getContent: () => waitStage("content", { rows: [[{ display: "1", raw: "1" }]] }),
-        getVariableMetadata: () => waitStage("metadata", null),
+        getRowCount: () => 501,
+        readColumnClipboardPage: ({ rowStart }) => waitStage(rowStart === 1 ? "content" : "next-page", {
+            total: 501,
+            cells: Array(rowStart === 1 ? 500 : 1).fill({ display: "1", raw: "1" }),
+            metadata: null
+        }),
         writeClipboard: () => waitStage("write", true),
         readClipboard: () => waitStage("read", "1"),
         runCommand: () => waitStage("command", true),
@@ -66,7 +68,7 @@ const checkOperation = async function(operation, stage, transition) {
         if (transition === "throw") {
             rejectRead(failure);
         } else {
-            release(stage === "content" ? { rows: [[{ display: "1", raw: "1" }]] } : (stage === "read" ? "1" : true));
+            release(stage === "read" ? "1" : true);
         }
     }
     if (transition === "throw") {
@@ -80,8 +82,8 @@ const checkOperation = async function(operation, stage, transition) {
         assert.ok(!effects.includes("Column pasted"));
         if (stage === "content") {
             assert.equal(effects.filter(effect => effect === "content").length, 1);
-            assert.ok(!effects.includes("metadata"));
-        } else if (stage === "metadata") {
+            assert.ok(!effects.includes("next-page"));
+        } else if (stage === "next-page") {
             assert.ok(!effects.includes("write"));
         } else if (stage === "read") {
             assert.ok(!effects.includes("command"));
@@ -96,7 +98,7 @@ const checkOperation = async function(operation, stage, transition) {
 
 
 const main = async function() {
-    for (const stage of ["content", "metadata", "write"]) {
+    for (const stage of ["content", "next-page", "write"]) {
         for (const transition of ["invalidate", "name", "metadata", "throw"]) {
             await checkOperation("copy", stage, transition);
         }

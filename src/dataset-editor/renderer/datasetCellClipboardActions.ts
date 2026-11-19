@@ -53,7 +53,7 @@ export interface DatasetCellClipboardActionsOptions {
         text: string
     ): VariableMetadataClipboardPayload | null;
     writeClipboard(text: string): Promise<boolean>;
-    readClipboard(): Promise<string>;
+    readClipboard(): Promise<string | null>;
     updateDataCell(
         row: number,
         column: string,
@@ -90,6 +90,7 @@ export interface DatasetCellClipboardActionsOptions {
 
 
 export interface DatasetCellClipboardActions {
+    invalidate(): void;
     copyTarget(): Promise<void>;
     pasteTarget(): Promise<void>;
 }
@@ -98,6 +99,7 @@ export interface DatasetCellClipboardActions {
 export const createDatasetCellClipboardActions = function(
     options: DatasetCellClipboardActionsOptions
 ): DatasetCellClipboardActions {
+    let datasetGeneration = 0;
     const copyTarget = async function(): Promise<void> {
         const target = options.getTarget();
         options.hideMenu();
@@ -148,7 +150,8 @@ export const createDatasetCellClipboardActions = function(
     const pasteVariablePayload = async function(
         target: VariableTarget,
         payload: VariableMetadataClipboardPayload,
-        targetRows: number[]
+        targetRows: number[],
+        isCurrent: () => boolean
     ): Promise<void> {
         if (target.key !== payload.key) {
             options.showNotice(
@@ -167,6 +170,9 @@ export const createDatasetCellClipboardActions = function(
                     rowIndex,
                     payload
                 );
+                if (!isCurrent()) {
+                    return;
+                }
                 changed = changed || updated;
             }
 
@@ -180,6 +186,9 @@ export const createDatasetCellClipboardActions = function(
 
             options.renderVariables();
             await options.refreshDataset();
+            if (!isCurrent()) {
+                return;
+            }
             options.showNotice(
                 options.translate("Value labels updated")
             );
@@ -204,6 +213,9 @@ export const createDatasetCellClipboardActions = function(
                 field,
                 payload.text
             );
+            if (!isCurrent()) {
+                return;
+            }
         }
 
         if (targetRows.length > 1) {
@@ -216,7 +228,8 @@ export const createDatasetCellClipboardActions = function(
     const pasteVariableText = async function(
         target: VariableTarget,
         text: string,
-        targetRows: number[]
+        targetRows: number[],
+        isCurrent: () => boolean
     ): Promise<void> {
         if (target.key === "values") {
             options.showNotice(
@@ -245,6 +258,9 @@ export const createDatasetCellClipboardActions = function(
                 field,
                 text
             );
+            if (!isCurrent()) {
+                return;
+            }
         }
 
         if (targetRows.length > 1) {
@@ -261,7 +277,17 @@ export const createDatasetCellClipboardActions = function(
             return;
         }
 
+        const generation = datasetGeneration;
+        const isCurrent = () => generation === datasetGeneration;
         const text = await options.readClipboard();
+
+        if (!isCurrent()) {
+            return;
+        }
+        if (text === null) {
+            options.showNotice(options.translate("Clipboard read failed"));
+            return;
+        }
 
         if (target.kind === "data") {
             if (!target.row || !target.column) {
@@ -274,6 +300,9 @@ export const createDatasetCellClipboardActions = function(
                 text
             );
 
+            if (!isCurrent()) {
+                return;
+            }
             if (!updated) {
                 options.showNotice(
                     options.translate("Cell update failed")
@@ -298,15 +327,19 @@ export const createDatasetCellClipboardActions = function(
             await pasteVariablePayload(
                 target,
                 metadataPayload,
-                targetRows
+                targetRows,
+                isCurrent
             );
             return;
         }
 
-        await pasteVariableText(target, text, targetRows);
+        await pasteVariableText(target, text, targetRows, isCurrent);
     };
 
     return {
+        invalidate() {
+            datasetGeneration += 1;
+        },
         copyTarget,
         pasteTarget
     };

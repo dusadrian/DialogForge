@@ -2,6 +2,7 @@ export type ScriptSaveDecision = "save" | "dont-save" | "cancel";
 
 
 export interface ScriptFileDocument {
+    fileKey?: string;
     filePath: string;
     content: string;
 }
@@ -71,15 +72,11 @@ export const createScriptFilePersistence = function(
         const channel = saveAs || !document.filePath
             ? "base-app:saveScriptFileAs"
             : "base-app:saveScriptFile";
-        const payload = channel === "base-app:saveScriptFileAs"
-            ? {
-                content: String(document.content || ""),
-                filePath: String(document.filePath || "")
-            }
-            : {
-                filePath: String(document.filePath || ""),
-                content: String(document.content || "")
-            };
+        const payload = {
+            ...document,
+            filePath: String(document.filePath || ""),
+            content: String(document.content || "")
+        };
 
         try {
             const response = asRecord(

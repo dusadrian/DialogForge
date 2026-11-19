@@ -2,6 +2,7 @@ import type * as Monaco from "monaco-editor";
 
 
 export interface ScriptDocument {
+    fileKey?: string;
     id: string;
     model: Monaco.editor.ITextModel;
     kind: "local" | "live-participant";
@@ -17,6 +18,7 @@ export interface ScriptDocument {
 
 
 export interface ScriptDocumentOptions {
+    fileKey?: string;
     kind?: ScriptDocument["kind"];
     displayName?: string;
     filePath?: string;
@@ -53,6 +55,7 @@ export const createScriptDocument = function(
     const model = monaco.editor.createModel("", "r");
     const document: ScriptDocument = {
         id: createDocumentId(),
+        fileKey: options.fileKey,
         model,
         kind: options.kind || "local",
         displayName: String(options.displayName || ""),

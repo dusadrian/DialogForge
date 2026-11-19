@@ -1,3 +1,4 @@
+import type { ColumnClipboardPage, ColumnClipboardPageRequest } from "../../runtime/tabular-data/datasetViewerTypes";
 // Global ambient declarations for DialogForge renderer bridges.
 // This file is picked up automatically because tsconfig.json includes "src/**/*.ts".
 
@@ -259,6 +260,7 @@ declare global {
                 nextName: string,
                 position: "before" | "after"
             ): Promise<{ name: string; column: string; nextName: string; columnIndex: number; columnCount: number; position: "before" | "after" } | null>;
+            readColumnClipboardPage(request: ColumnClipboardPageRequest): Promise<ColumnClipboardPage | null>;
             getContent(name: string, request?: DatasetViewerContentRequest): Promise<DatasetViewerContentPage | null>;
             getFilterMask(name: string, rowStart: number, rowCount: number): Promise<DatasetViewerFilterMaskPage | null>;
             getVariables(name: string): Promise<DatasetVariableMetadata[] | null>;

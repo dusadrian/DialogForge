@@ -3,6 +3,8 @@ import type {
     DatasetVariableMetadata,
     DatasetVariableMetadataBatch,
     DatasetVariableUpdatePatch,
+    ColumnClipboardPage,
+    ColumnClipboardPageRequest,
     DatasetViewerCell,
     DatasetViewerContentPage,
     DatasetViewerContentRequest,
@@ -38,6 +40,7 @@ export const datasetEditorIpcChannels = {
     getActiveState: "datasetEditor:getActiveState",
     consumeGoToContext: "datasetEditor:consumeGoToContext",
     getSchema: "datasetViewer:getSchema",
+    readColumnClipboardPage: "datasetViewer:readColumnClipboardPage",
     getContent: "datasetViewer:getContent",
     getFilterMask: "datasetViewer:getFilterMask",
     getVariables: "datasetViewer:getVariables",
@@ -86,6 +89,7 @@ export interface DatasetEditorIpcRoutes {
     "datasetEditor:getActiveState": { input: []; result: { datasetName: string } };
     "datasetEditor:consumeGoToContext": { input: []; result: { datasetName: string; mode: string } };
     "datasetViewer:getSchema": { input: [{ name: string }]; result: DatasetViewerSchema | null };
+    "datasetViewer:readColumnClipboardPage": { input: [ColumnClipboardPageRequest]; result: ColumnClipboardPage | null };
     "datasetViewer:getContent": { input: [{ name: string } & DatasetViewerContentRequest]; result: DatasetViewerContentPage | null };
     "datasetViewer:getFilterMask": { input: [{ name: string; rowStart: number; rowCount: number }]; result: DatasetViewerFilterMaskPage | null };
     "datasetViewer:getVariables": { input: [{ name: string }]; result: DatasetVariableMetadata[] | null };

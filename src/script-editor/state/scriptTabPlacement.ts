@@ -2,6 +2,7 @@ import { normalizeScriptFilePath } from "./scriptEditorSession";
 
 
 export interface ScriptTabPlacementInput {
+    fileKey?: string;
     id: string;
     filePath: string;
     dirty: boolean;
@@ -18,10 +19,14 @@ export const createScriptTabOpenPlan = function(
     tabs: ScriptTabPlacementInput[],
     activeTabId: string,
     filePath: string,
-    preferCurrent: boolean
+    preferCurrent: boolean,
+    fileKey?: string
 ): ScriptTabOpenPlan {
     const normalizedPath = normalizeScriptFilePath(filePath);
     const existing = tabs.find((tab) => {
+        if (fileKey || tab.fileKey) {
+            return tab.fileKey === fileKey;
+        }
         return normalizedPath
             && normalizeScriptFilePath(tab.filePath) === normalizedPath;
     });

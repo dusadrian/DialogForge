@@ -1,4 +1,5 @@
 export interface ScriptFileResult {
+    fileKey?: string;
     status: string;
     canceled: boolean;
     filePath: string;

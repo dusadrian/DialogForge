@@ -35,6 +35,7 @@ export interface BrowserConsoleBootstrapOptions {
     runtimeId: string;
     completionOptions: CompletionModelOptions;
     readRuntimeStatus(): string;
+    isStartupPending(): boolean;
     readRuntimeSnapshot(): RuntimeSessionSnapshot;
     startRuntimeSession(): Promise<RuntimeSessionSnapshot>;
     renderStatus(snapshot: RuntimeSessionSnapshot): void;
@@ -100,7 +101,7 @@ export const exposeBrowserConsoleHandle = function(
 export const createBrowserConsoleBootstrap = async function(
     options: BrowserConsoleBootstrapOptions
 ): Promise<BrowserConsoleBootstrapResult> {
-    const session = createConsoleSessionState(options.readRuntimeStatus);
+    const session = createConsoleSessionState(options.readRuntimeStatus, options.isStartupPending);
     const services = createConsoleServices({
         document: options.document,
         session,

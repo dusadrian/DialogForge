@@ -484,6 +484,60 @@ workspace_dataset_row_names <- function(value, page) {
 }
 
 
+# Keep the previous successful copy while the renderer prepares a replacement.
+column_clipboard <- list()
+
+workspace_column_clipboard_page <- function(params) {
+    key <- params$key
+    first <- as.integer(params$rowStart)
+    if (first == 1L) {
+        dataset <- workspace_tabular_object(params$name)
+        if (!isTRUE(dataset$ok)) {
+            return(dataset)
+        }
+        if (!is.element(params$column, names(dataset$value))) {
+            return(list(ok = FALSE, error = "Column not found."))
+        }
+        copies <- column_clipboard[intersect(names(column_clipboard), params$retainKey)]
+        column <- dataset$value[[params$column]]
+        copies[[key]] <- unserialize(serialize(column, NULL))
+        column_clipboard <<- copies
+    }
+
+    if (!is.element(key, names(column_clipboard))) {
+        return(list(ok = FALSE, error = "The copied column is no longer available."))
+    }
+    column <- column_clipboard[[key]]
+    page <- workspace_dataset_page_bounds(first, 500L, length(column))
+    rows <- seq_len(page$count) + page$first - 1L
+    cells <- vapply(rows, function(row) cell_state_json(column, row), character(1))
+    metadata <- if (first == 1L && isTRUE(params$includeLabels)) {
+        workspace_dataset_variable_json(params$column, column)
+    } else {
+        "null"
+    }
+
+    list(ok = TRUE, result_json = paste0(
+        '{"total":', json_num(length(column)),
+        ',"metadata":', metadata,
+        ',"cells":[', paste(cells, collapse = ","), "]}"
+    ))
+}
+
+workspace_copied_column <- function(key, target_rows, include_labels) {
+    if (!is.element(key, names(column_clipboard))) {
+        stop("The copied column is no longer available.")
+    }
+    column <- column_clipboard[[key]]
+    if (length(column) != target_rows) {
+        stop("The target dataset has a different number of rows.")
+    }
+    if (!include_labels && inherits(column, "declared")) {
+        column <- declared::undeclare(column, drop = TRUE)
+    }
+    column
+}
+
 workspace_dataset_content <- function(
     name,
     row_start,

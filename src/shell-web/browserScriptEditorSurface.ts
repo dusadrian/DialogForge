@@ -11,6 +11,7 @@ import type {
 
 
 export interface BrowserScriptEditorDocument {
+    fileKey?: string;
     filePath: string;
     content: string;
 }
@@ -147,6 +148,7 @@ export const createBrowserScriptEditorSurface = function(
             targetFrame?.contentWindow,
             scriptEditorEventChannels.publishOpenFile,
             {
+                fileKey: document.fileKey,
                 filePath: document.filePath,
                 content: document.content
             }

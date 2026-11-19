@@ -17,6 +17,7 @@ interface BrowserScriptWritableFile {
 }
 
 interface BrowserScriptFileHandle {
+    isSameEntry?(other: BrowserScriptFileHandle): Promise<boolean>;
     getFile(): Promise<File>;
     createWritable(): Promise<BrowserScriptWritableFile>;
 }
@@ -26,16 +27,17 @@ interface BrowserScriptWindow extends Window {
 }
 
 export interface BrowserScriptDocument {
+    fileKey?: string;
     filePath?: string;
     content?: string;
 }
 
 export interface BrowserScriptFileAdapterBindings {
     getCurrentDocument(): BrowserScriptDocument;
-    updateCurrentDocument(document: Required<BrowserScriptDocument> & { dirty: boolean }): void;
 }
 
 export interface BrowserScriptFileAdapter {
+    clearHandles(): void;
     openFile(): Promise<ScriptFileResult>;
     saveFile(input?: BrowserScriptDocument, saveAs?: boolean): Promise<ScriptFileResult>;
 }
@@ -105,29 +107,36 @@ export const createBrowserScriptFileAdapter = function(
     documentRef: Document = document,
     urlRef: typeof URL = URL
 ): BrowserScriptFileAdapter {
-    let fileHandle: BrowserScriptFileHandle | null = null;
+    const handles = new Map<string, BrowserScriptFileHandle>();
 
     return {
+        clearHandles() {
+            handles.clear();
+        },
         async openFile() {
             if (windowRef.showOpenFilePicker) {
                 try {
-                    const handles = await windowRef.showOpenFilePicker({
+                    const selectedHandles = await windowRef.showOpenFilePicker({
                         multiple: false,
                         types: rScriptFilePolicy.browserOpenFileTypes
                     });
-                    const selectedHandle = handles[0] || null;
+                    const selectedHandle = selectedHandles[0] || null;
                     const file = selectedHandle ? await selectedHandle.getFile() : null;
 
-                    if (!file) {
+                    if (!file || !selectedHandle) {
                         return createCanceledScriptFileSelectionResult();
                     }
 
-                    fileHandle = selectedHandle;
+                    const result = createOpenedScriptFileResult(file.name, await file.text());
+                    for (const [key, handle] of handles) {
+                        if (selectedHandle === handle || await selectedHandle.isSameEntry?.(handle)) {
+                            return { ...result, fileKey: key };
+                        }
+                    }
 
-                    return createOpenedScriptFileResult(
-                        readScriptBaseName(file.name || "Untitled.R"),
-                        await file.text()
-                    );
+                    const fileKey = crypto.randomUUID();
+                    handles.set(fileKey, selectedHandle);
+                    return { ...result, fileKey };
                 }
                 catch (error) {
                     if (error instanceof DOMException && error.name === "AbortError") {
@@ -144,12 +153,10 @@ export const createBrowserScriptFileAdapter = function(
                 return createCanceledScriptFileSelectionResult();
             }
 
-            fileHandle = null;
-
-            return createOpenedScriptFileResult(
-                readScriptBaseName(file.name || "Untitled.R"),
-                await file.text()
-            );
+            return {
+                ...createOpenedScriptFileResult(file.name, await file.text()),
+                fileKey: crypto.randomUUID()
+            };
         },
 
         async saveFile(input = {}, saveAs = false) {
@@ -159,21 +166,13 @@ export const createBrowserScriptFileAdapter = function(
             );
             const content = String(input.content ?? current.content ?? "");
 
-            bindings.updateCurrentDocument({
-                filePath,
-                content,
-                dirty: false
-            });
+            const fileHandle = input.fileKey ? handles.get(input.fileKey) : undefined;
 
             if (!saveAs && fileHandle) {
                 const writable = await fileHandle.createWritable();
 
-                try {
-                    await writable.write(content);
-                }
-                finally {
-                    await writable.close();
-                }
+                await writable.write(content);
+                await writable.close();
 
                 return createSavedScriptFileResult(filePath, content);
             }

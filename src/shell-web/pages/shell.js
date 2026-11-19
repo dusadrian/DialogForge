@@ -1118,11 +1118,6 @@ const browserScriptFileAdapter = createBrowserScriptFileAdapter({
             filePath: state.scriptEditor.fileName || "Untitled.R",
             content: String(state.scriptEditor.content || "")
         };
-    },
-    updateCurrentDocument(document) {
-        state.scriptEditor.fileName = document.filePath;
-        state.scriptEditor.content = document.content;
-        state.scriptEditor.dirty = document.dirty === true;
     }
 });
 
@@ -2051,6 +2046,9 @@ const browserScriptEditorSurface = function () {
                 return browserLiveScriptChannels().shutdown();
             },
             onStateChanged: function (surfaceState) {
+                if (!surfaceState.frame) {
+                    browserScriptFileAdapter.clearHandles();
+                }
                 state.scriptEditor.layer = surfaceState.layer;
                 state.scriptEditor.frame = surfaceState.frame;
             },
@@ -2083,6 +2081,7 @@ const openSharedScriptEditorLocalFile = async function () {
     state.scriptEditor.fileName = readScriptBaseName(file.filePath || "Untitled.R");
     state.scriptEditor.content = String(file.content || "");
     await browserScriptEditorSurface().openDocument({
+        fileKey: file.fileKey,
         filePath: state.scriptEditor.fileName,
         content: state.scriptEditor.content
     });
@@ -4296,7 +4295,6 @@ const executeRuntimeMethod = async function (input) {
 };
 const initializeSharedConsole = async function () {
     const readRuntimeStatus = function () {
-        if (state.runtimeStarting) return "starting";
         if (state.runtimeReady) return "ready";
         return "not-started";
     };
@@ -4328,9 +4326,10 @@ const initializeSharedConsole = async function () {
             }
         },
         readRuntimeStatus,
+        isStartupPending: () => state.runtimeStarting,
         readRuntimeSnapshot,
         startRuntimeSession: async function () {
-            await ensureRuntime();
+            await (state.runtimeStartPromise || ensureRuntime());
 
             return runtimeSnapshot("ready", "WebR ready.");
         },

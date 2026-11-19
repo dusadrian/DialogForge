@@ -6,6 +6,7 @@ export interface ScriptEditorDirtyState {
 
 
 export interface SelectedScriptFile {
+    fileKey?: string;
     filePath: string;
     content: string;
 }
@@ -47,6 +48,7 @@ export const createScriptEditorRendererTransport = function(
                 }
 
                 return {
+                    fileKey: response.fileKey,
                     filePath: String(response.filePath || ""),
                     content: String(response.content || "")
                 };

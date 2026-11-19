@@ -300,10 +300,16 @@ const reportSelfWrite = function(writtenPaths: string[]): void {
 const readRegistry = function(registryPath: string): DialogDefinition[] {
     try {
         const parsed = JSON.parse(fs.readFileSync(registryPath, "utf8"));
-        return Array.isArray(parsed) ? parsed as DialogDefinition[] : [];
+        if (!Array.isArray(parsed)) {
+            throw new Error("Expected an array of dialog definitions.");
+        }
+        return parsed;
     }
-    catch {
-        return [];
+    catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+            return [];
+        }
+        throw new Error(`Cannot read dialog registry ${registryPath}`, { cause: error });
     }
 };
 
@@ -365,9 +371,9 @@ const writePackageDirectory = function(
 
 const writeRegistryEntry = function(
     registryPath: string,
+    registry: DialogDefinition[],
     definition: DialogDefinition
 ): void {
-    const registry = readRegistry(registryPath);
     const existing = registry.find((entry) => entry.id === definition.id);
     const nextDefinition = Object.assign(
         {},
@@ -453,6 +459,8 @@ export const importDialogPackage = function(
     const files = readPackageDialog(packagePath);
     const plan = planDialogPackageImport(packagePath, target);
 
+    const registry = readRegistry(plan.registryPath);
+
     // Claim before writing: the dev watcher polls the tree, so a claim that
     // arrived after the write could miss the poll that saw it.
     reportSelfWrite(
@@ -465,7 +473,7 @@ export const importDialogPackage = function(
         files.actionsJs,
         files.supportFiles
     );
-    writeRegistryEntry(plan.registryPath, plan.definition);
+    writeRegistryEntry(plan.registryPath, registry, plan.definition);
 
     return plan;
 };

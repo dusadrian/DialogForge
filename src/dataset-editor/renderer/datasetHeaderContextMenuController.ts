@@ -17,7 +17,7 @@ export interface DatasetHeaderContextMenuControllerOptions<TCellTarget> {
     contextMenus: DatasetEditorContextMenuView<TCellTarget>;
     getDatasetName: () => string;
     getSchema: () => DatasetHeaderContextSchema | null;
-    readClipboardText: () => Promise<string>;
+    readClipboardText: () => Promise<string | null>;
     readColumnPayload: (
         text: string
     ) => DataColumnClipboardPayload | null;
@@ -55,17 +55,10 @@ export const createDatasetHeaderContextMenuController = function<
             0,
             Number(schema?.rowCount || 0)
         );
-        const schemaColumns = Array.isArray(schema?.columns)
-            ? schema.columns
-            : [];
-        const hasSourceColumn = !!payload && schemaColumns.some(
-            (entry) => String(entry?.name || "") === payload.columnName
-        );
-
         return !!payload
             && payload.datasetName === datasetName
             && payload.rowCount === rowCount
-            && hasSourceColumn;
+            && !!payload.snapshotKey;
     };
 
     const updatePasteState = async function(): Promise<void> {
@@ -78,7 +71,7 @@ export const createDatasetHeaderContextMenuController = function<
         button.disabled = true;
 
         const text = await options.readClipboardText();
-        const payload = options.readColumnPayload(text);
+        const payload = text === null ? null : options.readColumnPayload(text);
         button.disabled = !canPasteColumn(payload);
     };
 

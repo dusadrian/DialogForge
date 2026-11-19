@@ -619,12 +619,14 @@ const saveCurrentAs = () => scriptFileController.saveCurrent(true);
 const openFileIntoTab = (
   filePath: string,
   content: string,
-  preferCurrent = true
+  preferCurrent = true,
+  fileKey?: string
 ) => {
   return scriptFileController.openFile(
     filePath,
     content,
-    preferCurrent
+    preferCurrent,
+    fileKey
   );
 };
 const restoreSessionTabs = () => {
@@ -1056,12 +1058,7 @@ const scriptEditorIpcController = createScriptEditorIpcController({
     }
   },
   insertCode: insertCodeAtCursor,
-  openFile: ({ filePath, content }) => {
-    insertionController.openFile({
-      filePath,
-      content
-    });
-  },
+  openFile: insertionController.openFile,
   runtimeChanged: scheduleActiveTabValidation
 });
 

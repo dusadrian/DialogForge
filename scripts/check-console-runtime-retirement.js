@@ -48,14 +48,19 @@ const main = async function() {
         executeCommand: () => new Promise((resolve) => completions.push(resolve))
     });
     const oldCommand = visible.executeText("old()", "fixture");
+    assert.equal(busyStates.at(-1), true);
     visible.retire();
+    const replacementStart = busyStates.length;
     const newCommand = visible.executeText("new()", "fixture");
+    assert.ok(busyStates.length > replacementStart);
+    assert.ok(busyStates.slice(replacementStart).every(busy => busy === true));
+    const beforeOldCompletion = busyStates.slice();
     completions[0]();
     assert.equal(await oldCommand, undefined);
-    assert.deepEqual(busyStates, [true, true], "Retired completion cannot clear replacement busy state");
+    assert.deepEqual(busyStates, beforeOldCompletion, "Retired completion cannot change replacement busy state");
     completions[1]();
     assert.equal(await newCommand, "ok");
-    assert.deepEqual(busyStates, [true, true, false]);
+    assert.deepEqual(busyStates.slice(beforeOldCompletion.length), [false]);
 
     const acceptedReceipt = visible.executeWithReceipt("receipt()", "fixture");
     const commandResult = [{ type: "failed", message: "Caller must inspect this result" }];

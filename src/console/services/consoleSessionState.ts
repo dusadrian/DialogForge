@@ -50,7 +50,8 @@ const maximumConsoleIdentityEntries = 2000;
 
 
 export const createConsoleSessionState = function(
-    readRuntimeStatus: () => string
+    readRuntimeStatus: () => string,
+    isStartupPending: () => boolean = () => false
 ): ConsoleSessionState {
     const sessionPhaseListeners = new Set<(phase: string) => void>();
     const promptStateListeners = new Set<(state: ConsolePromptState) => void>();
@@ -69,6 +70,9 @@ export const createConsoleSessionState = function(
     const getSessionPhase = function(): string {
         const status = String(readRuntimeStatus() || "not-started");
 
+        if (isStartupPending() && status !== "failed") {
+            return "starting";
+        }
         if (status === "ready") return "ready";
         if (status === "starting") return "starting";
 

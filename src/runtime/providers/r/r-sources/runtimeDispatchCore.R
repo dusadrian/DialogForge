@@ -942,6 +942,7 @@ runtime_dataset_schema <- function(params) {
 
 runtime_dispatch_dataset_read <- function(method, params) {
     switch(method,
+        "workspace.column_clipboard_page" = workspace_column_clipboard_page(params),
         "workspace.dataset_schema" = runtime_dataset_schema(params),
         "workspace.dataset_content" = workspace_dataset_content(
             params$name %||% "",

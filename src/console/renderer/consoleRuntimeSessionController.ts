@@ -13,6 +13,7 @@ export interface ConsoleRuntimeSessionControllerOptions {
     refreshPrompts(): void;
     beforeStartupTasks?(snapshot: RuntimeSessionSnapshot): Promise<void> | void;
     runStartupTasks(): Promise<void>;
+    onStartupPendingChange?(pending: boolean): void;
     reportStartupFailure?(message: string): void;
     startupTimeoutMs?: number;
 }
@@ -145,9 +146,16 @@ export const createConsoleRuntimeSessionController = function(
     };
 
     const stop = async function(): Promise<void> {
-        operationGeneration += 1;
+        const generation = ++operationGeneration;
         pendingStart = null;
-        await update(options.stopRuntime);
+        try {
+            await update(options.stopRuntime);
+        }
+        finally {
+            if (generation === operationGeneration) {
+                options.onStartupPendingChange?.(false);
+            }
+        }
     };
 
     return {
@@ -160,9 +168,11 @@ export const createConsoleRuntimeSessionController = function(
             const pending = performStart().finally(function(): void {
                 if (pendingStart === pending) {
                     pendingStart = null;
+                    options.onStartupPendingChange?.(false);
                 }
             });
             pendingStart = pending;
+            options.onStartupPendingChange?.(true);
             return pending;
         },
         stop

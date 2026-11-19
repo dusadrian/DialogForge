@@ -3,6 +3,7 @@ import type { ScriptDocument } from "../state/scriptDocument";
 
 
 export interface PendingScriptFile {
+    fileKey?: string;
     filePath: string;
     content: string;
 }
@@ -17,7 +18,8 @@ export interface ScriptEditorInsertionControllerOptions {
     openFile: (
         filePath: string,
         content: string,
-        preferCurrent?: boolean
+        preferCurrent?: boolean,
+        fileKey?: string
     ) => Promise<void>;
 }
 
@@ -108,7 +110,8 @@ export const createScriptEditorInsertionController = function(
         void options.openFile(
             file.filePath,
             file.content,
-            true
+            true,
+            file.fileKey
         );
     };
 
@@ -138,7 +141,8 @@ export const createScriptEditorInsertionController = function(
             void options.openFile(
                 file.filePath,
                 file.content,
-                true
+                true,
+                file.fileKey
             );
         });
 

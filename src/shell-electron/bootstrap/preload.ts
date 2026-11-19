@@ -1,3 +1,4 @@
+import type { ColumnClipboardPageRequest } from "../../runtime/tabular-data/datasetViewerTypes";
 import { clipboard, contextBridge, ipcRenderer, webUtils } from "electron";
 import * as path from "path";
 import {
@@ -882,6 +883,9 @@ const api: DialogForgeApi = {
                 nextName,
                 position
             });
+        },
+        readColumnClipboardPage: function(request: ColumnClipboardPageRequest) {
+            return invokeDatasetEditor(datasetEditorIpcChannels.readColumnClipboardPage, request);
         },
         getContent: function(name: string, request?: DatasetViewerContentRequest) {
             return invokeDatasetEditor(datasetEditorIpcChannels.getContent, {

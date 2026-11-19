@@ -53,8 +53,17 @@ export const createBrowserFileExportAdapter = function(options: {
         },
         async prepare(fileName, extension, companions, workingDirectory, browseToken, optionalCompanion) {
             const fs = await options.fileSystem();
-            const filePath = fileName.startsWith('/') ? fileName
-                : workingDirectory.replace(/\/$/, '') + '/' + fileName;
+            let filePath = fileName;
+            if (fileName.startsWith('~/')) {
+                const home = await options.queryRuntimeText('path.expand("~")');
+                if (!home.startsWith('/')) {
+                    throw new Error('The runtime home directory is unavailable.');
+                }
+                filePath = home.replace(/\/$/, '') + fileName.slice(1);
+            }
+            else if (!fileName.startsWith('/')) {
+                filePath = workingDirectory.replace(/\/$/, '') + '/' + fileName;
+            }
             const browsed = browsedFiles.get(fileName);
             const selection = {
                 filePath, browseToken, commandPath: fileName,

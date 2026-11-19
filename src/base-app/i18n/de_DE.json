@@ -1,4 +1,5 @@
 {
+    "Clipboard read failed": "Die Zwischenablage konnte nicht gelesen werden",
     "Settings": "Einstellungen",
     "Language": "Sprache",
     "Runtime provider": "Laufzeitanbieter",

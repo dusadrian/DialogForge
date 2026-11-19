@@ -1,4 +1,5 @@
 {
+    "Clipboard read failed": "Nu s-a putut citi din clipboard",
     "Settings": "Setări",
     "Language": "Limbă",
     "Runtime provider": "Furnizor runtime",

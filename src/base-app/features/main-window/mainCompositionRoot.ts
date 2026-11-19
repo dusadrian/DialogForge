@@ -216,8 +216,11 @@ let uiActionCommandVisibility: "hidden" | "visible" = "hidden";
 let consoleWorkingDirectoryPath = "";
 let consoleHomeDirectoryPath = "";
 const mainZoomScaling = createMainZoomScaling();
+let runtimeStartupPending = false;
 const consoleSessionState = createConsoleSessionState(function(): string {
     return String(runtimeSessionSnapshot?.status || "not-started");
+}, function(): boolean {
+    return document.body.dataset.dialogForgeReady !== "1" || runtimeStartupPending;
 });
 const mainConsoleServices = createMainConsoleServices({
     document,
@@ -225,6 +228,12 @@ const mainConsoleServices = createMainConsoleServices({
     session: consoleSessionState,
     getWorkspaceSnapshot: () => workspaceSnapshot,
     getRuntimeSession: function() {
+        if (
+            runtimeSessionSnapshot?.status === "ready"
+            && consoleSessionState.getSessionPhase() === "starting"
+        ) {
+            return { ...runtimeSessionSnapshot, status: "starting" };
+        }
         return runtimeSessionSnapshot;
     },
     startRuntimeSession: function() {
@@ -954,6 +963,10 @@ const runtimeSessionServices = createMainRuntimeSessionServices({
     renderRuntimeEvents,
     renderRuntimeSession,
     renderConsoleStatus,
+    onStartupPendingChange: function(pending): void {
+        runtimeStartupPending = pending;
+        notifyConsoleSessionPhase();
+    },
     beforeStartupTasks: function(snapshot): void {
         if (showStartupMessagesBeforeStartupTasks) {
             startupOutputController.observe(snapshot);
@@ -1543,6 +1556,7 @@ const mainStartupController = createMainStartupController({
     markReady: function(): void {
         document.body.dataset.dialogForgeReady = "1";
         startupOutputController.outputReady();
+        notifyConsoleSessionPhase();
     },
     startRuntimeSession: function(
         options?: RuntimeStartupOptions
