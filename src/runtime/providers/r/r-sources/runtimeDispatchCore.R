@@ -288,7 +288,8 @@ runtime_finish_input <- function(
     state,
     parent_id,
     visible,
-    workspace_code = ""
+    workspace_code = "",
+    effect = NULL
 ) {
     outcome <- if (identical(state, "idle")) "success" else state
     emit_execution_phase_event("evaluated", parent_id, outcome)
@@ -297,6 +298,7 @@ runtime_finish_input <- function(
         parent_id,
         emit_prompt_state = isTRUE(visible),
         workspace_code = workspace_code,
+        effect = effect,
         emit_plot = FALSE
     )
     current_activity_id <<- ""
@@ -312,6 +314,10 @@ runtime_execute_input <- function(params) {
     parent_id <- as.character(params$parentId %||% "")
     input_plan <- NULL
     if (is.element(params$planInput %||% "", c("console", "script"))) {
+        if (grepl("\n", code, fixed = TRUE)) {
+            # Multiline boundaries use parse-data inspection, which can dispatch methods.
+            workspace_hashes_current <<- FALSE
+        }
         input_plan <- runtime_console_input_boundaries(code)
         if (identical(params$planInput, "console") && identical(input_plan$state, "invalid")) {
             # The interactive console submits the original invalid buffer when
@@ -374,6 +380,15 @@ runtime_execute_input <- function(params) {
     previous_plot <- plot_signature()
     emit_execution_phase_event("running", parent_id)
     emit_state_event("busy", parent_id)
+    expressions <- input_plan$expressions
+    if (is.null(expressions)) {
+        expressions <- tryCatch(parse(text = code, keep.source = FALSE),
+            error = function(error) expression())
+    }
+    effect <- runtime_workspace_command_effect(expressions)
+    if (is.null(effect)) {
+        workspace_hashes_current <<- FALSE
+    }
     if (ordered_capture) {
         evaluate_ordered_input <- function() {
             previous_width <- getOption("width")
@@ -438,7 +453,8 @@ runtime_execute_input <- function(params) {
         "idle",
         parent_id,
         visible,
-        code
+        code,
+        effect
     )
 
     if (visible) {
@@ -797,10 +813,16 @@ runtime_check_completeness <- function(params) {
     code <- as.character(params$code %||% "")
     result <- tryCatch({
         expression <- parse(text = code, keep.source = TRUE)
+        warnings <- list()
+        if (is.null(runtime_workspace_command_effect(expression))) {
+            # Resolving an arbitrary function name can force a workspace promise.
+            workspace_hashes_current <<- FALSE
+            warnings <- runtime_unresolved_function_warnings(expression, code)
+        }
         list(
             state = "complete",
             message = "",
-            warnings = runtime_unresolved_function_warnings(expression, code)
+            warnings = warnings
         )
     }, error = function(error) {
         message <- conditionMessage(error)
@@ -818,6 +840,7 @@ runtime_check_completeness <- function(params) {
 
 
 runtime_refresh_workspace_index <- function() {
+    workspace_hashes_current <<- FALSE
     snapshot <- workspace_snapshot()
     workspace_index_set("last_snapshot", snapshot)
     change <- runtime_commit_workspace_change(list(state = workspace_state_from_snapshot(snapshot)))
@@ -886,13 +909,14 @@ runtime_workspace_remove <- function(params) {
         }, error = function(error) error)
 
         if (inherits(removed, "error")) {
+            workspace_hashes_current <<- FALSE
             return(list(ok = FALSE, error = conditionMessage(removed)))
         }
     }
 
     change <- NULL
 
-    if (!isTRUE(workspace_reconciliation_failed)) {
+    if (isTRUE(workspace_hashes_current) && !isTRUE(workspace_reconciliation_failed)) {
         change <- workspace_remove_cached_state(
             workspace_index_get("last_state"),
             targets
@@ -924,6 +948,11 @@ runtime_workspace_rename <- function(params) {
         return(list(ok = FALSE, error = "workspace-object-name-conflict"))
     }
 
+    # Reading a delayed or active binding during Rename can run user code.
+    binding <- runtime_binding_info(.GlobalEnv, old_name)
+    targets <- if (is.element(binding$state, c("value", "forced"))) {
+        c(old_name, new_name)
+    }
     renamed <- tryCatch({
         assign(
             new_name,
@@ -935,10 +964,11 @@ runtime_workspace_rename <- function(params) {
     }, error = function(error) error)
 
     if (inherits(renamed, "error")) {
+        workspace_hashes_current <<- FALSE
         return(list(ok = FALSE, error = conditionMessage(renamed)))
     }
 
-    runtime_workspace_delta()
+    runtime_workspace_delta(targets)
 
     list(ok = TRUE, result = runtime_cached_workspace_snapshot())
 }
@@ -967,8 +997,14 @@ runtime_workspace_clear <- function() {
 }
 
 
-runtime_workspace_delta <- function() {
-    change <- collect_workspace_update(workspace_index_get("last_state"))
+runtime_workspace_delta <- function(targets = NULL) {
+    revision <- workspace_revision_sequence
+    on.exit({
+        if (identical(revision, workspace_revision_sequence)) {
+            workspace_hashes_current <<- FALSE
+        }
+    }, add = TRUE)
+    change <- collect_workspace_update(workspace_index_get("last_state"), targets)
     change <- runtime_commit_workspace_change(change)
 
     list(
@@ -993,8 +1029,7 @@ runtime_commit_workspace_mutation <- function() {
 
 runtime_complete_visible_workspace <- function(params) {
     change <- runtime_workspace_change_for_code(
-        params$code %||% "",
-        allow_cached_copy = FALSE
+        params$code %||% ""
     )
 
     if (is.null(change)) {
@@ -1536,6 +1571,15 @@ runtime_dispatch_service <- function(method, params) {
 
 
 eval_method <- function(method, params) {
+    # Other services may evaluate user code, force bindings, or edit data
+    # without a command completion. Recheck all datasets at the next commit.
+    if (!is.element(method, c(
+        "execute_input", "workspace.rename", "workspace.remove", "workspace.snapshot",
+        "check_completeness", "runtime.version", "get_working_directory"
+    ))) {
+        workspace_hashes_current <<- FALSE
+    }
+
     result <- runtime_dispatch_service(method, params)
 
     if (!is.null(result)) return(result)

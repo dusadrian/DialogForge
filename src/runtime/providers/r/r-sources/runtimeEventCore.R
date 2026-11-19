@@ -553,63 +553,92 @@ emit_prompt_state_event <- function() {
 }
 
 
-runtime_workspace_change_for_code <- function(code = "", allow_cached_copy = TRUE) {
-    if (!nzchar(trimws(as.character(code %||% "")))) {
+# Inspect bindings before evaluation. An active binding or forcing a promise can
+# leave an ordinary-looking value after executing arbitrary user code.
+runtime_workspace_command_effect <- function(expressions) {
+    if (!isTRUE(workspace_hashes_current) || isTRUE(workspace_reconciliation_failed)) {
+        return(NULL)
+    }
+    if (length(expressions) != 1L || !is.call(expressions[[1L]])) {
         return(NULL)
     }
 
-    # Arbitrary calls can change global objects, including through print methods.
-    # Syntax identifies the existing copy fast path, not proof of no mutation.
+    command <- expressions[[1L]]
+    if (!is.symbol(command[[1L]])) {
+        return(NULL)
+    }
+    operator <- as.character(command[[1L]])
+    if (!is.element(operator, c("<-", "=", "invisible"))) {
+        return(NULL)
+    }
+    scope <- .GlobalEnv
+    while (!identical(scope, baseenv())) {
+        if (identical(scope, emptyenv()) || exists(operator, scope, inherits = FALSE)) {
+            return(NULL)
+        }
+        scope <- parent.env(scope)
+    }
+    if (!identical(get(operator, baseenv(), inherits = FALSE), .Primitive(operator))) {
+        return(NULL)
+    }
+
+    read <- identical(operator, "invisible")
+    if (length(command) != (if (read) 2L else 3L) || !is.symbol(command[[2L]])) {
+        return(NULL)
+    }
+    target <- as.character(command[[2L]])
+    if (!grepl("^[A-Za-z][A-Za-z0-9_]*$", target)) {
+        return(NULL)
+    }
+    target_binding <- runtime_binding_info(.GlobalEnv, target)
+    stored <- is.element(target_binding$state, c("value", "forced"))
+    if (read) {
+        # An inherited name or an unevaluated promise may run a reader.
+        if (!stored) {
+            return(NULL)
+        }
+        return(list(targets = character(0)))
+    }
+    if (!stored && !identical(target_binding$state, "unbound")) {
+        return(NULL)
+    }
+
+    value <- command[[3L]]
+    if (is.symbol(value)) {
+        source <- as.character(value)
+        binding <- runtime_binding_info(.GlobalEnv, source)
+        if (is.element(binding$state, c("value", "forced"))) {
+            return(list(source = source, target = target))
+        }
+    }
+    if (is.atomic(value) && !is.null(value) && length(value) == 1L) {
+        if (stored) {
+            # Replacing a reference object can release a user finalizer.
+            old <- target_binding$value
+            if (!is.atomic(old) || !is.null(attributes(old)) ||
+                !runtime_stored_graph_is_inspectable(old) || length(old) != 1L) {
+                return(NULL)
+            }
+        }
+        return(list(targets = target))
+    }
+    NULL
+}
+
+
+runtime_workspace_change_for_code <- function(code = "", effect = NULL) {
+    if (!nzchar(trimws(as.character(code %||% "")))) {
+        return(NULL)
+    }
     previous_state <- workspace_index_get("last_state")
-    assignment <- if (isTRUE(allow_cached_copy) && !isTRUE(workspace_reconciliation_failed)) {
-        runtime_simple_workspace_copy(code)
-    }
-    else {
-        NULL
-    }
-
-    if (!is.null(assignment)) {
-        copied <- workspace_copy_cached_state(
-            previous_state,
-            assignment$source,
-            assignment$target
-        )
-
+    if (!is.null(effect$source) && isTRUE(workspace_hashes_current) &&
+        !isTRUE(workspace_reconciliation_failed)) {
+        copied <- workspace_copy_cached_state(previous_state, effect$source, effect$target)
         if (!is.null(copied)) {
             return(copied)
         }
     }
-
-    collect_workspace_update(previous_state)
-}
-
-
-runtime_simple_workspace_copy <- function(code = "") {
-    expressions <- tryCatch(
-        parse(text = as.character(code %||% ""), keep.source = FALSE),
-        error = function(error) expression()
-    )
-
-    if (length(expressions) != 1L) {
-        return(NULL)
-    }
-
-    expression <- expressions[[1L]]
-
-    if (
-        !is.call(expression) ||
-        length(expression) != 3L ||
-        !is.element(as.character(expression[[1L]]), c("<-", "=")) ||
-        !is.symbol(expression[[2L]]) ||
-        !is.symbol(expression[[3L]])
-    ) {
-        return(NULL)
-    }
-
-    list(
-        target = as.character(expression[[2L]]),
-        source = as.character(expression[[3L]])
-    )
+    collect_workspace_update(previous_state, effect$targets)
 }
 
 
@@ -627,7 +656,7 @@ runtime_workspace_update_has_changes <- function(update = NULL) {
 }
 
 
-runtime_reconcile_command_workspace <- function(code, allow_cached_copy) {
+runtime_reconcile_command_workspace <- function(code, effect) {
     for (attempt in seq_len(2L)) {
         if (attempt == 2L) {
             runtime_diagnostic_mark("reconciliation.retry")
@@ -636,7 +665,7 @@ runtime_reconcile_command_workspace <- function(code, allow_cached_copy) {
         result <- tryCatch({
             change <- runtime_workspace_change_for_code(
                 code,
-                allow_cached_copy = isTRUE(allow_cached_copy) && attempt == 1L
+                effect = if (attempt == 1L) effect else NULL
             )
 
             if (!is.null(change)) {
@@ -666,7 +695,8 @@ queue_completion_event <- function(
     parent_id = "",
     emit_prompt_state = TRUE,
     workspace_code = "",
-    emit_plot = FALSE
+    emit_plot = FALSE,
+    effect = NULL
 ) {
     state <- as.character(state %||% "")
     parent_id <- runtime_event_parent_id(parent_id)
@@ -675,7 +705,7 @@ queue_completion_event <- function(
 
     reconciliation <- runtime_reconcile_command_workspace(
         workspace_code,
-        allow_cached_copy = identical(state, "idle")
+        effect = if (identical(state, "idle")) effect else NULL
     )
     workspace_change <- reconciliation$change
 

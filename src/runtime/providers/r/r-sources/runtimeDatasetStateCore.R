@@ -1147,7 +1147,7 @@ workspace_variable_change_signature <- function(name, value, dataset_state = NUL
 }
 
 
-collect_workspace_update <- function(previous_state = NULL) {
+collect_workspace_update <- function(previous_state = NULL, changed_bindings = NULL) {
     runtime_diagnostic_count("workspace_scans")
     runtime_diagnostic_mark("reconciliation.started")
     on.exit(runtime_diagnostic_mark("reconciliation.finished"), add = TRUE)
@@ -1159,6 +1159,10 @@ collect_workspace_update <- function(previous_state = NULL) {
     previous_signatures <- previous_state$signatures %||% list()
     previous_variables <- previous_state$variables %||% list()
     previous_dataset_states <- previous_state$datasetStates %||% list()
+    if (is.null(changed_bindings) || !isTRUE(workspace_hashes_current) ||
+        isTRUE(workspace_reconciliation_failed)) {
+        changed_bindings <- NULL
+    }
     object_names <- runtime_global_names()
     signatures <- list()
     variables <- previous_variables
@@ -1214,11 +1218,16 @@ collect_workspace_update <- function(previous_state = NULL) {
         }
 
         if (is.data.frame(value)) {
-            dataset_update <- workspace_dataset_change_entries(
-                name,
-                value,
-                previous_dataset_states
-            )
+            if (!is.null(changed_bindings) &&
+                !is.element(name, changed_bindings) &&
+                nzchar(previous_dataset_states[[name]]$objectHash %||% "")) {
+                runtime_diagnostic_count("dataset_hashes_reused")
+                dataset_update <- list(state = previous_dataset_states[[name]], changes = list())
+            } else {
+                dataset_update <- workspace_dataset_change_entries(
+                    name, value, previous_dataset_states
+                )
+            }
             dataset_states[[name]] <- dataset_update$state
 
             for (change in dataset_update$changes %||% list()) {

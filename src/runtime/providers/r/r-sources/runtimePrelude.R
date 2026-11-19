@@ -41,6 +41,7 @@ workspace_revision_session <- paste0(
 )
 workspace_revision_sequence <- 0
 workspace_reconciliation_failed <- FALSE
+workspace_hashes_current <- FALSE
 
 
 # All successful baseline writes pass through this owner. An empty delta still
@@ -63,6 +64,7 @@ runtime_commit_workspace_change <- function(change) {
     workspace_index_set("last_state", change$state)
     workspace_revision_sequence <<- revision$sequence
     workspace_reconciliation_failed <<- FALSE
+    workspace_hashes_current <<- TRUE
     runtime_diagnostic_mark("workspace.committed", revision$sequence)
 
     change

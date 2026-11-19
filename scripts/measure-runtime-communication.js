@@ -372,7 +372,7 @@ const main = async function() {
 local({
     rt <- environment(as.environment("DialogApp")$runtime_workspace_change_for_code)
     original <- rt$collect_workspace_update
-    rt$collect_workspace_update <- function(previous_state = NULL) {
+    rt$collect_workspace_update <- function(previous_state = NULL, ...) {
         rt$collect_workspace_update <- original
         stop("synthetic one-time workspace failure")
     }
@@ -383,13 +383,13 @@ local({
     rt <- environment(as.environment("DialogApp")$runtime_workspace_change_for_code)
     original <- rt$collect_workspace_update
     attempts <- 0L
-    rt$collect_workspace_update <- function(previous_state = NULL) {
+    rt$collect_workspace_update <- function(previous_state = NULL, ...) {
         attempts <<- attempts + 1L
         if (attempts <= 2L) {
             stop("synthetic repeated workspace failure")
         }
         rt$collect_workspace_update <- original
-        original(previous_state)
+        original(previous_state, ...)
     }
 })
 cat("DFREV_PERSISTENT\\n")`, "DFREV_PERSISTENT");
@@ -403,13 +403,13 @@ local({
     rt <- environment(as.environment("DialogApp")$runtime_workspace_change_for_code)
     original <- rt$collect_workspace_update
     attempts <- 0L
-    rt$collect_workspace_update <- function(previous_state = NULL) {
+    rt$collect_workspace_update <- function(previous_state = NULL, ...) {
         attempts <<- attempts + 1L
         if (attempts <= 2L) {
             stop("synthetic repeated workspace failure before deletion")
         }
         rt$collect_workspace_update <- original
-        original(previous_state)
+        original(previous_state, ...)
     }
 })
 cat("DFREV_BEFORE_DELETE\\n")`, "DFREV_BEFORE_DELETE");
@@ -621,11 +621,11 @@ local({
     rt <- environment(as.environment("DialogApp")$runtime_workspace_change_for_code)
     original <- rt$collect_workspace_update
     attempts <- 0L
-    rt$collect_workspace_update <- function(previous_state = NULL) {
+    rt$collect_workspace_update <- function(previous_state = NULL, ...) {
         attempts <<- attempts + 1L
         if (attempts <= 2L) stop("synthetic mutation refresh failure")
         rt$collect_workspace_update <- original
-        original(previous_state)
+        original(previous_state, ...)
     }
 })`
                     }));

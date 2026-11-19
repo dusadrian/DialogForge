@@ -248,7 +248,8 @@ const main = async function() {
         console.log("Real WebR cell batch: both edits committed, R values verified and workspace revision advanced.");
         const inspectionSources = await Promise.all([
             "runtimePrelude.R", "runtimeBindingInspection.R", "runtimeWorkspaceCore.R",
-            "runtimeDatasetCore.R", "runtimeDatasetStateCore.R", "runtimeOutputJournalPrototype.R"
+            "runtimeDatasetCore.R", "runtimeDatasetStateCore.R", "runtimeOutputJournalPrototype.R",
+            "runtimeEventCore.R", "runtimeDispatchCore.R"
         ].map(async (name) => ({ name, text: await fs.readFile(path.join(sourceDir, name), "utf8") })));
         const inspectionTests = await Promise.all([
             "scripts/check-r-runtime-helper.R",
@@ -257,6 +258,7 @@ const main = async function() {
             "scripts/check-workspace-standard-method-safety.R",
             "scripts/check-workspace-inspection-safety.R",
             "scripts/check-workspace-copy-safety.R",
+            "scripts/check-workspace-dataset-hash-reuse.R",
             "scripts/check-workspace-altrep-safety.R",
             "scripts/check-output-journal-prototype.R",
             "scripts/check-dataset-mixed-change.R"
